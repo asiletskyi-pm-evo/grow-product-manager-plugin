@@ -625,7 +625,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
-### 31. Product Landscape (v0.5.1) — NEW in v3.3.0
+### 31. Product Landscape (v0.5.2) — NEW in v3.3.0
 
 **Description:** Registry and map of the products around yours — competitors, adjacent players, benchmarks, inspiration. `scan` lists what is installed on the Mac (including iPhone apps from the Mac App Store) and on an adb device and fills genre, rating and seller from the App Store; `discover` finds more by category and market through stores, web search and the optional connectors; `characterize` describes a product with sources; `map` renders the category map (`research/landscape`); `research` proposes a ranked list of products (no cap — you pick or name others) and starts the same flow on them through flow-walkthrough compare, product-research and brainstorm-features. Roles are per product of yours; bookmarks are read only with a per-scan yes; competitors stay read-only.
 
@@ -658,7 +658,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.16.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
-| Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
+| Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.19.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.17.1 | Configure plugin for your organization |
 | Knowledge Library | v0.10.0 | Manage curated knowledge sources and the tools registry |

@@ -151,7 +151,7 @@ If Blocked sources > 0 for critical findings:
 
 Pull information from every source agreed upon in Step 1. For each external product, follow the integration fallback chain from `references/integration-strategy.md`.
 
-**A market-data tool you do not have (since v0.17.0).** `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill product-research --need market-data` gives at most one record — say its one line, once per run, never in a headless run, and go on with the sources you have; «ні» → `decline`. No registry or nothing to suggest → no line.
+**A market-data tool you do not have (since v0.17.0).** `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill product-research --need market-data` (with SHELL) gives at most one record — unless its tools are already in this session, say its one line, once per run, never in a headless run, and go on with the sources you have; «ні» → `decline`. No registry or nothing to suggest → no line.
 
 **Web search** — use WebSearch to find:
 - Competitor websites, pricing pages, feature lists

@@ -34,6 +34,9 @@ ACCESS = ("free", "paid", "corporate", "unknown")
 VERDICTS = ("tried", "recommended", "deprecated")
 PUBLISHES = ("board", "page", "document", "deck", "dashboard", "design")
 CONTOURS = ("product", "delivery", "knowledge", "people", "design", "context")
+NEEDS = ("board", "diagram", "flowchart", "bpmn", "mind-map", "wireframe", "prototype", "infographic", "presentation",
+         "design", "transcript", "meetings", "market-data", "web-search", "screens", "store-data", "internal-docs",
+         "metrics")
 STATES = ("connected", "needs-auth", "installed", "not-installed", "not-seen")
 OBSERVED = ("connected", "needs-auth", "installed")
 RANK = {s: i for i, s in enumerate(STATES)}
@@ -43,14 +46,15 @@ SOURCE_HOST = {
     "scan-codex-mcp": "codex", "scan-codex-plugins": "codex", "scan-codex-skills": "codex",
     "scan-agents-skills": "agents", "scan-apps": "standalone", "scan-session": "session", "scan-account": "account"}
 SEED_FIELDS = ("name", "kind", "job", "skills", "contours", "access", "connect", "publishes", "via", "needs")
-USER_FIELDS = ("verdict", "shared", "recommended_by", "connect", "job", "access", "skills", "contours",
+USER_FIELDS = ("verdict", "shared", "recommended_by", "connect", "job", "access", "skills", "contours", "needs",
                "publishes", "checked", "notes")
-LIST_FIELDS = ("skills", "contours")
-EXPORT_FIELDS = ("name", "kind", "job", "skills", "contours", "access", "connect", "verdict", "recommended_by",
-                 "checked", "publishes")
+LIST_FIELDS = ("skills", "contours", "needs")
+EXPORT_FIELDS = ("name", "kind", "job", "skills", "contours", "needs", "access", "connect", "verdict",
+                 "recommended_by", "checked", "publishes")
 MAX_NAME, MAX_TEXT, MAX_DESC, MAX_FILE = 120, 300, 200, 64 * 1024 * 1024
 KEEP_SCANS = 30
-NAME_RE = re.compile(r"^[^\W_][\w .@+:()/'-]*$")
+NAME_RE = re.compile(r"^[^\W_][\w .+()'-]*$")          # no / @ : — a URL, an e-mail, a path or host:port is no name
+NOT_PLAIN = re.compile(r"://|[\w.+-]+@[\w-]+\.\w|(?:^|\s)(?:/|~/|[A-Za-z]:\\)\S")
 OPAQUE_RE = re.compile(r"^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{24,})$", re.I)
 FOLDED = (">", "|", ">-", "|-", ">+", "|+")
 
@@ -64,8 +68,15 @@ def norm(s):
 
 
 def clean(s, limit=MAX_TEXT):
-    s = re.sub(r"[\x00-\x1f\x7f]+", " ", str(s or "")).strip()
+    s = re.sub("[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]+", " ", str(s or "")).strip()
     return s[:limit]
+
+
+def plain_text(s, limit=MAX_DESC):
+    """A description the registry may keep, or "": never a key, a URL, an e-mail or a path."""
+    if not isinstance(s, str) or not s.strip() or s.strip() in FOLDED or flagged(s) or NOT_PLAIN.search(s):
+        return ""
+    return clean(s, limit)
 
 
 def result(**kw):
@@ -130,77 +141,152 @@ def _json_keys(path, *ways):
     return out
 
 
-_KEY = r"""(?:"[^"\\]*(?:\\.[^"\\]*)*"|'[^']*'|[A-Za-z0-9_-]+)"""
-_DOTTED = re.compile(r"^\s*(%s(?:\s*\.\s*%s)*)\s*=\s*(.*)$" % (_KEY, _KEY))
-_HEADER = re.compile(r"^\s*\[\s*([^\[\]]+?)\s*\]\s*(?:#.*)?$")
-_AHEADER = re.compile(r"^\s*\[\[\s*([^\[\]]+?)\s*\]\]\s*(?:#.*)?$")
-
-
-def _key_parts(s):
-    return [p.strip().strip("\"'") for p in re.findall(r'"[^"]*"|\'[^\']*\'|[^.]+', s)]
-
-
-def _brackets(s):
-    """The bracket balance of a TOML value outside its strings; a comment ends it."""
-    depth, q, i = 0, None, 0
-    while i < len(s):
-        ch = s[i]
-        if q:
-            if ch == "\\" and q == '"':
-                i += 2
-                continue
-            if ch == q:
-                q = None
-        elif ch in "\"'":
-            q = ch
-        elif ch == "#":
-            break
-        elif ch in "[{":
-            depth += 1
-        elif ch in "]}":
-            depth -= 1
-        i += 1
-    return depth
-
-
 def _toml_names(path, prefix):
-    """The names right under `prefix` in a TOML file — `[prefix.x]`, `[[prefix.x.y]]`, `prefix.x.k = …`,
-    `x = …` / `x.k = …` inside `[prefix]` — read from table headers and keys only. A line inside a
-    multi-line string or array is skipped whole, so a value that looks like a header is never a name."""
+    """The names right under `prefix` in a TOML file — `[prefix.x]`, `[[prefix.x.y]]`, `prefix.x.k = …`, `x = …`
+    inside `[prefix]`, the keys of `prefix = { x = … }` — read by a character lexer that steps over every string
+    (all four kinds), comment, array and inline table whole, so a value is never taken for a key or a header.
+    A file it cannot follow is not read at all (None) — never a guess."""
     text = _read_bounded(path)
     if text is None:
         return None
-    out, table, ml, depth = [], [], None, 0
-    for line in text.splitlines():
-        if ml:
-            if line.count(ml) % 2 == 1:
-                ml = None
-            continue
-        if depth > 0:
-            depth = max(0, depth + _brackets(line))
-            continue
-        s = line.strip()
-        if not s or s.startswith("#"):
-            continue
-        m = _AHEADER.match(line) or _HEADER.match(line)
-        if m:
-            table = _key_parts(m.group(1))
-            if len(table) >= 2 and table[0] == prefix and table[1] not in out:
-                out.append(table[1])
-            continue
-        m = _DOTTED.match(line)
-        if not m:
-            continue
-        full = table + _key_parts(m.group(1))
-        if len(full) >= 2 and full[0] == prefix and full[1] not in out:
-            out.append(full[1])
-        val = m.group(2)
+    try:
+        return _toml_scan(text, prefix)
+    except (ValueError, IndexError):
+        return None
+
+
+_BARE = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def _toml_scan(text, prefix):
+    n = len(text)
+
+    def ws(i):
+        while i < n and text[i] in " \t":
+            i += 1
+        return i
+
+    def eol(i):
+        i = ws(i)
+        if i < n and text[i] == "#":
+            while i < n and text[i] != "\n":
+                i += 1
+        if i < n and text[i] not in "\r\n":
+            raise ValueError("junk after a statement")
+        return i
+
+    def string(i):
         for q in ('"""', "'''"):
-            if val.count(q) % 2 == 1:
-                ml = q
-                break
-        if not ml:
-            depth = max(0, _brackets(val))
+            if text.startswith(q, i):
+                j = i + 3
+                while True:
+                    if j >= n:
+                        raise ValueError("unclosed string")
+                    if q == '"""' and text[j] == "\\":
+                        j += 2
+                        continue
+                    if text.startswith(q, j):
+                        k = j + 3
+                        while k < n and text[k] == q[0] and k - j < 5:
+                            k += 1
+                        return text[i + 3:k - 3], k
+                    j += 1
+        q, j = text[i], i + 1
+        while j < n and text[j] != q:
+            if text[j] == "\n":
+                raise ValueError("a newline in a string")
+            j += 2 if (q == '"' and text[j] == "\\") else 1
+        if j >= n:
+            raise ValueError("unclosed string")
+        return text[i + 1:j], j + 1
+
+    def key(i, stop):
+        parts = []
+        while True:
+            i = ws(i)
+            if i < n and text[i] in "\"'":
+                s, i = string(i)
+                parts.append(s)
+            else:
+                m = _BARE.match(text, i)
+                if not m:
+                    raise ValueError("not a key")
+                parts.append(m.group(0))
+                i = m.end()
+            i = ws(i)
+            if i < n and text[i] == ".":
+                i += 1
+                continue
+            if i < n and text[i] in stop:
+                return parts, i
+            raise ValueError("not a key")
+
+    def value(i):
+        """(end, the top-level keys when the value is an inline table)."""
+        i = ws(i)
+        if i >= n:
+            raise ValueError("no value")
+        c = text[i]
+        if c in "\"'":
+            return string(i)[1], []
+        if c in "[{":
+            close, keys, i = ("]" if c == "[" else "}"), [], i + 1
+            while True:
+                while i < n and text[i] in " \t\r\n,":
+                    i += 1
+                if i < n and text[i] == "#":
+                    while i < n and text[i] != "\n":
+                        i += 1
+                    continue
+                if i >= n:
+                    raise ValueError("unclosed array")
+                if text[i] == close:
+                    return i + 1, keys
+                if c == "{":
+                    parts, i = key(i, "=")
+                    keys.append(parts[0])
+                    i, _ = value(i + 1)
+                else:
+                    i, _ = value(i)
+        j = i
+        while j < n and text[j] not in ",]}#\r\n":
+            j += 1
+        if j == i:
+            raise ValueError("no value")
+        return j, []
+
+    out, table, i = [], [], 0
+
+    def add(name):
+        if name not in out:
+            out.append(name)
+    while i < n:
+        c = text[i]
+        if c in " \t\r\n":
+            i += 1
+            continue
+        if c == "#":
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if c == "[":
+            dbl = text.startswith("[[", i)
+            table, i = key(i + (2 if dbl else 1), "]")
+            if dbl and not text.startswith("]]", i):
+                raise ValueError("not a header")
+            i = eol(i + (2 if dbl else 1))
+            if len(table) >= 2 and table[0] == prefix:
+                add(table[1])
+            continue
+        parts, i = key(i, "=")
+        full = table + parts
+        i, keys = value(i + 1)
+        i = eol(i)
+        if len(full) >= 2 and full[0] == prefix:
+            add(full[1])
+        elif full == [prefix]:
+            for k in keys:
+                add(k)
     return out
 
 
@@ -253,6 +339,7 @@ SKILL_DIRS = ((".claude/skills", "scan-claude-code-skills"), (".codex/skills", "
 def scan_rows(home, apps=True, apps_jsonl=None):
     """(rows, sources read, refused) — `read` names a source only when its file was there and read."""
     rows, read, refused = [], [], 0
+    own_skills = skill_names()
     for source, kind, reader in host_readers(home):
         names = reader()
         if names is None:
@@ -276,10 +363,12 @@ def scan_rows(home, apps=True, apps_jsonl=None):
             if not n:
                 refused += norm(raw) != norm(SELF)
                 continue
+            if n in own_skills:                         # this plugin's own skill, under its bare name
+                continue
             row = {"source": source, "host": SOURCE_HOST[source], "kind": "skill", "name": n}
-            desc = fm.get("description") or ""
-            if desc and not flagged(desc):
-                row["description"] = clean(desc, MAX_DESC)
+            desc = plain_text(fm.get("description") or "")
+            if desc:
+                row["description"] = desc
             rows.append(row)
     if apps:
         lines, ok = app_lines(apps_jsonl)
@@ -371,6 +460,9 @@ def check_seed(root):
         for c in r.get("contours") or []:
             if c not in CONTOURS:
                 errs.append("%s: contour %r is not one of %s" % (rid, c, "|".join(CONTOURS)))
+        for x in r.get("needs") or []:
+            if x not in NEEDS:
+                errs.append("%s: need %r is not one of %s" % (rid, x, "|".join(NEEDS)))
         if r.get("via") and r["via"] not in ids:
             errs.append("%s: via %r is not a seed record" % (rid, r["via"]))
         for key in {norm(x) for x in [rid, r.get("name")] + list(r.get("aliases") or []) if norm(x)}:
@@ -576,15 +668,15 @@ def sanitize(row, observed, seed_ids):
         return None
     name = valid_name(row.get("name"))
     kind = row.get("kind") if row.get("kind") in KINDS else ("mcp" if observed and not row.get("kind") else None)
-    if not name or not kind:
+    if not name or not kind or (kind == "skill" and name in skill_names()):
         return None
     out = {"source": src, "host": SOURCE_HOST[src], "kind": kind, "name": name,
            "state": row.get("state") if row.get("state") in OBSERVED else "installed"}
     if src == "scan-apps" and row.get("id") in seed_ids:
         out["id"] = row["id"]
-    desc = row.get("description")
-    if isinstance(desc, str) and desc.strip() and desc.strip() not in FOLDED and not flagged(desc):
-        out["description"] = clean(desc, MAX_DESC)
+    desc = plain_text(row.get("description"))
+    if desc:
+        out["description"] = desc
     return out
 
 
@@ -726,7 +818,7 @@ def _candidates(store, skill, need=None, exclude=()):
         skills = t.get("skills") if isinstance(t.get("skills"), list) else []
         if skill not in skills:
             continue
-        if need and need not in (t.get("needs") or []):
+        if need and t.get("needs") and need not in t["needs"]:   # a record that names no need serves any
             continue
         if t.get("id") in exclude:                          # the step already offers it in its own question
             continue
@@ -757,6 +849,9 @@ def _skill_ok(skill):
 
 def cmd_suggest(args):
     if not _skill_ok(args.skill):
+        return 2
+    if args.need and args.need not in NEEDS:
+        result(error="not a need the registry knows (%s)" % "|".join(NEEDS))
         return 2
     store = store_dir(args)
     if not os.path.isfile(os.path.join(store, "registry.json")) and not load_team(store):
@@ -842,7 +937,7 @@ def _parse_fields(pairs):
             continue
         if k in LIST_FIELDS:
             vals = [x.strip() for x in v.split(",") if x.strip()]
-            allowed = skills if k == "skills" else CONTOURS
+            allowed = skills if k == "skills" else CONTOURS if k == "contours" else NEEDS
             if [x for x in vals if x not in allowed]:
                 bad.append(k)
                 continue
@@ -922,6 +1017,8 @@ def cmd_add(args):
            "state": args.state or "not-installed", "sources": [args.source]}
     if args.state:
         rec["seen"] = today()
+        if args.state == "connected":
+            rec["seen_by"] = ["scan-session"]          # a session saw it; the next one that does not makes it not-seen
     tools.append(rec)
     return _apply(rec, fields, tools, store, "added")
 
@@ -971,7 +1068,7 @@ def _team_record(r, skills):
     for k, allowed in (("kind", KINDS), ("access", ACCESS), ("verdict", VERDICTS), ("publishes", PUBLISHES)):
         if r.get(k) in allowed:
             rec[k] = r[k]
-    for k, allowed in (("skills", skills), ("contours", CONTOURS)):
+    for k, allowed in (("skills", skills), ("contours", CONTOURS), ("needs", NEEDS)):
         v = r.get(k)
         v = [v] if isinstance(v, str) else (v if isinstance(v, list) else [])
         v = [x for x in v if x in allowed]
@@ -1065,6 +1162,8 @@ def cmd_export(args):
     keep, held = [], 0
     for t in shared:
         rec = {k: t[k] for k in EXPORT_FIELDS if t.get(k) not in (None, "", [])}
+        if str(rec.get("recommended_by", "")).strip().lower() in ("я", "me", "i"):
+            rec.pop("recommended_by")                  # «я» in a core would name whoever reads it
         if never(rec):
             held += 1
             continue

@@ -232,7 +232,7 @@ After writing to ~/.grow-pm/knowledge-library/:
    - sources/{new-or-changed}.md → {vault}/{plugin_folder}/Knowledge/sources/
    - glossary/{changed}.yaml → {vault}/{plugin_folder}/Knowledge/glossary/
    - style/{changed}.md → {vault}/{plugin_folder}/Knowledge/style/
-   - tools/registry.json, tools/tools.md → {vault}/{plugin_folder}/Knowledge/tools/
+   - tools/registry.json, tools/tools.md, tools/team-declined.json → {vault}/{plugin_folder}/Knowledge/tools/
 
 4. Do NOT delete vault files that don't have source counterpart
    (vault may contain user's manual additions)

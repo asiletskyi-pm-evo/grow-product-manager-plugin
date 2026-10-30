@@ -162,6 +162,35 @@ try:
     check("1.10 a home with no host files → nothing found, nothing read, exit 0",
           rc == 0 and res.get("found") == 0 and res.get("sources_read") == [], out)
 
+    # Valid TOML where a value is shaped like a header (whole-branch review): the real server(s) only.
+    for k in "ABCDEF":
+        h = os.path.join(d, "toml-" + k)
+        os.makedirs(os.path.join(h, ".codex"))
+        shutil.copy(os.path.join(ROOT, "testing", "fixtures", "tools", "toml", k + ".toml"),
+                    os.path.join(h, ".codex", "config.toml"))
+        rc, out, res, rows = run("scan", "--home", h, "--no-apps")
+        got = sorted(r["name"] for r in rows)
+        check("1.10%s TOML %s: the real server only, never the value shaped like a header" % (k.lower(), k),
+              got == (["real", "real two"] if k == "F" else ["real"]) and "LEAK" not in out, got)
+    h = os.path.join(d, "names-home")
+    w(os.path.join(h, ".claude.json"), json.dumps({"mcpServers": {
+        "https://mcp.zorg.example/x": {}, "anna@zorg.example": {}, "/opt/zorg/server": {}, "localhost:8080": {},
+        "zorg-fine": {}}}))
+    w(os.path.join(h, ".claude", "skills", "zorg-links", "SKILL.md"),
+      "---\nname: zorg-links\ndescription: See https://zorg.example/docs or write to anna@zorg.example\n---\n")
+    w(os.path.join(h, ".claude", "skills", "zorg-bidi", "SKILL.md"),
+      "---\nname: zorg-bidi\ndescription: Notes \u202eevil\u202c of the team\n---\n")
+    w(os.path.join(h, ".claude", "skills", "knowledge-library", "SKILL.md"),
+      "---\nname: knowledge-library\ndescription: a copy of this plugin's own skill\n---\n")
+    rc, out, res, rows = run("scan", "--home", h, "--no-apps")
+    by = {r["name"]: r for r in rows}
+    check("1.10g a URL, an e-mail, a path or host:port is no name", sorted(by) == ["zorg-bidi", "zorg-fine", "zorg-links"]
+          and res.get("refused") == 4, (sorted(by), res))
+    check("1.10h a description with a URL or an e-mail is dropped; bidi controls are stripped",
+          "description" not in by["zorg-links"] and "\u202e" not in by["zorg-bidi"].get("description", "") and
+          "evil" in by["zorg-bidi"].get("description", ""), (by["zorg-links"], by["zorg-bidi"]))
+    check("1.10i this plugin's own skill under its bare name is no record", "knowledge-library" not in by, sorted(by))
+
     # Mutation: a scanner that reads the values under a server's name must be caught by check 1.3.
     mut = os.path.join(d, "mut")
     os.makedirs(mut)
@@ -310,6 +339,14 @@ try:
           by["zorg-whiteboard"]["state"] == "connected", (out, by.get("zorg-whiteboard")))
     rc, out, res, _ = run("add", "--store", store, "--name", "Zorg Other", "--kind", "mcp", "--state", "connected")
     check("4.9 --state without a search source is refused", rc == 2, out)
+    rc, out, res, rows = run("suggest", "--store", store, "--skill", "diagram-prototyper", "--need", "spaceship")
+    check("4.10 a need the registry does not know → exit 2, no record", rc == 2 and not rows, out)
+    s2 = os.path.join(d, "store-search")
+    run("add", "--store", s2, "--name", "Zorg Whiteboard", "--kind", "mcp", "--source", "registry-search",
+        "--state", "connected")
+    run("merge", "--store", s2, "--observed", os.path.join(d, "empty.jsonl"))
+    check("4.11 a search result added as connected becomes not-seen when a session no longer sees it",
+          reg(s2)["zorg-whiteboard"]["state"] == "not-seen", reg(s2)["zorg-whiteboard"])
 
     # ---------------------------------------------------------------- 5. an unreadable registry is never reset
     bad_store = os.path.join(d, "bad-store")
@@ -335,9 +372,10 @@ try:
     recs = cc.read_yaml_records(exp, "tools") if exp else []
     check("6.1 only the shared record goes out", rc == 0 and res.get("exported") == 1 and len(recs) == 1 and
           recs[0]["name"] == "zorg-crm", (out, exp))
-    check("6.2 only the listed fields — no state, hosts, sources, declined, seen",
-          recs and not set(recs[0]) - {"name", "kind", "job", "skills", "contours", "access", "connect", "verdict",
-                                       "recommended_by", "checked", "publishes"}, recs)
+    check("6.2 only the listed fields — no state, hosts, sources, declined, seen; «я» never goes out",
+          recs and not set(recs[0]) - {"name", "kind", "job", "skills", "contours", "needs", "access", "connect",
+                                       "verdict", "recommended_by", "checked", "publishes"}
+          and "recommended_by" not in recs[0], recs)
     rc, out, res, _ = run("export", "--store", os.path.join(d, "fresh-store"), "--home", home)
     check("6.3 nothing shared → no file", rc == 0 and res.get("exported") == 0 and res.get("file") is None, out)
 
@@ -367,6 +405,9 @@ try:
     rc, out, res, rows = run("suggest", "--store", store, "--skill", "feedback-triage")
     check("7.5 a team record comes before the seed's", rows and rows[0]["name"] == "Zorg Planner" and
           rows[0]["origin"] == "team", rows)
+    rc, out, res, rows = run("suggest", "--store", store, "--skill", "feedback-triage", "--need", "board")
+    check("7.5a with --need, a team record that names no need still comes before the seed's",
+          rows and rows[0]["name"] == "Zorg Planner", rows)
     n_before = len(reg(store))
     rc, out, res, _ = run("decline", "--store", store, "--skill", "feedback-triage", "--id", "zorg-planner")
     rc2, out2, res2, rows2 = run("suggest", "--store", store, "--skill", "feedback-triage")
@@ -398,5 +439,5 @@ try:
 finally:
     shutil.rmtree(d, ignore_errors=True)
 
-print("\n%s — %d failure(s)" % ("GREEN" if not fails else "RED", fails))
+print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

@@ -325,6 +325,21 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | U11 | хто такий Bea Two і хто на нього посилається | context-navigator (v3.18.0: `ctx entity`) |
 | U12 | що таке PROJ-1234 | context-navigator (v3.18.0: `ctx entity`) |
 
+### Group V — Tools registry (added 2026-10-30, v4.2.0)
+
+`knowledge-library` gained the tools registry; its neighbours are `product-landscape` (competitor apps and their scan) and `context-connect` (the team's core).
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| V1 | які інструменти в мене є | knowledge-library |
+| V2 | проскануй мої інструменти | knowledge-library |
+| V3 | what tools do I have installed | knowledge-library |
+| V4 | знайди інструмент для командних дошок | knowledge-library |
+| V5 | поділитися моїми інструментами з командою | knowledge-library — NOT context-connect |
+| V6 | просканируй мої застосунки конкурентів | product-landscape — NOT knowledge-library |
+| V7 | карта конкурентів у нашій категорії | product-landscape — NOT knowledge-library |
+| V8 | які джерела маємо про чекаут | knowledge-library (sources, as before) |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |

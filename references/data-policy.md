@@ -104,7 +104,7 @@ When in doubt whether a result holds internal data, it does (Practical Guideline
 
 The tools registry (`tool-registry.md`) lists what helps the user's work outside the plugin. Five rules keep it inside this policy:
 
-1. **Names only.** The scan reads the names of plugins, skills and MCP servers from the host files on this machine — never a value under them: no command, argument, environment variable, header or URL, where a host keeps its keys (`tool-registry.md` §3).
+1. **Names only.** The scan reads the names of plugins, skills and MCP servers from the host files on this machine, and the start of a skill's description — never a value under a name: no command, argument, environment variable, header or URL, where a host keeps its keys; a name or a description that holds a URL, an e-mail or a path is dropped (`tool-registry.md` §3).
 2. **Local, like the library.** The registry lives in `~/.grow-pm/knowledge-library/tools/` and the vault mirror; a text written into it passes the never-store filter below.
 3. **Public words leave the session.** A search of the MCP registry or of the organisation's plugin catalogue is made of public words only, never internal data (as Deep Research above).
 4. **The export carries only what the user marked.** Records marked `shared`, and only their listed fields — never what the scan saw on this machine; the plugin never writes into a core, the core's owner adds the file.
