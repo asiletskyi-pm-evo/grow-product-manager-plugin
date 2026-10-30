@@ -33,7 +33,7 @@ PUBLISHES = ("board", "page", "document", "deck", "dashboard", "design")
 STATES = ("connected", "needs-auth", "installed", "not-installed", "not-seen")
 OBSERVED = ("connected", "needs-auth", "installed")          # what a row can say; the rest the merge derives
 RANK = {s: i for i, s in enumerate(STATES)}
-SEED_FIELDS = ("name", "kind", "job", "skills", "contours", "access", "connect", "publishes")
+SEED_FIELDS = ("name", "kind", "job", "skills", "contours", "access", "connect", "publishes", "via")
 USER_FIELDS = ("verdict", "shared", "recommended_by", "connect", "job", "access", "skills", "contours",
                "publishes", "checked", "notes")
 LIST_FIELDS = ("skills", "contours")
@@ -251,6 +251,8 @@ def check_seed(root):
         for s in r.get("skills") or []:
             if s not in skills:
                 errs.append("%s: %r is not a skill" % (rid, s))
+        if r.get("via") and r["via"] not in {x.get("id") for x in recs}:
+            errs.append("%s: via %r is not a seed record" % (rid, r["via"]))
         for k in ("skills", "contours", "aliases", "app_names", "app_bundle_ids"):
             if r.get(k) not in (None, "") and not isinstance(r.get(k), list):
                 errs.append("%s: %s is not a list" % (rid, k))
@@ -529,6 +531,9 @@ def _candidates(store, skill):
         if t.get("state") in ("installed", "connected"):
             continue
         if t.get("verdict") == "deprecated":
+            continue
+        via = own_idx.get(norm(t.get("via"))) if t.get("via") else None      # reached through another tool you have
+        if via is not None and via.get("state") in ("installed", "connected"):
             continue
         if any(isinstance(d, dict) and d.get("skill") == skill for d in t.get("declined") or []):
             continue

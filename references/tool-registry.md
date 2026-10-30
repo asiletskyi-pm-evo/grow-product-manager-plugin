@@ -19,6 +19,7 @@
 | `declined` | `{skill, date}` — the user's «ні» to the suggestion in that skill | the suggesting skill, on the «ні» |
 | `recommended_by` | `я`, a colleague's name (identity only — `people-context-protocol.md`), or `team:<core id>` | the user or a core |
 | `checked` | the day the record was last checked | the scan or the user |
+| `via` | another record that brings this one (FigJam comes with the Figma connector): when that one is installed or connected, this one is not suggested | the seed or the user |
 | `publishes` | what a result can become there: `board` · `page` · `document` · `deck` · `dashboard` · `design` (read by publishing skills) | the seed or the user |
 | `shared` | goes into the export for the team (§5) | the user only |
 | `sources` | every way the record arrived: `seed`, `scan-<source>`, `registry-search`, `catalog`, `user`, `team:<id>` | the script |
@@ -44,7 +45,7 @@ The observed `state` and the user's `verdict` are separate on purpose: a scan ne
 
 ## 4. The suggestion at a step
 
-A skill that a tool would help at one of its steps asks `tools_scan.py suggest --skill <name>` and gets at most one record: one whose `skills` name the skill, that is neither `installed` nor `connected`, that the user has not declined for this skill, and whose `verdict` is not `deprecated` — the user's own `recommended` first, then what the team recommends, then the seed's; among equals, a tool that names the skill first in its `skills`, then the seed's order. Then it says **one line**, in the user's language, and goes on with the step:
+A skill that a tool would help at one of its steps asks `tools_scan.py suggest --skill <name>` and gets at most one record: one whose `skills` name the skill, that is neither `installed` nor `connected`, that the user has not declined for this skill, whose `verdict` is not `deprecated` and whose `via` tool the user does not already have — the user's own `recommended` first, then what the team recommends, then the seed's; among equals, a tool that names the skill first in its `skills`, then the seed's order. Then it says **one line**, in the user's language, and goes on with the step:
 
 > «Для цього кроку є NotebookLM (mind maps із публічних матеріалів) — у тебе не підключений. Як: у браузері, notebooklm.google.com. Не пропонувати — скажи «ні».»
 

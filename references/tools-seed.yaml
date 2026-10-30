@@ -11,7 +11,8 @@
 #
 # Fields (flat — the reader is ctx_common.read_yaml_records): id, name, kind, job, skills, contours, access,
 # connect, publishes, aliases (other names a host lists it under), app_names / app_bundle_ids (how an
-# installed app is recognised by the scan).
+# installed app is recognised by the scan), via (another seed record that brings this one: when you have
+# that tool, this one is not suggested).
 tools:
   - id: atlassian
     name: "Atlassian (Jira, Confluence)"
@@ -44,6 +45,7 @@ tools:
     access: paid
     connect: "through the Figma connector (its FigJam tools) or figma.com in the browser"
     publishes: board
+    via: figma
   - id: miro
     name: "Miro"
     kind: mcp

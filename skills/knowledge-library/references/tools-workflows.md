@@ -16,7 +16,9 @@ Step 0-host decides the path once: **SHELL** runs the script; without it the ski
 - every plugin and skill the session lists (a plugin from the `plugin:skill` prefix) → `"kind": "plugin"` / `"skill"`, `"state": "installed"`;
 - the account's plugins and skills, when the session has a tool that lists them → `"source": "scan-account"`.
 
-Names only — never a tool's arguments, results or descriptions beyond a short line.
+Names only — never a tool's arguments, results or descriptions beyond a short line. Two kinds of server are named differently or left out:
+- **An opaque id** (a UUID, a hash) is no name: name the server by the product its tools reveal (`references/integration-strategy.md` 1b — Jira and Confluence tools → Atlassian, `fireflies_*` → Fireflies), or leave it out.
+- **The host's own servers** — its session, window, view and settings tools, its terminal, browser pane, simulator, scheduler, connector directory, its live documents and inline visuals — are the host's capabilities (`references/host-profiles.md`, `references/native-surfaces.md`), not tools here: leave them out.
 
 **TS-4. Merge.** `merge --scan <scratch>/tools-scan.jsonl --observed <scratch>/tools-observed.jsonl`. The result names `records`, `created`, `state_changed` and the store.
 
