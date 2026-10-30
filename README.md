@@ -239,7 +239,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 3. Product Research (v0.16.0)
+### 3. Product Research (v0.17.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -306,7 +306,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.15.2)
+### 8. Diagram & Prototype Creator (v0.16.0)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -337,7 +337,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 9. Meeting Processor (v0.18.3)
+### 9. Meeting Processor (v0.19.0)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -651,15 +651,15 @@ The second contour of the plugin: **manager → people → goals → communicati
 |-------|---------|-------------|
 | CJM Research | v0.14.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.16.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.1 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.2 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.15.2 | Visualize concepts with diagrams, prototypes, infographics |
+| Diagram & Prototype Creator | v0.16.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
-| Meeting Processor | v0.18.3 | Process meetings and extract action items |
+| Meeting Processor | v0.19.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.17.1 | Configure plugin for your organization |
 | Knowledge Library | v0.10.0 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
