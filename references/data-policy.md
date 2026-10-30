@@ -100,6 +100,16 @@ A hosted surface is anything that lives outside the session and opens at a link:
 
 When in doubt whether a result holds internal data, it does (Practical Guidelines, rule 5).
 
+## Tools registry (since v4.2.0)
+
+The tools registry (`tool-registry.md`) lists what helps the user's work outside the plugin. Five rules keep it inside this policy:
+
+1. **Names only.** The scan reads the names of plugins, skills and MCP servers from the host files on this machine — never a value under them: no command, argument, environment variable, header or URL, where a host keeps its keys (`tool-registry.md` §3).
+2. **Local, like the library.** The registry lives in `~/.grow-pm/knowledge-library/tools/` and the vault mirror; a text written into it passes the never-store filter below.
+3. **Public words leave the session.** A search of the MCP registry or of the organisation's plugin catalogue is made of public words only, never internal data (as Deep Research above).
+4. **The export carries only what the user marked.** Records marked `shared`, and only their listed fields — never what the scan saw on this machine; the plugin never writes into a core, the core's owner adds the file.
+5. **Nothing leaves without the question.** Showing the registry on a hosted surface is a publication (Hosted surfaces, rule 1); nothing is connected or configured by a skill.
+
 ---
 
 ## What the context store never keeps (since v3.21.0)

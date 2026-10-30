@@ -1,14 +1,14 @@
 ---
 name: knowledge-library
-version: 0.9.3
-description: Curated source library — «які джерела маємо», «додай у бібліотеку» — trust scores, team glossary, writing style. Not templates (template-library), competitor research (product-research). UA — «збери глосарій», «як ми називаємо…», «перевір термінологію».
+version: 0.10.0
+description: Curated source library and tools registry — «які джерела маємо», «які інструменти в мене є» — trust scores, glossary, style. Not templates (template-library), competitor research (product-research). UA — «додай у бібліотеку», «знайди інструмент для…», «збери глосарій», «як ми називаємо…».
 ---
 
 # Knowledge Library
 
 > **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
 
-Manage a local library of curated knowledge sources with categorization, trust scoring, and multi-mode search. Acts as a knowledge layer that other skills query during enrichment.
+Manage a local library of curated knowledge sources with categorization, trust scoring, and multi-mode search. Acts as a knowledge layer that other skills query during enrichment. Since v0.10.0 it also keeps the **tools registry** — what helps the user's work outside the plugin, scanned by name only, with the one line a skill may say when a tool would help (`references/tool-registry.md`).
 
 This is a **service skill** — it provides search capabilities to other skills (primarily `cjm-research`) and also supports direct user management of the library.
 
@@ -32,10 +32,10 @@ Starting with v1.9.0, the plugin has two sibling service skills:
 - **`knowledge-library`** (this skill) — curated **source material** (articles, benchmarks, research insights, internal docs)
 - **`template-library`** — **artifact templates** that shape generated outputs (concept, requirements, research, CJM, epic, task, presentation)
 
-If the user says anything about **templates** ("templates", "template for requirements"), delegate to `template-library`. If the user says anything about **sources / knowledge** ("sources", "knowledge", "add this article"), stay here. Since v0.7.0 this skill also owns **terms / team language** ("глосарій", "додай термін", "як ми називаємо", "перевір термінологію", "стиль команди") — the glossary + style contour, also here.
+If the user says anything about **templates** ("templates", "template for requirements"), delegate to `template-library`. If the user says anything about **sources / knowledge** ("sources", "knowledge", "add this article"), stay here. Since v0.10.0 also **tools** — «які інструменти в мене є», «знайди інструмент для …», «додай інструмент», «поділитися інструментами з командою» — the tools contour, here too. Since v0.7.0 this skill also owns **terms / team language** ("глосарій", "додай термін", "як ми називаємо", "перевір термінологію", "стиль команди") — the glossary + style contour, also here.
 
 When ambiguous (e.g. "add this") ask one question via `AskUserQuestion`:
-> "Is this a **source** (article / research / benchmark), a **term** for the team glossary, or a **template** for the Template Library?"
+> "Is this a **source** (article / research / benchmark), a **tool** for the tools registry, a **term** for the team glossary, or a **template** for the Template Library?"
 
 ## Library Storage
 
@@ -52,6 +52,7 @@ The library is stored in the user's **persistent home directory** to survive plu
 ├── health-checks/        # Stored CJM health-check snapshots
 │   ├── 2026-04-07.md
 │   └── ...
+├── tools/                # Tools registry (v0.10.0): registry.json, tools.md, scans/, team/, export/
 ├── glossary/             # Team-language contour (v0.7.0): terms + phrases
 │   ├── _org.yaml
 │   └── {product_id}.yaml
@@ -145,6 +146,10 @@ Optional — created for sources with rich insights:
 | **Glossary Build** (+ Style Build) | User: "збери глосарій", "build a glossary", "навчись нашого стилю"; Gate 3 first-run opt-in | Mine term candidates from Confluence/Jira/Fireflies/documents, confirm in batches, build the style profile from reference texts |
 | **Glossary Manage** | User: "додай термін", "як ми називаємо…", "покажи глосарій", "add a term" | CRUD terms, phrases, and style rules; answer "how do we call X" |
 | **Glossary Lint** | Service call from `artifact-style-gate.md` Gate 3; user: "перевір термінологію" | Scan a draft: avoid→canonical replacements, style deviations, glossary candidates |
+| **Tools Scan** | User: «які інструменти в мене є», «просканируй мої інструменти» | Names of what is installed — host files, the session, the account, known apps — merged into the registry, no question |
+| **Tools Add / Manage** | User: «додай інструмент», «покажи інструменти», «познач X як рекомендований» | A record by hand; the user's verdict, sharing, a «ні» taken back |
+| **Tools Search** | User: «знайди інструмент для …» (on request only) | MCP registry and the organisation's catalogue with public keywords; only picked results are kept |
+| **Tools Export / Team** | User: «поділитися інструментами з командою», «що використовує команда» | The shared records as one file for a core's owner; the cores' own lists, read-only |
 
 If the user says "template" or asks about generated artifact structure — delegate to `template-library` immediately. Do NOT add templates as "sources".
 
@@ -155,6 +160,8 @@ If the user says "template" or asks about generated artifact structure — deleg
 The eight mode workflows — Add (A-1..A-6), Search local (S-1..S-3), Search Confluence (SC-1..SC-5), Search Google Drive (GD-1..GD-3), Search Baymard (B-1..B-4), Manage (M-1..M-3), Import (I-1..I-4), Verify (V-1..V-4) — live in `references/library-workflows.md` (skill-local). Read ONLY the workflow for the active mode.
 
 Trust score calculation (formula, type base scores, freshness, citation bonus, user override, monthly re-evaluation), the evidence class per source type (since v3.8.0), the default category taxonomy, and the Configurator-invoked onboarding (KL-1..KL-6) live in `references/trust-and-categories.md` (skill-local). Add/Import/Verify workflows require the trust section; Add, Import and the Search modes read its Evidence class table.
+
+The **tools contour** (since v0.10.0) — Tools Scan (TS-1..TS-6), Add, Search, Manage, Export, Team — lives in `references/tools-workflows.md` (skill-local); the record, the scan's limits, the suggestion and the team's list in the shared `references/tool-registry.md`. Read ONLY for the tools modes.
 
 The **team-language contour** — Glossary Build (GB-1..GB-6), Style Build (SB-1..SB-4), Glossary Manage (GM), Glossary Lint (GL-1..GL-3), storage schemas, and the Terminology & Style config — lives in `references/glossary-workflows.md` (skill-local). Read ONLY for the glossary/style modes. Key rule: read Atlassian MCP **sequentially** when mining.
 
@@ -189,6 +196,10 @@ When `product-research` or `brainstorm-features` are running and Knowledge Libra
 3. The calling skill then proposes to the user: "Knowledge Library has [N] sources on [topic]. Use them for enrichment?"
 4. Only proceed with library search if user confirms
 
+### As the owner of the tools registry (since v0.10.0)
+
+Three skills offer a missing tool at one of their steps (`references/tool-registry.md` §4): they call `scripts/tools_scan.py suggest --skill <name>` themselves and say one line; a «ні» is `decline`. They never scan, add or change records — that stays here.
+
 ### As the Gate 3 lint service
 
 `references/artifact-style-gate.md` (Gate 3b) calls Glossary Lint with a draft text. Return the structured payload `{replacements, style_findings, candidates}` (see `references/glossary-workflows.md` → GL-3); the calling gate applies it per `lint_mode`. No glossary configured → return "lint skipped" instantly, never block the caller.
@@ -201,7 +212,7 @@ When `product-research` or `brainstorm-features` are running and Knowledge Libra
 
 ## Vault Mirror Sync (Mandatory when Vault configured)
 
-After **every write operation** to `~/.grow-pm/knowledge-library/` (Add, Import, Manage, Verify modes), the Knowledge Library MUST sync changes to the Obsidian Vault mirror. This is the primary defense against data loss during plugin updates.
+After **every write operation** to `~/.grow-pm/knowledge-library/` (Add, Import, Manage, Verify modes, and since v0.10.0 every tools mode that writes), the Knowledge Library MUST sync changes to the Obsidian Vault mirror. This is the primary defense against data loss during plugin updates.
 
 ### Post-write sync procedure
 
@@ -221,6 +232,7 @@ After writing to ~/.grow-pm/knowledge-library/:
    - sources/{new-or-changed}.md → {vault}/{plugin_folder}/Knowledge/sources/
    - glossary/{changed}.yaml → {vault}/{plugin_folder}/Knowledge/glossary/
    - style/{changed}.md → {vault}/{plugin_folder}/Knowledge/style/
+   - tools/registry.json, tools/tools.md → {vault}/{plugin_folder}/Knowledge/tools/
 
 4. Do NOT delete vault files that don't have source counterpart
    (vault may contain user's manual additions)
@@ -270,6 +282,8 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 - **`references/library-workflows.md`** (skill-local) — all eight mode workflows in full
 - **`references/trust-and-categories.md`** (skill-local) — trust formula, evidence class per type, category taxonomy, KL onboarding
 - **`references/glossary-workflows.md`** (skill-local) — team-language contour: glossary + style profile workflows (GB/SB/GM/GL), schemas, config
+- **`references/tools-workflows.md`** (skill-local) — tools contour: Scan, Add, Search, Manage, Export, Team (since v0.10.0)
+- **`references/tool-registry.md`** (shared) — the tools registry: record, scan limits, suggestion, team list (since v4.2.0)
 - **`references/vocabulary-sets.md`** (shared) — read-only role vocabulary sets, lowest precedence below the glossary (since v3.6.0)
 
 - **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`), mirror, backup, recovery
@@ -287,4 +301,4 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
-> Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint.
+> Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint. Since v0.10.0 the tools registry: UA — «які інструменти в мене є», «просканируй мої інструменти», «знайди інструмент для …», «додай інструмент», «покажи мої інструменти», «поділитися інструментами з командою», «що використовує команда»; EN — "what tools do I have", "scan my tools", "find a tool for …", "share my tools with the team". Not the competitor products of the user's market (product-landscape).
