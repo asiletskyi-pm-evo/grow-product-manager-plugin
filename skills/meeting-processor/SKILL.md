@@ -107,7 +107,7 @@ The skill is **tool-agnostic** — it accepts meetings from any source. Determin
 | **Pasted text** | User pastes meeting notes or transcript directly in the chat | Use the pasted text as-is |
 | **No source provided** | User asks for meeting processing but doesn't specify a source | Ask via AskUserQuestion: "Where should I get the meeting from?" — list available options based on connected MCPs and offer file upload / text paste |
 
-**A transcript source you do not have (since v0.19.0).** When the meeting comes as a file or pasted text and no meeting tool is connected, `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill meeting-processor` gives at most one record — say its one line, once per run, never in a headless run, and go on; «ні» → `decline`. No registry or nothing to suggest → no line.
+**A transcript source you do not have (since v0.19.0).** When the meeting comes as a file or pasted text and no meeting tool is connected, `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill meeting-processor --need transcript` gives at most one record — say its one line, once per run, never in a headless run, and go on; «ні» → `decline`. No registry or nothing to suggest → no line.
 
 **M1a. For Fireflies (or similar MCP-based tool):**
 

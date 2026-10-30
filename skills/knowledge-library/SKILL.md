@@ -1,7 +1,7 @@
 ---
 name: knowledge-library
 version: 0.10.0
-description: Curated source library and tools registry — «які джерела маємо», «які інструменти в мене є» — trust scores, glossary, style. Not templates (template-library), competitor research (product-research). UA — «додай у бібліотеку», «знайди інструмент для…», «збери глосарій», «як ми називаємо…».
+description: Curated source library and tools registry — «які джерела маємо», «які інструменти в мене є» — trust scores, glossary, style. Not templates (template-library), competitor research (product-research), competitor apps (product-landscape). UA — «додай у бібліотеку», «знайди інструмент для…», «збери глосарій», «як ми називаємо…».
 ---
 
 # Knowledge Library
@@ -146,7 +146,7 @@ Optional — created for sources with rich insights:
 | **Glossary Build** (+ Style Build) | User: "збери глосарій", "build a glossary", "навчись нашого стилю"; Gate 3 first-run opt-in | Mine term candidates from Confluence/Jira/Fireflies/documents, confirm in batches, build the style profile from reference texts |
 | **Glossary Manage** | User: "додай термін", "як ми називаємо…", "покажи глосарій", "add a term" | CRUD terms, phrases, and style rules; answer "how do we call X" |
 | **Glossary Lint** | Service call from `artifact-style-gate.md` Gate 3; user: "перевір термінологію" | Scan a draft: avoid→canonical replacements, style deviations, glossary candidates |
-| **Tools Scan** | User: «які інструменти в мене є», «просканируй мої інструменти» | Names of what is installed — host files, the session, the account, known apps — merged into the registry, no question |
+| **Tools Scan** | User: «які інструменти в мене є», «проскануй мої інструменти» | Names of what is installed — host files, the session, the account, known apps — merged into the registry, no question |
 | **Tools Add / Manage** | User: «додай інструмент», «покажи інструменти», «познач X як рекомендований» | A record by hand; the user's verdict, sharing, a «ні» taken back |
 | **Tools Search** | User: «знайди інструмент для …» (on request only) | MCP registry and the organisation's catalogue with public keywords; only picked results are kept |
 | **Tools Export / Team** | User: «поділитися інструментами з командою», «що використовує команда» | The shared records as one file for a core's owner; the cores' own lists, read-only |
@@ -198,7 +198,7 @@ When `product-research` or `brainstorm-features` are running and Knowledge Libra
 
 ### As the owner of the tools registry (since v0.10.0)
 
-Three skills offer a missing tool at one of their steps (`references/tool-registry.md` §4): they call `scripts/tools_scan.py suggest --skill <name>` themselves and say one line; a «ні» is `decline`. They never scan, add or change records — that stays here.
+Three skills offer a missing tool at one of their steps (`references/tool-registry.md` §4): they call `scripts/tools_scan.py suggest --skill <name> --need <tag>` themselves and say one line; a «ні» is `decline`, which marks the record for that skill. Scanning, adding and every other change stay here.
 
 ### As the Gate 3 lint service
 
@@ -260,6 +260,10 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 3. If vault mirror also empty:
    → Inform user: "Knowledge Library is not initialized. Would you like to set it up?"
    → Proceed to onboarding workflow
+
+4. Tools (since v0.10.0), checked on its own — library.md may be there while tools/ is not (a second Mac):
+   ~/.grow-pm/knowledge-library/tools/registry.json missing AND vault Knowledge/tools/registry.json present
+   → copy vault Knowledge/tools/ → ~/.grow-pm/knowledge-library/tools/ before any tools mode writes
 ```
 
 ---
@@ -301,4 +305,4 @@ At the beginning of Knowledge Library skill execution (after Step 0 context load
 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
-> Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint. Since v0.10.0 the tools registry: UA — «які інструменти в мене є», «просканируй мої інструменти», «знайди інструмент для …», «додай інструмент», «покажи мої інструменти», «поділитися інструментами з командою», «що використовує команда»; EN — "what tools do I have", "scan my tools", "find a tool for …", "share my tools with the team". Not the competitor products of the user's market (product-landscape).
+> Curated knowledge library with trust scores, plus the team glossary and writing-style profile. Not artifact templates (template-library), not competitor research (product-research). UA — «додай у бібліотеку», «які джерела маємо», «збери глосарій», «додай термін», «перевір термінологію», «навчись нашого стилю». EN — "add to library", "search knowledge", "what sources do we have on [topic]", "import sources", "build a glossary", "how do we call X", "check terminology", "learn our writing style". Also UA — «пошук у знаннях», «як ми називаємо…», «покажи бібліотеку». Also called by other skills for enrichment search or a terminology lint. Since v0.10.0 the tools registry: UA — «які інструменти в мене є», «проскануй мої інструменти» (also «просканируй мої інструменти»), «знайди інструмент для …», «додай інструмент», «покажи мої інструменти», «поділитися інструментами з командою», «що використовує команда»; EN — "what tools do I have", "scan my tools", "find a tool for …", "share my tools with the team". Not the competitor products of the user's market (product-landscape).

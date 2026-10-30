@@ -12,7 +12,8 @@
 # Fields (flat — the reader is ctx_common.read_yaml_records): id, name, kind, job, skills, contours, access,
 # connect, publishes, aliases (other names a host lists it under), app_names / app_bundle_ids (how an
 # installed app is recognised by the scan), via (another seed record that brings this one: when you have
-# that tool, this one is not suggested).
+# that tool, this one is not suggested), needs (what a step asks for — `suggest --need <tag>` offers only a
+# record that carries the tag: mind-map, transcript, market-data …).
 tools:
   - id: atlassian
     name: "Atlassian (Jira, Confluence)"
@@ -36,6 +37,7 @@ tools:
     aliases: [figma-desktop]
     app_names: [Figma]
     app_bundle_ids: [com.figma.Desktop]
+    needs: [prototype, wireframe, design]
   - id: figjam
     name: "FigJam"
     kind: site
@@ -46,6 +48,7 @@ tools:
     connect: "through the Figma connector (its FigJam tools) or figma.com in the browser"
     publishes: board
     via: figma
+    needs: [board, diagram, flowchart]
   - id: miro
     name: "Miro"
     kind: mcp
@@ -57,6 +60,7 @@ tools:
     publishes: board
     app_names: [Miro]
     app_bundle_ids: [com.electron.realtimeboard]
+    needs: [board, diagram, mind-map]
   - id: notebooklm
     name: "NotebookLM"
     kind: site
@@ -65,6 +69,7 @@ tools:
     contours: [design]
     access: free
     connect: "in the browser at notebooklm.google.com — public material only (data-policy.md)"
+    needs: [mind-map, presentation]
   - id: gemini
     name: "Google Gemini"
     kind: site
@@ -73,6 +78,7 @@ tools:
     contours: [design]
     access: free
     connect: "in the browser at gemini.google.com — public material only (data-policy.md)"
+    needs: [infographic, prototype, wireframe, mind-map]
   - id: chatgpt
     name: "ChatGPT"
     kind: site
@@ -82,6 +88,7 @@ tools:
     access: free
     connect: "in the browser at chatgpt.com — public material only (data-policy.md)"
     app_names: [ChatGPT]
+    needs: [infographic, prototype, wireframe]
   - id: drawio
     name: "draw.io"
     kind: app
@@ -93,6 +100,7 @@ tools:
     aliases: [diagrams-net]
     app_names: [draw.io]
     app_bundle_ids: [com.jgraph.drawio.desktop]
+    needs: [flowchart, bpmn, diagram]
   - id: gmail
     name: "Gmail"
     kind: mcp
@@ -109,6 +117,7 @@ tools:
     contours: [delivery, people]
     access: corporate
     connect: "the plugin's Connectors tab → Google Calendar"
+    needs: [meetings]
   - id: google-drive
     name: "Google Drive"
     kind: mcp
@@ -118,6 +127,7 @@ tools:
     access: corporate
     connect: "the plugin's Connectors tab → Google Drive"
     publishes: document
+    needs: [internal-docs]
   - id: fireflies
     name: "Fireflies"
     kind: mcp
@@ -126,6 +136,7 @@ tools:
     contours: [knowledge, people]
     access: paid
     connect: "the plugin's Connectors tab → Fireflies"
+    needs: [transcript]
   - id: zoom
     name: "Zoom"
     kind: mcp
@@ -136,6 +147,7 @@ tools:
     connect: "the host's connector directory → Zoom"
     app_names: [zoom.us, Zoom]
     app_bundle_ids: [us.zoom.xos]
+    needs: [transcript]
   - id: lazyweb
     name: "Lazyweb"
     kind: mcp
@@ -144,6 +156,7 @@ tools:
     contours: [product]
     access: paid
     connect: "the plugin's Connectors tab → Lazyweb"
+    needs: [screens]
   - id: similarweb
     name: "Similarweb"
     kind: mcp
@@ -152,6 +165,7 @@ tools:
     contours: [product]
     access: paid
     connect: "the plugin's Connectors tab → Similarweb"
+    needs: [market-data]
   - id: mobbin
     name: "Mobbin"
     kind: mcp
@@ -160,6 +174,7 @@ tools:
     contours: [product]
     access: paid
     connect: "the plugin's Connectors tab → Mobbin"
+    needs: [screens]
   - id: semrush
     name: "Semrush"
     kind: mcp
@@ -168,6 +183,7 @@ tools:
     contours: [product]
     access: paid
     connect: "the plugin's Connectors tab → Semrush"
+    needs: [market-data]
   - id: tavily
     name: "Tavily"
     kind: mcp
@@ -176,6 +192,7 @@ tools:
     contours: [product]
     access: paid
     connect: "the plugin's Connectors tab → Tavily"
+    needs: [market-data, web-search]
   - id: apify
     name: "Apify"
     kind: mcp
@@ -184,6 +201,7 @@ tools:
     contours: [product]
     access: paid
     connect: "the plugin's Connectors tab → Apify"
+    needs: [store-data]
   - id: tableau
     name: "Tableau"
     kind: mcp
@@ -193,6 +211,7 @@ tools:
     access: corporate
     connect: "a local MCP server the user runs; declared in local-context.md (integration-strategy.md 1a)"
     app_names: [Tableau Desktop]
+    needs: [metrics]
   - id: notion
     name: "Notion"
     kind: mcp
