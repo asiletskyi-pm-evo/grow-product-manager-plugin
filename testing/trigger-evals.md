@@ -369,6 +369,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | (fill after each run) | | | |
 | 2026-10-22 (5) | **Claude Code, live** (`testing/trigger_claude.py`, staged copy, fictional context, model claude-fable-5-1), pre-release v3.18.0 — Groups U, L, T on the branch, both modes | visible and real: U 11/11 · L 8/9 · T 14/14 | U11 «хто такий …», U12 «що таке PROJ-…» → context-navigator (new). L9 → the host's `update-config` as before (predates this release). |
 | 2026-10-22 (6) | **Codex CLI 0.153.2, live** (`testing/trigger_codex.py`), pre-release v3.18.0 — Groups L, U, T on the branch; L5 and T8 2× on the branch and on `main` (v3.17.0, a temporary worktree) | branch 29/36; L5/T8 again: branch 3/4 (L5 → none once), `main` 4/4 | U11, U12 ✓. L6, L7, U8 miss as on `main` before; L8, U9 are the right command under Codex's name `source-command-…`. L5 (`none` once) and T8 (→ context-connect once in the full run) are noise: the branch changes no skill description, and Codex routes on descriptions. |
+| 2026-10-30 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy of `a46196f`, fictional context, model claude-opus-5-5), pre-release v4.2.0 — Group V and the library rows E3, E4, T5, T13, U7, both modes | visible 13/13 · real 12/13 | V5 «поділитися моїми інструментами з командою» → context-connect in `real` only — a visibility miss (in `visible` it routes to knowledge-library); the sources rows stay with knowledge-library. Codex not run: the user's Codex config does not load (`mcp_servers.lazyweb`). |
 
 ## Maintenance
 
