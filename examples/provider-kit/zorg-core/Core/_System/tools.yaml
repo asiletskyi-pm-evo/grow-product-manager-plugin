@@ -1,0 +1,20 @@
+# The tools list of the Zorg team (references/tool-registry.md §5): what colleagues use and recommend.
+# The core's owner adds it from the exports colleagues send; the plugin reads it, never writes it.
+# Everything here is fictional: Zorg is the plugin's example company.
+tools:
+  - name: "Zorg Board"
+    kind: "mcp"
+    job: "the team's whiteboard for discovery maps"
+    skills: ["diagram-prototyper", "brainstorm-features"]
+    access: "corporate"
+    connect: "ask the core owner for the server entry"
+    verdict: "recommended"
+    recommended_by: "Pat Moss"
+    publishes: "board"
+  - name: "Zorg Research Notes"
+    kind: "site"
+    job: "the team's interview notes portal"
+    skills: ["product-research"]
+    access: "corporate"
+    connect: "open it in the browser with the work account"
+    recommended_by: "Ana Lyst"

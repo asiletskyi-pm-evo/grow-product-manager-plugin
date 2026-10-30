@@ -888,10 +888,13 @@ def wrapper_problem(state, manifest=None):
     its `bundles_file`) counts; with no manifest, one in a `_System/` folder where it would be looked for. A broken
     wrapper elsewhere in the copy is no reason."""
     dirs = _manifest_dirs(manifest)
+    tools = os.path.basename(str((manifest or {}).get("tools_file") or "")) if isinstance(manifest, dict) else ""
     for rel, row in sorted(((state or {}).get("wrappers") or {}).items()):
         where = os.path.dirname(rel)
         if dirs is not None and where not in dirs:
             continue
+        if tools and isinstance(row, dict) and row.get("file") == tools:   # the team's tools list (v4.2.0) is no
+            continue                                                          # part of the team block
         if dirs is None and not re.fullmatch(r"(?:[^/]+/)?_System", where):
             continue
         if isinstance(row, dict) and row.get("why"):

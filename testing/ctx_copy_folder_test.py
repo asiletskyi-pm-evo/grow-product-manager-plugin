@@ -94,6 +94,7 @@ status: active
 """
 DEAD = "http://127.0.0.1:9/mcp"                      # nothing listens: the server is down (VPN off)
 MAN, MODEL = "Core/_System/provider-manifest.md", "Core/_System/access-bundles.md"
+TOOLS = "Core/_System/tools.md"           # since v4.2.0: the team's tools list — a wrapper too, so a "no wrappers" server skips it
 
 
 def repo_of(env, rid):
@@ -202,7 +203,7 @@ try:
           "@zorg-folder/Core/.backup/Ghost Folderplan.md" in json.dumps(res, ensure_ascii=False), out[-600:])
 
     print("— 5. the team block's reasons")
-    with FakeMcp(tree=served(KIT, skip=(MAN, MODEL))) as fake:
+    with FakeMcp(tree=served(KIT, skip=(MAN, MODEL, TOOLS))) as fake:
         set_url(reg, fake.url)
         env.run("repo", "copy", "zorg-core", "--now", "2026-10-30T09:00:00+02:00")
         env.run("repo", "copy", "zorg-core", "--now", "2026-10-31T10:00:00+02:00")
@@ -210,7 +211,7 @@ try:
         f5 = crp.fetch(r5)
         check("wrappers gone: the team block is unavailable with the advice for the core owner", f5["team"] is None
               and "сервер не віддає provider-manifest" in (f5["team_error"] or ""), f5["team_error"])
-        inline = served(KIT, skip=(MAN, MODEL))
+        inline = served(KIT, skip=(MAN, MODEL, TOOLS))
         blocks_note = inline["Zorg/Core/_System/context-blocks.md"]
         inline["Zorg/Core/_System/context-blocks.md"] = dict(blocks_note, content=blocks_note["content"]
                                                              + "\n<!-- zorg-core:begin id=team v=0.1 -->\n### Team\nAlpha, from the file.\n<!-- zorg-core:end id=team -->\n")

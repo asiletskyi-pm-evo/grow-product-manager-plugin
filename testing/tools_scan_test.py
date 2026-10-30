@@ -262,6 +262,14 @@ try:
     rc, out, res, _ = run("team", "--store", store, "--home", home)
     check("6.6 a tools_file outside the core is refused", rc == 0 and res.get("team") == {} and
           res.get("skipped") and res["skipped"][0]["core"] == "zorg-core", out)
+    kit = os.path.join(ROOT, "examples", "provider-kit", "zorg-core")
+    home2 = os.path.join(d, "home2")
+    w(os.path.join(home2, ".grow-pm", "providers", "zorg-core.yaml"),
+      "schema: provider-registration/2\nid: zorg-core\nkind: folder\npaths:\n  - %s\n" % kit)
+    kit_before = tree_hash(kit)
+    rc, out, res, _ = run("team", "--store", os.path.join(d, "store2"), "--home", home2)
+    check("6.7 the example kit's tools list is read through its manifest", rc == 0 and res.get("team") == {"zorg-core": 2}
+          and tree_hash(kit) == kit_before, out)
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

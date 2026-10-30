@@ -515,5 +515,32 @@ if toks:
 else:
     print("ℹ️  no org identifiers check skipped — testing/org-tokens.local absent")
 
+# tools_file (v4.2.0, tool-registry.md §5): the team's tools list goes into every bundle with the manifest; a path
+# that leaves the core is never copied.
+d, core, out = fresh()
+with open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "a", encoding="utf-8") as f:
+    f.write("tools_file: Core/_System/tools.yaml\n")
+with open(os.path.join(core, "Core", "_System", "tools.yaml"), "w", encoding="utf-8") as f:
+    f.write('tools:\n  - name: "Zorg Board"\n    kind: "mcp"\n')
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--jira-write", "own")
+check("tools_file copied into the bundle with the manifest", rc == 0 and
+      os.path.isfile(os.path.join(out, "Core", "_System", "tools.yaml")), (rc, o[-400:]))
+out_b = os.path.join(d, "out-b")
+rc, o = run("--core", core, "--out", out_b, "--email", "c.three@zorg.example", "--role", "analyst", "--jira-write", "none")
+check("tools_file copied for another team and role too", rc == 0 and
+      os.path.isfile(os.path.join(out_b, "Core", "_System", "tools.yaml")), (rc, o[-400:]))
+with open(os.path.join(d, "outside.yaml"), "w", encoding="utf-8") as f:
+    f.write('tools:\n  - name: "Outside"\n')
+mp = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+with open(mp, encoding="utf-8") as f:
+    mt = f.read()
+with open(mp, "w", encoding="utf-8") as f:
+    f.write(mt.replace("tools_file: Core/_System/tools.yaml", "tools_file: ../outside.yaml"))
+out_c = os.path.join(d, "out-c")
+rc, o = run("--core", core, "--out", out_c, "--email", "a.one@zorg.example", "--jira-write", "own")
+check("a tools_file outside the core is never copied", rc == 0 and
+      not [f for f in files_under(d) if f.endswith("outside.yaml") and f != "outside.yaml"], files_under(d))
+shutil.rmtree(d)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
