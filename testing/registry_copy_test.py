@@ -37,7 +37,8 @@ with tempfile.TemporaryDirectory() as d:
     os.makedirs(os.path.join(d, "testing"))
     shutil.copy(SCRIPT, os.path.join(d, "testing", "registry_copy.py"))
     write(d, ".claude-plugin/plugin.json", manifest())
-    write(d, ".claude-plugin/marketplace.json", '{"name": "demo-market", "plugins": []}\n')
+    market = lambda source: json.dumps({"name": "demo-market", "plugins": [{"name": "demo", "source": source}]}) + "\n"
+    write(d, ".claude-plugin/marketplace.json", market("./.ai-registry/skills/demo"))
     write(d, ".codex-plugin/plugin.json", manifest())
     write(d, "skills/hello/SKILL.md", "---\nname: hello\n---\n# Hello\n")
     write(d, "scripts/run.sh", "#!/bin/sh\necho hi\n", exe=True)
@@ -65,6 +66,16 @@ with tempfile.TemporaryDirectory() as d:
     check("--check passes right after a build", rc == 0, out)
     rc, out = run("--manifests")
     check("--manifests passes while the versions match", rc == 0, out)
+    # Since v4.1.1: a host that imports the whole repository refuses a tree with a second
+    # plugin manifest, so the marketplace entry must install from the copy, never from "./".
+    write(d, ".claude-plugin/marketplace.json", market("./"))
+    rc, out = run("--manifests")
+    check("--manifests fails while the marketplace installs from the root, and names the copy",
+          rc == 1 and 'source "./"' in out and "./.ai-registry/skills/demo" in out, out)
+    write(d, ".claude-plugin/marketplace.json", '{"name": "demo-market", "plugins": []}\n')
+    rc, out = run("--manifests")
+    check("--manifests fails when the marketplace has no entry for the plugin", rc == 1 and "no entry named 'demo'" in out, out)
+    write(d, ".claude-plugin/marketplace.json", market("./.ai-registry/skills/demo"))
 
     write(d, "skills/hello/SKILL.md", "---\nname: hello\n---\n# Hello, work in progress\n")
     run()

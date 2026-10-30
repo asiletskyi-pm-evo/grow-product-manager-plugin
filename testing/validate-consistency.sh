@@ -503,14 +503,21 @@ fi
 # testing/registry_copy.py rebuilds at release. Between releases it lags main on purpose — only its
 # manifests are read here: a release that bumps plugin.json and skips the rebuild would hand the registry
 # the previous release under the new version. Its full content is checked with --check after the release commit.
+# Since v4.1.1 the marketplace entry installs from the copy: with "./" a host that imports the whole repository
+# found the copy's manifest inside the plugin's tree and refused every release after 4.0.1.
 if [ -f testing/registry_copy.py ]; then
   COPY_ERRS=$(python3 testing/registry_copy.py --manifests 2>&1)
   if [ -n "$COPY_ERRS" ]; then
-    while IFS= read -r line; do err "registry copy: $line — rebuild it: python3 testing/registry_copy.py"; done <<EOF
+    while IFS= read -r line; do
+      case "$line" in
+        marketplace.json*) err "registry copy: $line" ;;
+        *) err "registry copy: $line — rebuild it: python3 testing/registry_copy.py" ;;
+      esac
+    done <<EOF
 $COPY_ERRS
 EOF
   else
-    ok "registry copy: its three manifests carry plugin.json's name and version $PLUGIN_VER"
+    ok "registry copy: its three manifests carry plugin.json's name and version $PLUGIN_VER; the marketplace installs from it"
   fi
 fi
 

@@ -7,8 +7,8 @@
   "plugins": [
     {
       "name": "grow-product-manager",
-      "version": "4.1.0",
-      "source": "./",
+      "version": "4.1.1",
+      "source": "./.ai-registry/skills/grow-product-manager",
       "description": "AI assistant for product managers: research, concepts, requirements, Jira tasks, planning, reports, meetings, people and team context — across Jira, Confluence, Figma and your notes.",
       "category": "productivity"
     }

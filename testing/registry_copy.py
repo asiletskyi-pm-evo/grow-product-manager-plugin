@@ -10,7 +10,8 @@ the maintainer's own (EXCLUDE), plus a `.cursor-plugin/plugin.json` derived from
 
   python3 testing/registry_copy.py               # rebuild the copy from the index
   python3 testing/registry_copy.py --check       # exit 1 if the copy differs from a rebuild
-  python3 testing/registry_copy.py --manifests   # exit 1 if its manifests lag plugin.json
+  python3 testing/registry_copy.py --manifests   # exit 1 if its manifests lag plugin.json,
+                                                 # or the marketplace entry is not the copy
 
 Built from the index, not the working tree: unstaged work in progress never reaches the
 copy, and a file the release adds counts once it is staged. Rebuilt at release
@@ -18,6 +19,11 @@ copy, and a file the release adds counts once it is staged. Rebuilt at release
 purpose, so a registry sees releases only; validator check 22 runs --manifests. Real
 files, never symlinks (a registry downloads an archive of the folder), and never
 `export-ignore` it in .gitattributes (that archive would come back empty). Stdlib + git.
+
+The marketplace installs from the copy too (since v4.1.1): its entry's `source` is
+`./.ai-registry/skills/<name>`, not `./`. A host that imports the whole repository
+refuses a plugin whose tree holds a second plugin manifest — with `./` it found the
+copy's, and the marketplace stayed at 4.0.1, the last release without a copy.
 """
 import argparse, json, os, shutil, subprocess, sys
 
@@ -133,11 +139,22 @@ def check():
 
 
 def manifests():
-    """The copy exists and its three manifests carry plugin.json's name and version (working tree)."""
+    """The copy exists, its three manifests carry plugin.json's name and version, and the
+    marketplace entry of the plugin installs from it (working tree)."""
     with open(os.path.join(ROOT, ".claude-plugin/plugin.json"), encoding="utf-8") as fh:
         root = json.load(fh)
     dest = os.path.join(REGISTRY_ROOT, root.get("name", ""))
     problems = []
+    with open(os.path.join(ROOT, ".claude-plugin/marketplace.json"), encoding="utf-8") as fh:
+        entries = [p for p in json.load(fh).get("plugins", []) if p.get("name") == root.get("name")]
+    want = "./" + dest
+    if not entries:
+        problems.append("marketplace.json has no entry named '%s'" % root.get("name"))
+    for e in entries:
+        if e.get("source") != want:
+            problems.append("marketplace.json: source %s, expected \"%s\" — a host that imports the whole "
+                            "repository refuses it when the copy's manifest is inside the plugin's tree"
+                            % (json.dumps(e.get("source"), ensure_ascii=False), want))
     for m in MANIFESTS:
         path = os.path.join(ROOT, dest, m)
         if not os.path.isfile(path):

@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.1.0
+**Version:** 4.1.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.1.1** — **The marketplace installs from the registry copy — releases reach Claude desktop and Cowork again** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The marketplace that Claude desktop and Cowork install from imports the whole repository and refuses a plugin whose tree holds a second plugin manifest; since v4.0.2 the tree carries the registry copy (`.ai-registry/skills/grow-product-manager/`), so with `"source": "./"` it stayed at 4.0.1. The entry now points at the copy, which is rebuilt at every release, and validator check 22 keeps it there. Reported, not reproduced locally: `claude plugin validate` accepts both forms. No skill behaves differently.
 
 **New in v4.1.0** — **«Поверхні хоста»: a skill knows where the host can put a result, and asks before anything leaves the session** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Step 0-host marks five more capabilities — a page at a link (ARTIFACT), a live document (DOCS), the host's own visual in the conversation (WIDGET), a recurring run on your machine (SCHEDULE `local`), a research pass with sources (RESEARCH) — described in `references/native-surfaces.md` with what was measured on each host. `focus-advisor` draws its board inline, `product-analysis` its charts, `cjm-research` schedules its health-check, `product-research` takes the host's research first, `product-reporter` offers a live document. Before internal data reaches a hosted surface — a live page or document, Confluence, Notion, a whiteboard, a design file — every skill asks, an update included, naming what goes, where and who can open it; a scheduled run never publishes; before a Jira or Confluence write the skill confirms itself on every host. Lint check 30 keeps host brands out of the skills. On Codex CLI 0.153.2 the plugin's hooks run once you trust them in Codex.
 
@@ -511,7 +513,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.5.0) — NEW in v1.28.0
+### 19. Release Manager (v0.5.1) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -667,7 +669,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.6.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.5.0 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.5.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.10.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.2 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -1097,5 +1099,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.1.0  
+**Version:** 4.1.1  
 **Last Updated:** October 2026
