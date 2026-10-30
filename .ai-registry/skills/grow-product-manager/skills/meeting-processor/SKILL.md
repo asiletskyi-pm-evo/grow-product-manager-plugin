@@ -1,6 +1,6 @@
 ---
 name: meeting-processor
-version: 0.18.3
+version: 0.19.0
 description: Turn meeting transcripts, recordings or notes into decisions, ARCV action items and MoM. Not a 1-1 (one-on-one, redirected automatically), not a role debate (brainstorm-features). UA — «підсумуй зустріч», «розбери транскрипт зустрічі», «action items». EN — "summarize meeting".
 ---
 
@@ -106,6 +106,8 @@ The skill is **tool-agnostic** — it accepts meetings from any source. Determin
 | **Uploaded file** | User uploads a file: audio (.mp3, .wav, .m4a, .ogg), video (.mp4, .webm), text transcript (.txt, .docx, .srt, .vtt), or PDF | Read the file content. For audio/video — note that transcription may require an external service; offer to use the browser to upload to a transcription tool if needed |
 | **Pasted text** | User pastes meeting notes or transcript directly in the chat | Use the pasted text as-is |
 | **No source provided** | User asks for meeting processing but doesn't specify a source | Ask via AskUserQuestion: "Where should I get the meeting from?" — list available options based on connected MCPs and offer file upload / text paste |
+
+**A transcript source you do not have (since v0.19.0).** When the meeting comes as a file or pasted text and no meeting tool is connected, `references/tool-registry.md` §4: `scripts/tools_scan.py suggest --skill meeting-processor --need transcript` (with SHELL) gives at most one record — say its one line, once per run, never in a headless run, and go on; «ні» → `decline`. No registry or nothing to suggest → no line.
 
 **M1a. For Fireflies (or similar MCP-based tool):**
 
@@ -337,7 +339,7 @@ If no chaining is relevant or the user declines — end the workflow gracefully.
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.18.3", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
+1. `vault_save({ type: "meeting-notes", product: active_product, skill: "meeting-processor", skill_version: "0.19.0", tags: [meeting type (grooming/discovery/demo/status/brainstorm), topic keywords], content: structured notes or MoM from M6, related: [artifacts created via M9 chaining], extra_frontmatter: { meeting_date, participants, source (fireflies/upload/paste) } })`
 2. Key decisions from the meeting may additionally be recorded as ADR-style records — offer, don't force: "The meeting produced N decisions. Log them in the decision log so the 'why' survives?" → invoke `decision-log` (log mode) once for the chosen decisions — one record per decision, and decision-log's own confidence question once for the whole batch (since v3.7.0) — passing per decision the decision-log row of `references/chaining.md`: what was decided, the context and options discussed, who decided, a link back to these notes, and the v3.7.0 fields only when said in the meeting, plus `evidence_classes` since v3.8.0. decision-log owns the `decision` artifact; do not hand-write `Decisions/` files here.
 3. Display: "Saved to Vault: Meetings/{product}/…"
 

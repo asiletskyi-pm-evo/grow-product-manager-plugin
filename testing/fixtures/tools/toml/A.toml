@@ -1,0 +1,5 @@
+[mcp_servers.real]
+note = 'say """ hello'
+instructions = """
+[mcp_servers.LEAK-A]
+"""

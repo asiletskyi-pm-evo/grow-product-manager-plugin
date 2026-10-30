@@ -210,7 +210,7 @@ try:
         f5 = crp.fetch(r5)
         check("wrappers gone: the team block is unavailable with the advice for the core owner", f5["team"] is None
               and "сервер не віддає provider-manifest" in (f5["team_error"] or ""), f5["team_error"])
-        inline = served(KIT, skip=(MAN, MODEL))
+        inline = served(KIT, skip=(MAN, MODEL))      # the tools wrapper is still served: never the team block's reason
         blocks_note = inline["Zorg/Core/_System/context-blocks.md"]
         inline["Zorg/Core/_System/context-blocks.md"] = dict(blocks_note, content=blocks_note["content"]
                                                              + "\n<!-- zorg-core:begin id=team v=0.1 -->\n### Team\nAlpha, from the file.\n<!-- zorg-core:end id=team -->\n")

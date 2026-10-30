@@ -1,7 +1,7 @@
 ---
 name: product-landscape
-version: 0.5.1
-description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover, characterise, research the same flow across products. Not a single competitive report (product-research), not its setup (plugin-configurator). UA — «карта конкурентів», «просканируй мої застосунки», «досліди однакове флоу на конкурентах».
+version: 0.5.2
+description: Registry and map of competitor, adjacent and benchmark products — scan installed apps, discover, characterise, research the same flow across products. Not a single competitive report (product-research), not its setup (plugin-configurator), not your own tools (knowledge-library). UA — «карта конкурентів», «просканируй мої застосунки», «досліди однакове флоу на конкурентах».
 ---
 
 # Product Landscape
@@ -121,7 +121,7 @@ Update `registry.yaml` (index) and `products/<slug>.md`; append the run to `scan
 
 > Requires: `references/vault-protocol.md` → Vault Save
 
-IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.5.1", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
+IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "landscape", product: active_product, skill: "product-landscape", skill_version: "0.5.2", tags: [category, market], content: the map, related: [registry slugs] })`. Display: "Saved to Vault: Research/landscape/{product}/…".
 
 ## Skill Chaining
 

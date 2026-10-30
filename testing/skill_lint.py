@@ -1586,7 +1586,7 @@ SURFACE_BRANDS = [   # (pattern, flags, what it names)
 SURFACE_BRAND_ALLOWED = {os.path.join("references", "host-profiles.md"), os.path.join("references", "native-surfaces.md")}
 _sb_files = (glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True)
              + glob.glob(os.path.join(root, "agents", "*.md")) + glob.glob(os.path.join(root, "commands", "*.md"))
-             + glob.glob(os.path.join(root, "references", "*.md"))
+             + glob.glob(os.path.join(root, "references", "*.md")) + glob.glob(os.path.join(root, "references", "*.yaml"))
              + glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True)
              + glob.glob(os.path.join(root, ".codex", "agents", "*.md")))
 for _f in sorted(_sb_files):

@@ -11,6 +11,7 @@ mode: snapshot
 product_name: Zorg App
 bundles_file: Core/_System/access-bundles.json
 blocks_file: Core/_System/context-blocks.md
+tools_file: Core/_System/tools.yaml
 team_card_dir: Core/Teams
 people_dir: Core/People
 missions_dir: Core/Products/Zorg App/Missions

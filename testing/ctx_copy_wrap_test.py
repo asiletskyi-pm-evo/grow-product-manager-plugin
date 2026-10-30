@@ -64,6 +64,7 @@ def snapshot(folder):
 
 
 MAN, MODEL = "Core/_System/provider-manifest.md", "Core/_System/access-bundles.md"
+TOOLS = "Core/_System/tools.md"           # since v4.2.0: the team's tools list (tool-registry.md §5), named by `tools_file`
 kit_before = snapshot(KIT)
 tmp = tempfile.mkdtemp(prefix="ctx-copy-wrap-")
 try:
@@ -78,12 +79,13 @@ try:
         folder = cp.copy_dir(home, "zorg-core")
         sysd = os.path.join(folder, "Core", "_System")
         check("complete", res["outcome"] == "complete", res)
-        for name in ("provider-manifest.yaml", "access-bundles.json"):
+        for name in ("provider-manifest.yaml", "access-bundles.json", "tools.yaml"):
             check("unpacked %s, byte for byte the kit's" % name,
                   os.path.isfile(os.path.join(sysd, name)) and read(os.path.join(sysd, name)) == read(os.path.join(KIT, "Core", "_System", name)))
         st = cp.load_state(folder)
         check("the state records what each wrapper unpacked", st.get("unpacked") == {
-            "Core/_System/provider-manifest.yaml": MAN, "Core/_System/access-bundles.json": MODEL}, st.get("unpacked"))
+            "Core/_System/provider-manifest.yaml": MAN, "Core/_System/access-bundles.json": MODEL,
+            "Core/_System/tools.yaml": TOOLS}, st.get("unpacked"))
         check("no wrapper problem", cp.wrapper_problem(st) == "", cp.wrapper_problem(st))
         m, why = pb.read_manifest(folder)
         check("the bundle builder reads the manifest from the copy", m is not None and m.s("id") == "zorg-core", why)
@@ -118,6 +120,34 @@ try:
               any(f == "access-bundles.json" for dp, dn, fn in os.walk(os.path.join(folder, ".removed")) for f in fn))
         check("a sound wrapper again: unpacked again, no problem",
               os.path.isfile(os.path.join(sysd, "access-bundles.json")) and cp.wrapper_problem(cp.load_state(folder)) == "")
+
+        print("— a manifest whose YAML does not read, with a tools: list inside")
+        good_m = dict(tree["Zorg/" + MAN])
+        fake.tree["Zorg/" + MAN] = dict(good_m, content=good_m["content"].replace(
+            "schema: provider-manifest/1", "schema: provider-manifest/1\nbroken: [a\ntools:\n  - name: \"x\"", 1))
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+        st = cp.load_state(folder)
+        check("the manifest is refused as before — the records reading is the tools list's only",
+              "YAML не читається" in cp.wrapper_problem(st), cp.wrapper_problem(st))
+        fake.tree["Zorg/" + MAN] = good_m
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+
+        print("— the team's tools list (v4.2.0)")
+        good_t = dict(tree["Zorg/" + TOOLS])
+        fake.tree["Zorg/" + TOOLS] = dict(good_t, content=good_t["content"] + "\n```yaml\n{}\n```\n")
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+        st = cp.load_state(folder)
+        m, _ = pb.read_manifest(folder)
+        check("a broken tools wrapper: its file not unpacked, its reason kept, and no reason for the team block",
+              not os.path.exists(os.path.join(sysd, "tools.yaml")) and "Core/_System/tools.md" in st["wrappers"]
+              and cp.wrapper_problem(st, m) == "", (st["wrappers"], cp.wrapper_problem(st, m)))
+        fake.tree["Zorg/" + TOOLS] = good_t
+        t += datetime.timedelta(hours=1)
+        cp.run(home, repo, t)
+        check("a sound tools wrapper again: unpacked", os.path.isfile(os.path.join(sysd, "tools.yaml")))
 
         print("— a wrapper elsewhere, a wrapper that is no wrapper any more")
         fake.tree["Zorg/Archive/old-manifest.md"] = {"frontmatter": {"kind": "provider-file", "file": "provider-manifest.yaml"},
@@ -154,7 +184,7 @@ try:
     check("the kit folder itself is never written", snapshot(KIT) == kit_before)
 
     print("— a server with no wrappers at all")
-    plain = {k: v for k, v in served(KIT).items() if k not in ("Zorg/" + MAN, "Zorg/" + MODEL)}
+    plain = {k: v for k, v in served(KIT).items() if k not in ("Zorg/" + MAN, "Zorg/" + MODEL)}   # tools.md still served
     with FakeMcp(tree=plain) as fake:
         repo = {"id": "zorg-bare", "endpoint": {"url": fake.url, "root": "Zorg/", "headers_env": ""}, "writable": []}
         cp.run(home, repo, NOW)

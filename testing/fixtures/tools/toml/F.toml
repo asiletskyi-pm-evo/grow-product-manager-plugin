@@ -1,0 +1,1 @@
+mcp_servers = { real = { command = "zorg" }, "real two" = { url = "https://zorg.example/mcp" } }

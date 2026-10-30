@@ -43,7 +43,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 N = lambda s: unicodedata.normalize("NFC", s or "")
 BUILTIN_TEMPLATES = os.path.join(HERE, "provider_templates")
 BUILTIN_EXCLUDE = [r"\.zip$", r"\.plugin$", r"\.tgz$", r"\.tar\.gz$", r"(^|/)__pycache__/", r"\.pyc$",
@@ -661,6 +661,20 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
 
 
 # ------------------------------------------------------------------- main
+def tools_file(m, core):
+    """The core's tools list (`tools_file`, tool-registry.md §5) as a path inside the core, or None — copied into
+    every bundle with the manifest: the list is the team's, not a role's. A YAML file only; a path that leaves the
+    core, by `..`, an absolute path or a link that points out of it, is ignored."""
+    rel = N(str(m.s("tools_file") or "")).strip()
+    if not rel or os.path.isabs(rel) or os.path.normpath(rel).split(os.sep)[0] == ".." or \
+            os.path.splitext(rel)[1] not in (".yaml", ".yml"):
+        return None
+    root, real = os.path.realpath(core), os.path.realpath(os.path.join(core, rel))
+    if os.path.commonpath([root, real]) != root:
+        return None
+    return os.path.normpath(rel)
+
+
 def select_files(core, J, m, tb, layers, excluded):
     files = set(J.get("shared", []))
     for pre in J.get("always", []):
@@ -675,6 +689,8 @@ def select_files(core, J, m, tb, layers, excluded):
                 files.update(os.path.join(d, f) for f in os.listdir(os.path.join(core, d)) if f.startswith(os.path.basename(pre)))
     if m.get("_path"):
         files.add(m["_path"])
+    if tools_file(m, core):
+        files.add(tools_file(m, core))
     enabled = [pre for l in layers for pre in J.get("layer_prefixes", {}).get(l, [])]
     if "all-teams" in layers:
         for t2 in J["teams"].values():
@@ -738,6 +754,8 @@ def main():
             files.update(os.path.join(pages, r) for r in walk(os.path.join(core, pages)))
         if m.get("_path"):
             files.add(m["_path"])
+        if tools_file(m, core):
+            files.add(tools_file(m, core))
         files = sorted(N(f) for f in files if not excluded(f) and os.path.isfile(os.path.join(core, f)))
         n = 0
         for f in files:
