@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.5.0
+version: 0.5.1
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
@@ -49,7 +49,7 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 3. `README.md` — header + footer `**Version:**`; if skills changed: section headers, Skills Summary rows, "New in vX.Y.Z" overview paragraph.
 4. `CHANGELOG.md` — prepend the entry (Added/Changed/Fixed, files table with skill version bumps, Backwards compatibility note). No editorial placeholders — write the final text directly (pitfall P3).
 5. **Component counts** (since v2.5.0; README alone since v3.20.0) — the phrase `N skills, N agents, N commands, N connectors, N hooks` in README must equal what is on disk (`skills/*/`, `agents/*.md`, `commands/*.md`, `.mcp.json` keys, the events wired in `hooks/hooks.json`). Validator check 10 fails the release otherwise. Adding an agent, a command or a connector is a MINOR bump.
-6. **Registry copy** — only when the repo has `testing/registry_copy.py`. A registry that syncs a subfolder (`.ai-registry/skills/<name>/`) never reads the root, so that folder is a generated copy. Last, once every file above is final: stage the release's files (`git add <explicit list>`), then run `python3 testing/registry_copy.py`. It rebuilds the copy from the index — unstaged work in progress never reaches it — and derives the Cursor manifest from plugin.json. Never edit the copy by hand; a file fixed after this point means staging and rebuilding again. Validator check 22 fails while the copy's version lags plugin.json.
+6. **Registry copy** — only when the repo has `testing/registry_copy.py`. A registry that syncs a subfolder (`.ai-registry/skills/<name>/`) never reads the root, so that folder is a generated copy. Last, once every file above is final: stage the release's files (`git add <explicit list>`), then run `python3 testing/registry_copy.py`. It rebuilds the copy from the index — unstaged work in progress never reaches it — and derives the Cursor manifest from plugin.json. Never edit the copy by hand; a file fixed after this point means staging and rebuilding again. Validator check 22 fails while the copy's version lags plugin.json. The marketplace entry installs from this copy (since v4.1.1: a host that imports the whole repository refuses a tree with a second plugin manifest), so the copy is what every user gets, and host-smoke's Codex leg installs it.
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 

@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.1.0
+**Version:** 4.1.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.1.1** — **The marketplace installs from the registry copy — releases reach Claude desktop and Cowork again** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The marketplace that Claude desktop and Cowork install from imports the whole repository and refuses a plugin whose tree holds a second plugin manifest; since v4.0.2 the tree carries the registry copy (`.ai-registry/skills/grow-product-manager/`), so with `"source": "./"` it stayed at 4.0.1. The entry now points at the copy, which is rebuilt at every release, and validator check 22 keeps it there. Reported, not reproduced locally: `claude plugin validate` accepts both forms. No skill behaves differently.
 
 **New in v4.1.0** — **«Поверхні хоста»: a skill knows where the host can put a result, and asks before anything leaves the session** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Step 0-host marks five more capabilities — a page at a link (ARTIFACT), a live document (DOCS), the host's own visual in the conversation (WIDGET), a recurring run on your machine (SCHEDULE `local`), a research pass with sources (RESEARCH) — described in `references/native-surfaces.md` with what was measured on each host. `focus-advisor` draws its board inline, `product-analysis` its charts, `cjm-research` schedules its health-check, `product-research` takes the host's research first, `product-reporter` offers a live document. Before internal data reaches a hosted surface — a live page or document, Confluence, Notion, a whiteboard, a design file — every skill asks, an update included, naming what goes, where and who can open it; a scheduled run never publishes; before a Jira or Confluence write the skill confirms itself on every host. Lint check 30 keeps host brands out of the skills. On Codex CLI 0.153.2 the plugin's hooks run once you trust them in Codex.
 
@@ -1097,5 +1099,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.1.0  
+**Version:** 4.1.1  
 **Last Updated:** October 2026

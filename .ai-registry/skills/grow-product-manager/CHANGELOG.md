@@ -12,6 +12,41 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.1.1 (2026-10-30)
+
+**The marketplace installs from the registry copy — releases reach Claude desktop and Cowork again.** The marketplace that Claude desktop and Cowork install from imports the whole repository and refuses a plugin whose tree holds a second plugin manifest. Since v4.0.2 the tree carries the registry copy (`.ai-registry/skills/grow-product-manager/`, with its own `.claude-plugin/plugin.json`), so with `"source": "./"` that marketplace stayed at 4.0.1 — the last release without a copy — and could not check for updates. Reported by a colleague, not reproduced locally: `claude plugin validate` accepts both forms.
+
+PATCH: one packaging field and one validator rule; no skill behaves differently.
+
+### Fixed
+
+- **`marketplace.json` → `"source": "./.ai-registry/skills/grow-product-manager"`.** The copy is rebuilt from the index at every release, so the marketplace serves exactly the release — what the registry already got. The string form with a `./` prefix is the one Codex reads (`host-profiles.md` §7).
+
+### Changed
+
+- **Validator check 22** (`registry_copy.py --manifests`) also fails when the marketplace entry is not the copy — red first on `"./"`; it catches another folder, a bare `"."` and the object form.
+- **`release-manager` 0.5.1** — Step 3.6 says the copy is what every user installs and what host-smoke's Codex leg installs.
+- **`references/host-profiles.md` §7, `AGENTS.md`** — the source rule and why.
+
+### Files
+
+| File | Change |
+|---|---|
+| `.claude-plugin/marketplace.json` | `source` → the registry copy; v4.1.1 |
+| `testing/registry_copy.py`, `testing/validate-consistency.sh`, `testing/registry_copy_test.py` | check 22 covers the marketplace source; two cases |
+| `references/host-profiles.md`, `AGENTS.md`, `skills/release-manager/SKILL.md` | the rule and why; release-manager 0.5.1 |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.1.1 |
+| `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.1.1 |
+
+### Backwards compatibility
+
+An installed plugin updates as usual; the new version makes Claude Code and Codex install it from the new source. The copy holds everything the plugin reads at runtime — only `testing/`, `docs/`, `.github/` and the marketplace file are left out. The marketplace now sees releases only, never work on `main` between them.
+
+### Known limits
+
+- That Claude desktop and Cowork accept the new source is seen only after the merge, with «Оновити» in Settings → Plugins.
+- A release that skipped rebuilding the copy would ship the previous release to every user, not only to the registry; check 22 fails while the copy's version lags.
+
 ## v4.1.0 (2026-10-29)
 
 **«Поверхні хоста»: a skill knows where the host can put a result — and asks before anything leaves the session.** Until now the plugin knew only what a host can *do* — read files, run scripts, reach connectors — not where it can *put* a result, so every skill wrote a markdown file or a `.pptx` even where the host has a live document, a page at a link or a chart in the conversation. Step 0-host now marks five more capabilities — **ARTIFACT** (a page at a link), **DOCS** (a live document the user and the agent edit), **WIDGET** (the host's own visual inside the conversation), **SCHEDULE** (a recurring run the agent can create: `local`, `session` or `remote`), **RESEARCH** (a research pass with sources inside the session) — and five skills use them. Before internal data reaches any hosted surface — a live page, a live document, Confluence, Notion, a whiteboard, a design file — the skill asks, every time, an update included, naming what goes, where, and who can open it there. A scheduled run never publishes.

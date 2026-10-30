@@ -23,7 +23,7 @@ The **Grow Product Manager** plugin — a set of skills for a product manager's 
 | `scripts/ctx.py`, `references/context-protocol.md` | the context store: records of the user's context, `local-context.md` compiled from them, `ctx sync` after any write to it |
 | `references/native-surfaces.md` | where a host can put a result — a page, a live document, an inline visual, a schedule, a research pass — and the question asked before anything is published |
 | `testing/` | `validate-consistency.sh`, `skill_lint.py` and the eval sets |
-| `.ai-registry/skills/<name>/`, `testing/registry_copy.py` | a generated copy of the plugin for a registry that syncs a subfolder, never the root; rebuilt at release from the index, never edited by hand |
+| `.ai-registry/skills/<name>/`, `testing/registry_copy.py` | a generated copy of the plugin for a registry that syncs a subfolder, never the root; rebuilt at release from the index, never edited by hand. Since v4.1.1 the marketplace installs from it too (`source` in `.claude-plugin/marketplace.json`), so a release that skips the rebuild ships the previous release |
 
 A bare `references/<file>.md` in a skill means the **shared** folder at the plugin root, not the skill's own. When a relative read of it fails, resolve the plugin root through `${PLUGIN_ROOT}` → `${CLAUDE_PLUGIN_ROOT}` → the directory that contains `skills/` (`references/host-profiles.md` §6) and read it from there. Do not silently continue without a protocol the skill named.
 
