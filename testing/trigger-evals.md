@@ -349,8 +349,8 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | W1 | опублікуй деку про контекст у Atlassian | design-bridge |
 | W2 | онови деку «Zorg: нова доставка» до нової версії | design-bridge |
 | W3 | publish the deck as an HTML page | design-bridge |
-| W4 | онови дашборд спринту | product-reporter |
-| W5 | зроби дашборд воронки з аномаліями | cjm-research — NOT product-analysis |
+| W4 | онови звіт по спринту 42 у тому самому документі | product-reporter |
+| W5 | опублікуй CJM-дослідження воронки з аномаліями як дашборд | cjm-research — NOT product-analysis |
 | W6 | онови живий борд фокусів | focus-advisor |
 | W7 | намалюй блок-схему онбордингу | diagram-prototyper — NOT design-bridge |
 

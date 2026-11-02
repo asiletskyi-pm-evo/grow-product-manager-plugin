@@ -22,7 +22,7 @@ HTML via `updateConfluencePage`/`createConfluencePage` (`contentFormat: html`): 
 
 ## 2. Live dashboard (an ARTIFACT, `native-surfaces.md`)
 
-Self-contained HTML (light mode, `:root{color-scheme:light}`). Static: capacity bars (target 85% / ceiling 100% markers), Gantt timeline. Live (on open): epic statuses ← `getJiraIssue` per-key; feature inventory ← CQL by quarter label. Published as a typed ARTIFACT whose live parts re-query the connectors on open (`native-surfaces.md` §1), after the question of `native-surfaces.md` §3 — and asked again before every refresh; without ARTIFACT a static HTML file, with the one line of `native-surfaces.md` §5. The refresh button — in the panel header (do not duplicate).
+Self-contained HTML (light mode, `:root{color-scheme:light}`). Static: capacity bars (target 85% / ceiling 100% markers), Gantt timeline. Live (on open): epic statuses ← `getJiraIssue` per-key; feature inventory ← CQL by quarter label. Published as a typed ARTIFACT whose live parts re-query the connectors on open (`native-surfaces.md` §1), after the question of `native-surfaces.md` §3 — and asked again before every refresh; without ARTIFACT a static HTML file, with the one line of `native-surfaces.md` §5. The refresh button — in the panel header (do not duplicate). The record of where it went and its next version follow `artifact-publishing.md` for the skills that adopted it; the planning skills adopt it in a later release, and until then each refresh asks as above.
 
 ## 3. Project roadmap (arc, project-planning)
 

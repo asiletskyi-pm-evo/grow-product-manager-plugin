@@ -59,18 +59,30 @@ One question in the user's language — a multi-choice one where the host can as
 
 ## 5. Publish and record
 
-After the «так» the skill publishes to each chosen place, saves its note, and then records each place in that note — the vault note, or without a vault the markdown file it wrote (the outline companion of a deck, the report's `.md`):
+After the «так» the skill publishes to each chosen place, saves its note, and then records each place:
 
 ```
-python3 scripts/publications.py record --note <path> --surface <surface> --kind <kind> --id <id> --url <url> --audience <audience> [--remote-version <v>] [--carry <previous note>]
+python3 scripts/publications.py record --key <the result's key> --note <the note it saved> --surface <surface> --kind <kind> [--level typed|page] --id <id> --url <url> --audience <audience> [--remote-version <v>]
 ```
 
-The record is the frontmatter field `published` — a list, one entry per place (`vault-schema.md` → Context Fields):
+**One record per result, whichever run saved which note.** The record lives in the result's **key file**, `~/.grow-pm/publications/<key>.yaml`; the note the run saved gets the same list in its frontmatter field `published` (`vault-schema.md` → Context Fields) — a mirror the user sees in the vault, never the place the next run looks. A run that published nothing (an answer «ні» or «лише файл», a scheduled run) leaves the key file as it was, so the chain of versions never breaks; a run without a vault still has its record. The key names the result, never a run, and the skill builds it from what it knows **before** the question:
+
+| Consumer | Key |
+|---|---|
+| `design-bridge` | `design-bridge/<product>/<deck slug>-<subtype>` — the deck's file name without its date |
+| `product-reporter` | `product-reporter/<product>/<mode>-<board>-<period>` |
+| `cjm-research` | `cjm-research/<product>/<mode>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — whatever run published the snapshot |
+| `focus-advisor` | none: the board keeps its record in its own state file, `~/.grow-pm/focus/board.yaml` (`--note`) |
+
+Lower-case words, `/` between at most four parts. A key file the result does not have yet is created by the first `record`; before it exists, the script reads the note given with `--note` — a note recorded before keys existed, or the deck's own note — so its places go on.
+
+Each entry of the record:
 
 | Field | What |
 |---|---|
 | `surface` | `artifact` or `docs` (a host capability), `confluence`, or the id of a tools-registry record (`atlassian`, `google-drive`, `notion` …) |
 | `kind` | the kind of §1 |
+| `level` | an ARTIFACT's level, `typed` or `page` — on one host they are two places |
 | `id`, `url` | the place's id and its link; the link carries no credentials (`publications.py` refuses one that does) |
 | `version` | the plugin's own counter for that place: 1, 2, … (a place's own version number, where it has one, is `remote_version`) |
 | `published` | the date and time of the latest version, UTC |
@@ -78,19 +90,18 @@ The record is the frontmatter field `published` — a list, one entry per place 
 | `replaced` | earlier ids of this place, when it had to be created anew (§6) |
 | `remote_version` | the place's own version or revision after this publication, when its tool gives one (a Confluence page version) — what §6 compares |
 
-- **One entry per place**: a surface, a kind and the host of its link. The same surface and kind on another host (a deck on two hosts' ARTIFACT) are two places.
+- **One entry per place**: a surface, a kind, the level of an ARTIFACT and the host of its link. The same kind on another host (a deck on two hosts' ARTIFACT), or as a typed artifact and as a page on one host, are two places.
 - **The older fields read as a record.** A note with `confluence_page_id`, `confluence_url` or a Confluence link in `published_to` (before v4.3.0) is read as a `confluence` record of version 1; they are never rewritten or removed. A `published_to` that is not a Confluence link is not read.
-- **A result with no note** keeps the same list in its own state file: the Focus Board in `~/.grow-pm/focus/board.yaml` → `published`.
-- **A note whose own `published` property is something else** (a date, a flag) is never written over: the skill says once that the record cannot be kept in that note, and the next run offers a new place.
+- **A v4.1.0–v4.2.0 `board.yaml`** that names its live board under `artifact_id` (or `board_id`, `*_url`) is read as an `artifact` record of version 1: the old board is refreshed, never orphaned.
+- **A note whose own `published` property is something else** (a date, a flag) is never written over; the key file still records, and the result says the mirror was skipped.
+- **Copied on, checked again.** An entry or an older field whose link or id would not pass `record` is dropped when it is read to build on, never written on.
 - **No FS or no SHELL → no record.** The run publishes, and the next run creates a new place; the skill says so once, at the question.
 - **Never a name, never a token.** The record holds no name of anyone it was shared with, no pre-signed or signed link and no URL with a user, a password, a token or a signature in it.
-- The script changes only the `published` field and keeps the rest of the note byte for byte; it ends with one `PUB_RESULT {json}` line.
+- The script changes only the `published` field of the note and keeps the rest of it byte for byte; it ends with one `PUB_RESULT {json}` line.
 
 ## 6. A new version, never a copy
 
-**The record of the same result.** A skill that saves a new note on every run (a report, a funnel analysis, a new render of a deck) finds the record in the **previous note of the same result** — the one it already finds for its own work: the deck's own note when an existing deck is published again (or the previous note of the same deck — slug and subtype); `product-reporter`'s previous report of the same mode, board and period (its `related`); `cjm-research`'s previous analysis of the same product and mode (Step 1.5). A note of another period or subject is another result, and its places are new. The new note starts from that record: `record --carry <previous note>` copies its list before the first place is recorded, so the counter goes on.
-
-Before the question the skill looks the place up — `publications.py find --note <previous note> --surface <surface> --kind <kind>` — and offers its next version:
+Before the question the skill looks the result up by its key — `publications.py find --key <key> [--note <the deck's own note>]` — and offers each place found as its next version. A result of another period or subject has another key, and its places are new.
 
 | Place | The new version is |
 |---|---|
@@ -101,7 +112,7 @@ Before the question the skill looks the place up — `publications.py find --not
 
 > «Оновити деку «Zorg: нова доставка» в Atlassian Artifacts до версії 2 (внутрішні дані: метрики воронки й задачі з Jira)? Бачиш ти і ті, з ким ти поділився. Так / ні.»
 
-The question says who will see the new version from the record's `audience`: `private` — «бачиш лише ти»; `shared` — «бачиш ти і ті, з ким ти поділився»; `space:<KEY>` — «усі, хто читає простір <KEY>»; `unknown` — both of the first two.
+The question names the result as the key does (the deck's title, the report's period) and says who will see the new version from the record's `audience`: `private` — «бачиш лише ти»; `shared` — «бачиш ти і ті, з ким ти поділився»; `space:<KEY>` — «усі, хто читає простір <KEY>»; `unknown` — both of the first two. A new version keeps the place's audience; `record` without `--audience` leaves it as it was.
 
 - **A place people edit** (DOCS, Confluence, another registry record's page) is checked before it is overwritten: when its own version is not the record's `remote_version`, or — where it has none — it changed after the record's `published` time (both UTC), or it cannot say, the skill asks one question: «замінити / додати новим розділом / новий документ». A place whose versions are immutable (Atlassian Artifacts, ARTIFACT) loses nothing and needs no such question.
 - **A place that is gone** — deleted, or the user has no access any more — is never recreated silently: «Деки в Atlassian Artifacts більше немає — створити нову?». The new place starts at version 1 and the old id goes to `replaced`.
@@ -115,7 +126,7 @@ Asked after a place that starts private is published (Atlassian Artifacts, an AR
 - **Once per place.** A place already shared is not asked about again: its next version reaches the same people, and the version question says so (§6).
 - **Never everyone with the link, never the whole organisation** — the skill does not set that level, even when asked: the user does it in the place's own interface.
 - **The host's own surfaces** are shared by the user in the host's interface; the skill says where in one line.
-- After sharing, `publications.py share --note <path> --surface <surface> --kind <kind> --audience shared` sets the record's `audience` — never the names, never a new version.
+- After sharing — the share question comes after the record — `publications.py share --key <key> --surface <surface> --kind <kind> --audience shared` sets the record's `audience`: never the names, never a new version. When the skill points the user to the host's own sharing, it sets `unknown`: it cannot know whether they shared, and the next question then says both.
 
 ## 8. Atlassian Artifacts
 
@@ -134,7 +145,7 @@ A connector's operations, not a host surface: the Atlassian connector v2 (`integ
 
 - **Every number carries its source and date** — the connector, the dashboard or the file it came from, and when — on the page next to the number or in a sources block it points to; a number without a source is not shown.
 - **Local data is baked in at render time** — the journal, a snapshot, the vault note: a hosted page cannot read the user's files.
-- **Live parts only where the surface re-queries the connectors when it is opened** (ARTIFACT `typed`, `native-surfaces.md` §1); everywhere else the page is a snapshot and says its date at the top.
+- **Live parts only where the surface re-queries the connectors when it is opened** (ARTIFACT `typed`, `native-surfaces.md` §1), and only for what the result already shows — the statuses of its own issues, its own funnel's numbers — never a new query; everywhere else the page is a snapshot and says its date at the top.
 - A dashboard holds no person's profile and no data the result itself does not hold.
 
 ## 10. Decks

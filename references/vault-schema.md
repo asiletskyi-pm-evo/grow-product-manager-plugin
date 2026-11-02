@@ -59,12 +59,13 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 
 #### Publication record (optional, since v4.3.0)
 
-`published` is a list of flat entries, one per place (surface, kind and the host of its link); `scripts/publications.py` writes it after the user's «так» and changes nothing else in the note. A personal space's audience is `private`.
+`published` is a list of flat entries, one per place (surface, kind, an ARTIFACT's level and the host of its link) — the mirror of the result's key file `~/.grow-pm/publications/<key>.yaml`, where the record lives (`artifact-publishing.md` §5); `scripts/publications.py` writes both after the user's «так» and changes nothing else in the note. A personal space's audience is `private`.
 
 | Entry field | Values |
 |---|---|
 | `surface` | `artifact` · `docs` · `confluence` · the id of a tools-registry record (`atlassian`, `google-drive`, `notion` …) |
 | `kind` | `deck` · `dashboard` · `document` · `page` · `board` · `design` |
+| `level` | `typed` · `page` — an ARTIFACT's level; the two are two places on one host |
 | `id`, `url` | the place's id and its link, never one with credentials |
 | `version` | integer, 1 for the first publication of that place |
 | `published` | date-time of the latest version, UTC |

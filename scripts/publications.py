@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 """publications.py — the record of where a result was published (references/artifact-publishing.md §5–§7).
 
-  find    the publication records of a note (or a YAML state file); the older confluence_page_id /
-          confluence_url / published_to (a Confluence link) read as a `confluence` record of version 1
+  find    the publication record of a result: its key file (`--key`, ~/.grow-pm/publications/<key>.yaml), else
+          the note's `published` field (`--note`); the older confluence_page_id / confluence_url / published_to
+          (a Confluence page) and a v4.2.0 board.yaml's artifact_id read as a record of version 1
   record  one version of one place: the first one, the next one of the same id, or a place created anew on the
-          same host (the old id goes to `replaced`); `--carry PREV` starts a new note from the record of the
-          previous note of the same result
+          same host and level (the old id goes to `replaced`); written to the key file, and mirrored into the note
   share   the audience of a recorded place after it was shared — never its version or time
   digest  the byte length and the base64 SHA-256 of a file — what an upload to a pre-signed link needs
 
-The record is the frontmatter field `published` (a YAML file: its top-level key), a list of flat entries:
-surface, kind, id, url, version, published, audience, replaced, remote_version. Only that field is written; every
-other byte of the file stays as it was. A link or an id with a user or a password, a token, a signature or a
+The record of one result lives in ONE file, whichever run saved which note: the key file, a YAML state file whose
+top-level `published` is a list of flat entries (surface, kind, level, id, url, version, published, audience,
+replaced, remote_version). The note the run saved gets the same list in its frontmatter field `published` — a
+mirror; only that field is written, and every other byte of the note stays as it was. A link or an id with a user or a password, a token, a signature or a
 pre-signed query — in the query, the fragment or a path parameter, encoded or not — is refused, by kind, never
 echoed (ctx_never and the rules below). Every command ends with one `PUB_RESULT {json}` line. Stdlib only
 (Python 3.9). Exit 0; 2 for wrong arguments, a refused value, a file that is not there or a `published` field
@@ -28,15 +29,20 @@ import ctx_never as cn  # noqa: E402
 KINDS = ("deck", "dashboard", "document", "page", "board", "design")
 SURFACES = ("artifact", "docs", "confluence")          # plus the id of a tools-registry record
 AUDIENCES = ("private", "shared", "space:<KEY>", "unknown")
-FIELDS = ("surface", "kind", "id", "url", "version", "published", "audience", "replaced", "remote_version")
+FIELDS = ("surface", "kind", "level", "id", "url", "version", "published", "audience", "replaced", "remote_version")
+LEVELS = ("typed", "page")                              # an ARTIFACT's level: two places on one host
+KEY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}(?:/[a-z0-9][a-z0-9._-]{0,79}){0,3}$")
+BOARD_KEYS = ("artifact_id", "artifact_url", "board_id", "board_url", "live_board_id", "live_board_url")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SPACE = re.compile(r"^space:[A-Z0-9][A-Z0-9_]{0,31}$")  # a team space's key; a personal space is `private`
 AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})?$")
 # A parameter that carries a credential: a token, a key, a signature, a session, a pre-signed link's parts.
 CRED = (r"x-amz-[\w-]*|x-goog-[\w-]*|[\w-]*token[\w-]*|[\w-]*secret[\w-]*|[\w-]*passw[\w-]*|[\w-]*signature[\w-]*|"
-        r"sig|se|sp|sv|st|skoid|sktid|key|key-pair-id|apikey|api_key|api-key|auth|authorization|code|credential|"
-        r"policy|expires|jwt|session|sessionid|jsessionid|phpsessid|sid")
-CRED_PARAM = re.compile(r"(?:^|[?&;#/])\s*(?:%s)\s*=" % CRED, re.I)
+        r"[\w-]*access[_-]?key[\w-]*|[\w-]*hmac[\w-]*|sig|skoid|sktid|key|key-pair-id|apikey|api_key|api-key|auth|"
+        r"authorization|bearer|code|credential|policy|expires|jwt|otp|pwd|pass|ticket|session|sessionid|jsessionid|"
+        r"phpsessid|sid")
+CRED_PARAM = re.compile(r"(?:^|[?&;#/])\s*(?:%s)\s*(?:\[\])?\s*=" % CRED, re.I)
+EMAIL_PARAM = re.compile(r"[?&;#][^?&;#]*=[^?&;#]*[\w.+-]+@[\w-]+\.\w")
 MAX_ID, MAX_URL, MAX_RV = 300, 2000, 64
 KEY_LINE = re.compile(r"^published[ \t]*:(?P<val>.*)$")
 TOP = re.compile(r"^[^\s#-]")                           # a line that opens another top-level key
@@ -65,6 +71,8 @@ def cred_problem(text):
         return "a secret (%s)" % ",".join(kinds)
     if CRED_PARAM.search(d):
         return "a credential in a parameter"
+    if EMAIL_PARAM.search(d):
+        return "an e-mail in a parameter"
     return None
 
 
@@ -155,8 +163,9 @@ def _block(text, start, end):
 def _scalar_fields(text, start, end):
     """The top-level `key: value` scalars of text[start:end] that the older records used."""
     out = {}
+    names = "published_to|confluence_page_id|confluence_url|" + "|".join(BOARD_KEYS)
     for line in text[start:end].splitlines():
-        m = re.match(r"^(published_to|confluence_page_id|confluence_url)[ \t]*:[ \t]*(.*?)[ \t]*$", line)
+        m = re.match(r"^(%s)[ \t]*:[ \t]*(.*?)[ \t]*$" % names, line)
         if m and m.group(2):
             try:
                 v = cc._scalar(cc._strip_comment(m.group(2)), 0)
@@ -172,7 +181,7 @@ def _entry(e):
     if not isinstance(e, dict) or not e.get("surface") or not e.get("kind"):
         raise Unreadable("an entry without surface or kind")
     out = dict(e)
-    for k in ("surface", "kind", "id", "url", "published", "audience", "remote_version"):
+    for k in ("surface", "kind", "level", "id", "url", "published", "audience", "remote_version"):
         if out.get(k) is not None and not isinstance(out[k], list):
             out[k] = str(out[k])
     try:
@@ -214,15 +223,38 @@ def load(path):
 
 
 def legacy_entry(legacy):
-    """The older fields as a `confluence` record — only when they name a Confluence page."""
+    """The older fields as a `confluence` record — only when they name a Confluence page by its id."""
     url = legacy.get("confluence_url") or legacy.get("published_to") or ""
     pid = legacy.get("confluence_page_id") or ""
-    if not pid:
+    if not pid and "/wiki/" in url:
         m = re.search(r"/pages/(\d+)", url)
         pid = m.group(1) if m else ""
-    if not pid and "/wiki/" not in url:
+    if not pid or (url and link_problem(url)):
         return None
     return {"surface": "confluence", "kind": "page", "id": pid, "url": url, "version": 1, "legacy": True}
+
+
+def board_entry(legacy):
+    """A v4.1.0–v4.2.0 board.yaml's live board (its id or link under one of BOARD_KEYS) as an `artifact` record."""
+    bid = next((legacy[k] for k in ("artifact_id", "board_id", "live_board_id") if legacy.get(k)), "")
+    url = next((legacy[k] for k in ("artifact_url", "board_url", "live_board_url") if legacy.get(k)), "") or \
+        (bid if "://" in bid else "")
+    if not (bid or url) or value_problem("the id", bid or url) or (url and link_problem(url)):
+        return None
+    return {"surface": "artifact", "kind": "dashboard", "level": "typed", "id": bid or url, "url": url, "version": 1,
+            "legacy": True}
+
+
+def _legacy(legacy, is_yaml):
+    lg = [legacy_entry(legacy)] + ([board_entry(legacy)] if is_yaml else [])
+    return [e for e in lg if e]
+
+
+def _clean(entries):
+    """(entries, dropped) — an entry whose link or id would not pass `record` is never copied on."""
+    keep = [e for e in entries if not value_problem("the id", e.get("id") or "x") and
+            not (e.get("url") and link_problem(e["url"]))]
+    return keep, len(entries) - len(keep)
 
 
 def _q(v):
@@ -234,6 +266,8 @@ def render(entries, eol):
     for e in entries:
         lines.append("  - surface: %s" % e["surface"])
         lines.append("    kind: %s" % e["kind"])
+        if e.get("level"):
+            lines.append("    level: %s" % e["level"])
         for k in ("id", "url"):
             lines.append("    %s: %s" % (k, _q(e.get(k, ""))))
         lines.append("    version: %d" % int(e.get("version") or 1))
@@ -310,32 +344,82 @@ def _open(path, what="the note"):
         return 2
 
 
-def _found(entries, legacy, surface=None, kind=None):
-    found = list(entries)
-    lg = legacy_entry(legacy)
-    if lg and not any(e.get("surface") == "confluence" for e in found):
-        found.append(lg)
-    return [e for e in found if (not surface or e.get("surface") == surface) and (not kind or e.get("kind") == kind)]
+def _key_path(args):
+    if not getattr(args, "key", None):
+        return None
+    store = os.path.abspath(os.path.expanduser(args.store or os.path.join("~", ".grow-pm", "publications")))
+    return os.path.join(store, args.key + ".yaml")
+
+
+def _base(args):
+    """(entries, dropped, source) — the record to read or to build on: the key file when it holds one, else the
+    note's field (its older fields as entries), else the --carry note's; or an exit code after the result line."""
+    kp = _key_path(args)
+    if kp and os.path.isfile(kp):
+        got = _open(kp, "the key file")
+        if isinstance(got, int) or got == "foreign":
+            if got == "foreign":
+                result(error="the key file's published is not a publication list")
+            return 2
+        if got[2]:
+            e, d = _clean(got[2])
+            return e, d, "key"
+    for path, what in ((getattr(args, "note", None), "the note"), (getattr(args, "carry", None), "the previous note")):
+        if not path:
+            continue
+        got = _open(path, what)
+        if isinstance(got, int):
+            return got
+        if got == "foreign":
+            continue
+        entries = list(got[2])
+        for lg in _legacy(got[3], got[1]):
+            if not any(x.get("surface") == lg["surface"] and x.get("kind") == lg["kind"] for x in entries):
+                entries.append(lg)
+        if entries:
+            e, d = _clean(entries)
+            return e, d, "note" if what == "the note" else "carry"
+    return [], 0, None
+
+
+def _matches(e, args):
+    return (not getattr(args, "surface", None) or e.get("surface") == args.surface) and \
+        (not getattr(args, "kind", None) or e.get("kind") == args.kind) and \
+        (not getattr(args, "level", None) or not e.get("level") or e.get("level") == args.level)
 
 
 def cmd_find(args):
-    got = _open(args.note)
-    if got == "foreign":
-        result(found=[], foreign=True, why="the note's own published property is not a publication list")
-        return 0
+    if not args.key and not args.note:
+        result(error="find needs --key or --note")
+        return 2
+    if args.key and not KEY.match(args.key):
+        result(error="the key is not lower-case words joined by / (at most four parts)")
+        return 2
+    if args.note and not args.key and os.path.isfile(args.note):
+        got = _open(args.note)
+        if got == "foreign":
+            result(found=[], foreign=True, why="the note's own published property is not a publication list")
+            return 0
+    got = _base(args)
     if isinstance(got, int):
         return got
-    result(found=_found(got[2], got[3], args.surface, args.kind))
+    result(found=[e for e in got[0] if _matches(e, args)], source=got[2], **({"dropped": got[1]} if got[1] else {}))
     return 0
 
 
-def _check_args(args):
+def _check_args(args, need_audience=True):
     if args.kind not in KINDS:
         return "the kind is not one of %s" % "|".join(KINDS)
     if not (args.surface in SURFACES or SLUG.match(args.surface or "")):
         return "the surface is not artifact|docs|confluence or a registry id"
-    if not (args.audience in ("private", "shared", "unknown") or SPACE.match(args.audience or "")):
+    if getattr(args, "level", None) and (args.level not in LEVELS or args.surface != "artifact"):
+        return "--level is typed|page, for the artifact surface only"
+    if getattr(args, "key", None) and not KEY.match(args.key):
+        return "the key is not lower-case words joined by / (at most four parts)"
+    if args.audience and not (args.audience in ("private", "shared", "unknown") or SPACE.match(args.audience)):
         return "the audience is not private|shared|unknown|space:<KEY> (a personal space is private)"
+    if need_audience and not args.audience:
+        return "--audience is needed"
     if getattr(args, "at", None) and not AT.match(args.at):
         return "--at is not YYYY-MM-DDTHH:MM[:SS][Z|±HH:MM]"
     if getattr(args, "remote_version", None):
@@ -347,82 +431,118 @@ def _check_args(args):
     return value_problem("the id", args.id) if getattr(args, "id", None) else None
 
 
+def _save(args, entries):
+    """Write the record: the key file (created when new), then the note's mirror. (exit code, mirror note)."""
+    kp, mirror = _key_path(args), None
+    try:
+        if kp:
+            if not os.path.isfile(kp):
+                os.makedirs(os.path.dirname(kp), exist_ok=True)
+                with open(kp, "w", encoding="utf-8") as f:
+                    f.write("# Publication record of %s — written by scripts/publications.py "
+                            "(references/artifact-publishing.md §5)\n" % args.key)
+            got = _open(kp, "the key file")
+            if isinstance(got, int) or got == "foreign":
+                return 2, None
+            write(kp, got[0], got[1], entries)
+        if args.note:
+            got = _open(args.note)
+            if got == "foreign":
+                mirror = "skipped: the note's own published property is something else"
+            elif isinstance(got, int):
+                if not kp:
+                    return got, None
+                mirror = "skipped: the note does not read"
+            else:
+                write(args.note, got[0], got[1], entries)
+                mirror = "written"
+    except OSError as e:
+        result(error="the record cannot be written: %s" % (e.strerror or type(e).__name__))
+        return 1, None
+    return 0, mirror
+
+
 def cmd_record(args):
-    bad = _check_args(args)
+    if not args.key and not args.note:
+        result(error="record needs --key or --note")
+        return 2
+    bad = _check_args(args, need_audience=False)
     if bad:
         result(error=bad)
         return 2
-    got = _open(args.note)
-    if got == "foreign":
-        result(error="the note's own published property is not a publication list — nothing written")
-        return 2
-    if isinstance(got, int):
-        return got
-    text, is_yaml, entries, legacy = got
-    carried = 0
-    if args.carry and not entries:
-        prev = _open(args.carry, "the previous note")
-        if prev == "foreign":
-            prev = (None, None, [], {})
-        if isinstance(prev, int):
-            return prev
-        entries = [dict(e) for e in prev[2]]
-        lg = legacy_entry(prev[3])                   # the older fields of the previous note move as a real entry
-        if lg and not any(e.get("surface") == "confluence" for e in entries) and not legacy_entry(legacy):
-            entries.append({k: v for k, v in lg.items() if k != "legacy"})
-        carried = len(entries)
+    if not args.key:
+        got = _open(args.note)
+        if got == "foreign":
+            result(error="the note's own published property is not a publication list — nothing written")
+            return 2
+        if isinstance(got, int):
+            return got
+    base = _base(args)
+    if isinstance(base, int):
+        return base
+    entries, dropped, source = base
+    entries = [{k: v for k, v in e.items() if k != "legacy"} for e in entries]
+    carried = len(entries) if source == "carry" else 0
     at = args.at or _now()
-    same = [e for e in entries if e.get("surface") == args.surface and e.get("kind") == args.kind]
+    same = [e for e in entries if e.get("surface") == args.surface and e.get("kind") == args.kind and
+            (not args.level or not e.get("level") or e.get("level") == args.level)]
     entry = next((e for e in same if e.get("id") == args.id), None) or \
         next((e for e in same if _host(e.get("url")) == _host(args.url)), None)
     if entry is None:
-        old = legacy_entry(legacy) if args.surface == "confluence" else None
-        version = 2 if old and (old["id"] == args.id or (old["url"] and old["url"] == args.url)) else 1
-        entry = {"surface": args.surface, "kind": args.kind}
+        if not args.audience:
+            result(error="--audience is needed for a place recorded for the first time")
+            return 2
+        version, entry = 1, {"surface": args.surface, "kind": args.kind}
         entries.append(entry)
     elif entry.get("id") == args.id:
         version = int(entry.get("version") or 1) + 1
-    else:                                              # the same place on the same host, created anew
+    else:                                              # the same place on the same host and level, created anew
         version = 1
         if entry.get("id"):
             entry["replaced"] = list(entry.get("replaced") or []) + [entry["id"]]
-    entry.update({"id": args.id, "url": args.url, "version": version, "published": at, "audience": args.audience})
+    entry.update({"id": args.id, "url": args.url, "version": version, "published": at,
+                  "audience": args.audience or entry.get("audience") or "unknown"})
+    if args.level:
+        entry["level"] = args.level
     if args.remote_version:
         entry["remote_version"] = args.remote_version
     else:
         entry.pop("remote_version", None)
-    try:
-        write(args.note, text, is_yaml, entries)
-    except OSError as e:
-        result(error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
-        return 1
-    result(recorded={k: entry[k] for k in FIELDS if k in entry}, carried=carried)
+    code, mirror = _save(args, entries)
+    if code:
+        return code
+    out = {"recorded": {k: entry[k] for k in FIELDS if k in entry}, "carried": carried}
+    if source:
+        out["from"] = source
+    if dropped:
+        out["dropped"] = dropped
+    if mirror:
+        out["mirror"] = mirror
+    result(**out)
     return 0
 
 
 def cmd_share(args):
+    if not args.key and not args.note:
+        result(error="share needs --key or --note")
+        return 2
     bad = _check_args(args)
     if bad:
         result(error=bad)
         return 2
-    got = _open(args.note)
-    if got == "foreign" or isinstance(got, int):
-        if got == "foreign":
-            result(error="the note's own published property is not a publication list — nothing written")
-        return 2
-    text, is_yaml, entries, _ = got
-    same = [e for e in entries if e.get("surface") == args.surface and e.get("kind") == args.kind and
-            (not args.id or e.get("id") == args.id)]
+    base = _base(args)
+    if isinstance(base, int):
+        return base
+    entries = [{k: v for k, v in e.items() if k != "legacy"} for e in base[0]]
+    same = [e for e in entries if _matches(e, args) and (not args.id or e.get("id") == args.id)]
     if len(same) != 1:
         result(error="no single recorded place matches — give --id" if same else "no recorded place matches")
         return 2
     same[0]["audience"] = args.audience
-    try:
-        write(args.note, text, is_yaml, entries)
-    except OSError as e:
-        result(error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
-        return 1
-    result(shared={k: same[0][k] for k in FIELDS if k in same[0]})
+    code, mirror = _save(args, entries)
+    if code:
+        return code
+    result(shared={k: same[0][k] for k in FIELDS if k in same[0]}, **({"mirror": mirror} if mirror else {}))
     return 0
 
 
@@ -532,24 +652,30 @@ def check_schema(root):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="publications.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
-    p = sub.add_parser("find")
-    p.add_argument("--note", required=True, help="the note (or a YAML state file) of the result")
+    def common(p):
+        p.add_argument("--key", help="the result's key, e.g. design-bridge/zorg/new-delivery-feature")
+        p.add_argument("--note", help="the note the run saved (or a YAML state file): read when there is no key "
+                                      "file, and given the record as its `published` field")
+        p.add_argument("--store", help="the folder of the key files (default ~/.grow-pm/publications)")
+        p.add_argument("--carry", help="an older note of the same result, read when neither holds a record")
+        return p
+    p = common(sub.add_parser("find"))
     p.add_argument("--surface")
     p.add_argument("--kind")
-    p = sub.add_parser("record")
-    p.add_argument("--note", required=True)
+    p.add_argument("--level", choices=LEVELS)
+    p = common(sub.add_parser("record"))
     p.add_argument("--surface", required=True, help="artifact | docs | confluence | a tools-registry id")
     p.add_argument("--kind", required=True, help="|".join(KINDS))
+    p.add_argument("--level", help="typed | page — an ARTIFACT's level")
     p.add_argument("--id", required=True)
     p.add_argument("--url", required=True, help="the place's link, without credentials")
-    p.add_argument("--audience", required=True, help="private | shared | unknown | space:<KEY>")
+    p.add_argument("--audience", help="private | shared | unknown | space:<KEY>; a new version keeps the place's own")
     p.add_argument("--remote-version", help="the place's own version or revision, when its tool gives one")
-    p.add_argument("--carry", help="the previous note of the same result: its record starts a note that has none")
     p.add_argument("--at", help="the version's time (default now, UTC)")
-    p = sub.add_parser("share")
-    p.add_argument("--note", required=True)
+    p = common(sub.add_parser("share"))
     p.add_argument("--surface", required=True)
     p.add_argument("--kind", required=True)
+    p.add_argument("--level", choices=LEVELS)
     p.add_argument("--id")
     p.add_argument("--audience", required=True)
     p = sub.add_parser("digest")

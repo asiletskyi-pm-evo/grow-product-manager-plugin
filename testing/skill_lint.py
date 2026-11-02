@@ -1583,6 +1583,8 @@ SURFACE_BRANDS = [   # (pattern, flags, what it names)
     (_B + r"deep-research\b(?!-)", 0, "a host's built-in research"),
     (r"\bchatgpt canvas\b", re.I, "a host's canvas"),
     (_B + r"sites_(?:create_site|deploy_\w+|update_site_access)\b", 0, "a host's hosted pages"),
+    (r"(?<![\w.])Sites\b", 0, "a host's hosted pages"),
+    (r"\bSlides type\b|\bclaude\.ai/(?:code/)?artifact", re.I, "a host's artifact kind or link"),
 ]
 SURFACE_BRAND_ALLOWED = {os.path.join("references", "host-profiles.md"), os.path.join("references", "native-surfaces.md")}
 _sb_files = (glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True)
@@ -1628,6 +1630,16 @@ else:
         if _why and "artifact-publishing.md" not in _txt:
             fail("publish-protocol", f"skills/{_sk}: {_why} but never cites references/artifact-publishing.md — "
                                      "its publication is neither recorded nor versioned")
+    # a shared protocol that sends a result to ARTIFACT or DOCS points at the protocol too (roadmap-artifacts §2)
+    _exempt = {"native-surfaces.md", "host-profiles.md", "artifact-publishing.md"}
+    for _r in sorted(glob.glob(os.path.join(root, "references", "*.md"))):
+        if os.path.basename(_r) in _exempt:
+            continue
+        _rt = open(_r, encoding="utf-8").read()
+        if re.search(r"\b(?i:published|publish(?:es|ing)?) (?:as|to|on) (?:a |an )?(?:typed )?ARTIFACT\b|"
+                     r"\bARTIFACT\b[^.\n]{0,60}\bafter the question\b", _rt) and "artifact-publishing.md" not in _rt:
+            fail("publish-protocol", f"references/{os.path.basename(_r)}: publishes to ARTIFACT but never cites "
+                                     "references/artifact-publishing.md")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

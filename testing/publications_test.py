@@ -364,6 +364,96 @@ try:
     check("16 M4 the mode stays, a linked note is written where it lives and the link stays a link",
           (os.stat(n16).st_mode & 0o777) == 0o600 and os.path.islink(link) and b"published:" in read(n16), oct(os.stat(n16).st_mode))
 
+    # 17. the review of tasks 5–7 — one record per result (the key file), the note a mirror
+    st = os.path.join(d, "store17")
+    K = ["--key", "design-bridge/zorg/new-delivery-feature", "--store", st]
+    a, b, c = (os.path.join(d, "run-%s.md" % x) for x in "abc")
+    for x in (a, b, c):
+        shutil.copy(os.path.join(FIX, "zorg-deck.md"), x)
+    rc, out, res = rec(a, *K)
+    keyf = os.path.join(st, "design-bridge", "zorg", "new-delivery-feature.yaml")
+    check("17.1 B1 the first publication goes to the key file and is mirrored into the note",
+          rc == 0 and os.path.isfile(keyf) and res.get("mirror") == "written" and b"published:" in read(a), out)
+    b0 = read(b)                                    # run 2: «лише файл» — a note saved, nothing recorded
+    rc, out, res = rec(c, *K)
+    check("17.2 B1 publish → «лише файл» → publish: the third run finds the key file — version 2 of the same id",
+          rc == 0 and res["recorded"]["version"] == 2 and res["recorded"]["id"] == "zorg-art-0001" and read(b) == b0, out)
+    rc, out, res = run("find", *K)
+    check("17.3 find by key alone, no note at all (I1: no vault, the record still lives)",
+          rc == 0 and res.get("source") == "key" and res["found"][0]["version"] == 2, out)
+    rc, out, res = rec(os.path.join(d, "nothing.md"), *K)
+    check("17.4 a note that is not there with a key: the key file is the record (the mirror is said skipped)",
+          rc == 0 and res.get("mirror", "").startswith("skipped") and res["recorded"]["version"] == 3, out)
+    foreign = os.path.join(d, "foreign17.md")
+    shutil.copy(os.path.join(FIX, "zorg-foreign.md"), foreign)
+    f0 = read(foreign)
+    rc, out, res = rec(foreign, *K)
+    check("17.5 a note whose own published is something else: the key file records, the note untouched",
+          rc == 0 and read(foreign) == f0 and res.get("mirror", "").startswith("skipped"), out)
+    # B2: the deck note that already holds a record (the real case of acceptance item 2) is read when no key file exists yet
+    st2 = os.path.join(d, "store17b")
+    deckn = os.path.join(d, "deck17.md")
+    shutil.copy(os.path.join(FIX, "zorg-deck.md"), deckn)
+    rec(deckn)                                         # a v4.3.0 note recorded without a key
+    rc, out, res = rec(deckn, "--key", "design-bridge/zorg/new-delivery-feature", "--store", st2)
+    check("17.6 B2 a note that already holds the record starts the key file — the next version, no copy",
+          rc == 0 and res["recorded"]["version"] == 2 and res.get("from") == "note", out)
+    # I4: audience kept across versions
+    st3 = os.path.join(d, "store17c"); K3 = ["--key", "zorg/aud", "--store", st3]
+    aud = os.path.join(d, "aud17.md")
+    shutil.copy(os.path.join(FIX, "zorg-deck.md"), aud)
+    rec(aud, *K3)
+    run("share", *K3, "--surface", "atlassian", "--kind", "deck", "--audience", "shared")
+    rc, out, res = run("record", *K3, "--surface", "atlassian", "--kind", "deck", "--id", "zorg-art-0001",
+                       "--url", "https://your-org.atlassian.net/artifacts/zorg-art-0001")
+    check("17.7 I4 a new version keeps the place's audience (shared stays shared)",
+          rc == 0 and res["recorded"]["audience"] == "shared" and res["recorded"]["version"] == 2, out)
+    rc, out, res = run("record", *K3, "--surface", "docs", "--kind", "document", "--id", "d-1",
+                       "--url", "https://zorg.example/doc/d-1")
+    check("17.8 I4 a place recorded for the first time needs --audience", rc == 2, out)
+    # I5: typed and page on one host are two places
+    st4 = os.path.join(d, "store17d"); K4 = ["--key", "zorg/levels", "--store", st4]
+    run("record", *K4, "--surface", "artifact", "--kind", "deck", "--level", "typed", "--id", "https://zorg-host.example/a/t1",
+        "--url", "https://zorg-host.example/a/t1", "--audience", "private")
+    run("record", *K4, "--surface", "artifact", "--kind", "deck", "--level", "page", "--id", "https://zorg-host.example/s/p1",
+        "--url", "https://zorg-host.example/s/p1", "--audience", "private")
+    rc, out, res = run("find", *K4)
+    check("17.9 I5 a typed deck and a page deck on one host are two places, nothing replaced",
+          len(res.get("found", [])) == 2 and not any(e.get("replaced") for e in res["found"]), res)
+    # I6: a v4.2.0 board.yaml
+    bo = os.path.join(d, "board17.yaml")
+    with open(bo, "w", encoding="utf-8") as f:
+        f.write("board: zorg-focus\nartifact_id: https://zorg-host.example/artifact/ZorgBoard01\n")
+    rc, out, res, found = find(bo)
+    rc2, out2, res2 = run("record", "--note", bo, "--surface", "artifact", "--kind", "dashboard", "--level", "typed",
+                          "--id", "https://zorg-host.example/artifact/ZorgBoard01",
+                          "--url", "https://zorg-host.example/artifact/ZorgBoard01")
+    check("17.10 I6 a v4.2.0 board.yaml's artifact_id is the live board — its next refresh is version 2 of it",
+          found and found[0]["surface"] == "artifact" and rc2 == 0 and res2["recorded"]["version"] == 2 and
+          res2["recorded"]["audience"] == "unknown", (found, out2))
+    # I7: entries copied on are checked like new ones
+    bad = os.path.join(d, "bad17.md")
+    with open(bad, "w", encoding="utf-8") as f:
+        f.write('---\npublished:\n  - surface: artifact\n    kind: deck\n    id: "a1"\n    url: "https://zorg.example/d?X-Amz-'
+                + 'Signature=' + "a1b2" * 16 + '"\n    version: 1\n    audience: "private"\n'
+                + 'published_to: "https://your-org.atlassian.net/wiki/spaces/SPACE/pages/9/Z?to' + 'ken=' + "Zorg9" * 5 + '"\n---\nb\n')
+    newn = os.path.join(d, "new17.md")
+    shutil.copy(os.path.join(FIX, "zorg-deck.md"), newn)
+    rc, out, res = rec(newn, "--carry", bad, surface="docs", kind="document", id_="d-9", url="https://zorg.example/doc/d-9")
+    check("17.11 I7 a signed link or a token in a carried entry or older field is dropped, never written on",
+          rc == 0 and res.get("dropped") == 1 and b"X-Amz" not in read(newn) and b"ken=" not in read(newn), (out, read(newn)[-500:]))
+    # M9 / M10
+    fresh()
+    for name, url in (("access_key", "https://zorg.example/d?access_key=" + "Zz9" * 6), ("pwd", "https://zorg.example/d?pwd=" + "x7" * 6),
+                      ("hmac", "https://zorg.example/d?hmac=" + "ab12" * 8), ("token[]", "https://zorg.example/d?to" + "ken[]=" + "Zz9" * 6),
+                      ("an e-mail", "https://zorg.example/d?user=fay%40zorg.example")):
+        rc, out, res = rec(n16, url=url)
+        check("17.12 M9 %s in the query is refused" % name, rc == 2, out)
+    rc, out, res = rec(n16, url="https://zorg.example/d?sp=r&st=2026-11-02&se=2026-12-01")
+    check("17.13 M9 an Azure link's clean permission and date parameters pass (its secret is sig)", rc == 0, out)
+    fresh(b'---\npublished_to: "https://wiki.zorg.example/wiki/x/AbC"\n---\nb\n')
+    check("17.14 M10 a /wiki/ link with no page id is not read as Confluence", find(n16)[3] == [], find(n16))
+
     # 15. check 24 — the schema in three places
     import publications as pub  # noqa: E402
     errs = pub.check_schema(ROOT)

@@ -302,7 +302,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
 
 4. Display: "Saved to Vault: {TYPE_FOLDER_MAP[type]}/{product}/…" (e.g. CJM/health-checks/{product}/…)
 
-5. For each place 12a published to (since v0.15.0), record it in the saved note — `python3 scripts/publications.py record … --carry <the Step 1.5 previous note of the same product and mode>` (`references/artifact-publishing.md` §5–§6). An automated health-check records nothing: it publishes nothing.
+5. For each place 12a published to (since v0.15.0), record it — `python3 scripts/publications.py record --key cjm-research/<product>/<mode> --note <the saved note> …`, the funnel dashboard under `cjm-research/<product>/funnel` (`references/artifact-publishing.md` §5). An automated health-check records nothing: it publishes nothing, and its key files stay as they were.
 
 ---
 

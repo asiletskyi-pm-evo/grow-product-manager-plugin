@@ -121,7 +121,7 @@ Via `AskUserQuestion` if not passed from an upstream skill:
 - handoff (developer spec for front-end)
 - research-enrichment (run sources through `design:research-synthesis` and append to the upstream artifact)
 
-**An existing deck (since v0.10.0).** When the request names a deck already in the vault — its note and its `.pptx` («опублікуй деку …»), Q1 is `deck`, Q2 and Steps 3–4 are skipped: the Deck IR is rebuilt from the note and the `.pptx` with no new content (playbook → Publish an existing deck), Step 2 takes the audience and the length from the note, and the run goes on at Step 5a.
+**An existing deck (since v0.10.0).** When the request names a deck already in the vault — its note and its `.pptx` («опублікуй деку …»), Q1 is `deck`, Q2 and Steps 3–4 are skipped: the Deck IR is rebuilt from the note and the `.pptx` with no new content (playbook → Publish an existing deck), Step 2 takes the audience and the length from the note, and the run goes on at Step 5a; Step 8 saves nothing new — the record goes to the deck's key with that note as its mirror (playbook).
 
 **Q2 (deck only). Which deck subtype?** Lengths are `target (max)` from `references/deck-subtypes.yaml` — that file is the source of truth; do not restate different numbers here.
 - feature (feature pitch — 10 slides, max 15; typical for direction review)
@@ -303,7 +303,7 @@ If any check fails → fix + rerun QA; escalate to the user if the blocker is no
 
 Depending on the deliverable — each publication below only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); a link shown in the chat or saved locally needs none:
 
-- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment and the Jira ticket as a comment with the link — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version (§6); each place recorded in the deck's note (§5); sharing asked after (§7)
+- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment and the Jira ticket as a comment with the link — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version — found by the deck's key `design-bridge/<product>/<slug>-<subtype>` (§5–§6); each place recorded, then sharing asked (§7)
 - **prototype** → link from the concept / requirements page (inline); a build-first prototype has no page yet — its link is shown and saved (Step 8) for the concept's Prototype link (PRD §9) when write-concept resumes (since v3.9.0)
 - **handoff** → new Confluence page in the design space, or attach to a Jira epic
 - **research-enrichment** → inline in the upstream skill
@@ -340,7 +340,7 @@ vault_save({
 })
 ```
 
-Where a deck went is the note's `published` field, written by `scripts/publications.py` right after this save — with `--carry` the deck's previous note (`references/artifact-publishing.md` §5–§6) — never in `extra_frontmatter`.
+Where a deck went is recorded right after this save — `scripts/publications.py record --key design-bridge/<product>/<slug>-<subtype> --note <the deck's note>` (`references/artifact-publishing.md` §5) — never in `extra_frontmatter`.
 
 ## Step 9 — Prototype as spec (since v3.9.0)
 
