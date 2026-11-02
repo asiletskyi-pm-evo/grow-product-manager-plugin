@@ -20,6 +20,7 @@ The **Grow Product Manager** plugin — a set of skills for a product manager's 
 | `hooks/`, `scripts/` | host hooks and the deterministic scripts they call |
 | `references/app-drive-protocol.md`, `scripts/walkthrough_preflight.sh` | driving the real product (capability APP-DRIVE) and the per-surface readiness table behind `flow-walkthrough` setup |
 | `skills/product-landscape`, `scripts/landscape_scan.sh` | the registry of competitor / adjacent / benchmark products (`~/.grow-pm/landscape/`) and the machine scan behind it |
+| `references/tool-registry.md`, `scripts/tools_scan.py`, `references/tools-seed.yaml` | the tools registry: what helps the work outside the plugin, scanned by name only (`~/.grow-pm/knowledge-library/tools/`), and the one-line suggestion of a missing tool at a skill's step |
 | `scripts/ctx.py`, `references/context-protocol.md` | the context store: records of the user's context, `local-context.md` compiled from them, `ctx sync` after any write to it |
 | `references/native-surfaces.md` | where a host can put a result — a page, a live document, an inline visual, a schedule, a research pass — and the question asked before anything is published |
 | `testing/` | `validate-consistency.sh`, `skill_lint.py` and the eval sets |

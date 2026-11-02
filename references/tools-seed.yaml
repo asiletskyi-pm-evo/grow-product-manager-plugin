@@ -1,0 +1,261 @@
+# tools-seed.yaml — the tools the plugin already names, as the first records of a user's tools registry.
+# Read by scripts/tools_scan.py (merge, suggest) and checked by validate-consistency.sh check 23;
+# the protocol is references/tool-registry.md. A seed record claims nothing about the user's machine:
+# until a scan or the session sees the tool, it is `not-installed`.
+#
+# Only tools a skill or a shared protocol of the plugin names belong here (integration-strategy.md 1a/1b,
+# the optional research connectors, diagram-prototyper's external tools, the meeting sources), plus the
+# examples the first three suggesting skills were decided with (v4.2.0). Every key of .mcp.json has a record.
+# A host's own surfaces (pages, live documents, inline visuals, schedules, research) are not tools here —
+# they are capabilities (native-surfaces.md).
+#
+# Fields (flat — the reader is ctx_common.read_yaml_records): id, name, kind, job, skills, contours, access,
+# connect, publishes, aliases (other names a host lists it under), app_names / app_bundle_ids (how an
+# installed app is recognised by the scan), via (another seed record that brings this one: when you have
+# that tool, this one is not suggested), needs (what a step asks for — `suggest --need <tag>` offers only a
+# record that carries the tag: mind-map, transcript, market-data …).
+tools:
+  - id: atlassian
+    name: "Atlassian (Jira, Confluence)"
+    kind: mcp
+    job: "tasks, epics, sprints and the pages of requirements, reports and concepts"
+    skills: [task-creator, requirements-creator, write-concept, product-reporter, sprint-planning, roadmap-architect, quarterly-planning]
+    contours: [product, delivery, knowledge]
+    access: corporate
+    connect: "the plugin's Connectors tab → Atlassian; sign in with the work account"
+    publishes: page
+    aliases: [atlassian-rovo, atlassian_rovo, jira, confluence]
+  - id: figma
+    name: "Figma"
+    kind: mcp
+    job: "design files, frames and screenshots for handoff and design review"
+    skills: [design-bridge, diagram-prototyper, requirements-creator]
+    contours: [design]
+    access: paid
+    connect: "the plugin's Connectors tab → Figma"
+    publishes: design
+    aliases: [figma-desktop]
+    app_names: [Figma]
+    app_bundle_ids: [com.figma.Desktop]
+    needs: [prototype, wireframe, design]
+  - id: figjam
+    name: "FigJam"
+    kind: site
+    job: "boards and diagrams on the Figma whiteboard"
+    skills: [diagram-prototyper]
+    contours: [design]
+    access: paid
+    connect: "through the Figma connector (its FigJam tools) or figma.com in the browser"
+    publishes: board
+    via: figma
+    needs: [board, diagram, flowchart]
+  - id: miro
+    name: "Miro"
+    kind: mcp
+    job: "whiteboards, tables and visual maps the team edits together"
+    skills: [diagram-prototyper, brainstorm-features]
+    contours: [design]
+    access: paid
+    connect: "the host's connector directory → Miro"
+    publishes: board
+    app_names: [Miro]
+    app_bundle_ids: [com.electron.realtimeboard]
+    needs: [board, diagram, mind-map]
+  - id: notebooklm
+    name: "NotebookLM"
+    kind: site
+    job: "mind maps and presentations from public material"
+    skills: [diagram-prototyper]
+    contours: [design]
+    access: free
+    connect: "in the browser at notebooklm.google.com — public material only (data-policy.md)"
+    needs: [mind-map, presentation]
+  - id: gemini
+    name: "Google Gemini"
+    kind: site
+    job: "illustrative infographics, image-based prototypes and mind maps"
+    skills: [diagram-prototyper]
+    contours: [design]
+    access: free
+    connect: "in the browser at gemini.google.com — public material only (data-policy.md)"
+    needs: [infographic, prototype, wireframe, mind-map]
+  - id: chatgpt
+    name: "ChatGPT"
+    kind: site
+    job: "a second opinion in deep research and illustrative visuals, from public material"
+    skills: [diagram-prototyper, product-research]
+    contours: [design, product]
+    access: free
+    connect: "in the browser at chatgpt.com — public material only (data-policy.md)"
+    app_names: [ChatGPT]
+    needs: [infographic, prototype, wireframe]
+  - id: drawio
+    name: "draw.io"
+    kind: app
+    job: "editable flowcharts and BPMN diagrams"
+    skills: [diagram-prototyper]
+    contours: [design]
+    access: free
+    connect: "the desktop app or app.diagrams.net in the browser"
+    aliases: [diagrams-net]
+    app_names: [draw.io]
+    app_bundle_ids: [com.jgraph.drawio.desktop]
+    needs: [flowchart, bpmn, diagram]
+  - id: gmail
+    name: "Gmail"
+    kind: mcp
+    job: "the morning brief and the threads behind a task"
+    skills: [focus-advisor]
+    contours: [delivery]
+    access: corporate
+    connect: "the plugin's Connectors tab → Gmail"
+  - id: google-calendar
+    name: "Google Calendar"
+    kind: mcp
+    job: "meetings of the day, 1-1 rhythm and focus time"
+    skills: [focus-advisor, one-on-one, meeting-processor]
+    contours: [delivery, people]
+    access: corporate
+    connect: "the plugin's Connectors tab → Google Calendar"
+    needs: [meetings]
+  - id: google-drive
+    name: "Google Drive"
+    kind: mcp
+    job: "internal files and documents as sources"
+    skills: [knowledge-library, product-research]
+    contours: [knowledge]
+    access: corporate
+    connect: "the plugin's Connectors tab → Google Drive"
+    publishes: document
+    needs: [internal-docs]
+  - id: fireflies
+    name: "Fireflies"
+    kind: mcp
+    job: "meeting transcripts and summaries without pasting them by hand"
+    skills: [meeting-processor, one-on-one]
+    contours: [knowledge, people]
+    access: paid
+    connect: "the plugin's Connectors tab → Fireflies"
+    needs: [transcript]
+  - id: zoom
+    name: "Zoom"
+    kind: mcp
+    job: "recordings and transcripts of Zoom meetings"
+    skills: [meeting-processor]
+    contours: [knowledge]
+    access: corporate
+    connect: "the host's connector directory → Zoom"
+    app_names: [zoom.us, Zoom]
+    app_bundle_ids: [us.zoom.xos]
+    needs: [transcript]
+  - id: lazyweb
+    name: "Lazyweb"
+    kind: mcp
+    job: "real app screens and design references for a flow"
+    skills: [product-landscape, flow-walkthrough]
+    contours: [product]
+    access: paid
+    connect: "the plugin's Connectors tab → Lazyweb"
+    needs: [screens]
+  - id: similarweb
+    name: "Similarweb"
+    kind: mcp
+    job: "traffic, ranks and similar sites of a market"
+    skills: [product-research, product-landscape]
+    contours: [product]
+    access: paid
+    connect: "the plugin's Connectors tab → Similarweb"
+    needs: [market-data]
+  - id: mobbin
+    name: "Mobbin"
+    kind: mcp
+    job: "mobile and web screen patterns of other products"
+    skills: [product-landscape, flow-walkthrough]
+    contours: [product]
+    access: paid
+    connect: "the plugin's Connectors tab → Mobbin"
+    needs: [screens]
+  - id: semrush
+    name: "Semrush"
+    kind: mcp
+    job: "competitors by domain, keywords and search demand"
+    skills: [product-research, product-landscape]
+    contours: [product]
+    access: paid
+    connect: "the plugin's Connectors tab → Semrush"
+    needs: [market-data]
+  - id: tavily
+    name: "Tavily"
+    kind: mcp
+    job: "web search on a host without its own"
+    skills: [product-research, product-landscape]
+    contours: [product]
+    access: paid
+    connect: "the plugin's Connectors tab → Tavily"
+    needs: [market-data, web-search]
+  - id: apify
+    name: "Apify"
+    kind: mcp
+    job: "store charts and reviews no public API gives (Google Play)"
+    skills: [product-landscape]
+    contours: [product]
+    access: paid
+    connect: "the plugin's Connectors tab → Apify"
+    needs: [store-data]
+  - id: tableau
+    name: "Tableau"
+    kind: mcp
+    job: "dashboards, views and metric data behind an analysis"
+    skills: [product-analysis, cjm-research]
+    contours: [product]
+    access: corporate
+    connect: "a local MCP server the user runs; declared in local-context.md (integration-strategy.md 1a)"
+    app_names: [Tableau Desktop]
+    needs: [metrics]
+  - id: notion
+    name: "Notion"
+    kind: mcp
+    job: "notes and documents kept in Notion"
+    skills: [knowledge-library]
+    contours: [knowledge]
+    access: paid
+    connect: "the host's connector directory → Notion"
+    publishes: page
+    app_names: [Notion]
+    app_bundle_ids: [notion.id]
+  - id: slack
+    name: "Slack"
+    kind: mcp
+    job: "team channels as a source of feedback and decisions"
+    skills: [feedback-triage, focus-advisor]
+    contours: [knowledge]
+    access: corporate
+    connect: "the host's connector directory → Slack"
+    app_names: [Slack]
+    app_bundle_ids: [com.tinyspeck.slackmacgap]
+  - id: obsidian
+    name: "Obsidian"
+    kind: app
+    job: "the vault — the user's notes the plugin reads and writes"
+    skills: [plugin-configurator, context-navigator]
+    contours: [knowledge, context]
+    access: free
+    connect: "the desktop app; the vault is connected in plugin-configurator"
+    app_names: [Obsidian]
+    app_bundle_ids: [md.obsidian]
+  - id: code-search
+    name: "Code search over the organisation's repositories"
+    kind: mcp
+    job: "how the product's code actually behaves, for requirements and analysis"
+    skills: [requirements-creator, product-analysis, task-creator]
+    contours: [product]
+    access: corporate
+    connect: "a server bridged locally, often behind a VPN; described in local-context.md (integration-strategy.md 1a)"
+  - id: baymard
+    name: "Baymard Institute"
+    kind: portal
+    job: "e-commerce UX research and benchmarks"
+    skills: [knowledge-library, cjm-research]
+    contours: [knowledge]
+    access: paid
+    connect: "in the browser at baymard.com — the user signs in"

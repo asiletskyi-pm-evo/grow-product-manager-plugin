@@ -12,6 +12,63 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.2.0 (2026-10-30)
+
+**«Реєстр інструментів»: the plugin knows what else helps your work, and says so in one line.** What helps a PM outside the plugin — other plugins, skills, MCP connectors, apps, sites, portals, courses — was scattered over five places, and no skill could say «for this step there is X, you have not connected it, here is how». `knowledge-library` now keeps one tools registry, filled by a scan that reads names only, and three skills offer a missing tool at their step in one line. A team's core can publish its own list.
+
+MINOR: a new shared protocol and script, a new section in one skill, one line in three skills, an optional key of the provider manifest; without a registry every skill works as in v4.1.1.
+
+### Added
+
+- **`references/tool-registry.md`** — the record (what the scan observed — `connected`, `needs-auth`, `installed`, `not-installed`, `not-seen` — kept apart from your own verdict, your «ні» per skill, who recommended it, `needs`, `via`, `publishes`), where it lives (`~/.grow-pm/knowledge-library/tools/`, mirrored into the vault), how it is filled, the one-line suggestion, the team's list and what never happens.
+- **`references/tools-seed.yaml`** — 25 tools the plugin already names (every declared connector, the products found by pattern, the external tools of `diagram-prototyper`, the meeting sources), with app matchers and `needs`.
+- **`scripts/tools_scan.py`** — `scan`, `merge`, `suggest`, `decline`, `add`, `set`, `team`, `export`. From a host's configuration it takes names only: the keys of an MCP server map, the table headers and keys of a TOML file read by a character lexer that steps over every string, comment and array — never a command, an argument, an environment variable, a header or a URL. A name that looks like a key, an opaque id, a URL, an e-mail or a path is refused; every text written passes the never-store filter; a `registry.json` that does not read is never reset.
+- **`knowledge-library` 0.10.0** — section «Інструменти» (Tools Scan, Add, Search, Manage, Export, Team, `references/tools-workflows.md`). The scan reads what is installed by itself — the host files on this machine, the session's own tools, the account's plugins and skills where the host lists them, the apps the seed knows; the MCP registry and the organisation's plugin catalogue are searched only on «знайди інструмент для …», with public words, and only what you pick is kept.
+- **The suggestion at a step** — `diagram-prototyper` 0.16.0 (Step 4, after its tool question, never a tool that question offered), `product-research` 0.17.0 (Step 2, market data), `meeting-processor` 0.19.0 (M1, transcripts): one line about one missing tool that serves the step's need, once per run, never in a scheduled or headless run, never when the session already has it, never again in that skill after «ні». No registry or no SHELL — no line.
+- **The team's list** — the optional provider-manifest key `tools_file`; `provider_bundle` 1.2.0 copies it into every bundle (YAML only, inside the core by realpath); a `.md` wrapper carries it for a server-only core, and a broken one is never the team block's reason; `tools_scan.py team` shows it read-only as «Від команди»; `export` writes your shared records as one file for the core's owner (never what the scan saw, never `recommended_by: я`). The plugin never writes into a core. The example kit ships a Zorg list.
+- **`data-policy.md` → Tools registry**; **validator check 23** (the seed: fields, closed lists, real skills, every declared connector, no alias owned twice); **trigger-evals Group V**.
+
+### Changed
+
+- **`skill_lint.py` check 30** reads `references/*.yaml` too — a host-surface brand in the seed is caught.
+- **`ctx_wrappers` / `ctx_copy` / `ctx_kit`** — a wrapper may unpack the tools list (read as a list of records — that name only); a wrapper is the team block's reason only when the block is built from it; kit-check reads the tools list as `team` does and refuses one outside the kit.
+- **`product-landscape` 0.5.2** — its description guards against the tools registry («not your own tools (knowledge-library)»).
+- **`integration-strategy.md`** 1a / Step 2, **`AGENTS.md`**, **`testing/host-matrix.md`** — pointers to the registry.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/tool-registry.md`, `references/tools-seed.yaml`, `scripts/tools_scan.py` | new |
+| `skills/knowledge-library/SKILL.md`, `skills/knowledge-library/references/tools-workflows.md` | 0.10.0, the tools contour |
+| `skills/diagram-prototyper/SKILL.md`, `skills/product-research/SKILL.md`, `skills/meeting-processor/SKILL.md` | 0.16.0, 0.17.0, 0.19.0 — the suggestion |
+| `skills/product-landscape/SKILL.md` | 0.5.2 — description guard |
+| `references/context-provider-protocol.md`, `scripts/provider_bundle.py`, `scripts/ctx_wrappers.py`, `scripts/ctx_copy.py`, `scripts/ctx_kit.py`, `examples/provider-kit/zorg-core/` | `tools_file` |
+| `references/data-policy.md`, `references/integration-strategy.md`, `AGENTS.md` | the registry |
+| `testing/validate-consistency.sh`, `testing/skill_lint.py` | check 23; check 30 reads YAML |
+| `testing/tools_scan_test.py`, `testing/fixtures/tools/`, `testing/provider_bundle_test.py`, `testing/ctx_copy_wrap_test.py`, `testing/ctx_copy_folder_test.py`, `testing/provider_kit_test.py` | new and extended cases |
+| `testing/test-cases.md`, `testing/trigger-evals.md`, `testing/host-matrix.md` | v4.2.0 cases, Group V and its run, reasons |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.2.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.2.0 |
+
+### Backwards compatibility
+
+Nothing that worked stops working. Without a registry the three skills say nothing new; a core without `tools_file` is read as before; the team block is built from the same files. New is one line at three steps, once per run, when a tool you do not have would help.
+
+### Known limits
+
+- The account's plugins and skills are seen only where the host has a tool that lists them (measured on Claude Code desktop); on Codex — the host files and the session's own listing.
+- An installed app is added only when it matches a seed record; add others by hand.
+- `connected` is known only to a session that sees the server's tools; a scan of files gives `installed`. A tool installed in another host counts as installed; what a session saw is not tied to a host.
+- A Codex server or plugin with `enabled = false` counts as installed (names only, no values read).
+- The team's list appears only when the core's owner adds the file and the `tools_file` key.
+- Suggestions only in three skills; without SHELL the registry is read-only and nothing is suggested.
+- No lock on `registry.json`: two writes at the same moment may lose one.
+- When Claude Code shows skill names only (a crowded listing), «поділитися моїми інструментами з командою» may route to `context-connect` (trigger evals: visible 13/13, real 12/13).
+- On Codex CLI, a server of your own config named like a connector the plugin declares (for example a stdio `lazyweb` beside the plugin's http `lazyweb`) stops Codex from starting («url is not supported for stdio»): give yours another name (measured 2026-10-30, 0.153.2).
+
+---
+
 ## v4.1.1 (2026-10-30)
 
 **The marketplace installs from the registry copy — releases reach Claude desktop and Cowork again.** The marketplace that Claude desktop and Cowork install from imports the whole repository and refuses a plugin whose tree holds a second plugin manifest. Since v4.0.2 the tree carries the registry copy (`.ai-registry/skills/grow-product-manager/`, with its own `.claude-plugin/plugin.json`), so with `"source": "./"` that marketplace stayed at 4.0.1 — the last release without a copy — and could not check for updates. Reported by a colleague, not reproduced locally: `claude plugin validate` accepts both forms.

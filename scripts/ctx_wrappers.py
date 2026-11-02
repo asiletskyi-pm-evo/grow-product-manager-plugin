@@ -7,8 +7,10 @@ publishes each beside it as a note whose frontmatter says `kind: provider-file` 
 exactly one fenced code block (```yaml for a `.yaml` name, ```json for a `.json` one) with the file's content. The copy
 unpacks it into the same folder as `<name>`; `ctx repo kit-check` checks that a wrapper and the file beside it agree.
 
-- unwrap(fm, body, allowed)   (name, text, "") or (name, None, why not) — reads only
-- allowed_names(manifest)      the names a wrapper may carry: the two fixed ones and the basename of `bundles_file`
+- unwrap(fm, body, allowed, records)  (name, text, "") or (name, None, why not) — reads only
+- allowed_names(manifest)      the names a wrapper may carry: the two fixed ones, the basename of `bundles_file` and,
+                               since v4.2.0, of `tools_file` (the team's tools list, tool-registry.md §5)
+- records_names(manifest)      the names whose YAML is a list of records (`tools:`), read as such: `tools_file` only
 - is_wrapper(fm)               does a frontmatter mark a wrapper?
 
 Stdlib only.
@@ -33,15 +35,28 @@ def is_wrapper(fm):
 
 
 def allowed_names(manifest=None):
-    """The file names a wrapper may unpack: provider-manifest.yaml, access-bundles.json and the basename of the
-    manifest's `bundles_file` (a role model under another name)."""
+    """The file names a wrapper may unpack: provider-manifest.yaml, access-bundles.json, the basename of the
+    manifest's `bundles_file` (a role model under another name) and, since v4.2.0, of its `tools_file` (the team's
+    tools list, tool-registry.md §5)."""
     names = list(FIXED)
-    bundles = (manifest or {}).get("bundles_file") if isinstance(manifest, dict) else None
-    if isinstance(bundles, str) and bundles.strip():
-        base = os.path.basename(bundles.strip())
-        if base and base not in names and os.path.splitext(base)[1] in LANGS:
-            names.append(base)
+    for key in ("bundles_file", "tools_file"):
+        val = (manifest or {}).get(key) if isinstance(manifest, dict) else None
+        if isinstance(val, str) and val.strip():
+            base = os.path.basename(val.strip())
+            if base and base not in names and os.path.splitext(base)[1] in LANGS:
+                names.append(base)
     return names
+
+
+def records_names(manifest=None):
+    """The names a wrapper's YAML is read as a list of records for (since v4.2.0): the basename of `tools_file` — never
+    the manifest or the role model, whose YAML must read as before."""
+    val = (manifest or {}).get("tools_file") if isinstance(manifest, dict) else None
+    if isinstance(val, str) and val.strip():
+        base = os.path.basename(val.strip())
+        if base not in FIXED and os.path.splitext(base)[1] in (".yaml", ".yml"):
+            return [base]
+    return []
 
 
 def _blocks(body):
@@ -60,7 +75,7 @@ def _blocks(body):
     return out, cur is not None
 
 
-def unwrap(fm, body, allowed=FIXED):
+def unwrap(fm, body, allowed=FIXED, records=()):
     """(name, text, "") of a sound wrapper — the text with one final newline — or (name, None, why) in words that name
     no path: an unknown name, not exactly one code block, a block never closed, a language tag that does not fit the
     name, a block whose JSON or YAML cannot be read."""
@@ -86,5 +101,11 @@ def unwrap(fm, body, allowed=FIXED):
         try:
             cc.read_yaml_subset(text)
         except ValueError as e:
-            return name, None, "YAML не читається (%s)" % e
+            if name not in records:                         # only the tools list (v4.2.0) is a list of records
+                return name, None, "YAML не читається (%s)" % e
+            try:
+                if not cc.read_yaml_records(text, "tools"):
+                    return name, None, "YAML не читається (%s)" % e
+            except ValueError:
+                return name, None, "YAML не читається (%s)" % e
     return name, text, ""

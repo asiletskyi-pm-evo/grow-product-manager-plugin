@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.1.1
+**Version:** 4.2.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.2.0** — **«Реєстр інструментів»: the plugin knows what else helps your work, and says so in one line** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `knowledge-library` keeps a tools registry — other plugins, skills, MCP connectors, apps, sites, portals, courses — with what each is for, whether it is on this machine, how to connect it and what you think of it (`references/tool-registry.md`). A scan finds what is installed by itself: the host files on this machine (names only — never a command, an argument, a key or a URL), the session's own tools, the account's plugins and skills, the apps the plugin knows; the MCP registry and your organisation's plugin catalogue are searched only when you ask. `diagram-prototyper`, `product-research` and `meeting-processor` offer a missing tool at their step in one line, once per run, never again after «ні». A team's core can publish its own list (`tools_file` in the provider manifest), shown read-only as «Від команди»; your shared records export as one file for the core's owner — the plugin never writes into a core.
 
 **New in v4.1.1** — **The marketplace installs from the registry copy — releases reach Claude desktop and Cowork again** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). The marketplace that Claude desktop and Cowork install from imports the whole repository and refuses a plugin whose tree holds a second plugin manifest; since v4.0.2 the tree carries the registry copy (`.ai-registry/skills/grow-product-manager/`), so with `"source": "./"` it stayed at 4.0.1. The entry now points at the copy, which is rebuilt at every release, and validator check 22 keeps it there. Reported, not reproduced locally: `claude plugin validate` accepts both forms. No skill behaves differently.
 
@@ -239,7 +241,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 3. Product Research (v0.16.0)
+### 3. Product Research (v0.17.0)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -306,7 +308,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.15.2)
+### 8. Diagram & Prototype Creator (v0.16.0)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -337,7 +339,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 9. Meeting Processor (v0.18.3)
+### 9. Meeting Processor (v0.19.0)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -389,7 +391,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.9.3)
+### 11. Knowledge Library (v0.10.0)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -625,7 +627,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 ---
 
-### 31. Product Landscape (v0.5.1) — NEW in v3.3.0
+### 31. Product Landscape (v0.5.2) — NEW in v3.3.0
 
 **Description:** Registry and map of the products around yours — competitors, adjacent players, benchmarks, inspiration. `scan` lists what is installed on the Mac (including iPhone apps from the Mac App Store) and on an adb device and fills genre, rating and seller from the App Store; `discover` finds more by category and market through stores, web search and the optional connectors; `characterize` describes a product with sources; `map` renders the category map (`research/landscape`); `research` proposes a ranked list of products (no cap — you pick or name others) and starts the same flow on them through flow-walkthrough compare, product-research and brainstorm-features. Roles are per product of yours; bookmarks are read only with a per-scan yes; competitors stay read-only.
 
@@ -651,17 +653,17 @@ The second contour of the plugin: **manager → people → goals → communicati
 |-------|---------|-------------|
 | CJM Research | v0.14.0 | Customer Journey Map analysis and hypothesis validation |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.16.0 | Competitive analysis, user research, market trends, UX benchmarking |
+| Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.1 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.2 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.15.2 | Visualize concepts with diagrams, prototypes, infographics |
+| Diagram & Prototype Creator | v0.16.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
-| Product Landscape | v0.5.1 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
-| Meeting Processor | v0.18.3 | Process meetings and extract action items |
+| Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
+| Meeting Processor | v0.19.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.17.1 | Configure plugin for your organization |
-| Knowledge Library | v0.9.3 | Manage curated knowledge sources |
+| Knowledge Library | v0.10.0 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.9.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.11.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
@@ -1099,5 +1101,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.1.1  
+**Version:** 4.2.0  
 **Last Updated:** October 2026

@@ -521,6 +521,19 @@ EOF
   fi
 fi
 
+# --- 23. The tools seed stays sound (v4.2.0) -----------------------------------
+# references/tools-seed.yaml is the first records of every user's tools registry (references/tool-registry.md):
+# a record naming a skill that does not exist would be suggested at a step no skill has, and a connector the
+# plugin declares without a record would never be suggested at all.
+SEED_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import tools_scan; print('\n'.join(tools_scan.check_seed('.')))" 2>&1)
+if [ -n "$SEED_ERRS" ]; then
+  while IFS= read -r line; do err "tools seed: $line"; done <<EOF
+$SEED_ERRS
+EOF
+else
+  ok "tools seed: every record sound, every declared connector has one"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

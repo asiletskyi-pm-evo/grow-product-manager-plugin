@@ -43,6 +43,8 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 
 **Optional research connectors (v3.3.0).** `lazyweb`, `similarweb`, `mobbin`, `semrush`, `tavily`, `apify` are declared so the Connectors tab shows them, but no skill requires them: `product-landscape` and `flow-walkthrough` say in one line which optional sources are present and continue without the rest. Each is a paid or account service the user registers for; keys live in the host's connector configuration, never in the plugin. `tavily` matters on hosts without a built-in web search (Codex, ChatGPT); `apify` is the only route to Google Play charts and reviews.
 
+**The tools registry (v4.2.0).** Which of these connectors — and which other tools — the user has, and how to connect a missing one, is kept in the tools registry (`tool-registry.md`, owned by `knowledge-library`): a scan of the names on this machine and in the session, and the one line a skill may say at its step when a tool would help (§4 there). The chain below decides how to *reach* a product; the registry remembers what the user has and what they declined.
+
 **1b. Pattern detection.** For anything not covered by 1a — or when the declared namespace is absent but the product might still be connected under another name — look at the available tools. MCP tools follow the pattern `mcp__<id>__<tool_name>`. Common connectors:
 
 | Product | Tool pattern to look for | Example tools |
@@ -104,7 +106,7 @@ Examples:
 - Slack → `["slack", "messaging"]`
 - GitHub → `["github", "git", "repository"]`
 
-**If found** → call `suggest_connectors` to recommend the user installs it. Explain what it does and why the skill needs it. Wait for the user to connect before proceeding.
+**If found** → call `suggest_connectors` to recommend the user installs it. Explain what it does and why the skill needs it. Wait for the user to connect before proceeding. A search the user asked for themselves («знайди інструмент для …») keeps what they pick in the tools registry (`tool-registry.md` §3 item 4); its keywords are public words only.
 
 **If the MCP server exists but lacks the specific functionality needed** → proceed to Step 3.
 
