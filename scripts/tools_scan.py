@@ -9,6 +9,7 @@
   set      the user's own fields of a record
   team     the lists the user's cores publish (`tools_file`), read-only
   export   the records the user marked shared, one file for a core's owner
+  targets  the records a result of one kind can be published to (`publishes`, v4.3.0)
 
 Names only: from a host's configuration the scan takes the keys of its MCP server map and the table
 headers and keys of a TOML file — never a value (command, args, env, headers, url); lines inside a
@@ -48,7 +49,7 @@ SOURCE_HOST = {
 SEED_FIELDS = ("name", "kind", "job", "skills", "contours", "access", "connect", "publishes", "via", "needs")
 USER_FIELDS = ("verdict", "shared", "recommended_by", "connect", "job", "access", "skills", "contours", "needs",
                "publishes", "checked", "notes")
-LIST_FIELDS = ("skills", "contours", "needs")
+LIST_FIELDS = ("skills", "contours", "needs", "publishes")
 EXPORT_FIELDS = ("name", "kind", "job", "skills", "contours", "needs", "access", "connect", "verdict",
                  "recommended_by", "checked", "publishes")
 MAX_NAME, MAX_TEXT, MAX_DESC, MAX_FILE = 120, 300, 200, 64 * 1024 * 1024
@@ -99,6 +100,13 @@ def valid_name(raw):
     if norm(n) == norm(SELF) or n.lower().startswith(SELF + ":"):
         return ""
     return n
+
+
+def as_list(v):
+    """A list field as a list: a single value written before v4.3.0 (`publishes: page`) reads as a list of one."""
+    if isinstance(v, list):
+        return v
+    return [v] if isinstance(v, str) and v else []
 
 
 def skill_names():
@@ -448,10 +456,10 @@ def check_seed(root):
         if ids.count(rid) > 1 and rid not in twice:
             twice.add(rid)
             errs.append("%s: id twice" % rid)
-        for k, allowed in (("kind", KINDS), ("access", ACCESS), ("publishes", PUBLISHES)):
+        for k, allowed in (("kind", KINDS), ("access", ACCESS)):
             if r.get(k) not in (None, "") and r[k] not in allowed:
                 errs.append("%s: %s %r is not one of %s" % (rid, k, r[k], "|".join(allowed)))
-        for k in ("skills", "contours", "aliases", "app_names", "app_bundle_ids", "needs"):
+        for k in ("skills", "contours", "aliases", "app_names", "app_bundle_ids", "needs", "publishes"):
             if r.get(k) not in (None, "") and not isinstance(r.get(k), list):
                 errs.append("%s: %s is not a list" % (rid, k))
         for s in r.get("skills") or []:
@@ -463,6 +471,9 @@ def check_seed(root):
         for x in r.get("needs") or []:
             if x not in NEEDS:
                 errs.append("%s: need %r is not one of %s" % (rid, x, "|".join(NEEDS)))
+        for x in r.get("publishes") if isinstance(r.get("publishes"), list) else []:
+            if x not in PUBLISHES:
+                errs.append("%s: publishes %r is not one of %s" % (rid, x, "|".join(PUBLISHES)))
         if r.get("via") and r["via"] not in ids:
             errs.append("%s: via %r is not a seed record" % (rid, r["via"]))
         for key in {norm(x) for x in [rid, r.get("name")] + list(r.get("aliases") or []) if norm(x)}:
@@ -716,6 +727,9 @@ def cmd_merge(args):
                     continue
                 if rec.get(k) in (None, "", []) and s.get(k) not in (None, "", []):
                     rec[k] = s[k]
+                elif k == "publishes" and k not in (rec.get("user_set") or []):     # a seed that lists more widens
+                    have = as_list(rec.get(k))
+                    rec[k] = as_list(s.get(k)) + [x for x in have if x not in as_list(s.get(k))]
             rec["sources"] = _add_unique(rec.get("sources"), "seed")
             continue
         rec = {"id": s["id"], "state": "not-installed", "sources": ["seed"]}
@@ -770,6 +784,9 @@ def cmd_merge(args):
         prev = seen_now.get(rec["id"])
         best = row["state"] if prev is None or RANK[row["state"]] < RANK[prev[0]] else prev[0]
         seen_now[rec["id"]] = (best, _add_unique(prev[1] if prev else [], row["source"]))
+    for rec in tools:
+        if isinstance(rec.get("publishes"), str):          # the v4.2.0 form, one value
+            rec["publishes"] = as_list(rec["publishes"])
     stamp, changed = today(), 0
     for rec in tools:
         if rec["id"] in seen_now:
@@ -873,6 +890,33 @@ def cmd_suggest(args):
     return 0
 
 
+def cmd_targets(args):
+    if args.kind not in PUBLISHES:
+        result(error="not a kind a result can be published as (%s)" % "|".join(PUBLISHES))
+        return 2
+    store = store_dir(args)
+    why = None
+    if not os.path.isfile(os.path.join(store, "registry.json")):
+        if not args.any_state:
+            result(targets=[], kind=args.kind, why="no registry")
+            return 0
+        tools, why = [dict(s, state="not-seen") for s in load_seed()], "no registry — the seed's records"
+    else:
+        try:
+            tools = load_registry(store)
+        except Unreadable:
+            result(targets=[], kind=args.kind, why="registry.json does not read")
+            return 0
+    out = [t for t in tools if args.kind in as_list(t.get("publishes")) and t.get("verdict") != "deprecated" and
+           (args.any_state or t.get("state") in ("connected", "installed"))]
+    for t in out:
+        print(json.dumps({"id": t.get("id"), "name": t.get("name"), "kind": t.get("kind"), "state": t.get("state"),
+                          "access": t.get("access", "unknown"), "publishes": as_list(t.get("publishes"))},
+                         ensure_ascii=False, sort_keys=True))
+    result(targets=[t.get("id") for t in out], kind=args.kind, **({"why": why} if why else {}))
+    return 0
+
+
 def _find(tools, key):
     for t in tools:
         if t["id"] == key:
@@ -937,15 +981,15 @@ def _parse_fields(pairs):
             continue
         if k in LIST_FIELDS:
             vals = [x.strip() for x in v.split(",") if x.strip()]
-            allowed = skills if k == "skills" else CONTOURS if k == "contours" else NEEDS
+            allowed = skills if k == "skills" else CONTOURS if k == "contours" else \
+                PUBLISHES if k == "publishes" else NEEDS
             if [x for x in vals if x not in allowed]:
                 bad.append(k)
                 continue
             out[k] = vals
         elif k == "shared":
             out[k] = v.lower() in ("true", "yes", "1", "так")
-        elif (k == "verdict" and v and v not in VERDICTS) or (k == "access" and v and v not in ACCESS) or \
-                (k == "publishes" and v and v not in PUBLISHES):
+        elif (k == "verdict" and v and v not in VERDICTS) or (k == "access" and v and v not in ACCESS):
             bad.append(k)
         else:
             out[k] = clean(v)
@@ -968,6 +1012,8 @@ def _apply(rec, fields, tools, store, what):
             rec["cleared"] = _add_unique(rec.get("cleared"), k)       # a seed never fills it back
         else:
             rec[k] = v
+            if k in SEED_FIELDS:
+                rec["user_set"] = _add_unique(rec.get("user_set"), k)     # a seed never widens it
             rest = [c for c in rec.get("cleared") or [] if c != k]
             if rest:
                 rec["cleared"] = rest
@@ -1065,10 +1111,10 @@ def _team_record(r, skills):
             if flagged(v):
                 return None
             rec[k] = clean(v)
-    for k, allowed in (("kind", KINDS), ("access", ACCESS), ("verdict", VERDICTS), ("publishes", PUBLISHES)):
+    for k, allowed in (("kind", KINDS), ("access", ACCESS), ("verdict", VERDICTS)):
         if r.get(k) in allowed:
             rec[k] = r[k]
-    for k, allowed in (("skills", skills), ("contours", CONTOURS), ("needs", NEEDS)):
+    for k, allowed in (("skills", skills), ("contours", CONTOURS), ("needs", NEEDS), ("publishes", PUBLISHES)):
         v = r.get(k)
         v = [v] if isinstance(v, str) else (v if isinstance(v, list) else [])
         v = [x for x in v if x in allowed]
@@ -1228,9 +1274,14 @@ def main(argv=None):
     p.add_argument("--context")
     p = common(sub.add_parser("export"))
     p.add_argument("--context")
+    p = common(sub.add_parser("targets"))
+    p.add_argument("--kind", required=True, help="|".join(PUBLISHES))
+    p.add_argument("--any-state", action="store_true", help="every record with the kind, whatever its stored state — "
+                   "the seed's when there is no registry; the skill's own tool list decides")
     args = ap.parse_args(argv)
     fn = {"scan": cmd_scan, "merge": cmd_merge, "suggest": cmd_suggest, "decline": cmd_decline, "add": cmd_add,
-          "set": cmd_set, "team": cmd_team, "export": cmd_export}.get(args.cmd)
+          "set": cmd_set, "team": cmd_team, "export": cmd_export,
+          "targets": cmd_targets}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2

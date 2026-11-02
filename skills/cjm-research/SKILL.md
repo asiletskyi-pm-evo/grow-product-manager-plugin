@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.14.0
+version: 0.15.0
 description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами».
 ---
 
@@ -173,13 +173,14 @@ Ask via AskUserQuestion (skip for automated `health-check` — use the saved par
 
 **2e. Output format:**
 
-> "Where should I publish the report? It will hold internal data (funnel metrics and anomalies). Confluence — everyone who reads the space; Notion or Google Docs — whoever can open that place; or only a local file."
+> "Where should I publish the report? It will hold internal data (funnel metrics and anomalies). Confluence — everyone who reads the space; Notion or Google Docs — whoever can open that place; a funnel dashboard — you, until you share it; or only a local file."
 
 This is a preference, not the publication itself: the question of `references/native-surfaces.md` §3 is asked at 12a when the report is ready, naming the place chosen here. An automated health-check never uses this step.
 
 - Confluence page (default)
 - Notion page
 - Google Docs
+- Funnel dashboard (since v0.15.0) — every stage's numbers with their source and date, where the session has a place for it (`references/artifact-publishing.md` §2, §9)
 - Local markdown file
 - Presentation (chains to diagram-prototyper)
 
@@ -281,7 +282,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.14.0",
+     skill_version: "0.15.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -300,6 +301,8 @@ IF vault_level > L0 AND vault sync_mode != "off":
    - Set `superseded_by` to link to new health check
 
 4. Display: "Saved to Vault: {TYPE_FOLDER_MAP[type]}/{product}/…" (e.g. CJM/health-checks/{product}/…)
+
+5. For each place 12a published to (since v0.15.0), record it in the saved note — `python3 scripts/publications.py record … --carry <the Step 1.5 previous note of the same product and mode>` (`references/artifact-publishing.md` §5–§6). An automated health-check records nothing: it publishes nothing.
 
 ---
 

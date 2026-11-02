@@ -524,7 +524,9 @@ fi
 # --- 23. The tools seed stays sound (v4.2.0) -----------------------------------
 # references/tools-seed.yaml is the first records of every user's tools registry (references/tool-registry.md):
 # a record naming a skill that does not exist would be suggested at a step no skill has, and a connector the
-# plugin declares without a record would never be suggested at all.
+# plugin declares without a record would never be suggested at all. Since v4.3.0 `publishes` is a list of the
+# kinds a result can be published as: the seed writes the list form a user's registry keeps, and an unknown kind
+# would offer a place for a result no skill makes.
 SEED_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import tools_scan; print('\n'.join(tools_scan.check_seed('.')))" 2>&1)
 if [ -n "$SEED_ERRS" ]; then
   while IFS= read -r line; do err "tools seed: $line"; done <<EOF
@@ -532,6 +534,19 @@ $SEED_ERRS
 EOF
 else
   ok "tools seed: every record sound, every declared connector has one"
+fi
+
+# --- 24. The publication record is one schema (v4.3.0) ------------------------
+# A note's `published` field is written by scripts/publications.py, described for people in vault-schema.md and used
+# by the skills through artifact-publishing.md; its kinds are the tools registry's `publishes`. A kind, a surface or an
+# audience added to one of them alone would make a skill record a place another one cannot read back.
+PUB_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import publications; print('\n'.join(publications.check_schema('.')))" 2>&1)
+if [ -n "$PUB_ERRS" ]; then
+  while IFS= read -r line; do err "published field: $line"; done <<EOF
+$PUB_ERRS
+EOF
+else
+  ok "published field: vault-schema.md, artifact-publishing.md, publications.py and the registry's publishes agree"
 fi
 
 # --- 10. Component counts in README ------------------------------------------

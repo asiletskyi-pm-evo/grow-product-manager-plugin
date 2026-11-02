@@ -21,9 +21,9 @@
 | `checked` | the day the user last checked the record | the user |
 | `aliases` | other names a host lists it under | the seed |
 | `needs` | what a step can ask it for, from a closed list (`board`, `mind-map`, `flowchart`, `transcript`, `market-data` … — `NEEDS` in the script); a record that names none serves any need of its skills (§4) | the seed, the user or a core |
-| `notes`, `cleared` | the user's own note; the seed fields the user emptied, which a seed never fills back | the user |
+| `notes`, `cleared`, `user_set` | the user's own note; the seed fields the user emptied, which a seed never fills back; the seed fields the user set, which a seed never widens | the user (`set`) |
 | `via` | another record that brings this one (FigJam comes with the Figma connector): when that one is installed or connected, this one is not suggested | the seed or the user |
-| `publishes` | what a result can become there: `board` · `page` · `document` · `deck` · `dashboard` · `design` (read by publishing skills) | the seed or the user |
+| `publishes` | what a result can become there, a list of `board` · `page` · `document` · `deck` · `dashboard` · `design` — read by `targets` (§7) for `artifact-publishing.md` §2; a single value written before v4.3.0 reads as a list of one, and a seed that lists more kinds widens the record's list unless the user set it | the seed or the user |
 | `shared` | goes into the export for the team (§5) | the user only |
 | `sources` | every way the record arrived: `seed`, `scan-<source>`, `registry-search`, `catalog`, `user`, `team:<id>` | the script |
 
@@ -79,7 +79,7 @@ A core may publish its own list: the optional key `tools_file` of its provider m
 - A value from a host's configuration is never read, kept or shown — only a name (§3).
 - A text the script writes passes the never-store filter of `ctx` (`data-policy.md`, «What the context store never keeps»): a `connect` line that holds a key is refused, by kind, never echoed.
 - Nothing is connected, installed or configured by a skill.
-- The registry is internal data: it stays on the machine and in the vault. Showing it on a hosted surface is a publication and takes the question of `native-surfaces.md` §3; no skill does it in v4.2.0.
+- The registry is internal data: it stays on the machine and in the vault. Showing it on a hosted surface is a publication and takes the question of `native-surfaces.md` §3; no skill does it. `targets` only names where a result may go — the result's own publication asks (`artifact-publishing.md` §4).
 - A person's profile is never a tool record; `recommended_by` holds a name, never a judgement.
 
 ## 7. The script
@@ -96,3 +96,4 @@ A core may publish its own list: the optional key `tools_file` of its provider m
 | `set --id ID field=value …` | the user's fields: `verdict`, `shared`, `recommended_by`, `connect`, `job`, `access`, `skills`, `contours`, `publishes`, `checked`, `notes` |
 | `team [--context PATH]` | the cores' lists (§5), read-only |
 | `export [--context PATH]` | the shared records, one file for a core's owner (§5) |
+| `targets --kind K [--any-state]` | the records a result of kind `K` can be published to: `K` in `publishes`, not `deprecated`, `connected` or `installed` — with `--any-state` whatever the stored state, and the seed's records when there is no registry; one JSON line each with its `state` and `access` (since v4.3.0). Publishing skills use `--any-state` and keep the records whose tools are in their own tool list (`artifact-publishing.md` §2); another `K` is exit 2 |

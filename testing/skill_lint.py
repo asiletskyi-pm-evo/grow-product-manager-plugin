@@ -50,6 +50,7 @@ CHECKS = """
 28. bootstrap-template   a heading or a deferred-step key of ctx bootstrap's skeleton (scripts/ctx_bootstrap.py) that onboarding Step 16c does not have
 29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
 30. surface-brand        a skill, agent, command, template or shared protocol naming a host surface by its brand or tool instead of its capability (native-surfaces.md §6)
+31. publish-protocol     a skill that publishes to ARTIFACT or DOCS, or that artifact-publishing.md names as its consumer, without citing artifact-publishing.md
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1599,6 +1600,34 @@ for _f in sorted(_sb_files):
             if _m:
                 fail("surface-brand", f"{_rel}:{_ln}: «{_m.group(0)}» names {_what} — name the capability "
                                       "(ARTIFACT / DOCS / WIDGET / SCHEDULE / RESEARCH, references/native-surfaces.md §1)")
+
+# ============================================================ publish protocol (31)
+# v4.3.0: a publication is recorded and becomes a new version of the same place on the next run only when the skill
+# follows references/artifact-publishing.md. Two skills had published to ARTIFACT and DOCS since v4.1.0 with a rerun
+# that made a new document each time ("keeping one document per report … comes with publishing, a later release").
+# A skill folder that names ARTIFACT or DOCS as a place, and every skill the protocol's header names as a consumer,
+# must cite it. Other skills that ask the question of native-surfaces.md §3 are not consumers yet (they come later).
+_ap = os.path.join(root, "references", "artifact-publishing.md")
+if not os.path.isfile(_ap):
+    fail("publish-protocol", "references/artifact-publishing.md is missing")
+else:
+    _head = open(_ap, encoding="utf-8").read().split("\n## ", 1)[0]
+    _cons = re.search(r"^> \*\*Consumers:\*\*(.*)$", _head, re.M)
+    _named = re.findall(r"`([a-z][a-z0-9-]+)`", _cons.group(1)) if _cons else []
+    _consumers = set(_named) & SKILLS
+    for _n in sorted(set(_named) - SKILLS):
+        fail("publish-protocol", f"artifact-publishing.md: «Consumers:» names `{_n}`, which is not a skill")
+    if not _consumers:
+        fail("publish-protocol", "artifact-publishing.md: its header has no «> **Consumers:**» line naming the consumer skills")
+    for _sk in sorted(SKILLS):
+        _files = [os.path.join(root, "skills", _sk, "SKILL.md")] + \
+            glob.glob(os.path.join(root, "skills", _sk, "references", "**", "*.md"), recursive=True)
+        _txt = "\n".join(open(_f, encoding="utf-8").read() for _f in _files if os.path.isfile(_f))
+        _why = "names ARTIFACT or DOCS as a place" if re.search(r"\b(?:ARTIFACT|DOCS)\b", _txt) else \
+            "is named a consumer in its header" if _sk in _consumers else None
+        if _why and "artifact-publishing.md" not in _txt:
+            fail("publish-protocol", f"skills/{_sk}: {_why} but never cites references/artifact-publishing.md — "
+                                     "its publication is neither recorded nor versioned")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

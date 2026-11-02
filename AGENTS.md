@@ -23,6 +23,7 @@ The **Grow Product Manager** plugin — a set of skills for a product manager's 
 | `references/tool-registry.md`, `scripts/tools_scan.py`, `references/tools-seed.yaml` | the tools registry: what helps the work outside the plugin, scanned by name only (`~/.grow-pm/knowledge-library/tools/`), and the one-line suggestion of a missing tool at a skill's step |
 | `scripts/ctx.py`, `references/context-protocol.md` | the context store: records of the user's context, `local-context.md` compiled from them, `ctx sync` after any write to it |
 | `references/native-surfaces.md` | where a host can put a result — a page, a live document, an inline visual, a schedule, a research pass — and the question asked before anything is published |
+| `references/artifact-publishing.md`, `scripts/publications.py` | publishing a result: the candidate places in order of audience, one question, the record of the id in the note's `published` field, and a new version of the same place instead of a copy |
 | `testing/` | `validate-consistency.sh`, `skill_lint.py` and the eval sets |
 | `.ai-registry/skills/<name>/`, `testing/registry_copy.py` | a generated copy of the plugin for a registry that syncs a subfolder, never the root; rebuilt at release from the index, never edited by hand. Since v4.1.1 the marketplace installs from it too (`source` in `.claude-plugin/marketplace.json`), so a release that skips the rebuild ships the previous release |
 

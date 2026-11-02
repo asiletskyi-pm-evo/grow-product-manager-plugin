@@ -340,6 +340,20 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | V7 | карта конкурентів у нашій категорії | product-landscape — NOT knowledge-library |
 | V8 | які джерела маємо про чекаут | knowledge-library (sources, as before) |
 
+### Group W — Publishing (added 2026-11-02, v4.3.0)
+
+`design-bridge` publishes an existing deck; the dashboards stay with the skills that own the numbers (`product-reporter`, `cjm-research`, `focus-advisor`); `diagram-prototyper` keeps quick diagrams.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| W1 | опублікуй деку про контекст у Atlassian | design-bridge |
+| W2 | онови деку «Zorg: нова доставка» до нової версії | design-bridge |
+| W3 | publish the deck as an HTML page | design-bridge |
+| W4 | онови дашборд спринту | product-reporter |
+| W5 | зроби дашборд воронки з аномаліями | cjm-research — NOT product-analysis |
+| W6 | онови живий борд фокусів | focus-advisor |
+| W7 | намалюй блок-схему онбордингу | diagram-prototyper — NOT design-bridge |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |

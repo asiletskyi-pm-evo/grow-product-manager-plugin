@@ -223,6 +223,10 @@ Gold check (2026-10-06): the gold meets every row at 2 on its own content. Probl
 
 **brainstorm-features** (hypothesis backlog): ice_scored (2), hypothesis_structure IF/THEN/measurable (2), funnel_impact_link (2), validation_method (1), prioritized (1). pass 0.8.
 
+**design-bridge** (the HTML deck and the host's deck from one IR, since v4.3.0): same_slides_as_ir — count, order, titles, no new content (2), source_captions_kept with their class (2), no_external_request in the HTML file (2), brand_tokens_only (1), keyboard_navigation_and_notes (1), contrast_aa on every render (1). pass 0.85.
+
+**dashboards** (`product-reporter`, `cjm-research`, the Focus Board, since v4.3.0): every_number_sourced_and_dated (2), snapshot_date_or_live_parts_marked (2), nothing_the_report_does_not_hold (2), no_per_person_table (1), period_annotation (1). pass 0.85.
+
 > **Rubric-authoring rule:** a criterion must be observable and binary-ish (0/1/2 with clear anchors). Vague criteria ("well written") are not allowed — they measure nothing.
 
 ## Integration

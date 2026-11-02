@@ -52,9 +52,27 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `source_session` | string | Session ID where artifact was created |
-| `published_to` | string | URL where artifact is published (e.g., Confluence page) |
-| `confluence_page_id` | string | Confluence page ID if synced |
+| `published_to` | string | URL where artifact is published (e.g., Confluence page); read as a `confluence` entry of `published` since v4.3.0, never rewritten |
+| `confluence_page_id` | string | Confluence page ID if synced; read the same way |
+| `published` | object[] | Where the artifact was published (since v4.3.0) — one entry per place, written by `scripts/publications.py` only (`artifact-publishing.md` §5); see below |
 | `jira_epic` | string | Associated Jira epic key |
+
+#### Publication record (optional, since v4.3.0)
+
+`published` is a list of flat entries, one per place (surface, kind and the host of its link); `scripts/publications.py` writes it after the user's «так» and changes nothing else in the note. A personal space's audience is `private`.
+
+| Entry field | Values |
+|---|---|
+| `surface` | `artifact` · `docs` · `confluence` · the id of a tools-registry record (`atlassian`, `google-drive`, `notion` …) |
+| `kind` | `deck` · `dashboard` · `document` · `page` · `board` · `design` |
+| `id`, `url` | the place's id and its link, never one with credentials |
+| `version` | integer, 1 for the first publication of that place |
+| `published` | date-time of the latest version, UTC |
+| `audience` | `private` · `shared` · `space:<KEY>` · `unknown` |
+| `replaced` | string[] — earlier ids of the same place |
+| `remote_version` | the place's own version after the publication, when its tool gives one |
+
+Never a name of whom it was shared with, never a token. A note without the field is valid; it is never backfilled.
 
 #### Judgment Fields (optional, since v3.8.0)
 

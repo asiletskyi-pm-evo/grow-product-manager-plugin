@@ -97,6 +97,7 @@ A hosted surface is anything that lives outside the session and opens at a link:
 4. **Sharing is a separate question**, asked after a page or document that starts private is published: to whom, by name or group. A place open to a team from the start (a Confluence space) is named with its audience in the question itself.
 5. **A person's profile is never published** to a hosted surface, whatever the answer (`people-context-protocol.md`).
 6. **The host's built-in research** (RESEARCH) runs in the session, but its searches leave it: phrase its queries from public information only, as for Deep Research above (rule 2 of the Practical Guidelines).
+7. **The record of a publication holds no data about people** (since v4.3.0, `artifact-publishing.md` §5): only the place's id, a link without credentials — never a signed or pre-signed one — its audience (`private`, `shared`, a space) and its version, never the name of anyone it was shared with. Sharing goes to named people, groups or teams only, never to everyone with the link or to the whole organisation (§7 there); a thumbnail of a published page is made only on request; a CSV of internal data is a publication like any other.
 
 When in doubt whether a result holds internal data, it does (Practical Guidelines, rule 5).
 

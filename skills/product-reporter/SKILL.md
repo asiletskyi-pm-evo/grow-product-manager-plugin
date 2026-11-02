@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.11.0
+version: 0.12.0
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a plan-vs-actual retro (quarterly-planning). UA — «звіт по спринту», «результати кварталу», «звіт по релізах», «які фічі виїхали в реліз», «QBR». EN — "board update".
 ---
 
@@ -120,11 +120,12 @@ Build charts into xlsx and/or as images embedded in Confluence.
 
 ### Step 6 — Output (ask each time)
 
-Ask via AskUserQuestion: **Confluence (the product's space from local-context) / local files (md + xlsx) / both** — and, where the host has DOCS (marked in Step 0-host, since v0.11.0), **a live document** in the user's account as one more option. **Never for `member-review`**: it is one named person's throughput, so it is not put into one more hosted place (`references/data-policy.md` → People data, Hosted surfaces) — that mode keeps Confluence and local files as before, and its Confluence question names the space's readers. The question names the internal data the report holds (issues, SP, people's names from Jira) and who will see each place; that makes it the question `references/native-surfaces.md` §3 asks before a publication — no second one. Ask it again before updating a page or a document published earlier.
-- **Confluence**: `contentFormat: html`; ask space + parent (page **or folder** id both work). Tables use `<th>` headers, no "№" column, panel-info for the header block, epic/board links.
+Ask via AskUserQuestion: **Confluence (the product's space from local-context) / local files (md + xlsx) / both** — and, where the host has DOCS (marked in Step 0-host, since v0.11.0), **a live document** in the user's account, and since v0.12.0 **a dashboard** of the report — the places of `references/artifact-publishing.md` §2, ordered for colleagues (§3), in this one question (§4). **Never for `member-review`**: it is one named person's throughput, so it is not put into one more hosted place (`references/data-policy.md` → People data, Hosted surfaces) — that mode keeps Confluence and local files as before, and its Confluence question names the space's readers. The question names the internal data the report holds (issues, SP, people's names from Jira) and who will see each place; that makes it the question `references/native-surfaces.md` §3 asks before a publication — no second one. **A rerun of the same report** (the same mode, board and period) offers each place it went to as its next version, asked again (`artifact-publishing.md` §6): the record is in the report's note (§5) — the vault note of Step 8, or without a vault the local `.md`.
+- **Confluence**: `contentFormat: html`; ask space + parent (page **or folder** id both work); a rerun updates the page by its id. Tables use `<th>` headers, no "№" column, panel-info for the header block, epic/board links.
 - **Local**: build `<report>.md` (structured, nested tables) and `<report>.xlsx` (flat filterable sheet + "Огляд" summary sheet). Present files for the user.
 - **Both**: do local first, then publish, then link the page.
-- **Live document** (DOCS): the same structured report as the local `.md` (tables as tables, epic/board links), titled like the Confluence page; the local files are written first, the document is one more place to read it, never the only one. Give its link in the answer and in the run summary. A rerun creates a new document; it never rewrites one the user may have edited or shared (keeping one document per report across runs comes with publishing, a later release). Sharing it is a separate question, after it is created. Without DOCS the option is not offered.
+- **Live document** (DOCS): the same structured report as the local `.md` (tables as tables, epic/board links), titled like the Confluence page; the local files are written first, the document is one more place to read it, never the only one. Give its link in the answer and in the run summary. A rerun updates the same document after checking it against the record's last version — edited by someone since → «замінити / додати новим розділом / новий документ» (§6). Sharing it is a separate question, after it is created (§7). Without DOCS the option is not offered.
+- **Dashboard** (since v0.12.0): the report's numbers on one page — committed and done SP, throughput, carry-over, epic statuses — each with its source and the date of the query (`artifact-publishing.md` §9). On ARTIFACT `typed` the issue statuses may re-query Jira when it is opened; in Atlassian Artifacts it is an HTML snapshot. It holds what the report holds and no per-person table. Without a place for it (§2) the option is not offered.
 
 ## Workflow — `goal-report` mode (3T5F)
 
@@ -166,9 +167,10 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.11.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.12.0", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
+2. For each place Step 6 published to, record it in the saved note — `python3 scripts/publications.py record … --carry <the previous report of the same mode, board and period>` (`references/artifact-publishing.md` §5–§6); without a vault the local `.md` carries it.
 
 ## Quality standards
 

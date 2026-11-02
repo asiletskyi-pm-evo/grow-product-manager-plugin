@@ -105,15 +105,16 @@
 
 **Before 12a — the PM-first comparison or `explain` (since v3.9.0).** In an interactive `hypotheses` / `full` run where `references/cjm-pipeline.md` Step 7.0 applied: "Your hypotheses vs mine" (`pm_first`, after an answer) or "How I got here" (`explain`) comes in chat once the report is assembled, before 12a. It never enters the report and asks nothing; a change it prompts goes through the 12b feedback loop. The Automated Health-Check Protocol below is unchanged: no question, no block.
 
-**12a. Ask via AskUserQuestion — every interactive run, even when Step 2e chose a place (`references/native-surfaces.md` §3):**
+**12a. Ask via AskUserQuestion — every interactive run, even when Step 2e chose a place (`references/native-surfaces.md` §3).** Since v0.15.0 the places, their order and the record follow `references/artifact-publishing.md`: the candidates (§2) are the places below, the place from 2e first; a place this report already went to — the same product and mode, its record in the previous note (§5) — is offered first as its next version (§6).
 
-> "Report is ready. It holds internal data (funnel metrics, anomalies, hypotheses). Publish it to <the place from 2e, or: Confluence / Notion / Google Docs> — visible to <who can open that place>? Or keep it local only?"
+> "Report is ready. It holds internal data (funnel metrics, anomalies, hypotheses). Publish it to <the place from 2e, or: Confluence / Notion / Google Docs / a funnel dashboard> — visible to <who can open that place>? Or keep it local only?"
 
-**An automated `health-check` run skips Step 12 entirely**: it saves the snapshot (Automated Health-Check Protocol below) and publishes nothing. **The next interactive run** of this skill on the same product looks at the newest snapshot in `~/.grow-pm/knowledge-library/health-checks/`, names its date, and offers to publish it with this question — the user knows whether it went out already.
+**An automated `health-check` run skips Step 12 entirely**: it saves the snapshot (Automated Health-Check Protocol below), publishes nothing and ends with the line of `references/native-surfaces.md` §4. **The next interactive run** of this skill on the same product looks at the newest snapshot in `~/.grow-pm/knowledge-library/health-checks/`, names its date, and offers to publish it with this question — a place it went to before as its next version («нова версія дашборда від <дата>»).
 
 - **Confluence** (default) → ask for space and parent page. Title: `[CJM] Product — Mode — Date`
 - **Notion** → ask for workspace and location
 - **Google Docs** → ask for folder
+- **Funnel dashboard** (since v0.15.0) → one page: the stages with their conversion, baseline, deviation and health, the anomalies, the health score — every number with its source (the dashboard or the snapshot) and its period (`artifact-publishing.md` §9). On ARTIFACT `typed` it may re-query a connector when opened; in Atlassian Artifacts it is an HTML snapshot dated at the top. No hypothesis text beyond the report's, no person
 - **Local markdown** → save to workspace folder
 - **No** → results stay in the dialogue
 
