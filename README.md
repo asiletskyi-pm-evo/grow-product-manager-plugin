@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.2.0
+**Version:** 4.3.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.3.0** — **«Публікація»: a result becomes a link you open, update and share — one «так», a new version instead of a copy** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). One protocol (`references/artifact-publishing.md`) says where a result can go — the host's own pages and documents, Atlassian Artifacts in your company's tenant, Confluence, the tools your registry says publish that kind — in which order (for colleagues the company's tenant first, for you alone your own account), and asks once, «лише файл» always an answer. Where a result went is kept per result (`~/.grow-pm/publications/`, mirrored into the note's `published` field), so the next run offers the next version of the same place — an artifact's next immutable version, the same link, the same page after an edit check — never a copy. `design-bridge` renders one deck as `.pptx`, a self-contained HTML deck and the host's deck on your product's design system, and publishes an existing deck as it is; `product-reporter`, `cjm-research` and `focus-advisor` get dashboards with a source and a date for every number. Sharing is its own question, to named people only; a scheduled run never publishes.
 
 **New in v4.2.0** — **«Реєстр інструментів»: the plugin knows what else helps your work, and says so in one line** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `knowledge-library` keeps a tools registry — other plugins, skills, MCP connectors, apps, sites, portals, courses — with what each is for, whether it is on this machine, how to connect it and what you think of it (`references/tool-registry.md`). A scan finds what is installed by itself: the host files on this machine (names only — never a command, an argument, a key or a URL), the session's own tools, the account's plugins and skills, the apps the plugin knows; the MCP registry and your organisation's plugin catalogue are searched only when you ask. `diagram-prototyper`, `product-research` and `meeting-processor` offer a missing tool at their step in one line, once per run, never again after «ні». A team's core can publish its own list (`tools_file` in the provider manifest), shown read-only as «Від команди»; your shared records export as one file for the core's owner — the plugin never writes into a core.
 
@@ -1101,5 +1103,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.2.0  
+**Version:** 4.3.0  
 **Last Updated:** October 2026

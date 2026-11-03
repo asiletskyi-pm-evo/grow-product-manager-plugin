@@ -1,6 +1,6 @@
 # native-surfaces.md
 
-> Shared reference (since v4.1.0). A host can show or keep a result in more places than a file: a typed page, a live document, a visual inside the conversation, a run on a schedule, a built-in research pass. This file says how a skill recognises each of these **surfaces**, which result goes where, what it asks before anything leaves the session, and what it does when the surface is absent. Consumed by `host-profiles.md` §1–§3 (the five capabilities are marked in Step 0-host) and by every skill that shows, publishes or schedules a result.
+> Shared reference (since v4.1.0). A host can show or keep a result in more places than a file: a typed page, a live document, a visual inside the conversation, a run on a schedule, a built-in research pass. This file says how a skill recognises each of these **surfaces**, which result goes where, what it asks before anything leaves the session, and what it does when the surface is absent. How a publication is recorded and becomes a new version of the same place on the next run is `artifact-publishing.md` (since v4.3.0). Consumed by `host-profiles.md` §1–§3 (the five capabilities are marked in Step 0-host) and by every skill that shows, publishes or schedules a result.
 >
 > **Rule of the file:** the same as `host-profiles.md` — branch on an **observed capability**, never on a brand. This file and `host-profiles.md` are the only two places where a surface is named by its brand or tool (§6); a skill names the capability (`skill_lint.py` check 30).
 
@@ -23,8 +23,10 @@ Mark them in Step 0-host together with the other six (`host-profiles.md` §3), o
 | Result | First choice | Next | Without any |
 |---|---|---|---|
 | A chart, a trend, a comparison shown while working (`product-analysis`) | WIDGET | — | a table in the report, as before v4.1.0 |
-| The Focus Board (`focus-advisor` Step 7b) | WIDGET, with no question | ARTIFACT `typed` — only on the user's request or when a live board already exists, asked before **every** create and refresh (§3) | the static `~/.grow-pm/focus/board.html` |
-| A report the user will read and edit (`product-reporter` Step 6) | offered as one of the outputs: DOCS, Confluence, local files — each after §3 | — | Confluence / local files, as before v4.1.0 |
+| The Focus Board (`focus-advisor` Step 7b) | WIDGET, with no question | ARTIFACT `typed` — only on the user's request or when a live board already exists, asked before **every** create and refresh (§3); recorded in `board.yaml` and refreshed as a new version (`artifact-publishing.md`) | the static `~/.grow-pm/focus/board.html` |
+| A report the user will read and edit (`product-reporter` Step 6) | offered as one of the outputs: DOCS, Confluence, a dashboard, local files — each after §3; a rerun updates the same place (`artifact-publishing.md` §6) | — | Confluence / local files, as before v4.1.0 |
+| A deck (`design-bridge` Step 7, since v4.3.0) | after §3, among the candidates of `artifact-publishing.md` §2: for colleagues the company's tenant first (Atlassian Artifacts), for the user alone the host's ARTIFACT in their account | the other candidates of the same question | the `.pptx` and its outline, as before v4.3.0 |
+| A dashboard (`product-reporter` Step 6, `cjm-research` 12a, since v4.3.0) | after §3, in the same question as the skill's other places (`artifact-publishing.md` §2–§4); every number with its source and date (§9 there) | — | the report's tables, as before v4.3.0 |
 | Any other publication of a skill's result — Confluence, Notion, Google Docs, a whiteboard, a design file, a live dashboard | after §3, every time | — | the local file |
 | A recurring run (`cjm-research` health-check, `focus-advisor` briefs, `knowledge-library` Verify, `experiment-tracker` stale-check, `feedback-triage`, `one-on-one` coverage, `project-planning` replan, the configurator's scheduled briefs) | SCHEDULE `local` — the run follows §4 | — | one line where to create it (§5) |
 | An enrichment pass over public sources (`product-research` Step 1–2) | RESEARCH, first, with no question of its own — it runs in the session | the external LLMs, each asked about as before | web search and the skill's other sources |
@@ -44,6 +46,7 @@ One question, in the user's language, naming three things:
 > «Опублікувати звіт спринту (внутрішні дані: задачі й SP з Jira) як живий документ у твоєму акаунті? Бачитимеш лише ти, поки не поділишся. Так / ні.»
 > «Опублікувати звіт у Confluence, простір ZORG (внутрішні дані: задачі й SP з Jira)? Сторінку бачитимуть усі, хто читає цей простір. Так / ні.»
 
+- **Which places, in which order, and the next version** — the candidates, the order by audience, the record of where a result went and a new version instead of a copy: `artifact-publishing.md` (since v4.3.0).
 - **An existing «where to?» question counts.** When a step already asks where the result goes (`product-reporter` Step 6, a skill's publishing question) and that question names the internal data and who can open each place, it is this question — the skill does not ask twice.
 - **Sharing is a separate question** — to whom, by name or group — asked after the publication of a page or document that starts private. A place that is open to a team from the start (a Confluence space) has no such step: its audience is named in the question itself.
 - **A person's profile is never published** to a hosted surface, whatever the answer (`people-context-protocol.md`). People-contour skills route nothing here.
@@ -89,7 +92,7 @@ What the plugin has seen under each capability, with where the fact comes from (
 | — (SCHEDULE absent for the agent) | The ChatGPT app: a «Заплановано» section where the user creates tasks; the model has only `automations.peek` (measured 2026-10-29) |
 | RESEARCH | Claude Code (desktop and CLI): the deep-research skill (measured 2026-10-29). Codex CLI: the same skill when a plugin that carries it is installed — it was on the measured machine (the model listed it, 2026-10-29); without one, web search only (`web.run`). The ChatGPT app: web search only (measured 2026-10-29) |
 
-Not surfaces in this sense: document, presentation and spreadsheet **generators** (they write files), image generation, a browser or computer-use tool (that is APP-DRIVE, `app-drive-protocol.md`).
+Not surfaces in this sense: document, presentation and spreadsheet **generators** (they write files), image generation, a browser or computer-use tool (that is APP-DRIVE, `app-drive-protocol.md`), and a connector's own publishing operations — Atlassian Artifacts are a tools-registry record's target, reached through the Atlassian connector (`artifact-publishing.md` §8).
 
 ## 7. Measured per host
 

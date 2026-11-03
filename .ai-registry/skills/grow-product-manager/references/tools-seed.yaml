@@ -23,7 +23,7 @@ tools:
     contours: [product, delivery, knowledge]
     access: corporate
     connect: "the plugin's Connectors tab → Atlassian; sign in with the work account"
-    publishes: page
+    publishes: [page, deck, dashboard]
     aliases: [atlassian-rovo, atlassian_rovo, jira, confluence]
   - id: figma
     name: "Figma"
@@ -33,7 +33,7 @@ tools:
     contours: [design]
     access: paid
     connect: "the plugin's Connectors tab → Figma"
-    publishes: design
+    publishes: [design]
     aliases: [figma-desktop]
     app_names: [Figma]
     app_bundle_ids: [com.figma.Desktop]
@@ -46,7 +46,7 @@ tools:
     contours: [design]
     access: paid
     connect: "through the Figma connector (its FigJam tools) or figma.com in the browser"
-    publishes: board
+    publishes: [board]
     via: figma
     needs: [board, diagram, flowchart]
   - id: miro
@@ -57,7 +57,7 @@ tools:
     contours: [design]
     access: paid
     connect: "the host's connector directory → Miro"
-    publishes: board
+    publishes: [board]
     app_names: [Miro]
     app_bundle_ids: [com.electron.realtimeboard]
     needs: [board, diagram, mind-map]
@@ -126,7 +126,7 @@ tools:
     contours: [knowledge]
     access: corporate
     connect: "the plugin's Connectors tab → Google Drive"
-    publishes: document
+    publishes: [document, deck]
     needs: [internal-docs]
   - id: fireflies
     name: "Fireflies"
@@ -220,7 +220,7 @@ tools:
     contours: [knowledge]
     access: paid
     connect: "the host's connector directory → Notion"
-    publishes: page
+    publishes: [page]
     app_names: [Notion]
     app_bundle_ids: [notion.id]
   - id: slack
