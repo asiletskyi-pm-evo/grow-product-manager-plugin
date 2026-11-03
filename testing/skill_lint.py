@@ -1584,7 +1584,9 @@ SURFACE_BRANDS = [   # (pattern, flags, what it names)
     (r"\bchatgpt canvas\b", re.I, "a host's canvas"),
     (_B + r"sites_(?:create_site|deploy_\w+|update_site_access)\b", 0, "a host's hosted pages"),
     (r"(?<![\w.])Sites\b", 0, "a host's hosted pages"),
-    (r"\bSlides type\b|\bclaude\.ai/(?:code/)?artifact", re.I, "a host's artifact kind or link"),
+    (r"\b(?:Slides|Dashboard|Design System) (?:type|artifact)s?\b|\bclaude\.ai/(?:code/)?artifact", re.I,
+     "a host's artifact kind or link"),
+    (r"\bcodex sites?\b|\bchatgpt\b[^.\n]{0,40}\bcanvas\b", re.I, "a host's hosted pages or canvas"),
 ]
 SURFACE_BRAND_ALLOWED = {os.path.join("references", "host-profiles.md"), os.path.join("references", "native-surfaces.md")}
 _sb_files = (glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True)
@@ -1630,6 +1632,9 @@ else:
         if _why and "artifact-publishing.md" not in _txt:
             fail("publish-protocol", f"skills/{_sk}: {_why} but never cites references/artifact-publishing.md — "
                                      "its publication is neither recorded nor versioned")
+        if _sk in _consumers and not re.search(r"publications\.py (?:record|find)", _txt):
+            fail("publish-protocol", f"skills/{_sk}: a consumer of artifact-publishing.md with no `publications.py record` "
+                                     "or `find` step — a citation alone records nothing")
     # a shared protocol that sends a result to ARTIFACT or DOCS points at the protocol too (roadmap-artifacts §2)
     _exempt = {"native-surfaces.md", "host-profiles.md", "artifact-publishing.md"}
     for _r in sorted(glob.glob(os.path.join(root, "references", "*.md"))):

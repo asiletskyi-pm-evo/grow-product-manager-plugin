@@ -7,6 +7,7 @@
   record  one version of one place: the first one, the next one of the same id, or a place created anew on the
           same host and level (the old id goes to `replaced`); written to the key file, and mirrored into the note
   share   the audience of a recorded place after it was shared — never its version or time
+  forget  one place out of a result's record, on the user's word (the place itself is not touched)
   digest  the byte length and the base64 SHA-256 of a file — what an upload to a pre-signed link needs
 
 The record of one result lives in ONE file, whichever run saved which note: the key file, a YAML state file whose
@@ -29,9 +30,10 @@ import ctx_never as cn  # noqa: E402
 KINDS = ("deck", "dashboard", "document", "page", "board", "design")
 SURFACES = ("artifact", "docs", "confluence")          # plus the id of a tools-registry record
 AUDIENCES = ("private", "shared", "space:<KEY>", "unknown")
-FIELDS = ("surface", "kind", "level", "id", "url", "version", "published", "audience", "replaced", "remote_version")
+FIELDS = ("surface", "kind", "level", "id", "url", "version", "published", "audience", "replaced", "remote_version",
+          "key")
 LEVELS = ("typed", "page")                              # an ARTIFACT's level: two places on one host
-KEY = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}(?:/[a-z0-9][a-z0-9._-]{0,79}){0,3}$")
+KEY = re.compile(r"^[^\W_][\w.-]{0,79}(?:/[^\W_][\w.-]{0,79}){0,3}\Z")   # lower-case words, Cyrillic too
 BOARD_KEYS = ("artifact_id", "artifact_url", "board_id", "board_url", "live_board_id", "live_board_url")
 SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 SPACE = re.compile(r"^space:[A-Z0-9][A-Z0-9_]{0,31}$")  # a team space's key; a personal space is `private`
@@ -40,9 +42,9 @@ AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:Z|[+-]\d{2}:\d{2})
 CRED = (r"x-amz-[\w-]*|x-goog-[\w-]*|[\w-]*token[\w-]*|[\w-]*secret[\w-]*|[\w-]*passw[\w-]*|[\w-]*signature[\w-]*|"
         r"[\w-]*access[_-]?key[\w-]*|[\w-]*hmac[\w-]*|sig|skoid|sktid|key|key-pair-id|apikey|api_key|api-key|auth|"
         r"authorization|bearer|code|credential|policy|expires|jwt|otp|pwd|pass|ticket|session|sessionid|jsessionid|"
-        r"phpsessid|sid")
-CRED_PARAM = re.compile(r"(?:^|[?&;#/])\s*(?:%s)\s*(?:\[\])?\s*=" % CRED, re.I)
-EMAIL_PARAM = re.compile(r"[?&;#][^?&;#]*=[^?&;#]*[\w.+-]+@[\w-]+\.\w")
+        r"phpsessid|sid|[\w-]*auth[_-]?key|[\w-]*private[_-]?key|rlkey|asp\.net_sessionid|hdnts")
+CRED_PARAM = re.compile(r"(?:^|[?&;#/~])\s*(?:%s)\s*(?:\[\])?\s*=" % CRED, re.I)
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.\w")
 MAX_ID, MAX_URL, MAX_RV = 300, 2000, 64
 KEY_LINE = re.compile(r"^published[ \t]*:(?P<val>.*)$")
 TOP = re.compile(r"^[^\s#-]")                           # a line that opens another top-level key
@@ -71,8 +73,13 @@ def cred_problem(text):
         return "a secret (%s)" % ",".join(kinds)
     if CRED_PARAM.search(d):
         return "a credential in a parameter"
-    if EMAIL_PARAM.search(d):
-        return "an e-mail in a parameter"
+    try:
+        rest = urlsplit(d)
+        after = d if not rest.netloc else d.split(rest.netloc, 1)[1]
+    except ValueError:
+        after = d
+    if EMAIL.search(after):
+        return "an e-mail in the link"
     return None
 
 
@@ -181,13 +188,20 @@ def _entry(e):
     if not isinstance(e, dict) or not e.get("surface") or not e.get("kind"):
         raise Unreadable("an entry without surface or kind")
     out = dict(e)
-    for k in ("surface", "kind", "level", "id", "url", "published", "audience", "remote_version"):
+    for k in ("surface", "kind", "level", "id", "url", "published", "audience", "remote_version", "key"):
         if out.get(k) is not None and not isinstance(out[k], list):
             out[k] = str(out[k])
     try:
-        out["version"] = int(float(str(e.get("version") or 1)))
-    except ValueError:
-        raise Unreadable("a version that is not a number")
+        v = float(str(e.get("version") or 1))
+        if v != v or v in (float("inf"), float("-inf")) or v < 1:
+            raise ValueError
+        out["version"] = int(v)
+    except (ValueError, OverflowError):
+        raise Unreadable("a version that is not a whole number from 1")
+    for k in [k for k in out if k not in FIELDS]:          # a field someone added stays only when it is harmless
+        v = out[k]
+        if isinstance(v, list) or not isinstance(v, (str, int)) or len(str(v)) > 100 or cred_problem(str(v)):
+            out.pop(k)
     rep = e.get("replaced")
     rep = [rep] if isinstance(rep, (str, int)) and str(rep).strip() else rep if isinstance(rep, list) else []
     out["replaced"] = [str(x) for x in rep if str(x).strip() and str(x) != "None"]
@@ -276,6 +290,8 @@ def render(entries, eol):
         lines.append("    audience: %s" % _q(e.get("audience") or "unknown"))
         if e.get("remote_version"):
             lines.append("    remote_version: %s" % _q(e["remote_version"]))
+        if e.get("key"):
+            lines.append("    key: %s" % _q(e["key"]))
         if e.get("replaced"):
             lines.append("    replaced: [%s]" % ", ".join(_q(x) for x in e["replaced"]))
         for k in sorted(k for k in e if k not in FIELDS and k != "legacy"):   # a field someone added stays
@@ -344,6 +360,10 @@ def _open(path, what="the note"):
         return 2
 
 
+def _key_ok(key):
+    return bool(key) and bool(KEY.match(key)) and key == key.lower()
+
+
 def _key_path(args):
     if not getattr(args, "key", None):
         return None
@@ -365,14 +385,15 @@ def _base(args):
             e, d = _clean(got[2])
             return e, d, "key"
     for path, what in ((getattr(args, "note", None), "the note"), (getattr(args, "carry", None), "the previous note")):
-        if not path:
-            continue
+        if not path or (not os.path.exists(path) and path.lower().endswith((".yaml", ".yml"))):
+            continue                                   # a state file not made yet (the first live board)
         got = _open(path, what)
         if isinstance(got, int):
             return got
         if got == "foreign":
             continue
-        entries = list(got[2])
+        key = getattr(args, "key", None)
+        entries = [e for e in got[2] if not key or e.get("key") in (None, "", key)]   # never another result's mirror
         for lg in _legacy(got[3], got[1]):
             if not any(x.get("surface") == lg["surface"] and x.get("kind") == lg["kind"] for x in entries):
                 entries.append(lg)
@@ -388,11 +409,19 @@ def _matches(e, args):
         (not getattr(args, "level", None) or not e.get("level") or e.get("level") == args.level)
 
 
+def _mirror(note_entries, entries, key, adopted):
+    """The note's new list: the other results' entries as they were, this key's in place of its own; entries with no
+    key (recorded before keys) give way only when this record was built from them."""
+    keep = [e for e in note_entries if e.get("key") and e.get("key") != key] + \
+        ([] if adopted else [e for e in note_entries if not e.get("key")])
+    return keep + entries
+
+
 def cmd_find(args):
     if not args.key and not args.note:
         result(error="find needs --key or --note")
         return 2
-    if args.key and not KEY.match(args.key):
+    if args.key and not _key_ok(args.key):
         result(error="the key is not lower-case words joined by / (at most four parts)")
         return 2
     if args.note and not args.key and os.path.isfile(args.note):
@@ -414,8 +443,10 @@ def _check_args(args, need_audience=True):
         return "the surface is not artifact|docs|confluence or a registry id"
     if getattr(args, "level", None) and (args.level not in LEVELS or args.surface != "artifact"):
         return "--level is typed|page, for the artifact surface only"
-    if getattr(args, "key", None) and not KEY.match(args.key):
+    if getattr(args, "key", None) and not _key_ok(args.key):
         return "the key is not lower-case words joined by / (at most four parts)"
+    if args.surface == "atlassian" and args.kind == "page":
+        return "an Atlassian page is Confluence: --surface confluence"
     if args.audience and not (args.audience in ("private", "shared", "unknown") or SPACE.match(args.audience)):
         return "the audience is not private|shared|unknown|space:<KEY> (a personal space is private)"
     if need_audience and not args.audience:
@@ -431,9 +462,18 @@ def _check_args(args, need_audience=True):
     return value_problem("the id", args.id) if getattr(args, "id", None) else None
 
 
-def _save(args, entries):
-    """Write the record: the key file (created when new), then the note's mirror. (exit code, mirror note)."""
+def _save(args, entries, adopted=False):
+    """Write the record: the key file (created when new), then the note's mirror. (exit code, mirror note). A mirror
+    that cannot be written is said, never fatal once the key file holds the record."""
     kp, mirror = _key_path(args), None
+    if not kp and args.note and args.note.lower().endswith((".yaml", ".yml")) and not os.path.exists(args.note):
+        try:                                           # a state file of its own (the first live board): created
+            os.makedirs(os.path.dirname(os.path.abspath(args.note)), exist_ok=True)
+            with open(args.note, "w", encoding="utf-8") as f:
+                f.write("# Written by scripts/publications.py (references/artifact-publishing.md §5)\n")
+        except OSError as e:
+            result(error="the state file cannot be created: %s" % (e.strerror or type(e).__name__))
+            return 1, None
     try:
         if kp:
             if not os.path.isfile(kp):
@@ -445,20 +485,28 @@ def _save(args, entries):
             if isinstance(got, int) or got == "foreign":
                 return 2, None
             write(kp, got[0], got[1], entries)
-        if args.note:
-            got = _open(args.note)
-            if got == "foreign":
-                mirror = "skipped: the note's own published property is something else"
-            elif isinstance(got, int):
-                if not kp:
-                    return got, None
-                mirror = "skipped: the note does not read"
-            else:
-                write(args.note, got[0], got[1], entries)
-                mirror = "written"
     except OSError as e:
         result(error="the record cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1, None
+    if args.note:
+        got = _open(args.note) if os.path.isfile(args.note) or not kp else "missing"
+        if got == "missing":
+            mirror = "skipped: the note is not there"
+        elif got == "foreign":
+            mirror = "skipped: the note's own published property is something else"
+        elif isinstance(got, int):
+            if not kp:
+                return got, None
+            mirror = "skipped: the note does not read"
+        else:
+            try:
+                write(args.note, got[0], got[1], _mirror(got[2], entries, args.key, adopted) if kp else entries)
+                mirror = "written"
+            except OSError as e:
+                if not kp:
+                    result(error="the record cannot be written: %s" % (e.strerror or type(e).__name__))
+                    return 1, None
+                mirror = "skipped: the note cannot be written"
     return 0, mirror
 
 
@@ -470,13 +518,16 @@ def cmd_record(args):
     if bad:
         result(error=bad)
         return 2
-    if not args.key:
+    if not args.key and os.path.exists(args.note):
         got = _open(args.note)
         if got == "foreign":
             result(error="the note's own published property is not a publication list — nothing written")
             return 2
         if isinstance(got, int):
             return got
+    elif not args.key and not args.note.lower().endswith((".yaml", ".yml")):
+        result(error="the note is not there")
+        return 2
     base = _base(args)
     if isinstance(base, int):
         return base
@@ -484,10 +535,13 @@ def cmd_record(args):
     entries = [{k: v for k, v in e.items() if k != "legacy"} for e in entries]
     carried = len(entries) if source == "carry" else 0
     at = args.at or _now()
+    if re.match(r"^\d{4}-\d{2}-\d{2}T[\d:]+$", at):
+        at += "Z"                                      # a time with no zone is UTC
     same = [e for e in entries if e.get("surface") == args.surface and e.get("kind") == args.kind and
             (not args.level or not e.get("level") or e.get("level") == args.level)]
     entry = next((e for e in same if e.get("id") == args.id), None) or \
-        next((e for e in same if _host(e.get("url")) == _host(args.url)), None)
+        next((e for e in same if _host(e.get("url")) == _host(args.url) and
+              (not args.level or e.get("level") == args.level)), None)
     if entry is None:
         if not args.audience:
             result(error="--audience is needed for a place recorded for the first time")
@@ -504,11 +558,14 @@ def cmd_record(args):
                   "audience": args.audience or entry.get("audience") or "unknown"})
     if args.level:
         entry["level"] = args.level
+    if args.key:
+        for e in entries:
+            e["key"] = args.key
     if args.remote_version:
         entry["remote_version"] = args.remote_version
     else:
         entry.pop("remote_version", None)
-    code, mirror = _save(args, entries)
+    code, mirror = _save(args, entries, adopted=source in ("note", "carry"))
     if code:
         return code
     out = {"recorded": {k: entry[k] for k in FIELDS if k in entry}, "carried": carried}
@@ -539,10 +596,39 @@ def cmd_share(args):
         result(error="no single recorded place matches — give --id" if same else "no recorded place matches")
         return 2
     same[0]["audience"] = args.audience
-    code, mirror = _save(args, entries)
+    if args.key:
+        for e in entries:
+            e["key"] = args.key
+    code, mirror = _save(args, entries, adopted=base[2] in ("note", "carry"))
     if code:
         return code
     result(shared={k: same[0][k] for k in FIELDS if k in same[0]}, **({"mirror": mirror} if mirror else {}))
+    return 0
+
+
+def cmd_forget(args):
+    """The user's «забудь»: one place out of a result's record (the place itself is not touched)."""
+    if not args.key:
+        result(error="forget needs --key")
+        return 2
+    if not _key_ok(args.key) or args.kind not in KINDS:
+        result(error="the key or the kind is not valid")
+        return 2
+    base = _base(args)
+    if isinstance(base, int):
+        return base
+    entries = [{k: v for k, v in e.items() if k != "legacy"} for e in base[0]]
+    gone = [e for e in entries if _matches(e, args) and (not args.id or e.get("id") == args.id)]
+    if len(gone) != 1:
+        result(error="no single recorded place matches — give --id" if gone else "no recorded place matches")
+        return 2
+    entries.remove(gone[0])
+    for e in entries:
+        e["key"] = args.key
+    code, mirror = _save(args, entries, adopted=True)
+    if code:
+        return code
+    result(forgot={k: gone[0][k] for k in ("surface", "kind", "id") if k in gone[0]}, **({"mirror": mirror} if mirror else {}))
     return 0
 
 
@@ -610,14 +696,15 @@ def check_schema(root):
     if not ctxf or not re.search(r"^\|\s*`published`\s*\|", ctxf.group(0), re.M):
         errs.append("vault-schema.md: Context Fields has no `published` row")
     want = {"kind": _const(src, "KINDS"), "surface": _const(src, "SURFACES"), "audience": _const(src, "AUDIENCES"),
-            "field": _const(src, "FIELDS")}
+            "field": _const(src, "FIELDS"), "level": _const(src, "LEVELS")}
     if None in want.values():
-        return ["scripts/publications.py: KINDS, SURFACES, AUDIENCES or FIELDS not found"]
+        return ["scripts/publications.py: KINDS, SURFACES, AUDIENCES, FIELDS or LEVELS not found"]
     got = {"kind": set(_ticks(_row(vs, "kind") or "")),
            "surface": {t for part in (_row(vs, "surface") or "").split("·")
                        for t in _ticks(part) if part.strip().startswith("`") and len(_ticks(part)) == 1},
            "audience": set(_ticks(_row(vs, "audience") or "")),
-           "field": set(_first_col(vs))}
+           "field": set(_first_col(vs)),
+           "level": set(_ticks((_row(vs, "level") or "").split("—")[0]))}
     for k in want:
         if got[k] != want[k]:
             errs.append("vault-schema.md: the %s values %s ≠ publications.py %s" % (
@@ -678,10 +765,16 @@ def main(argv=None):
     p.add_argument("--level", choices=LEVELS)
     p.add_argument("--id")
     p.add_argument("--audience", required=True)
+    p = common(sub.add_parser("forget"))
+    p.add_argument("--surface", required=True)
+    p.add_argument("--kind", required=True)
+    p.add_argument("--level", choices=LEVELS)
+    p.add_argument("--id")
     p = sub.add_parser("digest")
     p.add_argument("file")
     args = ap.parse_args(argv)
-    fn = {"find": cmd_find, "record": cmd_record, "share": cmd_share, "digest": cmd_digest}.get(args.cmd)
+    fn = {"find": cmd_find, "record": cmd_record, "share": cmd_share, "forget": cmd_forget,
+          "digest": cmd_digest}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2

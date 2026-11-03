@@ -62,7 +62,7 @@ One question in the user's language — a multi-choice one where the host can as
 After the «так» the skill publishes to each chosen place, saves its note, and then records each place:
 
 ```
-python3 scripts/publications.py record --key <the result's key> --note <the note it saved> --surface <surface> --kind <kind> [--level typed|page] --id <id> --url <url> --audience <audience> [--remote-version <v>]
+python3 scripts/publications.py record --key <the result's key> [--note <the note it saved>] [--carry <the note find read>] --surface <surface> --kind <kind> [--level typed|page] --id <id> --url <url> [--audience <audience>] [--remote-version <v>]
 ```
 
 **One record per result, whichever run saved which note.** The record lives in the result's **key file**, `~/.grow-pm/publications/<key>.yaml`; the note the run saved gets the same list in its frontmatter field `published` (`vault-schema.md` → Context Fields) — a mirror the user sees in the vault, never the place the next run looks. A run that published nothing (an answer «ні» or «лише файл», a scheduled run) leaves the key file as it was, so the chain of versions never breaks; a run without a vault still has its record. The key names the result, never a run, and the skill builds it from what it knows **before** the question:
@@ -70,11 +70,16 @@ python3 scripts/publications.py record --key <the result's key> --note <the note
 | Consumer | Key |
 |---|---|
 | `design-bridge` | `design-bridge/<product>/<deck slug>-<subtype>` — the deck's file name without its date |
-| `product-reporter` | `product-reporter/<product>/<mode>-<board>-<period>` |
-| `cjm-research` | `cjm-research/<product>/<mode>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — whatever run published the snapshot |
+| `product-reporter` | `product-reporter/<product>/<mode>-<subject>-<period>` — the board, or the epic of `initiative-status`; `member-review` and `goal-report` keep no record (they name a person) |
+| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot |
 | `focus-advisor` | none: the board keeps its record in its own state file, `~/.grow-pm/focus/board.yaml` (`--note`) |
 
-Lower-case words, `/` between at most four parts. A key file the result does not have yet is created by the first `record`; before it exists, the script reads the note given with `--note` — a note recorded before keys existed, or the deck's own note — so its places go on.
+Lower-case words (any alphabet), `-` inside a part, `/` between at most four parts; a part as the run names it — a sprint `sprint-42`, a quarter `2026-q4`, a month `2026-11`. A key file the result does not have yet is created by the first `record`; before it exists, the script reads the note given with `--note` — only its entries of the same key, or entries recorded before keys existed — so a deck's own note, an older report's `confluence_url` and a key file lost with `~/.grow-pm` all go on from the vault.
+
+- **`--audience` only for a place recorded for the first time** — a new version keeps the place's audience.
+- **`--carry` once, while there is no key file**: when `find` answered from an older note (`source: note`) — the previous report, the deck's note — `record` gets that note as `--carry`, so its places start the key file; after that the key file answers.
+- **The mirror goes only into a note this run saved through the vault save** (its gates passed), or into the deck's own note when it lies in the user's own vault and the vault takes writes (`vault-protocol.md`) — never into a core's or a provider's note: there the key file alone records.
+- **«Забудь, що я це публікував»** → `publications.py forget --key <key> --surface <surface> --kind <kind>`: the place leaves the record and its mirror; the place itself is not touched.
 
 Each entry of the record:
 
@@ -89,11 +94,12 @@ Each entry of the record:
 | `audience` | `private` · `shared` · `space:<KEY>` · `unknown` — so the next question can say who will see the new version; a personal space is `private` |
 | `replaced` | earlier ids of this place, when it had to be created anew (§6) |
 | `remote_version` | the place's own version or revision after this publication, when its tool gives one (a Confluence page version) — what §6 compares |
+| `key` | the result's key; a note that mirrors two results (a report and its dashboard) keeps each entry under its own, and a lost key file is rebuilt from the note |
 
 - **One entry per place**: a surface, a kind, the level of an ARTIFACT and the host of its link. The same kind on another host (a deck on two hosts' ARTIFACT), or as a typed artifact and as a page on one host, are two places.
 - **The older fields read as a record.** A note with `confluence_page_id`, `confluence_url` or a Confluence link in `published_to` (before v4.3.0) is read as a `confluence` record of version 1; they are never rewritten or removed. A `published_to` that is not a Confluence link is not read.
 - **A v4.1.0–v4.2.0 `board.yaml`** that names its live board under `artifact_id` (or `board_id`, `*_url`) is read as an `artifact` record of version 1: the old board is refreshed, never orphaned.
-- **A note whose own `published` property is something else** (a date, a flag) is never written over; the key file still records, and the result says the mirror was skipped.
+- **A note whose own `published` property is something else** (a date, a flag), or one that cannot be written, is never written over; the key file still records, and the result says the mirror was skipped. The Focus Board's `board.yaml` is created by its first record.
 - **Copied on, checked again.** An entry or an older field whose link or id would not pass `record` is dropped when it is read to build on, never written on.
 - **No FS or no SHELL → no record.** The run publishes, and the next run creates a new place; the skill says so once, at the question.
 - **Never a name, never a token.** The record holds no name of anyone it was shared with, no pre-signed or signed link and no URL with a user, a password, a token or a signature in it.
@@ -126,7 +132,7 @@ Asked after a place that starts private is published (Atlassian Artifacts, an AR
 - **Once per place.** A place already shared is not asked about again: its next version reaches the same people, and the version question says so (§6).
 - **Never everyone with the link, never the whole organisation** — the skill does not set that level, even when asked: the user does it in the place's own interface.
 - **The host's own surfaces** are shared by the user in the host's interface; the skill says where in one line.
-- After sharing — the share question comes after the record — `publications.py share --key <key> --surface <surface> --kind <kind> --audience shared` sets the record's `audience`: never the names, never a new version. When the skill points the user to the host's own sharing, it sets `unknown`: it cannot know whether they shared, and the next question then says both.
+- After sharing — the share question comes after the record — `publications.py share --key <key> [--note <the same note>] --surface <surface> --kind <kind> --audience shared` sets the record's `audience`: never the names, never a new version. When the skill points the user to the host's own sharing, it sets `unknown`: it cannot know whether they shared, and the next question then says both.
 
 ## 8. Atlassian Artifacts
 

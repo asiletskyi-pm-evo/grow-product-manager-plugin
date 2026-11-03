@@ -30,9 +30,13 @@ def check(name, cond, detail=""):
     print(("✅" if cond else "❌"), name, ("" if cond else "-> " + str(detail)[:900]))
 
 
+SAFE_HOME = tempfile.mkdtemp(prefix="publications-home-")   # a default store would land here, never in the real ~
+
+
 def run(*args, script=SCRIPT):
-    p = subprocess.run([sys.executable, script] + list(args), capture_output=True, text=True,
-                       env={k: v for k, v in os.environ.items() if not k.startswith("GROW_PM_")})
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GROW_PM_")}
+    env["HOME"] = SAFE_HOME
+    p = subprocess.run([sys.executable, script] + list(args), capture_output=True, text=True, env=env)
     res = {}
     for line in p.stdout.splitlines():
         if line.startswith("PUB_RESULT "):
@@ -91,7 +95,7 @@ try:
     check("2.3 find gives it back with every field",
           len(found) == 1 and found[0].get("surface") == "atlassian" and found[0].get("kind") == "deck" and
           found[0].get("id") == "zorg-art-0001" and found[0].get("version") == 1 and
-          found[0].get("published") == "2026-11-02T10:00" and found[0].get("audience") == "private" and
+          found[0].get("published") == "2026-11-02T10:00Z" and found[0].get("audience") == "private" and
           found[0].get("url") == "https://your-org.atlassian.net/artifacts/zorg-art-0001", found)
     check("2.4 the body's own fence and its «published:» line are untouched",
           after.count(b"published:\n  - surface: atlassian\n---") == 1, after[-200:])
@@ -103,7 +107,7 @@ try:
     rc2, out2, res2, found = find(deck, "--surface", "atlassian", "--kind", "deck")
     check("3.1 the same id again is version 2 of the same entry, at the new time",
           rc == 0 and res.get("recorded", {}).get("version") == 2 and len(found) == 1 and
-          found[0]["version"] == 2 and found[0]["published"] == "2026-11-03T09:30", (out, found))
+          found[0]["version"] == 2 and found[0]["published"] == "2026-11-03T09:30Z", (out, found))
     s1, s2 = one.index(b"published:"), two.index(b"published:")
     check("3.2 only the block changes between versions", one[:s1] == two[:s2] and
           one[fm_end(one):] == two[fm_end(two):], two[:700])
@@ -453,6 +457,62 @@ try:
     check("17.13 M9 an Azure link's clean permission and date parameters pass (its secret is sig)", rc == 0, out)
     fresh(b'---\npublished_to: "https://wiki.zorg.example/wiki/x/AbC"\n---\nb\n')
     check("17.14 M10 a /wiki/ link with no page id is not read as Confluence", find(n16)[3] == [], find(n16))
+
+    # 18. the whole-branch review — two results in one note, levels, the first board, forget, keys, links
+    st5 = os.path.join(d, "store18")
+    cj = os.path.join(d, "cjm18.md")
+    shutil.copy(os.path.join(FIX, "zorg-deck.md"), cj)
+    RK = ["--key", "cjm-research/zorg/full-2026-11", "--store", st5]
+    DK = ["--key", "cjm-research/zorg/funnel", "--store", st5]
+    run("record", *RK, "--note", cj, "--surface", "confluence", "--kind", "page", "--id", "777",
+        "--url", "https://your-org.atlassian.net/wiki/spaces/SPACE/pages/777/Zorg", "--audience", "space:SPACE")
+    rc, out, res = run("record", *DK, "--note", cj, "--surface", "atlassian", "--kind", "dashboard", "--id", "zorg-dash-1",
+                       "--url", "https://your-org.atlassian.net/artifacts/zorg-dash-1/share", "--audience", "private")
+    fd = run("find", *DK)[2].get("found", [])
+    fr = run("find", *RK)[2].get("found", [])
+    mirror = find(cj)[3]
+    check("18.1 B1 a report and its dashboard mirrored into one note stay two records: the dashboard key never takes the page",
+          rc == 0 and [e["surface"] for e in fd] == ["atlassian"] and [e["surface"] for e in fr] == ["confluence"] and
+          sorted(e.get("key") for e in mirror) == ["cjm-research/zorg/full-2026-11", "cjm-research/zorg/funnel"], (fd, fr, mirror))
+    shutil.rmtree(st5)
+    rc, out, res = run("find", *DK, "--note", cj)
+    check("18.2 I9 a lost key file is rebuilt from the note's mirror — only this key's entries",
+          rc == 0 and [e["surface"] for e in res.get("found", [])] == ["atlassian"], res)
+    lv = os.path.join(d, "lv18.md")
+    with open(lv, "w", encoding="utf-8") as f:
+        f.write('---\npublished:\n  - surface: artifact\n    kind: deck\n    id: "https://zorg-host.example/a/t1"\n'
+                '    url: "https://zorg-host.example/a/t1"\n    version: 2\n    audience: "private"\n---\nb\n')
+    rc, out, res = run("record", "--note", lv, "--surface", "artifact", "--kind", "deck", "--level", "page",
+                       "--id", "https://zorg-host.example/s/p1", "--url", "https://zorg-host.example/s/p1", "--audience", "private")
+    got = find(lv)[3]
+    check("18.3 I1 an entry with no level and another id is another place — the typed deck is not replaced",
+          rc == 0 and len(got) == 2 and not any(e.get("replaced") for e in got), got)
+    nb = os.path.join(d, "focus", "board.yaml")
+    rc, out, res = run("record", "--note", nb, "--surface", "artifact", "--kind", "dashboard", "--level", "typed",
+                       "--id", "https://zorg-host.example/a/b1", "--url", "https://zorg-host.example/a/b1", "--audience", "private")
+    check("18.4 I8 the first live board: its board.yaml is created with the record", rc == 0 and os.path.isfile(nb) and
+          find(nb)[3][0]["version"] == 1, out)
+    rc, out, res = run("forget", *DK, "--surface", "atlassian", "--kind", "dashboard", "--note", cj)
+    check("18.5 forget takes one place out of the record and its mirror", rc == 0 and run("find", *DK)[2].get("found") == [] and
+          all(e.get("key") != "cjm-research/zorg/funnel" for e in find(cj)[3]), (out, find(cj)[3]))
+    rc, out, res = run("record", "--key", "product-reporter/zorg/sprint-review-дошка-42", "--store", st5, "--surface", "docs",
+                       "--kind", "document", "--id", "d-1", "--url", "https://zorg.example/doc/d-1", "--audience", "private")
+    rc2, out2, _ = run("find", "--key", "Zorg/Upper", "--store", st5)
+    rc3, out3, _ = run("find", "--key", "zorg/x\n", "--store", st5)
+    rc4, out4, _ = run("find", "--key", "../../etc", "--store", st5)
+    check("18.6 I3/M4 a Cyrillic key is fine; an upper-case key, a trailing newline and a path out are refused",
+          rc == 0 and rc2 == 2 and rc3 == 2 and rc4 == 2, (out, out2, out3, out4))
+    fresh()
+    for name, url in (("auth_key", "https://zorg.example/d?auth_key=" + "Zz9" * 6), ("~hmac", "https://zorg.example/d?__token__=exp~hmac=" + "ab" * 10),
+                      ("ASP.NET_SessionId", "https://zorg.example/d?ASP.NET_SessionId=" + "x1" * 8),
+                      ("an e-mail in the path", "https://zorg.example/u/fay@zorg.example/deck")):
+        rc, out, res = rec(n16, url=url)
+        check("18.7 M2 %s is refused" % name, rc == 2, out)
+    rc, out, res = rec(n16, surface="atlassian", kind="page")
+    check("18.8 M5 an Atlassian page is refused — it is Confluence", rc == 2 and "confluence" in out, out)
+    fresh(b'---\npublished:\n  - surface: atlassian\n    kind: deck\n    id: "a"\n    url: "https://your-org.atlassian.net/a"\n    version: inf\n---\nb\n')
+    rc, out, res = rec(n16, id_="a", url="https://your-org.atlassian.net/a")
+    check("18.9 M4 version inf is unreadable, never a crash", rc == 2 and "PUB_RESULT" in out, out)
 
     # 15. check 24 — the schema in three places
     import publications as pub  # noqa: E402

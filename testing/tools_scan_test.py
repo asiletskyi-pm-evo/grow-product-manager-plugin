@@ -480,6 +480,13 @@ try:
         dict(reg(s8)["atlassian"], state="needs-auth")] + [t for k, t in reg(s8).items() if k != "atlassian"]}))
     rc, out, res, rows = run("targets", "--store", s8, "--kind", "deck")
     rc2, out2, res2, rows2 = run("targets", "--store", s8, "--kind", "deck", "--any-state")
+    s9 = os.path.join(d, "store9")
+    w(os.path.join(s9, "registry.json"), json.dumps({"schema": "tools-registry/1", "updated": "2026-11-01", "tools": [
+        {"id": "atlassian", "name": "Atlassian (Jira, Confluence)", "kind": "mcp", "publishes": "page",
+         "state": "connected", "seen_by": ["scan-session"], "sources": ["seed"]}]}))
+    rc9, out9, res9, _ = run("targets", "--store", s9, "--kind", "deck")
+    check("8.8c a v4.2.0 registry (publishes: page) gives Atlassian for a deck before any merge",
+          rc9 == 0 and res9.get("targets") == ["atlassian"], res9)
     check("8.8b a stored needs-auth hides a record by default, never with --any-state; deprecated never",
           res.get("targets") == [] and "atlassian" in res2.get("targets", []) and "zorg-slides" not in res2.get("targets", [])
           and [r for r in rows2 if r["id"] == "atlassian"][0].get("state") == "needs-auth", (res, res2))

@@ -303,7 +303,7 @@ If any check fails → fix + rerun QA; escalate to the user if the blocker is no
 
 Depending on the deliverable — each publication below only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); a link shown in the chat or saved locally needs none:
 
-- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment and the Jira ticket as a comment with the link — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version — found by the deck's key `design-bridge/<product>/<slug>-<subtype>` (§5–§6); each place recorded, then sharing asked (§7)
+- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment and the Jira ticket as a comment with the link — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version — found by the deck's key `design-bridge/<product>/<slug>-<subtype>` (§5–§6); sharing is asked after Step 8 records the places (§7)
 - **prototype** → link from the concept / requirements page (inline); a build-first prototype has no page yet — its link is shown and saved (Step 8) for the concept's Prototype link (PRD §9) when write-concept resumes (since v3.9.0)
 - **handoff** → new Confluence page in the design space, or attach to a Jira epic
 - **research-enrichment** → inline in the upstream skill
@@ -340,7 +340,7 @@ vault_save({
 })
 ```
 
-Where a deck went is recorded right after this save — `scripts/publications.py record --key design-bridge/<product>/<slug>-<subtype> --note <the deck's note>` (`references/artifact-publishing.md` §5) — never in `extra_frontmatter`.
+Whatever the vault level, where a deck went is recorded right after this step — `scripts/publications.py record --key design-bridge/<product>/<slug>-<subtype> [--note <the deck's note>]` (`references/artifact-publishing.md` §5) — never in `extra_frontmatter`; then the share question (§7).
 
 ## Step 9 — Prototype as spec (since v3.9.0)
 

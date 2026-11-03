@@ -474,6 +474,10 @@ def check_seed(root):
         for x in r.get("publishes") if isinstance(r.get("publishes"), list) else []:
             if x not in PUBLISHES:
                 errs.append("%s: publishes %r is not one of %s" % (rid, x, "|".join(PUBLISHES)))
+        for k in ("skills", "contours", "needs", "publishes"):
+            v = r.get(k) if isinstance(r.get(k), list) else []
+            if len(v) != len(set(v)):
+                errs.append("%s: %s lists a value twice" % (rid, k))
         if r.get("via") and r["via"] not in ids:
             errs.append("%s: via %r is not a seed record" % (rid, r["via"]))
         for key in {norm(x) for x in [rid, r.get("name")] + list(r.get("aliases") or []) if norm(x)}:
@@ -907,6 +911,11 @@ def cmd_targets(args):
         except Unreadable:
             result(targets=[], kind=args.kind, why="registry.json does not read")
             return 0
+    seed = {s["id"]: as_list(s.get("publishes")) for s in load_seed()}
+    for t in tools:                    # a registry merged before v4.3.0 holds the seed's single value: read it widened
+        if t.get("id") in seed and "publishes" not in (t.get("user_set") or []) and \
+                "publishes" not in (t.get("cleared") or []):
+            t["publishes"] = seed[t["id"]] + [x for x in as_list(t.get("publishes")) if x not in seed[t["id"]]]
     out = [t for t in tools if args.kind in as_list(t.get("publishes")) and t.get("verdict") != "deprecated" and
            (args.any_state or t.get("state") in ("connected", "installed"))]
     for t in out:
