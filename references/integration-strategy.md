@@ -86,6 +86,8 @@ Namespaces are what the host showed in real sessions; a differently-named connec
 | `createIssueLink`, `getIssueLinkTypes` | `createJiraIssueLink`, `listJiraIssueLinkTypes` | `executeWrite` / `executeRead` | |
 | `getAccessibleAtlassianResources`, `atlassianUserInfo` | same names | primary | pass the `cloudId` explicitly on every call |
 
+**Atlassian Artifacts (v2 only, since v4.3.0).** A deck or a dashboard published to the company's tenant: `createArtifactsUpload` → the bytes to its pre-signed link → `publishArtifact` (with an existing `id` — its next version) → `getArtifact`; `shareArtifact` / `revokeArtifactShare` to named users, groups or teams; `listArtifacts`. All through `executeWrite` / `executeRead`, with the inputs `discover` returns; the upload needs SHELL. The procedure, the record and the questions: `artifact-publishing.md` §8.
+
 The write gate covers `createConfluenceContent` and `updateConfluenceContent` as it covers their v1 names (`hooks/hooks.json`, `artifact-style-gate.md` → Host write gate); `executeWrite` is not gated on either version, as v1 comments and links were not.
 
 ### Step 2: Search for an MCP server

@@ -52,9 +52,29 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `source_session` | string | Session ID where artifact was created |
-| `published_to` | string | URL where artifact is published (e.g., Confluence page) |
-| `confluence_page_id` | string | Confluence page ID if synced |
+| `published_to` | string | URL where artifact is published (e.g., Confluence page); read as a `confluence` entry of `published` since v4.3.0, never rewritten |
+| `confluence_page_id` | string | Confluence page ID if synced; read the same way (and `confluence_url`, which `product-reporter` wrote before v4.3.0) |
+| `published` | object[] | Where the artifact was published (since v4.3.0) — one entry per place, written by `scripts/publications.py` only (`artifact-publishing.md` §5); see below |
 | `jira_epic` | string | Associated Jira epic key |
+
+#### Publication record (optional, since v4.3.0)
+
+`published` is a list of flat entries, one per place (surface, kind, an ARTIFACT's level and the host of its link) — the mirror of the result's key file `~/.grow-pm/publications/<key>.yaml`, where the record lives (`artifact-publishing.md` §5); `scripts/publications.py` writes both after the user's «так» and changes nothing else in the note. A personal space's audience is `private`.
+
+| Entry field | Values |
+|---|---|
+| `surface` | `artifact` · `docs` · `confluence` · the id of a tools-registry record (`atlassian`, `google-drive`, `notion` …) |
+| `kind` | `deck` · `dashboard` · `document` · `page` · `board` · `design` |
+| `level` | `typed` · `page` — an ARTIFACT's level; the two are two places on one host |
+| `id`, `url` | the place's id and its link, never one with credentials |
+| `version` | integer, 1 for the first publication of that place |
+| `published` | date-time of the latest version, UTC |
+| `audience` | `private` · `shared` · `space:<KEY>` · `unknown` |
+| `replaced` | string[] — earlier ids of the same place |
+| `remote_version` | the place's own version after the publication, when its tool gives one |
+| `key` | the result the entry belongs to — a note may mirror several results (a report and its dashboard) |
+
+Never a name of whom it was shared with, never a token. A note without the field is valid; it is never backfilled.
 
 #### Judgment Fields (optional, since v3.8.0)
 

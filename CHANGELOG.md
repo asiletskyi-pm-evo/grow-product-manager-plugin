@@ -12,6 +12,60 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.3.0 (2026-11-03)
+
+**«Публікація»: a result becomes a link you open, update and share — one «так», a new version instead of a copy.** Since v4.1.0 every skill asks before internal data reaches a hosted place, but each one asked in its own words, and a rerun made a new document or page each time. One protocol now says where a result can go, in which order, the one question, where the place is recorded, and how the next run publishes the next version of the same place. Decks reach Atlassian Artifacts and the host's own decks beside the `.pptx`; reports and the funnel get dashboards. The last release of the «Поверхні» programme.
+
+MINOR: a new shared protocol and script, new steps in four skills, `publishes` as a list; without a hosted place or a connector every skill writes its files as in v4.2.0.
+
+### Added
+
+- **`references/artifact-publishing.md`** — the kind of result, the candidates (the host's surfaces, the tools registry's `publishes`, Confluence, the file and the vault, always), the order by audience (colleagues → the company's tenant first; you alone → your own account first), one question with «лише файл», the record, a new version instead of a copy (Atlassian Artifacts: the artifact's next immutable version; the host's artifact: the same link; Confluence and documents: the same page after an edit check), sharing as its own question to named people only, Atlassian Artifacts, dashboards, decks.
+- **One record per result** — `~/.grow-pm/publications/<key>.yaml` (the deck: product, slug and subtype; a report: mode, subject and period; the funnel dashboard: one per product), mirrored into the note's frontmatter field `published` (`vault-schema.md` → «Publication record»). A run that publishes nothing leaves it alone, a run without a vault still records, a lost key file is rebuilt from the note.
+- **`scripts/publications.py`** — `find`, `record`, `share`, `forget`, `digest` (the byte length and base64 SHA-256 an Atlassian upload needs). Only the `published` field of a note is written, every other byte kept; a link or an id with a user, a password, a token, a signature or a pre-signed query is refused, never echoed; the older `confluence_page_id` / `confluence_url` / a Confluence `published_to` and a v4.2.0 `board.yaml` `artifact_id` read as a record.
+- **`design-bridge` 0.10.0** — one deck IR, three renders: the `.pptx`, a self-contained HTML deck (16:9, keyboard navigation, notes, no external request, the theme's font embedded when its licence allows), the host's deck on the product's design system (created once from the same tokens, on your «так»); QA on every render, a look at 2–3 slides in the session's browser; «опублікуй деку» publishes an existing deck from its note and `.pptx` without new content work.
+- **Dashboards** — `product-reporter` 0.12.0 (a dashboard of the report; a rerun of the same report updates the same document or page), `cjm-research` 0.15.0 (a funnel dashboard; a scheduled health-check never publishes, the next run offers its next version), `focus-advisor` 0.11.0 (the live board recorded in `board.yaml`); every number with its source and date.
+- **`tools_scan.py targets --kind K [--any-state]`** — where a result of a kind can go; `publishes` is a list (a single value still reads), the seed's Atlassian publishes `page`, `deck`, `dashboard`, Google Drive `document`, `deck`.
+- **`data-policy.md` → Hosted surfaces, rule 7** — the record holds no names, no tokens, no signed links; named sharing only; a thumbnail only on request; a CSV of internal data is a publication too.
+- **Checks** — lint 31 `publish-protocol` (a consumer must cite the protocol and record; a shared protocol that publishes to ARTIFACT points at it); validate check 24 (one schema in four places: kinds, surfaces, audiences, levels, entry fields) and check 23 (`publishes` a list of known kinds); lint 30 catches more host brands; `testing/publications_test.py`; trigger-evals Group W; two output rubrics.
+
+### Changed
+
+- **`native-surfaces.md`** §2 (a deck and a dashboard), §3 (the protocol), §6 (a connector's publishing operations are no host surface); **`integration-strategy.md`** 1c (Atlassian Artifacts on v2); **`tool-registry.md`** (`publishes` a list, `targets`); **`roadmap-artifacts.md`** §2 points at the protocol; **`AGENTS.md`**, **`testing/host-matrix.md`**.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/artifact-publishing.md`, `scripts/publications.py`, `testing/publications_test.py`, `testing/fixtures/publications/` | new |
+| `skills/design-bridge/SKILL.md`, `skills/design-bridge/references/design-bridge-playbook.md` | 0.10.0 — three renders, an existing deck, the record |
+| `skills/product-reporter/SKILL.md` | 0.12.0 — dashboard, next version |
+| `skills/cjm-research/SKILL.md`, `skills/cjm-research/references/cjm-reports.md` | 0.15.0 — funnel dashboard, next version |
+| `skills/focus-advisor/SKILL.md` | 0.11.0 — the board's record |
+| `scripts/tools_scan.py`, `references/tools-seed.yaml`, `references/tool-registry.md`, `testing/tools_scan_test.py` | `publishes` a list, `targets` |
+| `references/native-surfaces.md`, `references/data-policy.md`, `references/vault-schema.md`, `references/integration-strategy.md`, `references/roadmap-artifacts.md`, `AGENTS.md` | the protocol's places |
+| `testing/validate-consistency.sh`, `testing/skill_lint.py` | checks 23, 24, 30, 31 |
+| `testing/test-cases.md`, `testing/trigger-evals.md`, `testing/output-evals.md`, `testing/host-matrix.md` | v4.3.0 cases, Group W, rubrics, publishing per host |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.3.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.3.0 |
+
+### Backwards compatibility
+
+Nothing that worked stops working. Without a hosted place, a connector, SHELL or FS a skill writes its files as in v4.2.0 and says nothing new; a v4.2.0 registry, a note with `published_to` / `confluence_page_id` / `confluence_url` and a `board.yaml` with the live board's `artifact_id` are read as they are. The other skills that publish keep their own question and record nothing yet.
+
+### Known limits
+
+- Atlassian Artifacts need SHELL (the upload) and the Atlassian connector v2 (its operations through `discover`); the host write gate does not see `executeWrite`, so the skill asks itself. On Codex CLI 0.153.2 they are not reachable (`discover` finds no artifact operations; measured 2026-11-02).
+- `listArtifacts` shows a new artifact late (measured 2026-11-02); the proof of the same id is `publishArtifact`'s «updated».
+- A dashboard in Atlassian is a snapshot of the moment it was published; live parts only where the host's artifact re-queries the connectors.
+- Versions in four skills only (`design-bridge`, `product-reporter`, `cjm-research`, `focus-advisor`); the others publish as in v4.2.0. `member-review` and `goal-report` keep no record (they name a person).
+- No FS or no SHELL → no record: the next run offers a new place. The record lives in `~/.grow-pm/publications/` on this machine; on another one the note's mirror rebuilds it on the next run.
+- The same service as DOCS on one host and as a registry record (`google-drive`) on another is two entries. A `publishes` you set yourself in v4.2.0 is widened by the seed.
+- Sharing the host's own artifact is done in the host's interface; the skill says where and records the audience as unknown. The HTML deck's font is embedded only when its file is on the machine and its licence allows it; otherwise the system fallback.
+- On Codex the candidates are a site and Google Drive; versions there are not measured. ChatGPT Canvas is out of this release.
+
+---
+
 ## v4.2.0 (2026-10-30)
 
 **«Реєстр інструментів»: the plugin knows what else helps your work, and says so in one line.** What helps a PM outside the plugin — other plugins, skills, MCP connectors, apps, sites, portals, courses — was scattered over five places, and no skill could say «for this step there is X, you have not connected it, here is how». `knowledge-library` now keeps one tools registry, filled by a scan that reads names only, and three skills offer a missing tool at their step in one line. A team's core can publish its own list.

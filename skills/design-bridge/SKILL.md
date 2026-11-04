@@ -1,7 +1,7 @@
 ---
 name: design-bridge
-version: 0.9.2
-description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку», «hi-fi прототип/екран», «через мій дизайн-тулкіт», «дизайн-рев'ю макета у Figma». EN — "create a deck", "design review".
+version: 0.10.0
+description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку», «опублікуй деку», «hi-fi прототип/екран», «через мій дизайн-тулкіт», «дизайн-рев'ю макета у Figma». EN — "create a deck", "design review".
 ---
 
 # Design Bridge
@@ -30,6 +30,7 @@ All brand-specific values (Design System spec, pptx theme, base template, brand 
 
 **Manual** — when the user says:
 - "make a deck", "create a presentation", "prep for direction review"
+- "publish the deck", «опублікуй деку», «онови деку в Atlassian» — a deck that already exists, rendered for a hosted place (since v0.10.0, Step 1 → An existing deck)
 - "prototype", "mockup" (for a hypothesis / concept / requirements doc) — **when it should carry your Design System / brand**; a plain structural wireframe is `diagram-prototyper`. If the request doesn't say, ask: "branded (your DS tokens, ready to show) or plain structure (fast, to think with)?"
 - "handoff to engineering", "ship the design to dev"
 - "design review", "contrast check", "a11y audit"
@@ -115,10 +116,12 @@ Data policy (protocol §9): `data_locality: external` → `references/data-polic
 Via `AskUserQuestion` if not passed from an upstream skill:
 
 **Q1. What deliverable is needed?**
-- deck (.pptx presentation)
+- deck (.pptx; where a place for it exists, also an HTML deck or the host's deck — Step 5a)
 - prototype (wireframe / lo-fi mockup)
 - handoff (developer spec for front-end)
 - research-enrichment (run sources through `design:research-synthesis` and append to the upstream artifact)
+
+**An existing deck (since v0.10.0).** When the request names a deck already in the vault — its note and its `.pptx` («опублікуй деку …»), Q1 is `deck`, Q2 and Steps 3–4 are skipped: the Deck IR is rebuilt from the note and the `.pptx` with no new content (playbook → Publish an existing deck), Step 2 takes the audience and the length from the note, and the run goes on at Step 5a; Step 8 saves nothing new — the record goes to the deck's key with that note as its mirror (playbook).
 
 **Q2 (deck only). Which deck subtype?** Lengths are `target (max)` from `references/deck-subtypes.yaml` — that file is the source of truth; do not restate different numbers here.
 - feature (feature pitch — 10 slides, max 15; typical for direction review)
@@ -150,6 +153,8 @@ Via `AskUserQuestion` (since v3.9.0 the build-first hand-off from write-concept 
 - **Language**: from local-context `user.language`; user can override
 - **Brand mode**: `brand_default` (uses `product.brand.*`) | `custom` | `minimal`
 - **Figma embeds**: yes / no / only if the user provides a link
+
+The audience also orders the places of Step 7 for a deck (`references/artifact-publishing.md` §3); it is not asked again there.
 
 ### Step 3 — Source extraction
 
@@ -251,9 +256,14 @@ Pulls the linked frame's design context and a screenshot into the Deck IR as sli
 
 Routing by `intent`:
 
-#### 5a. intent=deck → .pptx
+#### 5a. intent=deck → .pptx, HTML deck, the host's deck
 
-Renders the Deck IR on `product.base_pptx` (blank `Presentation()` when unset) with the `product.pptx_theme` colours and fonts, saves `{vault_root}/Presentations/{product}/{date}-{slug}-{subtype}.pptx` plus a markdown outline companion; pptx skill unavailable → outline.md + outline.html. The full procedure — layout mapping, placeholder / shape filling, media embedding and save paths — lives in `references/design-bridge-playbook.md` (skill-local). Read it when rendering a deck.
+One Deck IR, up to three renders, each on the product's design system — `product.brand.*`, the DS spec and the deck theme from `local-context.md`, never a value of the skill's own:
+- **.pptx** — always: on `product.base_pptx` (blank `Presentation()` when unset) with the `product.pptx_theme` colours and fonts, saved as `{vault_root}/Presentations/{product}/{date}-{slug}-{subtype}.pptx` with a markdown outline companion; pptx skill unavailable → outline.md + outline.html.
+- **HTML deck** (since v0.10.0) — one self-contained `.html` beside it: 16:9, keyboard navigation, no external request, the theme's font embedded or the system fallback. Rendered when Step 7 has a place that takes a page (Atlassian Artifacts, ARTIFACT `page`) or the user asks for it.
+- **The host's deck** (ARTIFACT `typed`, kind deck) — built at Step 7 from the same IR when the user picks it, on the host's design system for the product when the host shows one; without one the skill offers once to create it from the same tokens — a publication too, asked as `references/native-surfaces.md` §3 says.
+
+No render adds, drops or rewrites content. The procedures — layout mapping, the HTML deck's structure and file checks, the host's deck, publishing an existing deck — live in `references/design-bridge-playbook.md` (skill-local). Read it when rendering a deck.
 
 #### 5b. intent=prototype → HTML / Mermaid / Figma
 
@@ -285,16 +295,15 @@ Required for `intent ∈ {deck, prototype, handoff}`:
 - **A11y**: Step 4e always ran for deck/prototype/handoff — blocker-severity findings (per the intent's row in `references/a11y-checklist.md`) block the deliverable; warnings go into the footer notice
 - **Evidence labels** (deck, since v3.8.0; `references/artifact-style-gate.md` Gate 4b on the rendered slides, after T-5 step 3c on the outline): each data-bearing slide's source caption and each quote's attribution carry the upstream class (a quote verbatim · `reported`, with who and when); `simulated` / `assumed` stay visible on the item and `simulated` never fills a finding, evidence, metric or quote slide; for an external audience the caption keeps the class and drops internal source names, and hand-back lines go only to the outline companion. Fixed silently, only toward a weaker class — never a question. Prototypes and handoffs are `n/a`
 
+- **Every render** (deck, since v0.10.0): the checks above run on each render — `.pptx`, HTML deck, the host's deck — not once for all; the HTML deck also passes the playbook's file checks and, where the session has a browser, a look at 2–3 of its slides (one screenshot each) before Step 7
+
 If any check fails → fix + rerun QA; escalate to the user if the blocker is not auto-fixable.
 
 ### Step 7 — Publish & link
 
 Depending on the deliverable — each publication below only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); a link shown in the chat or saved locally needs none:
 
-- **deck** → attach to:
-  - upstream Confluence page (if any) as attachment
-  - Jira ticket (if source = ticket) as comment with link
-  - both, if upstream has both
+- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment and the Jira ticket as a comment with the link — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version — found by the deck's key `design-bridge/<product>/<slug>-<subtype>` (§5–§6); sharing is asked after Step 8 records the places (§7)
 - **prototype** → link from the concept / requirements page (inline); a build-first prototype has no page yet — its link is shown and saved (Step 8) for the concept's Prototype link (PRD §9) when write-concept resumes (since v3.9.0)
 - **handoff** → new Confluence page in the design space, or attach to a Jira epic
 - **research-enrichment** → inline in the upstream skill
@@ -313,7 +322,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.9.2",
+  skill_version: "0.10.0",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],
@@ -331,6 +340,8 @@ vault_save({
 })
 ```
 
+Whatever the vault level, where a deck went is recorded right after this step — `scripts/publications.py record --key design-bridge/<product>/<slug>-<subtype> [--note <the deck's note>]` (`references/artifact-publishing.md` §5) — never in `extra_frontmatter`; then the share question (§7).
+
 ## Step 9 — Prototype as spec (since v3.9.0)
 
 The second site of the build-first line (`references/judgment-points.md` §8; switch `judgment.build_first`, default `on`). It runs only with `judgment.build_first` `on`, after a Step 5b prototype, in an interactive run, when the upstream is the build-first hand-off (playbook → Step 3 f) or there is none and the prototype is mid-fi or hi-fi (a standalone lo-fi prototype is drawn without `return_to`, so the Prototype IR does not describe it). Never after requirements-creator or write-concept Step 8, for research-enrichment, in a scheduled or headless run, or in a return payload; a toolkit prototype whose Figma file cannot be read leaves the IR without screen references, and the line is left out.
@@ -347,7 +358,8 @@ One line in `user.language` at the end of the Step 7 summary — not a question,
 - **`references/deck-subtypes.yaml`** — slide outlines for all 4 subtypes (layout sequence, required slots, recommended media)
 - **`references/figma-playbook.md`** — how to resolve a `fileKey`, safe patterns, known limitations (View seat), Step 4g procedure (frame context, screenshots, embed policy)
 - **`references/a11y-checklist.md`** — checklist for Step 6 QA
-- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–f), the Prototype IR, Step 9 prototype as spec (payload and mapping), Step 5a pptx rendering, the failure-mode table, the end-to-end concept → deck example, Step 1 role defaults, version history
+- **`references/artifact-publishing.md`** — Step 7 for a deck: the places, the question, the record, the next version (since v0.10.0)
+- **`references/design-bridge-playbook.md`** — skill-local: Step 3 per-source extraction (a–f), the Prototype IR, Step 9 prototype as spec (payload and mapping), Step 5a renders (pptx, HTML deck, the host's deck) and publishing an existing deck, the failure-mode table, the end-to-end concept → deck example, Step 1 role defaults, version history
 - **`references/vault-protocol.md`** — Step 8 vault save
 - **`local-context.example.md`** → Design System section — schema for brand configuration (DS spec path, pptx theme path, base pptx path, brand tokens, Figma file key)
 
@@ -380,3 +392,5 @@ Version history up to 0.3.0 lives in `references/design-bridge-playbook.md` → 
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
 > Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку/презентацію», «hi-fi прототип/екран», «design handoff», «дизайн-рев'ю», «через мій дизайн-тулкіт». EN — "create a deck", "make a presentation", "build a prototype on our DS", "generate a hi-fi screen", "use my design toolkit", "generate handoff", "design review". Also UA — «передати дизайн у розробку». Orchestrates research-synthesis, ux-copy, design-critique, design-system, accessibility-review, design-handoff and Figma MCP; the next step after write-concept, requirements-creator, brainstorm-features or product-research when a deck or prototype is needed.
+
+Since v0.10.0 also UA — «опублікуй деку», «онови деку в Atlassian», «зроби HTML-деку»; EN — "publish the deck", "update the deck in Atlassian".

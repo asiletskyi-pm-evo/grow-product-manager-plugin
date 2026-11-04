@@ -436,6 +436,86 @@ try:
     rc, out, res, _ = run("team", "--store", os.path.join(d, "store2"), "--home", home2)
     check("7.10 the example kit's tools list is read through its manifest", rc == 0 and res.get("team") == {"zorg-core": 2}
           and tree_hash(kit) == kit_before, out)
+
+    # ---------------------------------------------------------------- 8. publishes is a list; targets (v4.3.0)
+    import tools_scan as ts  # noqa: E402
+    s8 = os.path.join(d, "store8")
+    w(os.path.join(s8, "registry.json"), json.dumps({"schema": "tools-registry/1", "updated": "2026-11-01", "tools": [
+        {"id": "atlassian", "name": "Atlassian (Jira, Confluence)", "kind": "mcp", "publishes": "page",
+         "state": "connected", "seen": "2026-11-01", "seen_by": ["scan-session"], "sources": ["seed"]},
+        {"id": "notion", "name": "Notion", "kind": "mcp", "publishes": "page", "state": "installed",
+         "seen_by": ["scan-claude-code-mcp"], "sources": ["seed"]},
+        {"id": "zorg-slides", "name": "Zorg Slides", "kind": "mcp", "publishes": "deck", "state": "connected",
+         "seen_by": ["scan-session"], "sources": ["user"], "verdict": "deprecated"},
+        {"id": "zorg-boards", "name": "Zorg Boards", "kind": "mcp", "publishes": "board", "state": "installed",
+         "seen_by": ["scan-claude-code-mcp"], "sources": ["user"]}]}))
+    rc, out, res, _ = run("merge", "--store", s8)
+    by = reg(s8)
+    check("8.1 a v4.2.0 scalar is widened by the seed's list", rc == 0 and
+          by["atlassian"].get("publishes") == ["page", "deck", "dashboard"], by.get("atlassian"))
+    check("8.2 a scalar no seed widens reads as a list of one", by["zorg-boards"].get("publishes") == ["board"],
+          by.get("zorg-boards"))
+    rc, out, res, _ = run("set", "--store", s8, "--id", "notion", "publishes=document")
+    run("merge", "--store", s8)
+    by = reg(s8)
+    check("8.3 set takes a list, and a publishes the user set is never widened by the seed",
+          rc == 0 and by["notion"].get("publishes") == ["document"], by.get("notion"))
+    rc, out, res, _ = run("set", "--store", s8, "--id", "notion", "publishes=document,slides")
+    check("8.4 a kind outside the list is refused", rc == 2 and reg(s8)["notion"].get("publishes") == ["document"], out)
+    rc, out, res, rows = run("targets", "--store", s8, "--kind", "deck")
+    check("8.5 targets --kind deck: connected or installed, not deprecated, never a seed tool nobody saw",
+          rc == 0 and res.get("targets") == ["atlassian"] and rows and rows[0].get("access") == "corporate" and
+          rows[0].get("state") == "connected" and "deck" in rows[0].get("publishes", []), (res, rows))
+    rc, out, res, rows = run("targets", "--store", s8, "--kind", "board")
+    check("8.6 an installed record is a target too (the skill checks its own tool list)",
+          res.get("targets") == ["zorg-boards"], res)
+    rc, out, res, rows = run("targets", "--store", s8, "--kind", "slides")
+    check("8.7 a kind outside the list is exit 2", rc == 2, out)
+    rc, out, res, rows = run("targets", "--store", os.path.join(d, "none8"), "--kind", "deck")
+    check("8.8 no registry → no targets, exit 0", rc == 0 and res.get("targets") == [] and res.get("why") == "no registry", out)
+    rc, out, res, rows = run("targets", "--store", os.path.join(d, "none8"), "--kind", "deck", "--any-state")
+    check("8.8a --any-state with no registry → the seed's records with the kind (the session decides)",
+          rc == 0 and res.get("targets") == ["atlassian", "google-drive"] and "seed" in res.get("why", ""), (res, rows))
+    w(os.path.join(s8, "registry.json"), json.dumps({"schema": "tools-registry/1", "updated": "2026-11-01", "tools": [
+        dict(reg(s8)["atlassian"], state="needs-auth")] + [t for k, t in reg(s8).items() if k != "atlassian"]}))
+    rc, out, res, rows = run("targets", "--store", s8, "--kind", "deck")
+    rc2, out2, res2, rows2 = run("targets", "--store", s8, "--kind", "deck", "--any-state")
+    s9 = os.path.join(d, "store9")
+    w(os.path.join(s9, "registry.json"), json.dumps({"schema": "tools-registry/1", "updated": "2026-11-01", "tools": [
+        {"id": "atlassian", "name": "Atlassian (Jira, Confluence)", "kind": "mcp", "publishes": "page",
+         "state": "connected", "seen_by": ["scan-session"], "sources": ["seed"]}]}))
+    rc9, out9, res9, _ = run("targets", "--store", s9, "--kind", "deck")
+    check("8.8c a v4.2.0 registry (publishes: page) gives Atlassian for a deck before any merge",
+          rc9 == 0 and res9.get("targets") == ["atlassian"], res9)
+    check("8.8b a stored needs-auth hides a record by default, never with --any-state; deprecated never",
+          res.get("targets") == [] and "atlassian" in res2.get("targets", []) and "zorg-slides" not in res2.get("targets", [])
+          and [r for r in rows2 if r["id"] == "atlassian"][0].get("state") == "needs-auth", (res, res2))
+    w(os.path.join(d, "broken8", "registry.json"), "{not json")
+    rc, out, res, rows = run("targets", "--store", os.path.join(d, "broken8"), "--kind", "deck")
+    check("8.9 a registry that does not read → no targets, said, never reset", rc == 0 and res.get("targets") == [] and
+          open(os.path.join(d, "broken8", "registry.json")).read() == "{not json", out)
+    sd = {s["id"]: s for s in seed}
+    check("8.10 the seed: atlassian page, deck, dashboard; google-drive document, deck; every publishes a list",
+          sd["atlassian"].get("publishes") == ["page", "deck", "dashboard"] and
+          sd["google-drive"].get("publishes") == ["document", "deck"] and
+          all(isinstance(s["publishes"], list) for s in seed if "publishes" in s), [(s["id"], s.get("publishes")) for s in seed])
+    tr = ts._team_record({"name": "Zorg Wiki", "kind": "site", "publishes": ["page", "deck", "slides"]}, set())
+    tr1 = ts._team_record({"name": "Zorg Wiki", "kind": "site", "publishes": "page"}, set())
+    check("8.11 a core's record: a list kept to the known kinds, a scalar read as a list of one",
+          tr.get("publishes") == ["page", "deck"] and tr1.get("publishes") == ["page"], (tr, tr1))
+    r8 = os.path.join(d, "root8")
+    for sub in ("references", "skills"):
+        shutil.copytree(os.path.join(ROOT, sub), os.path.join(r8, sub))
+    shutil.copy(os.path.join(ROOT, ".mcp.json"), os.path.join(r8, ".mcp.json"))
+    sp = os.path.join(r8, "references", "tools-seed.yaml")
+    st = open(sp, encoding="utf-8").read()
+    w(sp, st.replace("publishes: [page, deck, dashboard]", "publishes: page", 1))
+    e1 = ts.check_seed(r8)
+    w(sp, st.replace("publishes: [page, deck, dashboard]", "publishes: [page, slides]", 1))
+    e2 = ts.check_seed(r8)
+    check("8.12 check 23: a scalar publishes and a kind outside the list are named",
+          any("publishes is not a list" in e for e in e1) and any("slides" in e for e in e2) and ts.check_seed(ROOT) == [],
+          (e1, e2, ts.check_seed(ROOT)))
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

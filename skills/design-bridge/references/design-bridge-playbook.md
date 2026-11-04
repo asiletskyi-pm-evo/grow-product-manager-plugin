@@ -1,4 +1,4 @@
-# Design Bridge playbook — source extraction (Step 3), Prototype IR, prototype as spec (Step 9), deck rendering (Step 5a), failure modes, worked example, role defaults, history
+# Design Bridge playbook — source extraction (Step 3), Prototype IR, prototype as spec (Step 9), deck rendering (Step 5a: pptx, HTML deck, the host's deck), publishing an existing deck, failure modes, worked example, role defaults, history
 
 > Part of `design-bridge`. Loaded on demand: Step 3 before extracting from an upstream artifact (and before Step 2 for a build-first hand-off), the Prototype IR when Step 3 builds a prototype and at 5b, Prototype as spec when Step 9 shows its line, Step 5a when rendering a deck, the failure-mode table when a dependency is missing or fails at runtime, the end-to-end example when checking the call order, Role defaults when Step 1 asks a question under a role default, History for version context. Step headings, triggers, the Deck IR schema, the copy / DS / a11y gates (4b, 4d, 4e), the Step 6 QA gate and the vault save stay in SKILL.md.
 
@@ -95,7 +95,11 @@ A claim about users made on the prototype alone ("users will understand X") stay
 
 **Payload to product-research** (the "show it to 3–5 real users" suggestion, first when the prototype tests an assumption): `prototype_ref`, the assumption, the screens in flow order from the IR, and a request for 3–5 sessions with real users of the target segment. What the sessions show comes back with its own class (`observed` / `reported`, with the session); the prototype itself is never evidence of what users do.
 
-## Step 5a — intent=deck → .pptx
+## Step 5a — intent=deck → .pptx, HTML deck, the host's deck
+
+All three renders take the same Deck IR and the same tokens (`product.brand.*`, the DS spec, the deck theme). A render never adds, drops or rewrites a slide, a word, a number or a source caption; what one render cannot show (an animation, a native chart) is drawn as the closest static form, never left out.
+
+### .pptx
 
 1. Load the base template from `product.base_pptx` (path in local-context): `Presentation(<base_pptx_path>)`. If unset or missing → create a blank `Presentation()` and position shapes manually.
 2. Load the theme yaml from `product.pptx_theme`.
@@ -110,6 +114,43 @@ A claim about users made on the prototype alone ("users will understand X") stay
 6. In parallel, produce a markdown outline companion in the same folder (`.md`) for quick review.
 
 Fallback: if the pptx skill is unavailable → outline.md + outline.html (copy-pasteable into Google Slides).
+
+### HTML deck (since v0.10.0)
+
+One file, `{date}-{slug}-{subtype}.html`, beside the `.pptx`. It is what goes to a place that takes a page — Atlassian Artifacts (`text/html`), ARTIFACT `page` — and a file the user can open anywhere.
+
+- **Structure.** `<!doctype html>`, `lang` from `user.language`, `<title>` = the deck title; `:root { color-scheme: light; }` with the tokens as CSS custom properties (primary, dark, background, text, accent; fonts). One `<section class="slide">` per IR slide, in order, with `aria-label="Slide n of N: <title>"`; 16:9 on a 1280×720 design grid, scaled to the window by a few lines of inline script — no framework.
+- **Navigation.** ←/→, PageUp/PageDown, Space, Home/End; a counter «n / N»; `#n` in the address opens slide n; `n` shows the speaker notes (`<aside class="notes">`, hidden by default); print styles give one slide per page.
+- **Content.** The IR's titles, bodies, tables and source captions (with their evidence class) as text, never as pictures of text; a chart as inline SVG drawn from the IR's chart spec, from its numbers only; a diagram redrawn as inline SVG in the theme's colours, its arrowheads drawn as shapes on their own slide — an `id` shared between slides (an SVG `marker` defined once and used on every slide) resolves to the first slide's copy, which is hidden, and the arrows vanish; a picture inlined as a `data:` URI with its alt text (a picture whose only alt is a file name is decorative: `alt=""`) (a Figma screenshot only under the embed rules of `references/data-policy.md`).
+- **No external request.** No `<script src>`, no stylesheet or font loaded by URL, no `@import`, no `url(http…)`, no remote image, no analytics. A link the reader may click (`<a href>` to the upstream page) is not a request and stays.
+- **Font.** The theme's font is embedded as a base64 `@font-face` when its file is on this machine — among the user's design assets or installed fonts — and its licence allows embedding (an OFL font does); otherwise `font-family: <font_primary>, system-ui, sans-serif`, and the outline's footer says once that the system fallback was used.
+
+**File checks** (Step 6, on top of the deck checks): the count of `section.slide` equals the IR's slides; every slide has its title; no `{{…}}`, `TODO` or «Lorem ipsum»; no external request by the rule above — search the file for `src=`, `srcset=`, `poster=` and `href=` outside `<a>` whose value starts with `http` or `//` (either quote), `@import`, `url(` with an `http` or `//` value (quoted or not), `fetch(`, `XMLHttpRequest`, `<meta http-equiv="refresh"`; every `id` used once in the file (markers, gradients, clip paths); `lang` is the deck's language; the file's size said in the summary (a host may refuse a large one); the contrast pairs computed from the CSS custom properties. Where the session has a browser, open the file and take one screenshot each of the cover, one data slide and the last slide — clipped or overflowing text, a missing chart or a wrong colour fails the check.
+
+### A document service's deck (DOCS `connector` or a registry record that publishes `deck`)
+
+The `.pptx` itself, imported as the service's presentation in the user's drive (the service's own import tool); a new version replaces the same presentation's content by its id. Its sharing is the drive's: the question names who can open that folder (`native-surfaces.md` §3).
+
+### The host's deck (ARTIFACT `typed`, kind deck, since v0.10.0)
+
+Built at Step 7, when the user picks it, from the IR as data — per slide its title, body, table, notes, media and source caption; the host adds no content of its own.
+
+- **Design system.** The host's design system for the product when the host lists one — its title equal to the DS spec's `ds_name` (or `<product> Design System`), never a loose match. Without one, ask once per product in a run: «Створити дизайн-систему «<product>» для дек у твоєму акаунті з токенів продукту (кольори, шрифти, лого з DS spec)? Бачиш лише ти. Так / ні.» — built from the same tokens, never from a guess. «Ні» → the host's deck is not built in this run (an off-brand deck is not offered); the other places stay.
+- **Faithful to the source's paint.** A translucent fill stays translucent (its alpha as `rgba`; a near-invisible one is no fill, never a solid block), and a text box shorter than its text keeps its text's size — set the host's no-shrink option where it has one — the way the `.pptx` lets text run past its box; a host that shrinks or clips such text breaks the layout.
+- **QA** on the built deck as on the other renders (Step 6), before the link is given: a first build in the user's private account is the publication the user said yes to, and nobody else sees it before the check — a new version of a deck already shared reaches its audience at once, so it is built only after the same IR passed Step 6 on the other renders; where the session cannot open the host's page (not signed in), the user's look at it is the check, and the run says so.
+- **A new version** is a publication to the same link (`references/artifact-publishing.md` §6).
+
+## Publish an existing deck (since v0.10.0)
+
+«Опублікуй деку <назва>» — a deck that exists in the vault. **The deck's note** is the note of `type: presentation` that names or sits beside its `.pptx` (`{date}-{slug}-{subtype}.pptx`); with both an outline companion and a vault note of one deck, it is the vault note — they are one deck, never two to choose between. The deck's key is `design-bridge/<product>/<slug>-<subtype>` (`references/artifact-publishing.md` §5).
+
+1. **Find** the deck's note by the name the user gave (the vault path, or `ctx search` with the presentation type); two different decks match → ask which. No `.pptx` → rebuild from the note's outline alone and say so.
+2. **Read** the note (frontmatter: subtype, audience, slide count, language, template; body: the outline and the speaker notes) and the `.pptx` — with python-pptx, or with the standard library where it is not installed (a `.pptx` is a zip of XML: `ppt/presentation.xml` for the order, `ppt/slides/slideN.xml` for shapes and text, `ppt/notesSlides/` for notes, `ppt/media/` for pictures): per slide the layout name, the title, the text frames with their bullet levels, tables, notes, pictures, native charts' data, and each shape's place, fill (with its transparency) and line.
+3. **Rebuild the IR**: the slides in the `.pptx` order; the layout mapped back through `implementation_hints.slide_layout_index.mapping`; titles, bodies, notes and source captions verbatim, evidence labels as they are; a diagram drawn with shapes is redrawn as SVG in the theme's colours from its own shapes and words — no new box, arrow or word; pictures kept.
+4. **Check** that the IR has the `.pptx`'s slide count and every title, and nothing more. The summary says «Деку з N слайдів перенесено як є». Where the note and the `.pptx` disagree, the `.pptx` wins for what the slides say, the note for the deck's metadata (audience, language, subtype).
+5. **QA without rewriting.** Step 6 runs on each new render for what a render can break — contrast, fonts, overflow, the file checks, a11y of the render (alt text, `lang`, reading order; Step 4e does not run again on content already shown). A content rule the deck already broke (bullets, title length, slide count, a missing label) is reported in the summary as it is, never fixed: the deck is published as the user made it.
+6. **The `.pptx` is not re-rendered** — it exists; the HTML deck and the host's deck are rendered from the IR (Step 5a), then Step 6 and Step 7. Before the Step 7 question the deck's key is looked up (`publications.py find --key <key> --note <the deck's note>`): a place the deck already went to — the key file, or before it exists the note's own `published` — is offered as its next version. **Step 8 saves nothing new**: the record goes to the key, with the deck's note as its mirror only when that note is in the user's own vault and the vault takes writes — the user's «так» to the publication is not a «так» to a write elsewhere.
+7. **An attachment and a comment of an earlier run.** A rerun attaches the new `.pptx` to the upstream Confluence page under the same file name — Confluence keeps it as the attachment's next version — and does not add a second Jira comment: the one already there links the page.
 
 ## Failure modes & fallbacks
 
@@ -127,6 +168,11 @@ Fallback: if the pptx skill is unavailable → outline.md + outline.html (copy-p
 | A11y fail on handoff | release blocker; in deck mode — footer warning |
 | Language not in `available_languages` | pick the closest and note it in the outline |
 | `design_toolkits` empty / absent | skip Step 0.5; built-in hi-fi path (Figma) — unchanged behaviour |
+| No place takes a page, and the user did not ask for an HTML deck | no HTML deck is rendered; the `.pptx` and its outline as before v0.10.0 |
+| The theme's font file is absent or may not be embedded | the HTML deck uses the system fallback; one line in the outline's footer |
+| No browser in the session | the HTML deck's file checks still run; the 2–3 slide look is skipped, said once in the outline's footer |
+| The host shows no design system for the product and the user said «ні» to creating one | the host's deck is not built in this run; the other places stay |
+| An existing deck without its `.pptx` | the IR is rebuilt from the note's outline; said in the summary |
 | Declared toolkit entry unavailable at runtime | note it, offer `setup_hint`, fall back to built-in path; never hard-fail |
 | Two+ toolkits match one request | `AskUserQuestion` which to use |
 | Toolkit `contract_version` mismatch | warn (don't block); verify payload/return shape |
