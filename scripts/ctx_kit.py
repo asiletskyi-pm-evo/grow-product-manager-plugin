@@ -48,18 +48,32 @@ def _files(folder):
     return sorted(pb.walk(folder))
 
 
-def check(folder, warnings=None):
+def check(folder, warnings=None, manifest_path=None):
     """(manifest or None, model or None, [problem]) of a kit folder. A problem names the file and what is wrong.
     `warnings` (a list) gets what is no fault of the kit but worth knowing when the folder is shared as it is: a
     registry card's private fields and the owner's personal layer — the bundle builder leaves both out of a colleague's
-    bundle, but anyone who opens the folder itself sees them."""
+    bundle, but anyone who opens the folder itself sees them.
+
+    `manifest_path` (since v4.4.0) is a manifest from outside the folder — the one `ctx repo add --infer` derives —
+    checked as the folder's own would be. Under an inferred manifest (`inferred: true`) the person checking is not the
+    core's owner and connects it in place: what only the owner can fix and what does not stop the connection (a team
+    naming a file that is not there, a missing team card, a person card without its fields, a stray marker beside
+    blocks that read, a wrapper) is a warning ending «справа власника ядра»; no role model, no blocks file, no block
+    at all stay faults."""
     out = []
     warn = warnings if warnings is not None else []
     if not os.path.isdir(folder):
         return None, None, ["немає теки набору: %s" % folder]
-    m, why = pb.read_manifest(folder)
+    if manifest_path and not os.path.isfile(manifest_path):
+        return None, None, ["немає маніфесту: %s" % manifest_path]
+    m, why = pb.read_manifest(folder, path=manifest_path or None)
     if m is None:
         return None, None, [why]
+    inferred = m.get("inferred") is True
+
+    def owner(problem):
+        """A fault of the kit — a warning when the manifest is inferred (the owner's to fix, the connection stands)."""
+        (warn if inferred else out).append(problem + (" — справа власника ядра" if inferred else ""))
     for k in REQUIRED:
         if not m.s(k):
             out.append("provider-manifest.yaml: немає %s" % k)
@@ -83,19 +97,19 @@ def check(folder, warnings=None):
         teams = model.get("teams") if isinstance(model.get("teams"), dict) else {}
         for email, team in (model.get("emails") or {}).items():
             if team not in teams:
-                out.append("%s: пошта %s → команда %s, якої немає в teams" % (m.s("bundles_file"), email, team))
+                owner("%s: пошта %s → команда %s, якої немає в teams" % (m.s("bundles_file"), email, team))
         for key, tb in teams.items():
             if not isinstance(tb, dict) or not tb.get("title"):
-                out.append("%s: команда %s без title" % (m.s("bundles_file"), key))
+                owner("%s: команда %s без title" % (m.s("bundles_file"), key))
                 continue
             for f in tb.get("files") or []:
                 if f not in files:
-                    out.append("%s: команда %s називає файл, якого немає: %s" % (m.s("bundles_file"), key, f))
+                    owner("%s: команда %s називає файл, якого немає: %s" % (m.s("bundles_file"), key, f))
             if not os.path.isfile(pb.team_card_path(folder, m, key)):
-                out.append("немає картки команди %s: %s" % (key, os.path.relpath(pb.team_card_path(folder, m, key), folder)))
+                owner("немає картки команди %s: %s" % (key, os.path.relpath(pb.team_card_path(folder, m, key), folder)))
         for role, layers in (model.get("roles") or {}).items():
             if not isinstance(layers, list) or not layers:
-                out.append("%s: роль %s без шарів" % (m.s("bundles_file"), role))
+                owner("%s: роль %s без шарів" % (m.s("bundles_file"), role))
     elif model is not None:
         out.append("%s: не об'єкт JSON" % m.s("bundles_file"))
     blocks = os.path.join(folder, m.s("blocks_file")) if m.s("blocks_file") else None
@@ -108,13 +122,13 @@ def check(folder, warnings=None):
         if text is not None:
             import ctx_blocks as cb                     # here: the strict reading of regions lives with the merge
             found, errors = cb.find_regions([{"id": "kit", "body": text}], ns)
-            for x in errors:
-                out.append("%s: блок %s — %s" % (m.s("blocks_file"), x["block"] or "?", x["why"]))
-            if not found and not errors:
+            for x in errors:                            # beside blocks that read, a stray marker is the owner's
+                (owner if found else out.append)("%s: блок %s — %s" % (m.s("blocks_file"), x["block"] or "?", x["why"]))
+            if not found:
                 out.append("%s: жодного блоку простору імен %s" % (m.s("blocks_file"), ns))
             for bid, r in found.items():
                 if not r["v"]:
-                    out.append("%s: блок %s без v=" % (m.s("blocks_file"), bid))
+                    owner("%s: блок %s без v=" % (m.s("blocks_file"), bid))
     pdir = os.path.join(folder, m.s("people_dir")) if m.s("people_dir") else None
     for name in sorted(os.listdir(pdir)) if pdir and os.path.isdir(pdir) else []:
         if not name.endswith(".md") or name.startswith(("_", ".")):
@@ -122,7 +136,7 @@ def check(folder, warnings=None):
         front = _front(os.path.join(pdir, name)) or {}
         missing = [k for k in CARD_FIELDS if not pb.fget(front, k)]
         if missing:
-            out.append("%s/%s: немає %s" % (m.s("people_dir"), name, ", ".join(missing)))
+            owner("%s/%s: немає %s" % (m.s("people_dir"), name, ", ".join(missing)))
         private = [k for k in (m.get("people_private_fields") or []) if pb.fget(front, k)]
         if private:
             warn.append("%s/%s: приватні поля (%s) — у пакет колеги не підуть, але в спільній теці їх видно"
@@ -144,7 +158,8 @@ def check(folder, warnings=None):
                     out.append("%s: не список інструментів із name (tool-registry.md §5)" % tf)
             except (OSError, UnicodeDecodeError, ValueError) as e:
                 out.append("%s: не читається (%s)" % (tf, getattr(e, "strerror", None) or type(e).__name__))
-    out.extend(_wrapper_problems(folder, files, m))
+    for problem in _wrapper_problems(folder, files, m):
+        owner(problem)
     return m, model, out
 
 

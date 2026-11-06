@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+"""TC-ctx-4400-infer — scripts/ctx_infer.py: a minimal provider manifest inferred from a core's layout (since v4.4.0).
+
+A shared core may come without its owner's `_System/provider-manifest.yaml`. `infer(folder)` reads the layout — the
+folder that holds `_System/access-bundles.json`, the one `_System/*.md` with block markers, Teams/, People/,
+Playbook/, provider-templates/ — and writes a manifest that only reads: never a command (`people_resolver`), an MCP
+address, the owner's filters (`deny_patterns`, `delink_*`) or a write scope; the owner's personal layer and the
+conservative `INFERRED_EXCLUDE` are left out of search. An ambiguous layout is named, never guessed. The core is only
+read. `ctx_kit.check(folder, manifest_path=…)` checks the manifest from outside the core as it checks the core's own,
+with what only the core's owner can fix said as a warning. The fictional «Zorg» kit (examples/provider-kit/zorg-core)
+with its manifest removed. Semantics: references/context-provider-protocol.md §9. Stdlib only; run from the repo root.
+"""
+import hashlib, json, os, re, shutil, sys, tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import ctx_common as cc  # noqa: E402
+import ctx_kit as ckit  # noqa: E402
+import ctx_infer as ci  # noqa: E402
+
+KIT = os.path.join(ROOT, "examples", "provider-kit", "zorg-core")
+TODAY = "2026-11-06"
+fails = 0
+
+
+def check(name, cond, detail=""):
+    global fails
+    fails += not cond
+    print(("✅" if cond else "❌"), name, ("" if cond else "-> " + str(detail)[:900]))
+
+
+def digest(root):
+    """One hash of every path and every byte under `root` — the core before and after."""
+    h = hashlib.sha256()
+    for base, dirs, files in sorted(os.walk(root)):
+        dirs.sort()
+        for f in sorted(files):
+            p = os.path.join(base, f)
+            h.update(os.path.relpath(p, root).encode() + b"\0" + open(p, "rb").read() + b"\0")
+    return h.hexdigest()
+
+
+def bare_kit(d, name="ZorgCore"):
+    """A copy of the example kit without its owner's manifest (the YAML and its `.md` wrapper)."""
+    core = os.path.join(d, name)
+    shutil.copytree(KIT, core)
+    for f in ("provider-manifest.yaml", "provider-manifest.md"):
+        os.remove(os.path.join(core, "Core", "_System", f))
+    return core
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    open(path, "w", encoding="utf-8").write(text)
+
+
+check("INFERRED_EXCLUDE is exactly the eight expressions of the plan (C5)", ci.INFERRED_EXCLUDE == [
+    r"(^|/)Meetings/", r"(^|/)Focus/", r"(^|/)_personal/", r"(^|/)TODO", r"\.xlsx$",
+    r"local-context\.(existing|proposed)\.md$", r"context-merge-report\.md$", r"(^|/)_archive/"], ci.INFERRED_EXCLUDE)
+
+with tempfile.TemporaryDirectory() as d:
+    core = bare_kit(d)
+    before = digest(core)
+    r = ci.infer(core, today=TODAY)
+    m = r.get("manifest") or {}
+    check("infers_kit: ok, the plugin folder, the role model and the blocks file of the layout",
+          r.get("ok") is True and m.get("plugin_folder") == "Core" and m.get("bundles_file") == "Core/_System/access-bundles.json"
+          and m.get("blocks_file") == "Core/_System/context-blocks.md" and m.get("namespace") == "zorg-core"
+          and m.get("inferred") is True, r)
+    check("…Teams, People and Playbook when they are there; no templates folder when there is none",
+          m.get("team_card_dir") == "Core/Teams" and m.get("people_dir") == "Core/People"
+          and m.get("playbook") == ["Core/Playbook/01 Rules.md"] and "templates_dir" not in cc.read_yaml_subset(r["text"]), m)
+    check("…id is the kebab of the folder's name, title the first heading of its README.md",
+          m.get("id") == "zorgcore" and m.get("title") == "Provider kit — example «Zorg»", (m.get("id"), m.get("title")))
+    check("…schema, contract, authority, mode", m.get("schema") == "provider-manifest/1" and m.get("contract") == "vault/v1"
+          and m.get("authority") == "org" and m.get("mode") == "snapshot", m)
+    check("…the owner's personal layer, conservatively, and the eight exclusions",
+          m.get("personal_overlay") == ["Core/Now.md", "Core/TODO*", "Core/_personal/"] and m.get("exclude") == ci.INFERRED_EXCLUDE, m)
+    parsed = cc.read_yaml_subset(r["text"])
+    check("…the text reads back through the YAML subset to the same keys (a round trip)",
+          all(parsed.get(k) == m.get(k) for k in parsed) and parsed.get("exclude") == ci.INFERRED_EXCLUDE, parsed)
+    check("…every key says where it came from", all(r.get("from", {}).get(k) for k in
+                                                     ("plugin_folder", "bundles_file", "blocks_file", "id", "title")), r.get("from"))
+    out = os.path.join(d, "outside", "zorgcore.manifest.yaml")
+    write(out, r["text"])
+    warns = []
+    m2, model, problems = ckit.check(core, warns, manifest_path=out)
+    check("…ctx_kit.check reads the manifest from outside the core: no fault", m2 is not None and problems == [], problems)
+    check("…and the same folder without it is still 'no provider manifest'", ckit.check(core)[2][:1] and
+          "no provider manifest" in ckit.check(core)[2][0], ckit.check(core)[2])
+
+    # never_infers_commands
+    keys = set(parsed)
+    check("never_infers_commands: no command, MCP address, owner filter, write scope or tools list",
+          not keys & {"people_resolver", "mcp", "deny_patterns", "delink_targets", "delink_labels", "delink_note",
+                      "dashboard_rewrites", "write_scope", "tools_file"}
+          and not re.search(r"^(people_resolver|mcp|deny_patterns|tools_file|write_scope)\s*:", r["text"], re.M), sorted(keys))
+
+    # first_line
+    first = r["text"].splitlines()[0]
+    check("first_line: '# ctx:inferred <date>' and where the owner may put it",
+          first.startswith("# ctx:inferred %s" % TODAY) and "Core/_System/provider-manifest.yaml" in first, first)
+    check("…and the owner is told to drop `inferred: true` and add their own filters first",
+          "inferred: true" in r["text"].splitlines()[1] and "deny_patterns" in r["text"].splitlines()[1], r["text"][:400])
+
+    # --id
+    check("--id overrides the folder's name", ci.infer(core, rid="zorg-core", today=TODAY)["manifest"]["id"] == "zorg-core", "")
+    bad = ci.infer(core, rid="Not A Kebab", today=TODAY)
+    check("…an id that is not kebab-case is refused with the reason", bad["ok"] is False and "kebab" in bad["why"], bad)
+
+    # core_untouched
+    check("core_untouched: the core folder is byte for byte as it was", digest(core) == before, "")
+
+with tempfile.TemporaryDirectory() as d:
+    core = bare_kit(d, "Zorg_Core")
+    check("the kebab of «Zorg_Core» is zorg-core", ci.infer(core, today=TODAY)["manifest"]["id"] == "zorg-core", "")
+    os.remove(os.path.join(core, "README.md"))
+    write(os.path.join(core, "README — note to Pat.md"), "# A letter, not the core's title\n")
+    check("a README with a suffix is a letter, not the title: the folder's name stands in",
+          ci.infer(core, today=TODAY)["manifest"]["title"] == "Zorg_Core", ci.infer(core, today=TODAY)["manifest"].get("title"))
+    os.makedirs(os.path.join(core, "Core", "_System", "provider-templates"))
+    check("templates_dir when <pf>/_System/provider-templates is there",
+          ci.infer(core, today=TODAY)["manifest"].get("templates_dir") == "Core/_System/provider-templates", "")
+
+    # files that carry the namespace but are no blocks file: an excluded copy of a context, a generated team block
+    sysd = os.path.join(core, "Core", "_System")
+    blocks = open(os.path.join(sysd, "context-blocks.md"), encoding="utf-8").read()
+    write(os.path.join(sysd, "local-context.proposed.md"), "# Proposed\n\n" + blocks)
+    write(os.path.join(sysd, "context-merge-report.md"), blocks)
+    write(os.path.join(sysd, "team-context.md"), "<!-- zorg-core:begin id=team v=0.1 -->\n### Team: Alpha\n<!-- zorg-core:end id=team -->\n")
+    r = ci.infer(core, today=TODAY)
+    check("an excluded copy of a context and a file of the team block alone are no blocks file",
+          r["ok"] and r["manifest"].get("blocks_file") == "Core/_System/context-blocks.md", r.get("from"))
+
+    # two_block_files
+    write(os.path.join(sysd, "more-blocks.md"), "<!-- zorg-more:begin id=x v=1 -->\nX\n<!-- zorg-more:end id=x -->\n")
+    r = ci.infer(core, today=TODAY)
+    check("two_block_files: no blocks_file and no namespace, and `from` says why, naming both",
+          r["ok"] is True and "blocks_file" not in r["manifest"] and "namespace" not in cc.read_yaml_subset(r["text"])
+          and "context-blocks.md" in r["from"].get("blocks_file", "") and "more-blocks.md" in r["from"].get("blocks_file", ""), r)
+    os.remove(os.path.join(sysd, "more-blocks.md"))
+
+    # ambiguous_folders
+    write(os.path.join(core, "Second", "_System", "access-bundles.json"), "{}")
+    r = ci.infer(core, today=TODAY)
+    check("ambiguous_folders: two folders with a role model → not ok, both named as candidates and in the reason",
+          r["ok"] is False and sorted(r["candidates"]) == ["Core", "Second"] and "Core" in r["why"] and "Second" in r["why"]
+          and r["manifest"] is None, r)
+    shutil.rmtree(os.path.join(core, "Second"))
+
+    # the role model iCloud has evicted
+    os.rename(os.path.join(sysd, "access-bundles.json"), os.path.join(sysd, ".access-bundles.json.icloud"))
+    r = ci.infer(core, today=TODAY)
+    check("a role model iCloud has evicted: not ok, «not downloaded» — never «no model»",
+          r["ok"] is False and "не завантажена" in r["why"], r)
+    os.remove(os.path.join(sysd, ".access-bundles.json.icloud"))
+
+    # no_model
+    r = ci.infer(core, today=TODAY)
+    check("no_model: no role model → not ok, «немає моделі ролей — лише пошук»",
+          r["ok"] is False and "немає моделі ролей" in r["why"] and "лише пошук" in r["why"] and r["candidates"] == [], r)
+
+with tempfile.TemporaryDirectory() as d:
+    # a core whose role model sits at its root: the plugin folder is the core itself
+    core = os.path.join(d, "Flat")
+    shutil.copytree(os.path.join(KIT, "Core"), core)
+    for f in ("provider-manifest.yaml", "provider-manifest.md"):
+        os.remove(os.path.join(core, "_System", f))
+    r = ci.infer(core, today=TODAY)
+    check("a role model at the root: plugin_folder '.', paths without a prefix",
+          r["ok"] and r["manifest"]["plugin_folder"] == "." and r["manifest"]["bundles_file"] == "_System/access-bundles.json"
+          and r["manifest"]["personal_overlay"] == ["Now.md", "TODO*", "_personal/"], r.get("manifest"))
+
+with tempfile.TemporaryDirectory() as d:
+    # what only the core's owner can fix is a warning under an inferred manifest, a fault under the owner's own
+    core = bare_kit(d)
+    model_path = os.path.join(core, "Core", "_System", "access-bundles.json")
+    model = json.load(open(model_path, encoding="utf-8"))
+    model["teams"]["alpha"]["files"].append("Core/Products/Gone page.md")
+    json.dump(model, open(model_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    blocks_path = os.path.join(core, "Core", "_System", "context-blocks.md")
+    open(blocks_path, "a", encoding="utf-8").write("\n<!-- zorg-core:end -->\n")
+    out = os.path.join(d, "zorgcore.manifest.yaml")
+    write(out, ci.infer(core, today=TODAY)["text"])
+    warns = []
+    _, _, problems = ckit.check(core, warns, manifest_path=out)
+    check("an inferred manifest: a team's missing file and a stray marker are warnings for the owner, not faults",
+          problems == [] and any("Gone page.md" in w for w in warns) and any("broken marker" in w for w in warns), (problems, warns))
+    write(os.path.join(core, "Core", "_System", "provider-manifest.yaml"),
+          open(os.path.join(KIT, "Core", "_System", "provider-manifest.yaml"), encoding="utf-8").read())
+    _, _, problems = ckit.check(core, [])
+    check("…the same faults under the owner's own manifest stay faults (kit-check as before)",
+          any("Gone page.md" in p for p in problems) and any("broken marker" in p for p in problems), problems)
+    os.remove(os.path.join(core, "Core", "_System", "provider-manifest.yaml"))
+    open(blocks_path, "w", encoding="utf-8").write("# no blocks here\n")
+    _, _, problems = ckit.check(core, [], manifest_path=out)
+    check("…a blocks file with no block at all is a fault even so (nothing to connect)",
+          any("жодного блоку" in p for p in problems), problems)
+
+print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
+sys.exit(1 if fails else 0)

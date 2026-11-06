@@ -121,6 +121,17 @@ def manifest_files(core):
     return [p for p in cands if os.path.isfile(p)]
 
 
+def with_defaults(m):
+    """The manifest with the defaults every reader assumes: the namespace is the id, the team cards and the people
+    are `<plugin_folder>/Teams` and `<plugin_folder>/People` (since v4.4.0 one function: ctx_infer applies the same)."""
+    pf = m.s("plugin_folder", ".")
+    m.setdefault("namespace", m.get("id"))
+    for k, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
+        if not m.get(k):
+            m[k] = os.path.normpath(os.path.join(pf, sub))
+    return m
+
+
 def read_manifest(core, path=None, read=None):
     """(manifest, None), or (None, why) in the words `load_manifest` prints — with nothing printed and no exit, so a
     caller in a helper thread (the daily sync's fetch, since v3.14.0) never has to swap the process's stdout. The file
@@ -133,12 +144,7 @@ def read_manifest(core, path=None, read=None):
             except (ValueError, UnicodeDecodeError) as e:
                 return None, "provider manifest %s: %s" % (p, e)
             m["_path"] = os.path.relpath(os.path.abspath(p), os.path.abspath(core))
-            pf = m.s("plugin_folder", ".")
-            m.setdefault("namespace", m.get("id"))
-            for k, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
-                if not m.get(k):
-                    m[k] = os.path.normpath(os.path.join(pf, sub))
-            return m, None
+            return with_defaults(m), None
     return None, "no provider manifest under %s (expected _System/provider-manifest.yaml)" % core
 
 
