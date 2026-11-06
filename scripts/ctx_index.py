@@ -247,7 +247,7 @@ def scope(context_text, repos):
     """The roots of the index: `own` for `<vault>/<plugin folder>` of every vault of local-context.md, and the
     repository's id for the core folder (`core_root`, else its first path) of every registration whose folder is on
     disk. A folder named twice is walked once (the first name). Since v4.4.0 a registration's `exclude` goes with its
-    root (`Root`)."""
+    root (`Root`), with the core's own manifest's exclusions once the core ships one (`_live_exclude`)."""
     entries = cc.vault_entries(context_text)
     vaults = [v for v, _ in entries]
     out, seen = [], set()
@@ -263,8 +263,30 @@ def scope(context_text, repos):
     for r in repos or []:
         path = r.get("core_root") or next(iter(r.get("paths") or []), "")
         if path and os.path.isdir(path):
-            add(r.get("id") or "", path, _vault_of(path, vaults), r.get("exclude") or ())
+            add(r.get("id") or "", path, _vault_of(path, vaults), _live_exclude(r, path))
     return out
+
+
+def _live_exclude(repo, path):
+    """A registration's `exclude` and — for one that has any (modes A–C of v4.4.0) — the exclusions of the core's own
+    manifest once the core ships one: its `exclude` and its `personal_overlay` (ctx_infer.registration_exclude), read
+    at each scope. The owner's manifest wins in search as it does for the team block, without a new registration. A
+    manifest that does not read adds nothing; the registration's own list always stays."""
+    ex = list(repo.get("exclude") or [])
+    if not ex:
+        return ex
+    try:
+        import ctx_infer as cinf                     # here: ctx_infer reads provider_bundle, the index needs it only now
+        import ctx_store as cst
+        import provider_bundle as pb
+        if pb.manifest_files(path):
+            m, _ = pb.read_manifest(path, read=lambda p: cst.read_text(p))
+            for x in cinf.registration_exclude(m) if m is not None else ():
+                if x not in ex:
+                    ex.append(x)
+    except Exception:  # noqa: BLE001 — a scope never fails over a manifest; the registration's own list stays
+        pass
+    return ex
 
 
 def rel_path(abs_path, vaults, root=None):

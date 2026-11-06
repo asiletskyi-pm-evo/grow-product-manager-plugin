@@ -256,6 +256,23 @@ with tempfile.TemporaryDirectory() as d:
         open(os.path.join(d, "references", "context-provider-protocol.md"), "w", encoding="utf-8").write(proto.replace(old_s, new_s, 1))
         errs = getattr(ci, "check_protocol", lambda r: [])(d)
         check("check_protocol catches %s" % name, old_s in proto and errs, errs)
+    # review of tasks 5–7, M3: the check compares both ways and looks at what infer() emits
+    open(os.path.join(d, "references", "context-provider-protocol.md"), "w", encoding="utf-8").write(proto.replace(
+        "`(^|/)_System/context/` (the owner's own context store", "`(^|/)_System/context/`, `(^|/)Journal/` (the owner's own context store", 1))
+    errs = getattr(ci, "check_protocol", lambda r: [])(d)
+    check("check_protocol catches a search exclusion the protocol promises and the code lacks", any("Journal" in e for e in errs), errs)
+    shutil.copytree(os.path.join(ROOT, "examples"), os.path.join(d, "examples"))
+    open(os.path.join(d, "references", "context-provider-protocol.md"), "w", encoding="utf-8").write(proto)
+    saved_p = list(ci.PERSONAL_EXCLUDE)
+    ci.PERSONAL_EXCLUDE[:] = [x for x in saved_p if "context" not in x]
+    errs = ci.check_protocol(d)
+    ci.PERSONAL_EXCLUDE[:] = saved_p
+    check("check_protocol catches the code dropping an exclusion the protocol promises", any("_System/context/" in e for e in errs), errs)
+    real_infer = ci.infer
+    ci.infer = lambda *a, **k: dict(real_infer(*a, **k), text=real_infer(*a, **k)["text"] + "tools_file: Core/_System/tools.yaml\n")
+    errs = ci.check_protocol(d)
+    ci.infer = real_infer
+    check("check_protocol catches the code starting to infer a never-inferred key", any("tools_file" in e for e in errs), errs)
     saved = list(ci.INFERRED_EXCLUDE)
     open(os.path.join(d, "references", "context-provider-protocol.md"), "w", encoding="utf-8").write(proto)
     ci.INFERRED_EXCLUDE.append(r"(^|/)Secret/")

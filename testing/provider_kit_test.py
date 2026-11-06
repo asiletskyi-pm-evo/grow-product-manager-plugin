@@ -478,5 +478,66 @@ with tempfile.TemporaryDirectory() as d:
     check("M7: kit-check --infer with a fault never ends saying the owner may place the manifest",
           rc == 3 and "нічого не записано" in out and not [l for l in out.splitlines() if l.startswith("нічого не записано —")], out[-400:])
 
+# ===================================================================== review of tasks 5–7 (v4.4.0)
+with tempfile.TemporaryDirectory() as d:
+    # I1: the owner ships a manifest after mode B — its exclude and personal layer leave the colleague's search
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    put(core, "Core/Playbook/02 Zebrafish.md", "# Zebrafish rule\n\nzebrafishword is read twice.\n")
+    put(core, "Core/Journal/2026-11-05.md", "# Journal\n\nzebrafishword in the owner's journal.\n")
+    put(core, "Core/_drafts/d.md", "# Draft\n\nzebrafishword in the owner's draft.\n")
+    rck, outk, _ = ctx(home, ctxp, "repo", "kit-check", core, "--infer")
+    check("M7: an inferred manifest never makes a kit's tools.md wrapper the owner's fault", rck == 0 and "tools.md" not in outk, outk[-500:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer")
+    check("M7: mode B's dry run never speaks of the core manifest's personal layer (the core ships none)",
+          "особистий шар із маніфесту ядра" not in out, out[-500:])
+    ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer", "--apply", "--code", res.get("code") or "x")
+    before = hits_of(home, ctxp, "zebrafishword")
+    own = open(os.path.join(KIT, "Core", "_System", "provider-manifest.yaml"), encoding="utf-8").read()
+    put(core, "Core/_System/provider-manifest.yaml", own.replace("  - Core/_personal/\n", "  - Core/_personal/\n  - Core/Journal/\n"))
+    after = hits_of(home, ctxp, "zebrafishword")
+    check("I1: before the owner's manifest, the journal and the draft are found (the inferred manifest knew neither)",
+          any("Journal" in h for h in before) and any("_drafts" in h for h in before), before)
+    check("I1: once the owner ships a manifest, its exclude and personal_overlay leave search at once",
+          after and not [h for h in after if "Journal" in h or "_drafts" in h], after)
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    os.remove(os.path.join(core, "Core", "_System", "access-bundles.json"))
+    os.remove(os.path.join(core, "Core", "_System", "access-bundles.md"))
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--search-only")
+    check("M2: the line about older plugins says they call a search-only core unreachable too", "недоступн" in out, out[-500:])
+    rc, out, res2 = ctx(home, ctxp, "repo", "add", core, "--search-only", "--apply", "--code", res.get("code") or "x")
+    check("M1: search only --apply: `written` is [] (it holds record ids), `snapshot` null", rc == 0 and res2.get("written") == []
+          and res2.get("snapshot") is None, res2)
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "new@zorg.example", "--guest")
+    ctx(home, ctxp, "repo", "add", KIT, "--email", "new@zorg.example", "--guest", "--apply", "--code", res.get("code") or "x")
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "new@zorg.example", "--guest")
+    check("M2: a guest of a core that ships its manifest is never offered another --id (it takes none)",
+          rc == 3 and "прибери" in out and "--id" not in out, out[-300:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--search-only")
+    check("M2: …a mode that takes --id is offered it", rc == 3 and "--id" in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    kit2 = os.path.join(d, "kit2")
+    shutil.copytree(KIT, kit2)
+    sysd = os.path.join(kit2, "Core", "_System")
+    os.rename(os.path.join(sysd, "provider-manifest.yaml"), os.path.join(sysd, ".provider-manifest.yaml.icloud"))
+    os.remove(os.path.join(sysd, "provider-manifest.md"))
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", kit2)
+    check("M8: plain kit-check on an owner's manifest iCloud has evicted: «не завантажений», never «no provider manifest»",
+          rc == 3 and "не завантажений" in out and "no provider manifest" not in out, out[-300:])
+    core = bare(d)
+    put(core, "Core/_System/other-blocks.md", "<!-- zorg-more:begin id=x v=1 -->\nX\n<!-- zorg-more:end id=x -->\n")
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", core, "--infer")
+    printed = "\n".join(l for l in out.splitlines() if not l.startswith("CTX_RESULT"))
+    check("M8: kit-check --infer with a fault prints no «може покласти» header above it",
+          rc == 3 and "може покласти" not in printed and "з чого:" in printed, printed[-500:])
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

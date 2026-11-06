@@ -169,14 +169,16 @@ def check(folder, warnings=None, manifest_path=None, manifest=None, quiet=False)
                     out.append("%s: не список інструментів із name (tool-registry.md §5)" % tf)
             except (OSError, UnicodeDecodeError, ValueError) as e:
                 out.append("%s: не читається (%s)" % (tf, getattr(e, "strerror", None) or type(e).__name__))
-    for problem in _wrapper_problems(folder, files, m):
+    for problem in _wrapper_problems(folder, files, m, skip_unnamed=inferred):
         owner(problem)
     return m, model, out
 
 
-def _wrapper_problems(folder, files, m):
+def _wrapper_problems(folder, files, m, skip_unnamed=False):
     """Since v3.24.0: every `.md` wrapper of the kit (`kind: provider-file`, ctx_wrappers) is sound and its block is the
-    file beside it, byte for byte — a notes server serves the wrapper, a folder the file, and both must say the same."""
+    file beside it, byte for byte — a notes server serves the wrapper, a folder the file, and both must say the same.
+    `skip_unnamed` (an inferred manifest, since v4.4.0): a wrapper of a file only a manifest key could name (`tools.yaml`
+    with no `tools_file`) is no fault — the inferred manifest names none of them, by design."""
     out = []
     for rel in files:
         if not rel.endswith(".md"):
@@ -193,6 +195,8 @@ def _wrapper_problems(folder, files, m):
         except ValueError:
             continue
         if not cw.is_wrapper(fm):
+            continue
+        if skip_unnamed and str(fm.get("file") or "").strip() not in cw.allowed_names(m):
             continue
         name, inner, why = cw.unwrap(fm, body, cw.allowed_names(m), cw.records_names(m))
         if why:

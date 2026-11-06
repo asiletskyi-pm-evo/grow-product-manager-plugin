@@ -317,7 +317,8 @@ def manifest_warning(repo):
     root = repo.get("core_root") or ""
     if not repo.get("manifest") or not root or not os.path.isdir(root) or not pb.manifest_files(root):
         return None
-    return ("у ядрі тепер є маніфест власника — діє він; прибери `manifest:` з реєстрації %s, а файл %s можна видалити"
+    return ("у ядрі тепер є маніфест власника — діє він, і для командного блоку, і для пошуку; прибери `manifest:` з "
+            "реєстрації %s, а файл %s можна видалити"
             % (os.path.basename(repo.get("_file") or "") or repo.get("id", "?"), os.path.basename(repo["manifest"])))
 
 

@@ -252,8 +252,9 @@ def _paragraph(text, lead):
 def check_protocol(root):
     """[problem] — what context-provider-protocol.md §9 («A core with no manifest», v4.4.0) and this module disagree on:
     every INFERRED_EXCLUDE expression in backticks in its «*The inferred manifest*» paragraph and no other there, every
-    NEVER_INFERRED key after «Never inferred», and PERSONAL_EXCLUDE in its «*Search in the core.*» paragraph
-    (testing/validate-consistency.sh, check 25). [] when they agree."""
+    NEVER_INFERRED key after «Never inferred», PERSONAL_EXCLUDE in its «*Search in the core.*» paragraph and every
+    `(^|/)…` expression that paragraph promises in the code, and no NEVER_INFERRED key in what infer() emits on the
+    example kit (testing/validate-consistency.sh, check 25). [] when they agree."""
     try:
         text = open(os.path.join(root, PROTOCOL), encoding="utf-8").read()
     except OSError as e:
@@ -278,4 +279,34 @@ def check_protocol(root):
     for x in PERSONAL_EXCLUDE:
         if "`%s`" % x not in search:
             out.append("%s §9: «Search in the core» does not name `%s`" % (PROTOCOL, x))
+    for x in re.findall(r"`(\(\^\|/\)[^`]+)`", search):    # an expression it promises that the code does not have
+        if x not in INFERRED_EXCLUDE + PERSONAL_EXCLUDE:
+            out.append("%s §9: «Search in the core» promises `%s`, which ctx_infer does not exclude" % (PROTOCOL, x))
+    out.extend(_never_emitted(root))
     return out
+
+
+def _never_emitted(root):
+    """[problem] when infer() on the example kit without its manifest emits a key of NEVER_INFERRED (`delink_*` any
+    `delink_` key) — what the code does, not only what it lists. A kit that cannot be copied or read: no problem here."""
+    import shutil
+    import tempfile
+    kit = os.path.join(root, "examples", "provider-kit", "zorg-core")
+    if not os.path.isdir(kit):
+        return []
+    tmp = tempfile.mkdtemp(prefix="ctx-infer-check-")
+    try:
+        core = os.path.join(tmp, "zorg-core")
+        shutil.copytree(kit, core)
+        for f in ("provider-manifest.yaml", "provider-manifest.md"):
+            p = os.path.join(core, "Core", "_System", f)
+            if os.path.exists(p):
+                os.remove(p)
+        r = infer(core, today="2000-01-01")
+        keys = set(cc.read_yaml_subset(r["text"])) if r.get("ok") else set()
+        bad = sorted(k for k in keys if k in NEVER_INFERRED or (k.startswith("delink_") and "delink_*" in NEVER_INFERRED))
+        return ["ctx_infer.infer emits %s, which context-provider-protocol.md §9 says is never inferred" % k for k in bad]
+    except (OSError, ValueError) as e:
+        return ["ctx_infer.infer on the example kit failed: %s" % e]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

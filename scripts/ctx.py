@@ -1757,19 +1757,26 @@ def cmd_repo_kit_check(a, c):
     the core — with where each key came from and the check under it; nothing is written."""
     warnings = []
     folder = os.path.abspath(os.path.expanduser(a.folder))
+    if pbm.manifest_evicted(folder) and not pbm.manifest_files(folder):   # since v4.4.0: never «no manifest» for it
+        why = "маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори"
+        print("вада: %s" % why)
+        return 3, {"command": "repo", "action": "kit-check", "problems": [why], "warnings": [], "id": None}
     if getattr(a, "infer", False):
         r = cinf.infer(folder, rid=a.id or "", today=now()[:10])
         if not r["ok"]:
             print("вада: %s" % r["why"])
             return 3, {"command": "repo", "action": "kit-check", "inferred": True, "problems": [r["why"]], "warnings": [],
                        "candidates": r["candidates"], "id": None}
+        m, model, problems = ckit.check(folder, warnings, manifest=r["manifest"])
         if pbm.manifest_files(folder):
             print("увага: у ядрі вже є маніфест власника — він і діє; нижче лише те, що плагін вивів би без нього")
-        print(r["text"].rstrip("\n"))
+        shown = r["text"].rstrip("\n").split("\n")
+        if problems:                                    # a manifest with faults is nothing the owner may place: no header
+            shown = [l for l in shown if not l.startswith("# ")]
+        print("\n".join(shown))
         print("з чого:")
         for k, v in r["from"].items():
             print("  %s — %s" % (k, v))
-        m, model, problems = ckit.check(folder, warnings, manifest=r["manifest"])
     else:
         m, model, problems = ckit.check(folder, warnings)
     for p in problems:
@@ -1807,13 +1814,15 @@ def _owner_line(ident, m, model, manifest_where):
 
 
 OLDER_HOSTS_LINE = ("увага: Grow PM до 4.4.0 на іншому хості чи Mac, що читає цю реєстрацію, не знає exclude: — там "
-                    "особистий шар власника видно в пошуку; онови плагін усюди")
+                    "особистий шар власника видно в пошуку, а реєстрацію лише для пошуку він називає недоступною "
+                    "(provider plan, exit 5); онови плагін усюди")
 
 
-def _taken(c, rid, mode_flags, regs_dir):
+def _taken(c, rid, mode_flags, regs_dir, takes_id=False):
     """The usage error for an id a registration already has (`ctx repo add`). A plain kit add keeps the v3.23.0 words
     (refresh through `provider plan`); a mode of v4.4.0 — or a registration of one (search only, an inferred manifest) —
-    says how to change it: remove the registration file (and its manifest), or give another --id. None when free."""
+    says how to change it: remove the registration file (and its manifest) — or give another --id, when the mode asked
+    for takes one (`takes_id`: --infer, --search-only). None when free."""
     skipped = []
     have = next((r for r in crp.load_repos(c.text, c.home, skipped=skipped) if r["id"] == rid), None)
     if have is None:
@@ -1821,8 +1830,8 @@ def _taken(c, rid, mode_flags, regs_dir):
     if not mode_flags and not crp.search_only(have) and not have.get("manifest"):
         return "%s уже зареєстровано — оновлення: ctx provider plan %s" % (rid, rid)
     extra = " і %s" % have["manifest"] if have.get("manifest") else ""
-    return ("%s уже зареєстровано (%s) — щоб змінити режим, прибери файл реєстрації%s і запусти ctx repo add знову, "
-            "або дай інший --id" % (rid, have.get("_file") or os.path.join(regs_dir, rid + ".yaml"), extra))
+    return ("%s уже зареєстровано (%s) — щоб змінити режим, прибери файл реєстрації%s і запусти ctx repo add знову%s"
+            % (rid, have.get("_file") or os.path.join(regs_dir, rid + ".yaml"), extra, ", або дай інший --id" if takes_id else ""))
 
 
 def _stale_manifest(man_where):
@@ -1854,7 +1863,7 @@ def _search_add_plan(c, a, folder):
     if pbm.manifest_evicted(folder):                    # its owner's filters would be lost: never search without them
         raise Usage("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори")
     regs = ckit.registrations_dir(c.store.root, c.text, c.home)
-    taken = _taken(c, rid, True, regs)
+    taken = _taken(c, rid, True, regs, takes_id=True)
     if taken:
         raise Usage(taken)
     owner_m = pbm.read_manifest(folder)[0] if pbm.manifest_files(folder) else None   # a core that ships one: its filters too
@@ -1915,7 +1924,7 @@ def _kit_add_plan(c, a):
             raise Usage("набір має вади — ctx repo kit-check %s:\n  %s" % (a.folder, "\n  ".join(problems)))
     rid = m.s("id")
     regs = ckit.registrations_dir(c.store.root, c.text, c.home)
-    taken = _taken(c, rid, bool(a.infer or a.guest), regs)
+    taken = _taken(c, rid, bool(a.infer or a.guest), regs, takes_id=bool(a.infer))
     if taken:
         raise Usage(taken)
     try:
@@ -1955,7 +1964,7 @@ def _kit_add_plan(c, a):
                                   cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
     if exclude:
         lines.append("поза пошуком у теці ядра: Meetings/, Focus/, _personal/, TODO…, Now.md, .xlsx, _archive/, копії контексту, "
-                     "сховище власника, особистий шар із маніфесту ядра")
+                     "сховище власника" + ("" if inferred else ", особистий шар із маніфесту ядра"))
         lines.append(OLDER_HOSTS_LINE)
     owner_faults = [w for w in warnings if w.endswith("— справа власника ядра")]   # an inferred manifest's
     lines += ["увага: %s" % w for w in warnings if w not in owner_faults]               # softened faults: one count
@@ -2012,7 +2021,7 @@ def cmd_repo_add(a, c):
     print("реєстрацію записано: %s" % facts["where"])
     if card:
         print(card)
-    return 0, dict(out, written=res["written"] if res else [facts["where"]], snapshot=res["snapshot"] if res else None)
+    return 0, dict(out, written=res["written"] if res else [], snapshot=res["snapshot"] if res else None)
 
 
 def _index_scope(c):
