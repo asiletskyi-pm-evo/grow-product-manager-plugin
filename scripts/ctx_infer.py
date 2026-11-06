@@ -1,0 +1,352 @@
+#!/usr/bin/env python3
+"""Grow PM — a minimal provider manifest inferred from a shared core's layout (since v4.4.0;
+references/context-provider-protocol.md §9 «A core with no manifest»).
+
+A core may reach a colleague without its owner's `_System/provider-manifest.yaml`. `infer(folder)` reads the layout
+and writes the manifest the plugin can connect the core with IN PLACE (`ctx repo add --infer`): the folder holding
+`_System/access-bundles.json` is the plugin folder, the one `_System/*.md` with block markers of one namespace is the
+blocks file, Teams/, People/, Playbook/ and `_System/provider-templates` are named when they are there. It never
+infers what would run or reach out — a command (`people_resolver`), an MCP address — nor the owner's filters
+(`deny_patterns`, `delink_*`, `dashboard_rewrites`), a write scope or a tools list: the owner's personal layer is left
+out conservatively (`personal_overlay` and `INFERRED_EXCLUDE`). The result carries `inferred: true`, which the bundle
+builder refuses (a selective copy needs the owner's filters). An ambiguous layout is named, never guessed.
+
+The core is only read; the text goes beside the registration (ctx.py), never into the core. Stdlib only.
+"""
+import fnmatch
+import os
+import re
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ctx_common as cc  # noqa: E402
+import provider_bundle as pb  # noqa: E402
+
+# What search in a shared core leaves out when its owner gave no manifest (C5): an owner's meetings, focus notes,
+# personal folder, TODO lists, spreadsheets, archives, and the copies of a context the connect flow leaves behind.
+INFERRED_EXCLUDE = [
+    r"(^|/)Meetings/", r"(^|/)Focus/", r"(^|/)_personal/", r"(^|/)TODO", r"\.xlsx$",
+    r"local-context\.(existing|proposed)\.md$", r"context-merge-report\.md$", r"(^|/)_archive/",
+]
+# …and, in a registration of a core connected without its owner's manifest (search only, inferred, a guest), the
+# owner's current-focus note, the owner's own context store and the 1-1 folders, when the core is the owner's vault:
+# Review Focus 1 of v4.4.0 names Now.md, the reviews the store (`<pf>/_System/context/`, persistent-storage.md) and the
+# People contour's 1-1 logs (`People/1-1/`, `1-1-Logs/`); the index also leaves out its other notes (people_output).
+PERSONAL_EXCLUDE = [r"(^|/)Now\.md$", r"(^|/)_System/context/", r"(^|/)1-1/", r"(^|/)1-1-Logs/"]
+# What an inferred manifest never carries: a command the plugin would run, an address it would reach, the owner's
+# filters and rewrites, a write scope, a tools list (C4) — named so in context-provider-protocol.md §9.
+NEVER_INFERRED = ("people_resolver", "mcp", "deny_patterns", "delink_*", "dashboard_rewrites", "write_scope", "tools_file")
+PROTOCOL = os.path.join("references", "context-provider-protocol.md")
+MODEL = os.path.join("_System", "access-bundles.json")
+KEBAB = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+MARKER = re.compile(r"<!--\s*([a-z0-9][a-z0-9-]*):begin\s+id=([A-Za-z0-9_.-]+)")
+README_NAMES = ("readme.md", "readme-core.md")
+
+
+def excluded(rel):
+    """Is the core-relative path `rel` (with `/`) one search leaves out under an inferred manifest?"""
+    return any(re.search(p, rel) for p in INFERRED_EXCLUDE)
+
+
+def expression_problems(patterns):
+    """[problem] for every `exclude` expression that will not compile on every Python the plugin runs on — one that does
+    not compile, or one Python 3.9 only warns about and 3.11+ refuses (a flag such as `(?i)` not at its start). The
+    index would leave the whole folder out for it (fail closed); `ctx repo add` names it instead."""
+    import warnings
+    out = []
+    for p in patterns or ():
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                re.compile(str(p), re.IGNORECASE)
+        except (re.error, Warning) as e:
+            out.append("вираз exclude %r не компілюється всюди (%s)" % (str(p), e))
+    return out
+
+
+def owner_manifest(folder):
+    """(the core's own manifest or None, why it cannot be used or "") — "" with None when the core ships none. A
+    manifest the core visibly ships and the plugin cannot read is a reason, never «none»: one iCloud has evicted, one
+    only as its `.md` wrapper, one that does not parse, one whose `exclude` will not compile everywhere."""
+    if pb.manifest_evicted(folder) and not pb.manifest_files(folder):
+        return None, "маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder"
+    if pb.manifest_wrappers(folder) and not pb.manifest_files(folder):
+        return None, ("маніфест власника ядра є лише як обгортка provider-manifest.md — плагін її на місці не розгортає; "
+                      "попроси власника покласти provider-manifest.yaml поруч (context-provider-protocol §9)")
+    if not pb.manifest_files(folder):
+        return None, ""
+    m, why = pb.read_manifest(folder, read=_read)
+    if m is None:                                       # the parser's words after the file's name, never its path
+        return None, "маніфест власника ядра не читається: %s" % why.split("provider-manifest.yaml: ", 1)[-1]
+    bad = expression_problems(m.get("exclude") or [])
+    if bad:
+        return None, "маніфест власника ядра: %s" % "; ".join(bad)
+    return m, ""
+
+
+def glob_expression(glob):
+    """A `personal_overlay` glob (relative to the core) as a regular expression of `exclude` — matched the way
+    `ctx_common._writable` matches it: a trailing `/` is the folder and everything under it, otherwise `fnmatch`."""
+    g = glob.strip().replace(os.sep, "/")
+    if g.endswith("/"):
+        return "^" + re.escape(g)
+    return "^" + fnmatch.translate(g)
+
+
+def registration_exclude(manifest=None):
+    """The `exclude:` of a registration `ctx repo add --search-only | --infer | --guest` writes: INFERRED_EXCLUDE, the
+    owner's Now.md and store, and — when the core ships a manifest (a guest, or search only, of such a core) — that
+    manifest's own `exclude` and its `personal_overlay` as expressions; each once, in that order. The index walks the
+    core folder without them (ctx_index.scope), case-folded."""
+    m = manifest or {}
+    own = [str(v) for v in (m.get("exclude") or []) if str(v).strip()]
+    overlay = [glob_expression(str(g)) for g in (m.get("personal_overlay") or []) if str(g).strip()]
+    out = []
+    for x in INFERRED_EXCLUDE + PERSONAL_EXCLUDE + own + overlay:
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def kebab(name):
+    """`Zorg_Core` → `zorg-core`: lower case, every run of other characters one '-', at most 64; '' when nothing is left."""
+    return re.sub(r"[^a-z0-9]+", "-", (name or "").lower()).strip("-")[:64].strip("-")
+
+
+def _read(path):
+    import ctx_store as cs                              # within the time budget: an evicted file never hangs the read
+    return cs.read_text(path)
+
+
+def _join(pf, *parts):
+    """A core-relative path with `/`, the plugin folder '.' adding no prefix."""
+    return "/".join(([] if pf in ("", ".") else [pf]) + list(parts))
+
+
+def _subdirs(folder):
+    try:
+        return sorted(n for n in os.listdir(folder) if not n.startswith(".") and os.path.isdir(os.path.join(folder, n)))
+    except OSError:
+        return []
+
+
+def _plugin_folders(folder):
+    """([plugin folders holding the role model], [plugin folders whose role model iCloud has evicted]) — the core's
+    root ('.') and one level down, where the bundle builder looks for a manifest. An evicted one is a candidate as
+    much as a found one: with both, the plugin does not guess (the review of tasks 1–4, M2)."""
+    found, evicted = [], []
+    for pf in ["."] + _subdirs(folder):
+        sysd = os.path.join(folder, pf, "_System")
+        if os.path.isfile(os.path.join(sysd, "access-bundles.json")):
+            found.append(pf)
+        elif os.path.exists(os.path.join(sysd, ".access-bundles.json.icloud")):
+            evicted.append(pf)
+    return found, evicted
+
+
+def _blocks_file(folder, pf):
+    """(the blocks file, its namespace, why) — the one `<pf>/_System/*.md` whose markers are of one namespace and more
+    than the team block alone (a generated team block is the bundle builder's output, never the core's blocks file);
+    a file search leaves out (a copy of a context, a merge report) is no candidate. None, None, why when there is no
+    such file or more than one."""
+    sysd = os.path.join(folder, pf, "_System")
+    cands = []
+    try:
+        listed = os.listdir(sysd)
+    except OSError:
+        listed = []
+    names = sorted(n for n in listed if n.endswith(".md") and not n.startswith("."))
+    evicted = sorted(n[1:-len(".icloud")] for n in listed if n.startswith(".") and n.endswith(".md.icloud")
+                     and not excluded(_join(pf, "_System", n[1:-len(".icloud")])))
+    if evicted:                                         # an evicted .md may be the blocks file: never guess past it
+        return None, None, ("%s ще не завантажено з iCloud (%s) — не вгадую; відкрий теку ядра у Finder"
+                            % (_join(pf, "_System"), ", ".join(evicted)))
+    for n in names:
+        rel = _join(pf, "_System", n)
+        if excluded(rel) or n.lower() == "local-context.md":   # the owner's own compiled context is no blocks file
+            continue
+        try:
+            text = _read(os.path.join(sysd, n))
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        marks = MARKER.findall(text)
+        spaces = {ns for ns, _ in marks}
+        if len(spaces) != 1 or {bid for _, bid in marks} == {"team"}:
+            continue
+        cands.append((rel, spaces.pop()))
+    if len(cands) == 1:
+        return cands[0][0], cands[0][1], "єдиний файл %s/*.md з маркерами блоків (простір імен %s)" % (
+            _join(pf, "_System"), cands[0][1])
+    if not cands:
+        return None, None, "у %s немає файлу з маркерами блоків одного простору імен" % _join(pf, "_System")
+    return None, None, "кілька файлів блоків (%s) — не вгадую" % ", ".join(r for r, _ in cands)
+
+
+def title_of(folder):
+    """(title, where from): the first `# ` heading of README.md or README-core.md at the core's root, else its name. A
+    README with another suffix is a letter to someone, not the core's title."""
+    for n in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if n.lower() not in README_NAMES:
+            continue
+        try:
+            for line in _read(os.path.join(folder, n)).splitlines():
+                if line.startswith("# ") and line[2:].strip():
+                    return line[2:].strip(), n
+        except (OSError, UnicodeDecodeError, ValueError):
+            pass
+    return os.path.basename(os.path.normpath(folder)), "назва теки"
+
+
+def _fail(why, candidates=()):
+    return {"ok": False, "text": "", "manifest": None, "from": {}, "why": why, "candidates": list(candidates)}
+
+
+def infer(folder, rid="", today=""):
+    """{ok, text, manifest, from, why, candidates} for the core `folder`. `text` is the manifest as YAML the plugin's
+    reader takes back (first line `# ctx:inferred <today> …`); `manifest` the same as provider_bundle reads it (a
+    Manifest, its defaults applied); `from` {key: where it came from}; `why` the reason when not ok — no role model
+    (search only), its file not downloaded yet, more than one folder with one (`candidates`: those folders), an id
+    that is not kebab-case. Reads only."""
+    folder = os.path.abspath(os.path.expanduser(folder))
+    if not os.path.isdir(folder):
+        return _fail("немає теки ядра: %s" % folder)
+    if pb.manifest_evicted(folder) and not pb.manifest_files(folder):   # the core ships its owner's manifest
+        return _fail("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і підключи "
+                     "без --infer; виводити маніфест не треба")
+    if pb.manifest_wrappers(folder) and not pb.manifest_files(folder):
+        return _fail("маніфест власника ядра є лише як обгортка provider-manifest.md — він є, виводити не треба; "
+                     "попроси власника покласти provider-manifest.yaml поруч (context-provider-protocol §9)")
+    found, evicted = _plugin_folders(folder)
+    if found and evicted:
+        return _fail("тека з моделлю ролей ще не завантажена з iCloud (%s) поруч із %s — не вгадую; відкрий теку ядра "
+                     "у Finder" % (", ".join(evicted), ", ".join(found)), found + evicted)
+    if len(found) > 1:
+        return _fail("кілька тек із _System/access-bundles.json: %s — не вгадую; лише пошук (--search-only) або "
+                     "маніфест від власника ядра" % ", ".join(found), found)
+    if not found:
+        if evicted:
+            return _fail("модель ролей (%s/_System/access-bundles.json) ще не завантажена з iCloud — відкрий теку ядра "
+                         "у Finder" % evicted[0])
+        return _fail("немає моделі ролей (_System/access-bundles.json) — лише пошук (--search-only)")
+    pf = found[0]
+    origin = {"plugin_folder": "тека з _System/access-bundles.json", "bundles_file": "модель ролей у теці плагіна"}
+    name = os.path.basename(folder)
+    if rid:
+        if not KEBAB.match(rid):
+            return _fail("id %r — не kebab-case до 64 символів" % rid)
+        mid, origin["id"] = rid, "--id"
+    else:
+        mid = kebab(name)
+        if not mid:
+            return _fail("назва теки «%s» не дає id латиницею — дай --id" % name)
+        origin["id"] = "назва теки «%s»" % name
+    title, origin["title"] = title_of(folder)
+    blocks, ns, origin["blocks_file"] = _blocks_file(folder, pf)
+    keys = [("schema", "provider-manifest/1"), ("id", mid), ("title", title)]
+    if ns:
+        keys.append(("namespace", ns))
+    keys += [("plugin_folder", pf), ("contract", "vault/v1"), ("authority", "org"), ("mode", "snapshot"),
+             ("inferred", "true"), ("bundles_file", _join(pf, "_System", "access-bundles.json"))]
+    if blocks:
+        keys.append(("blocks_file", blocks))
+    for key, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
+        if os.path.isdir(os.path.join(folder, pf, sub)):
+            keys.append((key, _join(pf, sub)))
+            origin[key] = "тека %s" % sub
+    if os.path.isdir(os.path.join(folder, pf, "_System", "provider-templates")):
+        keys.append(("templates_dir", _join(pf, "_System", "provider-templates")))
+        origin["templates_dir"] = "тека _System/provider-templates"
+    lists = []
+    pdir = os.path.join(folder, pf, "Playbook")
+    if os.path.isdir(pdir):
+        books = sorted(n for n in os.listdir(pdir) if n.endswith(".md") and not n.startswith(("_", ".")))
+        if books:
+            lists.append(("playbook", [_join(pf, "Playbook", n) for n in books]))
+            origin["playbook"] = "тека Playbook"
+    lists.append(("personal_overlay", [_join(pf, "Now.md"), _join(pf, "TODO*"), _join(pf, "_personal") + "/"]))
+    lists.append(("exclude", list(INFERRED_EXCLUDE)))
+    origin["personal_overlay"] = "консервативно: Now.md, TODO*, _personal/"
+    origin["exclude"] = "вбудований INFERRED_EXCLUDE"
+    target = _join(pf, "_System", "provider-manifest.yaml")
+    lines = ["# ctx:inferred %s — виведено плагіном; власник ядра може покласти його в %s" % (today, target),
+             "# перед тим — прибрати рядок inferred: true і додати свої exclude, deny_patterns "
+             "(references/context-provider-protocol.md §3a)"]
+    lines += ["%s: %s" % (k, v if k == "inferred" else pb.yaml_value(v)) for k, v in keys]
+    for k, items in lists:
+        lines.append("%s:" % k)
+        lines += ["  - %s" % pb.yaml_value(x) for x in items]
+    text = "\n".join(lines) + "\n"
+    manifest = pb.with_defaults(pb.Manifest(cc.read_yaml_subset(text)))
+    return {"ok": True, "text": text, "manifest": manifest, "from": origin, "why": "", "candidates": []}
+
+
+def _paragraph(text, lead):
+    """The paragraph of `text` that starts with `lead` (up to the next blank line), or ""."""
+    at = text.find(lead)
+    if at < 0:
+        return ""
+    end = text.find("\n\n", at)
+    return text[at:end if end >= 0 else len(text)]
+
+
+def check_protocol(root):
+    """[problem] — what context-provider-protocol.md §9 («A core with no manifest», v4.4.0) and this module disagree on:
+    every INFERRED_EXCLUDE expression in backticks in its «*The inferred manifest*» paragraph and no other there, every
+    NEVER_INFERRED key after «Never inferred», PERSONAL_EXCLUDE in its «*Search in the core.*» paragraph and every
+    `(^|/)…` expression that paragraph promises in the code, and no NEVER_INFERRED key in what infer() emits on the
+    example kit (testing/validate-consistency.sh, check 25). [] when they agree."""
+    try:
+        text = open(os.path.join(root, PROTOCOL), encoding="utf-8").read()
+    except OSError as e:
+        return ["%s: %s" % (PROTOCOL, e.strerror or type(e).__name__)]
+    out = []
+    inferred = _paragraph(text, "*The inferred manifest*")
+    if not inferred:
+        return ["%s §9: no «*The inferred manifest*» paragraph" % PROTOCOL]
+    listed = inferred.split("the built-in list", 1)[1].split(". The file", 1)[0] if "the built-in list" in inferred else ""
+    shown = re.findall(r"`([^`]+)`", listed)
+    for x in INFERRED_EXCLUDE:
+        if x not in shown:
+            out.append("%s §9: the exclusion `%s` of ctx_infer.INFERRED_EXCLUDE is not in the built-in list" % (PROTOCOL, x))
+    for x in shown:
+        if x not in INFERRED_EXCLUDE:
+            out.append("%s §9: the built-in list has `%s`, which ctx_infer.INFERRED_EXCLUDE does not" % (PROTOCOL, x))
+    never = inferred.split("Never inferred:", 1)[1].split(". ", 1)[0] if "Never inferred:" in inferred else ""
+    for k in NEVER_INFERRED:
+        if "`%s`" % k not in never:
+            out.append("%s §9: «Never inferred» does not name `%s`" % (PROTOCOL, k))
+    search = _paragraph(text, "*Search in the core.*")
+    for x in PERSONAL_EXCLUDE:
+        if "`%s`" % x not in search:
+            out.append("%s §9: «Search in the core» does not name `%s`" % (PROTOCOL, x))
+    for x in re.findall(r"`(\(\^\|/\)[^`]+)`", search):    # an expression it promises that the code does not have
+        if x not in INFERRED_EXCLUDE + PERSONAL_EXCLUDE:
+            out.append("%s §9: «Search in the core» promises `%s`, which ctx_infer does not exclude" % (PROTOCOL, x))
+    out.extend(_never_emitted(root))
+    return out
+
+
+def _never_emitted(root):
+    """[problem] when infer() on the example kit without its manifest emits a key of NEVER_INFERRED (`delink_*` any
+    `delink_` key) — what the code does, not only what it lists. A kit that cannot be copied or read: no problem here."""
+    import shutil
+    import tempfile
+    kit = os.path.join(root, "examples", "provider-kit", "zorg-core")
+    if not os.path.isdir(kit):
+        return []
+    tmp = tempfile.mkdtemp(prefix="ctx-infer-check-")
+    try:
+        core = os.path.join(tmp, "zorg-core")
+        shutil.copytree(kit, core)
+        for f in ("provider-manifest.yaml", "provider-manifest.md"):
+            p = os.path.join(core, "Core", "_System", f)
+            if os.path.exists(p):
+                os.remove(p)
+        r = infer(core, today="2000-01-01")
+        keys = set(cc.read_yaml_subset(r["text"])) if r.get("ok") else set()
+        bad = sorted(k for k in keys if k in NEVER_INFERRED or (k.startswith("delink_") and "delink_*" in NEVER_INFERRED))
+        return ["ctx_infer.infer emits %s, which context-provider-protocol.md §9 says is never inferred" % k for k in bad]
+    except (OSError, ValueError) as e:
+        return ["ctx_infer.infer on the example kit failed: %s" % e]
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)

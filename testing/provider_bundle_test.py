@@ -415,8 +415,8 @@ skill = read_root("skills", "context-connect", "SKILL.md")
 check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and "provider apply" in steps and "provider adopt --apply" in steps, "")
 check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
       "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
-check("the skill is 0.5.0 and a refresh with a store never stamps Updated or appends a changelog",
-      "version: 0.8.1" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
+check("the skill is 0.9.0 and a refresh with a store never stamps Updated or appends a changelog",
+      "version: 0.9.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
 # 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
 # (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
@@ -547,6 +547,42 @@ out_d = os.path.join(d, "out-d")
 rc, o = run("--core", core, "--out", out_d, "--email", "a.one@zorg.example", "--jira-write", "own")
 check("a tools_file that is a link out of the core is never copied", rc == 0 and
       not os.path.exists(os.path.join(out_d, "Core", "_System", "linked.yaml")), files_under(out_d)[-5:])
+shutil.rmtree(d)
+
+# --- v4.4.0: an inferred manifest is for `ctx repo add` in place only; an outside manifest is never copied
+d, core, out = fresh()
+inferred = os.path.join(d, "zorg-core.manifest.yaml")
+own = open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), encoding="utf-8").read()
+open(inferred, "w", encoding="utf-8").write("# ctx:inferred 2026-11-06\n" + own + "inferred: true\n")
+for args in (("--email", "a.one@zorg.example"), ("--core-export",)):
+    rc, o = run("--core", core, "--out", out, "--manifest", inferred, *args)
+    check("refuses_inferred (%s): exit 3, «виведений маніфест — лише ctx repo add», nothing written" % args[0],
+          rc == 3 and "виведений маніфест — лише ctx repo add" in o and not os.path.exists(out), (rc, o[-300:]))
+for spelling in ('"true"', "yes", "True", "1"):              # review M6: any truthy spelling is inferred
+    open(inferred, "w", encoding="utf-8").write(own + "inferred: %s\n" % spelling)
+    rc, o = run("--core", core, "--out", out, "--manifest", inferred, "--core-export")
+    check("refuses_inferred: `inferred: %s` too" % spelling, rc == 3 and "виведений маніфест" in o and not os.path.exists(out), (rc, o[-200:]))
+outside = os.path.join(d, "x.yaml")
+open(outside, "w", encoding="utf-8").write(own)
+os.remove(os.path.join(core, "Core", "_System", "provider-manifest.yaml"))
+elsewhere = os.path.join(d, "elsewhere")
+out = os.path.join(elsewhere, "out")                  # out/../x.yaml would be a new file beside it, outside --out
+rc, o = run("--core", core, "--out", out, "--manifest", outside, "--core-export")
+got = files_under(out) if os.path.isdir(out) else []
+check("external_manifest_not_copied (core export): the owner's outside manifest is read, never copied — nothing lands "
+      "outside --out", rc == 0 and got and not any(f.endswith("x.yaml") for f in got) and os.listdir(elsewhere) == ["out"]
+      and sorted(os.listdir(d)) == ["core", "elsewhere", "x.yaml", "zorg-core.manifest.yaml"], (rc, o[-300:], got[:8], os.listdir(elsewhere)))
+shutil.rmtree(out)
+rc, o = run("--core", core, "--out", out, "--manifest", outside, "--email", "a.one@zorg.example", "--propose-only",
+            "--existing-context", os.path.join(FIX, "existing-context.md"))
+bundle = report(o, "BUNDLE_RESULT") or {}
+listed = [f for f in (bundle.get("files") or []) if isinstance(f, str)]
+check("…and a colleague's bundle does not list it among its files", rc == 0 and not any("x.yaml" in f or f.startswith("..")
+                                                                                        for f in listed), (rc, o[-400:]))
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+import provider_bundle as pbm  # noqa: E402
+m_out, _ = pbm.read_manifest(core, path=outside)
+check("…read_manifest gives an outside manifest no `_path`", m_out is not None and not m_out.get("_path"), m_out and m_out.get("_path"))
 shutil.rmtree(d)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
