@@ -112,12 +112,20 @@ class Manifest(dict):
         return default if v in (None, "", []) else v
 
 
+def manifest_files(core):
+    """The core's own provider manifests that are there, in the order `read_manifest` tries them: the root's
+    `_System/provider-manifest.yaml`, then one level down (since v4.4.0 also asked by `ctx_repos`: a core whose owner
+    has shipped a manifest beats the one a registration names)."""
+    cands = [os.path.join(core, "_System", "provider-manifest.yaml")] + \
+        sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
+    return [p for p in cands if os.path.isfile(p)]
+
+
 def read_manifest(core, path=None, read=None):
     """(manifest, None), or (None, why) in the words `load_manifest` prints — with nothing printed and no exit, so a
     caller in a helper thread (the daily sync's fetch, since v3.14.0) never has to swap the process's stdout. The file
     is read through `read` (see `rd`)."""
-    cands = [path] if path else [os.path.join(core, "_System", "provider-manifest.yaml")] + \
-        sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
+    cands = [path] if path else manifest_files(core)
     for p in cands:
         if p and os.path.isfile(p):
             try:

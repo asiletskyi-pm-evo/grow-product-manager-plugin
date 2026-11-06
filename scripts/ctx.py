@@ -2487,8 +2487,8 @@ def _repository(c, rid):
     if not repos:
         raise Usage(_not_registered(rid, skipped))
     if crp.search_only(repos[0]):
-        raise Usage("%s is a search-only registration (no blocks_file and no core folder): it publishes no blocks for "
-                    "`ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
+        raise Usage("%s is a search-only registration (blocks: none, or no blocks_file and no core folder): it publishes "
+                    "no blocks for `ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
     return repos[0]
 
 
@@ -2622,6 +2622,9 @@ def cmd_provider_plan(a, c):
         plan["namespace_warning"] = crp.namespace_warning(repo, fetched["namespace"])
         if plan["namespace_warning"]:
             print("warning: %s" % plan["namespace_warning"])
+        plan["manifest_warning"] = crp.manifest_warning(repo)          # since v4.4.0: the core now ships its own
+        if plan["manifest_warning"]:
+            print("увага: %s" % plan["manifest_warning"])
         plans.append(plan)
     rc = 5 if down else 0
     if a.repo:

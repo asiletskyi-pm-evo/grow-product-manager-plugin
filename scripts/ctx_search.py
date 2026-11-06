@@ -159,7 +159,7 @@ def context_for(home, context_text, store_root=None, repos=None):
         name = r.get("blocks_file") or ""
         root = by_source.get(r.get("id"))
         if not name and root:
-            manifest, _ = crp._manifest(root["path"])
+            manifest, _ = crp._manifest(root["path"], r.get("manifest", ""))
             name = manifest.s("blocks_file") if manifest is not None else ""
         if name:
             rel = _repo_name(r, name, vaults)
@@ -190,7 +190,7 @@ def class_ttl(repos, vaults=None):
         folder = _folder(repo)
         if not folder or not os.path.isdir(folder):
             continue
-        manifest, _ = crp._manifest(folder)
+        manifest, _ = crp._manifest(folder, repo.get("manifest", ""))
         ttl = manifest.get("ttl_days") if manifest is not None else None
         if not isinstance(ttl, dict):
             continue
