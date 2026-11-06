@@ -458,6 +458,19 @@ with tempfile.TemporaryDirectory() as d:
     check("I4: kit-check --infer on it: exit 3, «не завантажений»", rc == 3 and "не завантажений" in out, out[-300:])
 
 with tempfile.TemporaryDirectory() as d:
+    # acceptance: the real core gave a guest 20 lines of the owner's faults, with card names — one line counts them
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    mp = os.path.join(core, "Core", "_System", "access-bundles.json")
+    model = json.load(open(mp, encoding="utf-8"))
+    model["teams"]["alpha"]["files"].append("Core/Products/Gone page.md")
+    json.dump(model, open(mp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest")
+    check("acceptance: a guest's dry run counts the faults only the owner can fix in one line, never lists them",
+          rc == 0 and "Gone page" not in out and re.search(r"справа власника ядра: \d+ \(", out) and "kit-check" in out
+          and not [l for l in out.splitlines() if l.startswith("увага:") and l.endswith("— справа власника ядра")], out[-700:])
+
+with tempfile.TemporaryDirectory() as d:
     home, ctxp, store = fresh(d)
     core = bare(d)
     put(core, "Core/_System/other-blocks.md", "<!-- zorg-more:begin id=x v=1 -->\nX\n<!-- zorg-more:end id=x -->\n")

@@ -1957,7 +1957,11 @@ def _kit_add_plan(c, a):
         lines.append("поза пошуком у теці ядра: Meetings/, Focus/, _personal/, TODO…, Now.md, .xlsx, _archive/, копії контексту, "
                      "сховище власника, особистий шар із маніфесту ядра")
         lines.append(OLDER_HOSTS_LINE)
-    lines += ["увага: %s" % w for w in warnings]
+    owner_faults = [w for w in warnings if w.endswith("— справа власника ядра")]   # an inferred manifest's
+    lines += ["увага: %s" % w for w in warnings if w not in owner_faults]               # softened faults: one count
+    if owner_faults:
+        lines.append("увага: вад, які виправляє лише власник ядра — справа власника ядра: %d (на підключення не впливають; "
+                     "перелік — ctx repo kit-check %s --infer)" % (len(owner_faults), a.folder))
     if owner:
         lines.append(owner)
     lines.append("код: %s" % code)
