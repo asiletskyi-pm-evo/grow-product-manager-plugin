@@ -12,6 +12,49 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## Unreleased
+
+**A pause of the write gate for one bulk job — it ends on its own.** The write gate asked before every Confluence and Jira write, dry runs of `updateConfluenceContent` included, and a hook's «ask» beats the host's «always allow»; the only way out was `--write-gate off`, which also switched off the provider-boundary and generated-region questions and stayed off until someone remembered. On 2026-11-06 a 38-page docs sync took dozens of answers one by one, then a config file written by hand and deleted after. Now `/grow-product-manager:setup --write-gate pause <minutes>` skips the Jira/Confluence question for 1–240 minutes and the gate asks again by itself afterwards; a dry run is never asked about.
+
+Proposed class: MINOR — a new option of a host toggle and a new rule in the write gate; nothing that worked before changes.
+
+### Added
+
+- **`write_gate_pause_until`** in the plugin config (`$CLAUDE_PLUGIN_DATA/config.json`, else `~/.grow-pm/plugin-data/config.json`): a UTC time. While now is before it, `scripts/write_gate.py` skips the Jira/Confluence question; once it has passed, the question is back, and the gate says when the pause ended. The pause covers that question alone — the provider-boundary and generated-region questions stay on, and every question says so. **Fails closed:** a value that is not a zoned ISO time (a typo, a naive time, a number) or ends more than 240 minutes ahead (a permanent off in disguise) is ignored, and the gate asks, naming it; the script still fails open on any other error.
+- **`/grow-product-manager:setup --write-gate pause <minutes>`** (1–240; anything else is refused with nothing changed) writes the pause and sets `write_gate: on`, so a gate that was off comes back when the pause ends; `--write-gate on` ends a pause early, `--write-gate off` drops it. The report shows the pause, its end and the minutes left (`write_gate_pause_state`: `none | active | expired | invalid`).
+- **A dry run passes.** `updateConfluenceContent` with `dryRun: true` (the JSON boolean) validates and previews without persisting, so the gate does not ask. No other gated tool has a dry run: the string `"true"`, `dryRun` on a create or on a Jira edit still asks.
+
+### Changed
+
+- **The questions' text** — the Jira/Confluence one names the pause and that it covers Jira/Confluence only; the provider-boundary and generated-region ones say a pause does not cover them.
+- **`plugin-configurator` 2.17.2** — «вимкни підтвердження на годину» / one bulk job → explain the typed `--write-gate pause <minutes>`; the configurator still never edits the hook config itself.
+- **`references/artifact-style-gate.md`** → Host write gate (the pause, the dry run, and that the chat go-ahead for the listed batch still comes first); **`references/host-profiles.md`** §1 (the gate can be paused too, so it is never relied on); **`references/context-provider-protocol.md`** §7; **`commands/setup.md`**, **`hooks/hooks.json`** description, README (commands and hooks tables).
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/write_gate.py` | the pause (`load_config`, `parse_utc`, `pause_state`), the dry run, the questions' text |
+| `scripts/setup.py` | `--write-gate pause <minutes>`; `on` / `off` drop the pause; the pause in the report |
+| `testing/write_gate_test.py` | 32 new cases: active, expired, malformed (6 kinds) and over-the-cap pauses, the provider and region questions during a pause, dry runs, `setup.py` end to end — red first, 72/72 |
+| `commands/setup.md`, `hooks/hooks.json`, `README.md` | the pause and the dry run |
+| `skills/plugin-configurator/SKILL.md` | 2.17.2 — the pause explained |
+| `references/artifact-style-gate.md`, `references/host-profiles.md`, `references/context-provider-protocol.md` | the pause and its scope |
+| `testing/ctx_cli_test.py` | the pinned `plugin-configurator` version follows |
+| `testing/test-cases.md`, `testing/Testing-process.md` | TC-hook-gate-pause |
+
+### Backwards compatibility
+
+A config without `write_gate_pause_until` behaves exactly as before; `--write-gate on|off` work as before and now also drop a pause. The provider-boundary and generated-region questions are unchanged.
+
+### Known limits
+
+- The pause is read from the first config file that parses — `$CLAUDE_PLUGIN_DATA/config.json` before `~/.grow-pm/plugin-data/config.json`, as the on/off switch is; `setup.py` writes where it finds `CLAUDE_PLUGIN_DATA`, so a Bash without that variable writes the fallback file (unchanged since v2.6.0; `--show` reports which).
+- The host gate is never relied on (`host-profiles.md` §1); a pause changes the host's question, not the skill's own go-ahead.
+- The clock is the machine's; a pause written on one machine means nothing on another.
+
+---
+
 ## v4.3.0 (2026-11-03)
 
 **«Публікація»: a result becomes a link you open, update and share — one «так», a new version instead of a copy.** Since v4.1.0 every skill asks before internal data reaches a hosted place, but each one asked in its own words, and a rerun made a new document or page each time. One protocol now says where a result can go, in which order, the one question, where the place is recorded, and how the next run publishes the next version of the same place. Decks reach Atlassian Artifacts and the host's own decks beside the `.pptx`; reports and the funnel get dashboards. The last release of the «Поверхні» programme.

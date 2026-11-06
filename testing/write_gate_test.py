@@ -183,5 +183,118 @@ with tempfile.TemporaryDirectory() as d:
     check("…write_gate off: no question", out == "", out)
     os.unlink(os.path.join(pdata, "config.json"))
 
+    # the write-gate pause: `write_gate_pause_until` silences the Jira / Confluence question until a UTC time, never
+    # longer than MAX_PAUSE_MINUTES; the provider-boundary and generated-region questions stay on
+    from datetime import datetime, timedelta, timezone
+    cfg_path = os.path.join(pdata, "config.json")
+    def pause_for(value):
+        open(cfg_path, "w").write(json.dumps({"write_gate_pause_until": value}))
+    def read_cfg():
+        try:
+            return json.load(open(cfg_path))
+        except (OSError, ValueError):
+            return {}
+    def iso(minutes):
+        return (datetime.now(timezone.utc) + timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    jira = {"tool_name": "mcp__Atlassian_Rovo__createJiraIssue", "tool_input": {"description": "d" * 300}}
+    upd = {"tool_name": v2 + "updateConfluenceContent", "tool_input": {
+        "contentId": "1", "snapshotToken": "v:7", "body": {"format": "html", "value": "p" * 300}}}
+    asks = lambda o: '"permissionDecision": "ask"' in o
+
+    pause_for(iso(30))
+    out = run(env, jira)
+    check("pause: an active pause lets a Jira create through with no question", out == "", out)
+    out = run(env, upd)
+    check("pause: …and a v2 Confluence update with content", out == "", out)
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(core, "Core", "Teams", "x.md")}})
+    check("pause: the provider-boundary question still fires during a pause", asks(out) and "zorg-core" in out, out)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": note, "old_string": "- [[Standup]]",
+                                                        "new_string": "x"}})
+    check("pause: the generated-region question still fires during a pause", asks(out) and "generated region" in out, out)
+    pause_for(iso(30).replace("Z", "+00:00"))
+    out = run(env, jira)
+    check("pause: an explicit +00:00 offset is read like Z", out == "", out)
+
+    pause_for(iso(-1))
+    out = run(env, jira)
+    check("pause: an expired pause asks again on its own, saying the pause ended",
+          asks(out) and "pause" in out and "ended" in out, out)
+    for bad, why in (("tomorrow", "not a time"), ("2026-13-01T00:00:00Z", "no 13th month"),
+                     (iso(30)[:-1], "no zone (naive)"), (1767225600, "a number"), ("", "empty"),
+                     (iso(60 * 24 * 365), "a year — over the cap, a permanent off in disguise")):
+        pause_for(bad)
+        out = run(env, jira)
+        check("pause: a malformed value asks (fail closed) — " + why, asks(out) and "not a valid pause" in out, out)
+    open(cfg_path, "w").write('{"write_gate_pause_until": ')
+    out = run(env, jira)
+    check("pause: a config that is not JSON leaves the gate on (asks)", asks(out), out)
+    os.unlink(cfg_path)
+    out = run(env, jira)
+    check("pause: the ordinary question names the pause and that it covers Jira / Confluence only",
+          asks(out) and "--write-gate pause" in out and "Jira/Confluence only" in out, out)
+
+    # dry run: updateConfluenceContent with dryRun true persists nothing — no question; nothing else is a dry run
+    dry = {"tool_name": v2 + "updateConfluenceContent", "tool_input": dict(upd["tool_input"], dryRun=True)}
+    out = run(env, dry)
+    check("dry run: updateConfluenceContent with dryRun true passes with no question", out == "", out)
+    out = run(env, {"tool_name": v2 + "updateConfluenceContent", "tool_input": dict(upd["tool_input"], dryRun="true")})
+    check("dry run: dryRun as the string \"true\" is not a dry run (asks)", asks(out), out)
+    out = run(env, {"tool_name": v2 + "updateConfluenceContent", "tool_input": dict(upd["tool_input"], dryRun=False)})
+    check("dry run: dryRun false asks", asks(out), out)
+    out = run(env, {"tool_name": v2 + "createConfluenceContent", "tool_input": {
+        "contentType": "page", "title": "T", "body": {"format": "html", "value": "p" * 300}, "dryRun": True}})
+    check("dry run: a create has no dry run — dryRun on it still asks", asks(out), out)
+    out = run(env, {"tool_name": "mcp__Atlassian_Rovo__editJiraIssue", "tool_input": {
+        "issueIdOrKey": "PROJ-1234", "fields": {"description": "d" * 300}, "dryRun": True}})
+    check("dry run: a Jira edit has no dry run — still asks", asks(out), out)
+
+    # setup.py — `--write-gate pause <minutes>` writes the pause, `--write-gate on` clears it
+    SETUP = os.path.join(ROOT, "scripts", "setup.py")
+    def setup(*args):
+        p = subprocess.run([sys.executable, SETUP] + list(args), capture_output=True, text=True, env=env, timeout=20)
+        try:
+            return p.returncode, json.loads(p.stdout)
+        except ValueError:
+            return p.returncode, {"raw": p.stdout + p.stderr}
+    t0 = datetime.now(timezone.utc)
+    rc, st = setup("--write-gate", "pause", "45")
+    cfg = read_cfg()
+    until = cfg.get("write_gate_pause_until", "")
+    try:
+        left = (datetime.fromisoformat(until.replace("Z", "+00:00")) - t0).total_seconds() / 60
+    except ValueError:
+        left = -1
+    check("setup: --write-gate pause 45 writes a UTC time ~45 minutes ahead",
+          rc == 0 and until.endswith("Z") and 44 <= left <= 46 and st.get("changed") is True, (rc, st, cfg))
+    check("setup: …and reports the pause with its end and the minutes left",
+          st.get("write_gate_pause_until") == until and st.get("write_gate_paused") is True
+          and 44 <= (st.get("write_gate_pause_minutes_left") or 0) <= 45, st)
+    out = run(env, jira)
+    check("setup → gate: the pause setup wrote silences the Jira question", out == "", out)
+    for bad in (["0"], ["241"], ["abc"], ["-5"], []):
+        rc, st = setup("--write-gate", "pause", *bad)
+        check("setup: pause %s is refused (1–240 minutes), nothing changed" % (bad or "with no minutes"),
+              rc == 2 and "error" in st and read_cfg().get("write_gate_pause_until") == until, (rc, st))
+    rc, st = setup("--write-gate", "on")
+    cfg = read_cfg()
+    check("setup: --write-gate on clears the pause", rc == 0 and "write_gate_pause_until" not in cfg
+          and cfg.get("write_gate") == "on" and st.get("write_gate_paused") is False, (rc, st, cfg))
+    out = run(env, jira)
+    check("setup → gate: after --write-gate on the gate asks again", asks(out), out)
+    open(cfg_path, "w").write('{"write_gate": "off"}')
+    rc, st = setup("--write-gate", "pause", "10")
+    cfg = read_cfg()
+    check("setup: a pause on a gate that was off turns it on, so the question returns when the pause ends",
+          rc == 0 and cfg.get("write_gate") == "on" and cfg.get("write_gate_pause_until"), (rc, cfg))
+    rc, st = setup("--write-gate", "off")
+    cfg = read_cfg()
+    check("setup: --write-gate off drops a pause it makes moot", rc == 0 and cfg.get("write_gate") == "off"
+          and "write_gate_pause_until" not in cfg, (rc, cfg))
+    pause_for(iso(-5))
+    rc, st = setup("--show")
+    check("setup: --show reports an expired pause as not paused", rc == 0 and st.get("write_gate_paused") is False
+          and st.get("write_gate_pause_state") == "expired", st)
+    os.unlink(cfg_path)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
