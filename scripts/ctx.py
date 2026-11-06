@@ -1487,7 +1487,7 @@ def cmd_repo_list(a, c):
     rows, bad = [], []
     for r in repos:
         blocks, version, checked, error = _list_state(c, r["id"])
-        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked))
+        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked, search_only=crp.search_only(r)))
         if error is not None:
             rows[-1]["state_error"] = error
             bad.append((r["id"], error))
@@ -1496,7 +1496,8 @@ def cmd_repo_list(a, c):
         for r in rows:
             cells = ("!", "!", "!") if r.get("state_error") else (
                 str(r["blocks"]) if r["blocks"] else "—", r["base_version"] or "—", r["checked"] or "—")
-            table.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
+            table.append((r["id"] + (" (paused)" if r["status"] == "paused" else "") + (" (лише пошук)" if r["search_only"] else ""),
+                          r["kind"] or "—",
                           ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—") + cells)
         print(_table(table))
     else:
@@ -1509,7 +1510,7 @@ def cmd_repo_list(a, c):
     for rid, error in bad:
         print("block state unreadable: %s (%s)" % (cb.clip(rid, cb.HEADER_CLIP), error))
     for r in rows:
-        warning = crp.namespace_warning(r)
+        warning = None if r["search_only"] else crp.namespace_warning(r)   # the row's `blocks` is the count by now
         if warning:
             print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
         r["namespace_warning"] = warning
@@ -1757,6 +1758,8 @@ def cmd_repo_kit_check(a, c):
     the core — with where each key came from and the check under it; nothing is written."""
     warnings = []
     folder = os.path.abspath(os.path.expanduser(a.folder))
+    if getattr(a, "id", None) and not getattr(a, "infer", False):
+        raise Usage("--id лише з --infer — інакше id дає маніфест ядра")
     if pbm.manifest_evicted(folder) and not pbm.manifest_files(folder):   # since v4.4.0: never «no manifest» for it
         why = "маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори"
         print("вада: %s" % why)
@@ -1818,13 +1821,21 @@ OLDER_HOSTS_LINE = ("увага: Grow PM до 4.4.0 на іншому хості
                     "(provider plan, exit 5); онови плагін усюди")
 
 
-def _taken(c, rid, mode_flags, regs_dir, takes_id=False):
+def _taken(c, rid, mode_flags, regs_dir, takes_id=False, folder=""):
     """The usage error for an id a registration already has (`ctx repo add`). A plain kit add keeps the v3.23.0 words
     (refresh through `provider plan`); a mode of v4.4.0 — or a registration of one (search only, an inferred manifest) —
     says how to change it: remove the registration file (and its manifest) — or give another --id, when the mode asked
-    for takes one (`takes_id`: --infer, --search-only). None when free."""
+    for takes one (`takes_id`: --infer, --search-only). Since v4.4.0 a registration of the same core folder under another
+    id (`folder`: search only takes its id from the folder's name, the kit and a guest from the manifest) is taken too —
+    a core is registered once. None when free."""
     skipped = []
-    have = next((r for r in crp.load_repos(c.text, c.home, skipped=skipped) if r["id"] == rid), None)
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    have = next((r for r in repos if r["id"] == rid), None)
+    if have is None and folder:
+        real = os.path.realpath(folder)
+        have = next((r for r in repos if r.get("core_root") and os.path.realpath(r["core_root"]) == real), None)
+        if have is not None:
+            mode_flags, rid = True, have["id"]
     if have is None:
         return None
     if not mode_flags and not crp.search_only(have) and not have.get("manifest"):
@@ -1832,6 +1843,17 @@ def _taken(c, rid, mode_flags, regs_dir, takes_id=False):
     extra = " і %s" % have["manifest"] if have.get("manifest") else ""
     return ("%s уже зареєстровано (%s) — щоб змінити режим, прибери файл реєстрації%s і запусти ctx repo add знову%s"
             % (rid, have.get("_file") or os.path.join(regs_dir, rid + ".yaml"), extra, ", або дай інший --id" if takes_id else ""))
+
+
+def _inside_core(regs, folder):
+    """The usage error when the providers folder — where `repo add` writes the registration and an inferred manifest —
+    lies inside the core folder being connected (a storage root inside the core, since v4.4.0): the plugin never
+    writes into a core. "" when it does not."""
+    real, root = os.path.realpath(regs), os.path.realpath(folder)
+    if os.path.commonpath([real, root]) != root:
+        return ""
+    return ("сховище лежить у теці ядра (%s) — реєстрація лягла б у ядро, а плагін у ядро не пише; підключи ядро з "
+            "окремим сховищем або без вейлту в теці ядра" % regs)
 
 
 def _stale_manifest(man_where):
@@ -1850,7 +1872,8 @@ SEARCH_OWNER_LINE_MODEL = ("Власнику ядра: щоб ядро підк�
 def _search_add_plan(c, a, folder):
     """(facts, text) of `repo add <folder> --search-only [--id I]` (since v4.4.0): a core folder registered for search
     alone — `blocks: none`, no role model, no manifest, no e-mail; the owner's personal layer left out of the index."""
-    given = [f for f, v in (("--infer", a.infer), ("--guest", a.guest), ("--team", a.team), ("--role", a.role)) if v]
+    given = [f for f, v in (("--infer", a.infer), ("--guest", a.guest), ("--team", a.team), ("--role", a.role),
+                            ("--email", a.email)) if v]
     if given:
         raise Usage("--search-only бере лише теку (і --id), не %s" % ", ".join(given))
     if not os.path.isdir(folder):
@@ -1860,17 +1883,20 @@ def _search_add_plan(c, a, folder):
         raise Usage("назва теки «%s» не дає id латиницею — дай --id" % os.path.basename(folder))
     if not cinf.KEBAB.match(rid):
         raise Usage("id %r — не kebab-case до 64 символів: --id" % rid)
-    if pbm.manifest_evicted(folder):                    # its owner's filters would be lost: never search without them
-        raise Usage("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори")
+    owner_m, problem = cinf.owner_manifest(folder)     # a core that ships one: its filters too — or none of it
+    if problem:
+        raise Usage("%s — без фільтрів власника ядро не підключається; повтори, коли маніфест читатиметься" % problem)
     regs = ckit.registrations_dir(c.store.root, c.text, c.home)
-    taken = _taken(c, rid, True, regs, takes_id=True)
+    inside = _inside_core(regs, folder)
+    if inside:
+        raise Usage(inside)
+    taken = _taken(c, rid, True, regs, takes_id=True, folder=folder)
     if taken:
         raise Usage(taken)
-    owner_m = pbm.read_manifest(folder)[0] if pbm.manifest_files(folder) else None   # a core that ships one: its filters too
     title, _ = cinf.title_of(folder)
     exclude = cinf.registration_exclude(owner_m)
     text = ckit.registration(folder, pbm.Manifest({"id": rid, "title": title}), None, None, now()[:10], search_only=True,
-                             exclude=exclude)
+                             exclude=exclude, connected_as="search")
     where = os.path.join(regs, "%s.yaml" % rid)
     if os.path.lexists(where):
         raise Usage("файл реєстрації вже є: %s — нічого не записано" % where)
@@ -1903,6 +1929,9 @@ def _kit_add_plan(c, a):
     if pbm.manifest_evicted(folder) and not pbm.manifest_files(folder):   # never «no manifest» for one iCloud holds
         raise Usage("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори "
                     "ctx repo add %s --email %s" % (a.folder, a.email))
+    if pbm.manifest_wrappers(folder) and not pbm.manifest_files(folder):  # it ships one, only as a note
+        raise Usage("маніфест власника ядра є лише як обгортка provider-manifest.md — плагін її на місці не розгортає; "
+                    "попроси власника покласти provider-manifest.yaml поруч (context-provider-protocol §9)")
     if a.infer:
         if pbm.manifest_files(folder):
             raise Usage("у ядрі є маніфест власника — запусти без --infer: ctx repo add %s --email %s" % (a.folder, a.email))
@@ -1918,13 +1947,25 @@ def _kit_add_plan(c, a):
         m, model, problems = ckit.check(folder, warnings, quiet=a.guest)
         if problems and m is None and problems[0].startswith("no provider manifest"):
             raise Usage("у ядрі немає маніфесту власника (_System/provider-manifest.yaml) — підключи з виведеним: "
-                        "ctx repo add %s --email %s --infer (його покаже ctx repo kit-check %s --infer), або лише пошук: "
-                        "--search-only" % (a.folder, a.email, a.folder))
+                        "ctx repo add %s --email %s --infer%s (його покаже ctx repo kit-check %s --infer), або лише пошук: "
+                        "--search-only" % (a.folder, a.email, " --guest" if a.guest else "", a.folder))
+        if problems and a.guest:                        # a guest is not the owner: the count, never the cards' names
+            raise Usage("набір має вади (%d) — справа власника ядра; перелік — ctx repo kit-check %s"
+                        % (len(problems), a.folder))
         if problems:
             raise Usage("набір має вади — ctx repo kit-check %s:\n  %s" % (a.folder, "\n  ".join(problems)))
+        if a.guest:                                     # the owner's filters must apply everywhere, or not at all
+            bad = cinf.expression_problems(m.get("exclude") or [])
+            if bad:
+                raise Usage("маніфест власника ядра: %s — повідом власника; без його фільтрів гість не підключається"
+                            % "; ".join(bad))
     rid = m.s("id")
     regs = ckit.registrations_dir(c.store.root, c.text, c.home)
-    taken = _taken(c, rid, bool(a.infer or a.guest), regs, takes_id=bool(a.infer))
+    if inferred or a.guest:
+        inside = _inside_core(regs, folder)
+        if inside:
+            raise Usage(inside)
+    taken = _taken(c, rid, bool(a.infer or a.guest), regs, takes_id=bool(a.infer), folder=folder if (a.infer or a.guest) else "")
     if taken:
         raise Usage(taken)
     try:
@@ -1934,7 +1975,8 @@ def _kit_add_plan(c, a):
     where = os.path.join(regs, "%s.yaml" % rid)
     man_where = os.path.join(regs, "manifests", "%s.manifest.yaml" % rid) if inferred else ""
     exclude = cinf.registration_exclude(m) if (inferred or a.guest) else None
-    text = ckit.registration(folder, m, model, ident, now()[:10], manifest_path=man_where, exclude=exclude)
+    text = ckit.registration(folder, m, model, ident, now()[:10], manifest_path=man_where, exclude=exclude,
+                             connected_as="guest" if a.guest else ("inferred" if inferred else ""))
     if os.path.lexists(where):
         raise Usage("файл реєстрації вже є: %s — нічого не записано" % where)
     if man_where and os.path.lexists(man_where):
@@ -2004,7 +2046,8 @@ def cmd_repo_add(a, c):
         c.import_first()
         facts, text = _kit_add_plan(c, a)
         if facts["code"] != a.code:
-            raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s" % a.folder)
+            raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s %s" % (
+                a.folder, "--search-only" if a.search_only else "--email %s" % a.email))
         if facts["mode"] != "search":
             res = cb.apply(c.store, c.copies, c.home, facts["repo"], facts["fetched"], {}, facts["adds"], now())
         os.makedirs(cs.check_target(os.path.dirname(facts["where"])), exist_ok=True)    # after the blocks: a failed

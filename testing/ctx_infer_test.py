@@ -243,6 +243,49 @@ with tempfile.TemporaryDirectory() as d:
     check("M4: a folder name with no Latin letters gives no id — not ok, «--id»; with --id it is fine",
           r["ok"] is False and "--id" in r["why"] and ci.infer(core, rid="zorg-core", today=TODAY)["ok"], r)
 
+# --- whole-branch review (v4.4.0): each finding reproduced first
+import warnings  # noqa: E402
+import ctx_index as cidx  # noqa: E402
+with warnings.catch_warnings():
+    warnings.simplefilter("error")                      # 3.9 warns where 3.11+ raises: a flag not at the start
+    try:
+        rx = cidx._exclusion(["(^|/)Meetings/", "(?i)(^|/)private/"])
+        ok = rx is not None and rx.search("Core/Private/x.md") and rx.search("Core/Meetings/m.md") and not rx.search("Core/Playbook/a.md")
+    except Exception as e:  # noqa: BLE001
+        ok, rx = False, e
+check("I2: an inline-flag expression is compiled on its own — never joined into one that 3.11+ refuses", ok, rx)
+bad = cidx._exclusion(["(^|/)Meetings/", "foo(?i)bar"])
+check("I2: an expression that does not compile (or warns) hides the whole folder — fail closed, never silently skipped",
+      bad is not None and bad.search("Core/Playbook/a.md"), bad)
+check("I2: no expressions → nothing hidden", cidx._exclusion([]) is None and cidx._exclusion(None) is None, "")
+probs = getattr(ci, "expression_problems", lambda pats: ["missing"])(["(^|/)ok/", "foo(?i)bar", "(unclosed"])
+check("I2: repo add names an owner's expression that will not compile everywhere", len(probs) == 2
+      and any("foo(?i)bar" in p for p in probs) and any("(unclosed" in p for p in probs), probs)
+check("I3: the owner's 1-1 folders are out of search", hit(ci.registration_exclude(), "Core/People/1-1/2026-10-01 x.md")
+      and hit(ci.registration_exclude(), "GrowPM/_personal/1-1-Logs/a/b.md") and hit(ci.registration_exclude(), "Core/1-1-Logs/x.md"), "")
+
+with tempfile.TemporaryDirectory() as d:
+    core = bare_kit(d)
+    sysd = os.path.join(core, "Core", "_System")
+    blocks = open(os.path.join(sysd, "context-blocks.md"), encoding="utf-8").read()
+    write(os.path.join(sysd, "local-context.md"), "# Local Context\n\n" + blocks)
+    r = ci.infer(core, today=TODAY)
+    check("M8: the owner's own local-context.md in the core is no second blocks file",
+          r["ok"] and r["manifest"].get("blocks_file") == "Core/_System/context-blocks.md", r.get("from"))
+    os.remove(os.path.join(sysd, "local-context.md"))
+    write(os.path.join(sysd, "provider-manifest.md"), "---\nkind: provider-file\nfile: provider-manifest.yaml\n---\n# m\n\n```yaml\nid: zorg-core\n```\n")
+    r = ci.infer(core, today=TODAY)
+    check("I1: the owner's manifest only as its .md wrapper — the core ships one: not inferred, «обгортка»",
+          r["ok"] is False and "обгортк" in r["why"], r)
+    os.remove(os.path.join(sysd, "provider-manifest.md"))
+    model_path = os.path.join(sysd, "access-bundles.json")
+    model = json.load(open(model_path, encoding="utf-8"))
+    model["roles"] = {}
+    json.dump(model, open(model_path, "w", encoding="utf-8"))
+    write(os.path.join(d, "m.yaml"), ci.infer(core, today=TODAY)["text"])
+    _, _, problems = ckit.check(core, [], manifest_path=os.path.join(d, "m.yaml"))
+    check("M4: a role model with no roles is a fault, under an inferred manifest too", any("ролей" in p or "roles" in p for p in problems), problems)
+
 # --- validate check 25: the protocol's §9 and the code agree (a mutation of each side is caught)
 check("check_protocol: the shipped protocol and ctx_infer agree", getattr(ci, "check_protocol", lambda r: ["missing"])(ROOT) == [],
       getattr(ci, "check_protocol", lambda r: ["missing"])(ROOT))

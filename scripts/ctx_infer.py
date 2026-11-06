@@ -29,9 +29,10 @@ INFERRED_EXCLUDE = [
     r"local-context\.(existing|proposed)\.md$", r"context-merge-report\.md$", r"(^|/)_archive/",
 ]
 # …and, in a registration of a core connected without its owner's manifest (search only, inferred, a guest), the
-# owner's current-focus note and the owner's own context store, when the core is the owner's vault: Review Focus 1
-# of v4.4.0 names Now.md, the review of tasks 1–4 the store (`<pf>/_System/context/`, persistent-storage.md).
-PERSONAL_EXCLUDE = [r"(^|/)Now\.md$", r"(^|/)_System/context/"]
+# owner's current-focus note, the owner's own context store and the 1-1 folders, when the core is the owner's vault:
+# Review Focus 1 of v4.4.0 names Now.md, the reviews the store (`<pf>/_System/context/`, persistent-storage.md) and the
+# People contour's 1-1 logs (`People/1-1/`, `1-1-Logs/`); the index also leaves out its other notes (people_output).
+PERSONAL_EXCLUDE = [r"(^|/)Now\.md$", r"(^|/)_System/context/", r"(^|/)1-1/", r"(^|/)1-1-Logs/"]
 # What an inferred manifest never carries: a command the plugin would run, an address it would reach, the owner's
 # filters and rewrites, a write scope, a tools list (C4) — named so in context-provider-protocol.md §9.
 NEVER_INFERRED = ("people_resolver", "mcp", "deny_patterns", "delink_*", "dashboard_rewrites", "write_scope", "tools_file")
@@ -45,6 +46,42 @@ README_NAMES = ("readme.md", "readme-core.md")
 def excluded(rel):
     """Is the core-relative path `rel` (with `/`) one search leaves out under an inferred manifest?"""
     return any(re.search(p, rel) for p in INFERRED_EXCLUDE)
+
+
+def expression_problems(patterns):
+    """[problem] for every `exclude` expression that will not compile on every Python the plugin runs on — one that does
+    not compile, or one Python 3.9 only warns about and 3.11+ refuses (a flag such as `(?i)` not at its start). The
+    index would leave the whole folder out for it (fail closed); `ctx repo add` names it instead."""
+    import warnings
+    out = []
+    for p in patterns or ():
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                re.compile(str(p), re.IGNORECASE)
+        except (re.error, Warning) as e:
+            out.append("вираз exclude %r не компілюється всюди (%s)" % (str(p), e))
+    return out
+
+
+def owner_manifest(folder):
+    """(the core's own manifest or None, why it cannot be used or "") — "" with None when the core ships none. A
+    manifest the core visibly ships and the plugin cannot read is a reason, never «none»: one iCloud has evicted, one
+    only as its `.md` wrapper, one that does not parse, one whose `exclude` will not compile everywhere."""
+    if pb.manifest_evicted(folder) and not pb.manifest_files(folder):
+        return None, "маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder"
+    if pb.manifest_wrappers(folder) and not pb.manifest_files(folder):
+        return None, ("маніфест власника ядра є лише як обгортка provider-manifest.md — плагін її на місці не розгортає; "
+                      "попроси власника покласти provider-manifest.yaml поруч (context-provider-protocol §9)")
+    if not pb.manifest_files(folder):
+        return None, ""
+    m, why = pb.read_manifest(folder, read=_read)
+    if m is None:                                       # the parser's words after the file's name, never its path
+        return None, "маніфест власника ядра не читається: %s" % why.split("provider-manifest.yaml: ", 1)[-1]
+    bad = expression_problems(m.get("exclude") or [])
+    if bad:
+        return None, "маніфест власника ядра: %s" % "; ".join(bad)
+    return m, ""
 
 
 def glob_expression(glob):
@@ -126,7 +163,7 @@ def _blocks_file(folder, pf):
                             % (_join(pf, "_System"), ", ".join(evicted)))
     for n in names:
         rel = _join(pf, "_System", n)
-        if excluded(rel):
+        if excluded(rel) or n.lower() == "local-context.md":   # the owner's own compiled context is no blocks file
             continue
         try:
             text = _read(os.path.join(sysd, n))
@@ -173,9 +210,12 @@ def infer(folder, rid="", today=""):
     folder = os.path.abspath(os.path.expanduser(folder))
     if not os.path.isdir(folder):
         return _fail("немає теки ядра: %s" % folder)
-    if pb.manifest_evicted(folder):                     # the core ships its owner's manifest: nothing to infer
+    if pb.manifest_evicted(folder) and not pb.manifest_files(folder):   # the core ships its owner's manifest
         return _fail("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і підключи "
                      "без --infer; виводити маніфест не треба")
+    if pb.manifest_wrappers(folder) and not pb.manifest_files(folder):
+        return _fail("маніфест власника ядра є лише як обгортка provider-manifest.md — він є, виводити не треба; "
+                     "попроси власника покласти provider-manifest.yaml поруч (context-provider-protocol §9)")
     found, evicted = _plugin_folders(folder)
     if found and evicted:
         return _fail("тека з моделлю ролей ще не завантажена з iCloud (%s) поруч із %s — не вгадую; відкрий теку ядра "

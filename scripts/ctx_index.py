@@ -193,26 +193,87 @@ def index_dir(home):
 
 
 # ------------------------------------------------------------------ scope and names
-def Root(source, path, vault="", exclude=()):
+def Root(source, path, vault="", exclude=(), guarded=False):
     """One folder the index walks: `source` is "own" (the plugin folder of a vault) or a repository id; `vault` is the
     vault the folder lies in ("" outside every vault); `exclude` (since v4.4.0) the regular expressions, relative to the
     folder, of what the walk leaves out — a registration's `exclude:` (a shared core connected without its owner's
-    manifest: the owner's personal layer stays out of search)."""
-    return {"source": source, "path": path, "vault": vault, "exclude": list(exclude or ())}
+    manifest: the owner's personal layer stays out of search); `guarded` — such a core (`connected_as`): the walk also
+    leaves out every note of the owner's People contour (`people_output`)."""
+    return {"source": source, "path": path, "vault": vault, "exclude": list(exclude or ()), "guarded": bool(guarded)}
+
+
+class _AnyOf(object):
+    """The expressions of a root's `exclude`, each compiled on its own: `search` is true when one of them matches."""
+
+    def __init__(self, rxs):
+        self.rxs = rxs
+
+    def search(self, text):
+        return any(rx.search(text) for rx in self.rxs)
+
+
+HIDE_ALL = "."                                          # an `exclude` that leaves out every path of its folder
 
 
 def _exclusion(patterns):
-    """One compiled expression of a root's `exclude`, or None for none — case-folded, as the index folds its own folder
-    names (a case-insensitive disk holds `meetings/` and `Meetings/` alike). An expression that does not compile is
-    left out — the registration's author (`ctx repo add`) writes only ones that do."""
-    good = []
+    """The expressions of a root's `exclude` as one matcher, or None for none — case-folded, as the index folds its own
+    folder names (a case-insensitive disk holds `meetings/` and `Meetings/` alike). Each is compiled on its own (joined,
+    a flag such as `(?i)` stands in the middle: Python 3.11+ refuses that). One that does not compile — or only warns,
+    as 3.9 does where 3.11+ refuses — makes the matcher leave out the whole folder: an owner's filter the plugin
+    cannot apply never lets that layer into search (fail closed)."""
+    import warnings
+    rxs = []
     for p in patterns or ():
         try:
-            re.compile(p)
-            good.append("(?:%s)" % p)
-        except re.error:
-            continue
-    return re.compile("|".join(good), re.IGNORECASE) if good else None
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                rxs.append(re.compile(p, re.IGNORECASE))
+        except (re.error, Warning, TypeError):
+            return _AnyOf([re.compile(HIDE_ALL)])
+    return _AnyOf(rxs) if rxs else None
+
+
+def people_output(rel, text):
+    """Is a note the People contour's own output — a 1-1 (`one_on_one`), a note of a people type other than the
+    registry's `people` / `person`, or one that carries a person profile's judgement field (STEP_P_FIELDS)? Such a note
+    is never a shared core's content: the walk leaves it out of a guarded root (data-policy.md → Search, rule 1). The
+    core's own registry cards stay."""
+    fm, _ = _frontmatter(text or "")
+    fm = fm if isinstance(fm, dict) else {}
+    title = _text(fm.get("title"))
+    if one_on_one(rel, title):
+        return True
+    types = fm.get("type") if isinstance(fm.get("type"), list) else [fm.get("type")]
+    if any(_text(x).lower() in PEOPLE_TYPES - {"people", "person"} for x in types):
+        return True
+    maps = [fm] + [v for v in fm.values() if isinstance(v, dict)]
+    return any(_filled(m.get(k)) for m in maps for k in STEP_P_FIELDS)
+
+
+def hidden_in(roots, vaults, path):
+    """Does the root that holds the index name `path` leave it out — its `exclude`, matched against the path relative to
+    its folder? For `ctx search --get`, which reads a file the walk never indexed (since v4.4.0)."""
+    best = None
+    for r in roots or ():
+        top = rel_path(r["path"], vaults or [], r)
+        if (path == top or path.startswith(top + "/")) if top else not path.startswith("@"):
+            if best is None or len(top) > len(best[1]):
+                best = (r, top)
+    if best is None:
+        return False
+    r, top = best
+    rx = _exclusion(r.get("exclude"))
+    sub = path[len(top) + 1:] if top else path
+    return bool(rx and sub and rx.search(sub))
+
+
+def guarded_root(roots, vaults, path):
+    """Is the root that holds `path` a guarded one (a core connected in mode A, B or C)?"""
+    for r in roots or ():
+        top = rel_path(r["path"], vaults or [], r)
+        if top and (path == top or path.startswith(top + "/")):
+            return bool(r.get("guarded"))
+    return False
 
 
 @functools.lru_cache(maxsize=8192)
@@ -252,40 +313,41 @@ def scope(context_text, repos):
     vaults = [v for v, _ in entries]
     out, seen = [], set()
 
-    def add(source, path, vault, exclude=()):
+    def add(source, path, vault, exclude=(), guarded=False):
         key = os.path.normpath(path)
         if key not in seen:
             seen.add(key)
-            out.append(Root(source, key, vault, exclude))
+            out.append(Root(source, key, vault, exclude, guarded))
 
     for vault, folder in entries:
         add("own", os.path.join(vault, folder) if folder else vault, vault)
     for r in repos or []:
         path = r.get("core_root") or next(iter(r.get("paths") or []), "")
         if path and os.path.isdir(path):
-            add(r.get("id") or "", path, _vault_of(path, vaults), _live_exclude(r, path))
+            add(r.get("id") or "", path, _vault_of(path, vaults), _live_exclude(r, path), bool(r.get("connected_as")))
     return out
 
 
 def _live_exclude(repo, path):
-    """A registration's `exclude` and — for one that has any (modes A–C of v4.4.0) — the exclusions of the core's own
-    manifest once the core ships one: its `exclude` and its `personal_overlay` (ctx_infer.registration_exclude), read
-    at each scope. The owner's manifest wins in search as it does for the team block, without a new registration. A
-    manifest that does not read adds nothing; the registration's own list always stays."""
+    """A registration's `exclude` and — for a core connected in mode A, B or C (`connected_as`, v4.4.0) — the exclusions
+    of the core's own manifest once the core ships one: its `exclude` and its `personal_overlay`
+    (ctx_infer.registration_exclude), read at each scope. The owner's manifest wins in search as it does for the team
+    block, without a new registration. A manifest the core visibly ships that cannot be read now — evicted by iCloud,
+    only its `.md` wrapper, one that does not parse, an expression that will not compile — leaves the whole folder out
+    of search until it reads again (fail closed: its filters are unknown, so nothing under it is shown)."""
     ex = list(repo.get("exclude") or [])
-    if not ex:
+    if not repo.get("connected_as"):
         return ex
     try:
         import ctx_infer as cinf                     # here: ctx_infer reads provider_bundle, the index needs it only now
-        import ctx_store as cst
-        import provider_bundle as pb
-        if pb.manifest_files(path):
-            m, _ = pb.read_manifest(path, read=lambda p: cst.read_text(p))
-            for x in cinf.registration_exclude(m) if m is not None else ():
-                if x not in ex:
-                    ex.append(x)
-    except Exception:  # noqa: BLE001 — a scope never fails over a manifest; the registration's own list stays
-        pass
+        m, problem = cinf.owner_manifest(path)
+        if problem:
+            return ex + [HIDE_ALL]
+        for x in cinf.registration_exclude(m) if m is not None else ():
+            if x not in ex:
+                ex.append(x)
+    except Exception:  # noqa: BLE001 — a manifest that cannot even be asked about is one that does not read
+        return ex + [HIDE_ALL]
     return ex
 
 
@@ -1880,10 +1942,11 @@ class _Walk:
         regular = info is not None and stat.S_ISREG(info.st_mode)
         md = rel.lower().endswith(".md")
         dataless = bool(regular and md and is_dataless(path))
+        hidden = False
         try:
-            self._note(ri, path, rel, info, dataless)
+            hidden = self._note(ri, path, rel, info, dataless) == "hidden"
         finally:
-            if regular and not _skip_folder(rel, self.store_rel) and not _dotted(rel):
+            if regular and not hidden and not _skip_folder(rel, self.store_rel) and not _dotted(rel):
                 self._name(ri, rel, dataless, md)
             elif rel in self.names:
                 self._forget(rel)
@@ -1944,6 +2007,10 @@ class _Walk:
         except OSError:
             return
         digest = hashlib.sha1(data).hexdigest()
+        if self.roots[ri].get("guarded") and people_output(rel, data.decode("utf-8", errors="replace")):
+            if rel in self.rows:                         # since v4.4.0: the owner's People contour in a guarded core —
+                self._remove(rel)                        # a 1-1, a profile — is no content of the core (its name neither)
+            return "hidden"
         if row and row["hash"] == digest:            # touched, not changed: the columns this build's rules of
             meta = note_meta(rel, data.decode("utf-8", errors="replace").replace("\r\n", "\n"), mtime=info.st_mtime)
             self.con.execute("UPDATE notes SET sensitive=?, mtime=?, size=? WHERE id=?",   # note_meta changed (v3.17.0)

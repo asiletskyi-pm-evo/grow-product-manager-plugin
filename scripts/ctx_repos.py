@@ -58,6 +58,7 @@ def _rank(v, authority):
 
 
 SYNC_DAILY, SYNC_OFF = "daily", "off"
+CONNECTED_AS = ("search", "inferred", "guest")         # since v4.4.0: how `ctx repo add` connected a core with no manifest
 
 
 def normalise(reg):
@@ -67,7 +68,8 @@ def normalise(reg):
     Since v4.4.0 `manifest` is the provider manifest the registration names for a core that ships none (an absolute
     path; a relative one is taken beside the registration file; "" for none) and `blocks` is "none" when the
     registration says `blocks: none` (any case) — a core folder registered for search only — else ""; `exclude` the
-    expressions (relative to the core folder) the index leaves out of it, [] for none."""
+    expressions (relative to the core folder) the index leaves out of it, [] for none; `connected_as` the mode
+    `ctx repo add` connected a core with no manifest in (`search`, `inferred`, `guest`; "" for any other registration)."""
     out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
@@ -113,6 +115,7 @@ def normalise(reg):
         "manifest": manifest,
         "blocks": "none" if _s(reg.get("blocks")).lower() == "none" else "",
         "exclude": _list(reg.get("exclude")),
+        "connected_as": _s(reg.get("connected_as")).lower() if _s(reg.get("connected_as")).lower() in CONNECTED_AS else "",
         "_file": reg.get("_file", ""),
     })
     return out
@@ -499,7 +502,7 @@ def namespace_warning(repo, namespace=None):
     """The one line a registration with no namespace earns when the core's manifest says another: the namespace the
     manifest names (`namespace`, when a fetch has found it already, else read from the core folder) and the line to add.
     None when the registration names its namespace, or the manifest agrees with the id, or there is nobody to ask."""
-    if repo.get("namespace_explicit", True):
+    if repo.get("namespace_explicit", True) or search_only(repo):     # search only (v4.4.0): no blocks, no namespace
         return None
     ns = _clean(namespace if namespace is not None else manifest_namespace(repo) or "")
     if not ns or ns == repo["namespace"]:

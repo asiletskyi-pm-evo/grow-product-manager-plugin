@@ -131,6 +131,16 @@ def manifest_evicted(core):
             and not os.path.isfile(os.path.join(d, "provider-manifest.yaml"))]
 
 
+def manifest_wrappers(core):
+    """The core's own `provider-manifest.md` wrappers (since v3.24.0, for a notes server) with no `provider-manifest.yaml`
+    beside them — where `manifest_files` looks. Such a core ships a manifest the plugin does not unpack in place
+    (since v4.4.0 asked by ctx_infer: it is not a core without one)."""
+    cands = [os.path.join(core, "_System")] + sorted(glob.glob(os.path.join(core, "*", "_System")))
+    return [os.path.join(d, "provider-manifest.md") for d in cands
+            if os.path.isfile(os.path.join(d, "provider-manifest.md"))
+            and not os.path.isfile(os.path.join(d, "provider-manifest.yaml"))]
+
+
 def is_inferred(m):
     """Is the manifest one the plugin inferred (ctx_infer, since v4.4.0)? `inferred:` true in any spelling — a bool, a
     number 1, or the words true / yes / on / 1 in any case."""

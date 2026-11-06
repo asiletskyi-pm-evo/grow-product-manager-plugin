@@ -99,6 +99,8 @@ def check(folder, warnings=None, manifest_path=None, manifest=None, quiet=False)
         for k in MODEL_KEYS:
             if k not in model:
                 out.append("%s: немає %s" % (m.s("bundles_file"), k))
+        if "roles" in model and not model.get("roles"):     # since v4.4.0: no role at all — nothing to resolve to
+            out.append("%s: немає жодної ролі в roles" % m.s("bundles_file"))
         teams = model.get("teams") if isinstance(model.get("teams"), dict) else {}
         for email, team in (model.get("emails") or {}).items():
             if team not in teams:
@@ -254,12 +256,13 @@ def _q(s):
     return json.dumps(str(s), ensure_ascii=False)
 
 
-def registration(folder, m, model, ident, today, manifest_path="", search_only=False, exclude=None):
+def registration(folder, m, model, ident, today, manifest_path="", search_only=False, exclude=None, connected_as=""):
     """The text of the registration of this kit (provider-registration/2): a local folder, `sync: off` (the daily sync
     is asked for once by context-connect), the owner's personal layer as `writable`. Since v4.4.0: `manifest_path` —
     the manifest beside the registration (`manifest:`, absolute) for a core that ships none; `exclude` — the
     expressions the index leaves out of the core folder (ctx_infer.registration_exclude), given for modes A–C only,
     which then write `writable: []` (the owner's personal layer is someone else's: the write gate asks for it);
+    `connected_as` — `search`, `inferred` or `guest`: the mode, which the index keys the owner's later manifest on;
     `search_only` — a core
     folder registered for search alone (`blocks: none`: no blocks, no team, no role model; `m` gives only the id and
     the title, `model` and `ident` are not read)."""
@@ -276,6 +279,8 @@ def registration(folder, m, model, ident, today, manifest_path="", search_only=F
         lines.append("products: []")
         ov = [] if exclude else (m.get("personal_overlay") or [])   # modes A–C: the owner's layer is no file of yours
         lines += (["writable:"] + ["  - %s" % _q(g) for g in ov]) if ov else ["writable: []"]
+    if connected_as:
+        lines.append("connected_as: %s" % connected_as)
     if exclude:
         lines += ["exclude:"] + ["  - %s" % _q(x) for x in exclude]
     if search_only:
