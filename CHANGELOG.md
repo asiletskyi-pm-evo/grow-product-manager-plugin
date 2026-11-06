@@ -55,6 +55,63 @@ A config without `write_gate_pause_until` behaves exactly as before; `--write-ga
 
 ---
 
+## v4.4.0 (2026-11-06)
+
+**«Гість ядра»: a shared core connects even when it ships no manifest, or its registry does not list you.** Until now a colleague whose core came without its owner's `_System/provider-manifest.yaml`, or whose e-mail its role model did not list, stopped at «its owner has to add a manifest». `ctx repo add` now connects such a core in one of three modes, the safest first, none of them changing the core: search only, an inferred manifest, or a guest without a team. The owner's personal layer stays out of the colleague's search, and each mode ends with one line for the core's owner, ready to forward.
+
+MINOR: three modes of an existing command, new registration keys, a new script; a core that ships its manifest and a user in its registry connect as in v4.3.0.
+
+### Added
+
+- **`ctx repo add <folder> --search-only [--id I]`** — mode A: the folder as a search source (`ctx search`, `context-navigator`), no blocks, no team block, no role model and no e-mail needed; the registration says `blocks: none`.
+- **`ctx repo add <folder> --email E --infer [--id I]`** — mode B: a manifest inferred from the core's layout (`scripts/ctx_infer.py`). The folder with `_System/access-bundles.json`, the one `_System/*.md` with block markers of one namespace, Teams, People, Playbook, provider-templates. It never infers a command (`people_resolver`), an MCP address, the owner's filters (`deny_patterns`, `delink_*`, `dashboard_rewrites`), a write scope or a tools list; an ambiguous layout (two role models, two blocks files, an evicted candidate) is named, never guessed. The manifest is kept in the providers folder's `manifests/<id>.manifest.yaml` — never in the core, and not beside the registrations, which are read as `*.yaml` — and works in place only.
+- **`--guest`** — mode C: no team, no team block; the role from `--role`, else `pm`, else the model's first in alphabetical order. With `--infer` for a core with no manifest, alone for a core that ships one.
+- **`ctx repo kit-check <folder> --infer`** — prints the inferred manifest with where each key came from, for the owner to place in the core (after removing `inferred: true` and adding their own filters); writes nothing.
+- **Registration keys** (`context-provider-protocol.md` §3b): `manifest` (the inferred manifest; the core's own wins once it is there, in the team block and in search), `blocks: none`, `exclude` (regular expressions the index leaves out of the core folder, any case), `connected_as` (`search`, `inferred`, `guest`).
+- **The owner's layer stays out of search** in modes A–C: Meetings/, Focus/, `_personal/`, TODO…, `Now.md`, spreadsheets, archives, copies of a context, the owner's own store (`_System/context/`), 1-1 folders, and every note of the owner's People contour (a 1-1, a people type other than the registry's, a judgement field), `ctx search --get` included; the core's registry cards stay. A shipped manifest's `exclude` and `personal_overlay` join — also one the owner ships later. A manifest the core visibly ships that cannot be read now (evicted, only its `.md` wrapper, broken, an expression that will not compile everywhere) hides the whole core from search until it reads.
+- **The line for the core's owner** — «Власнику ядра: внеси, будь ласка, <e-mail> · команда: <назви сам> · роль: <role> у `access-bundles.json`» for a guest, «… поклади маніфест <file> …» for an inferred manifest; the file's name, never a local path. The plugin sends nothing.
+- **Checks** — validator check 25 (protocol §9 and `ctx_infer`: the exclusions both ways, the never-inferred keys, and `infer()` run on the example kit); `testing/ctx_infer_test.py`; v4.4.0 sections of `ctx_repos_test`, `provider_bundle_test`, `provider_kit_test`; trigger-evals T15–T18 (run live, real 4/4, visible 4/4).
+
+### Changed
+
+- **`context-connect` 0.9.0** — `connect-steps.md` §0 item 2: instead of «stop», one `--infer` dry run finds what the folder allows and one choice offers only those modes, the recommended first (Б, Б+В or Б with a team, А); iCloud and no-store branches; the Jira and daily-sync questions after the apply for Б and В; the owner's faults said as one count. §1 and §9 offer «гостем» when the e-mail is not listed.
+- **`provider_bundle.py` 1.2.1** — a manifest with `inferred: true` (any spelling) is refused (exit 3, nothing written); a manifest passed from outside the core is never copied (core export wrote it beside `--out`, or crashed on the same file).
+- **`ctx_kit.check`** — takes a manifest from outside the core; under an inferred one, what only the owner can fix is a warning «… справа власника ядра» (counted in the dry run), no role model, no blocks file, no block or no role at all stay faults. **`ctx repo status`** says «лише пошук» for a search-only registration; **`repo list`** marks it. An evicted role model or owner manifest is «not downloaded», never «not found».
+- **Docs** — `context-provider-protocol.md` §3b, §9 «A core with no manifest», §12.7; `context-protocol.md` command table; `search-protocol.md` §12 and `host-profiles.md` for hosts without a shell; `testing/host-matrix.md`.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_infer.py`, `testing/ctx_infer_test.py` | new — the inferred manifest, the registration's exclusions, check 25 |
+| `scripts/ctx.py` | `repo add --infer \| --guest \| --search-only`, `kit-check --infer`, the owner line, `repo status` / `repo list` for search only |
+| `scripts/ctx_repos.py` | keys `manifest`, `blocks`, `exclude`, `connected_as`; the owner's manifest wins; «not downloaded» reasons |
+| `scripts/ctx_kit.py` | an outside manifest, owner faults as warnings, the guest, registrations of A–C |
+| `scripts/ctx_index.py`, `scripts/ctx_search.py` | `exclude` per root (each expression on its own, fail closed), the owner's People contour out of a guarded core, `--get` |
+| `scripts/provider_bundle.py` | 1.2.1 — the inferred manifest refused, an outside manifest never copied |
+| `skills/context-connect/SKILL.md`, `skills/context-connect/references/connect-steps.md` | 0.9.0 — three modes |
+| `references/context-provider-protocol.md`, `references/context-protocol.md`, `references/search-protocol.md`, `references/host-profiles.md` | the modes, keys, results, search without a shell |
+| `testing/validate-consistency.sh`, `testing/ctx_repos_test.py`, `testing/provider_bundle_test.py`, `testing/provider_kit_test.py`, `testing/ctx_cli_test.py` | check 25; the v4.4.0 cases; context-connect 0.9.0 pinned |
+| `testing/test-cases.md`, `testing/trigger-evals.md`, `testing/host-matrix.md` | v4.4.0 cases, T15–T18 and their live run, the three modes per host |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.4.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.4.0 |
+
+### Backwards compatibility
+
+Nothing that worked stops working. A core that ships its manifest and a user its registry lists connect exactly as in v4.3.0 — the kit mode's output and codes, the bundle builder's bundles (but for its version) and the server sync are unchanged. The plugin never writes into a core. A registration without the new keys reads as before.
+
+### Known limits
+
+- Mode B knows none of the owner's filters (`deny_patterns`, `delink_*`) or labels (`head_label`, `owner_label`, `ttl_days`): it works in place only, and the bundle builder refuses its manifest. The conservative exclusions match without regard to case, so they may hide more than the owner meant (`TODO…` hides `Todoist…`).
+- A core with a role model but no single blocks file connects only as A — a team block alone is not offered.
+- An owner's manifest only as its `.md` wrapper is not unpacked in place: such a core is refused until `provider-manifest.yaml` is beside it. A shipped manifest that cannot be read hides that core from search until it reads.
+- A host or a Mac still on a plugin before v4.4.0 reading the same registrations ignores `exclude:` (the owner's layer shows in its search) and calls a search-only registration unreachable (`provider plan` exit 5); update the plugin everywhere.
+- Changing the mode of a registered core means removing its registration file (and its manifest) by hand — there is no `ctx repo remove`.
+- Hosts without a shell: only mode A through the core's MCP server, else the owner is asked for a manifest. Codex CLI is derived (the same `python3`), not run in acceptance.
+- The `context-connect` procedure was walked through the CLI by an independent review (each case ends in the right mode); the skill itself was not run live (TC-skill-4400-modes pending).
+
+---
+
 ## v4.3.0 (2026-11-03)
 
 **«Публікація»: a result becomes a link you open, update and share — one «так», a new version instead of a copy.** Since v4.1.0 every skill asks before internal data reaches a hosted place, but each one asked in its own words, and a rerun made a new document or page each time. One protocol now says where a result can go, in which order, the one question, where the place is recorded, and how the next run publishes the next version of the same place. Decks reach Atlassian Artifacts and the host's own decks beside the `.pptx`; reports and the funnel get dashboards. The last release of the «Поверхні» programme.

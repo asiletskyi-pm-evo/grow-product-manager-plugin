@@ -58,12 +58,18 @@ def _rank(v, authority):
 
 
 SYNC_DAILY, SYNC_OFF = "daily", "off"
+CONNECTED_AS = ("search", "inferred", "guest")         # since v4.4.0: how `ctx repo add` connected a core with no manifest
 
 
 def normalise(reg):
     """A registration as read by `find_registrations` → the repository dict (schema v1 or v2). `sync` (since v3.14) is
     "daily" only when the registration says `sync: daily` (any case); anything else, and no key, is "off" — the daily
-    sync writes without asking, so it is switched on per repository, by an explicit word (the D6 write boundary)."""
+    sync writes without asking, so it is switched on per repository, by an explicit word (the D6 write boundary).
+    Since v4.4.0 `manifest` is the provider manifest the registration names for a core that ships none (an absolute
+    path; a relative one is taken beside the registration file; "" for none) and `blocks` is "none" when the
+    registration says `blocks: none` (any case) — a core folder registered for search only — else ""; `exclude` the
+    expressions (relative to the core folder) the index leaves out of it, [] for none; `connected_as` the mode
+    `ctx repo add` connected a core with no manifest in (`search`, `inferred`, `guest`; "" for any other registration)."""
     out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
@@ -76,6 +82,12 @@ def normalise(reg):
         core_root = paths[0]
     ep = reg.get("endpoint") if isinstance(reg.get("endpoint"), dict) else {}
     source = _s(reg.get("blocks_source")).lower()
+    manifest = _s(reg.get("manifest"))
+    if manifest:                                        # since v4.4.0: a relative one is the registration's neighbour
+        manifest = os.path.expanduser(cc.N(manifest))
+        if not os.path.isabs(manifest) and reg.get("_file"):
+            manifest = os.path.join(os.path.dirname(reg["_file"]), manifest)
+        manifest = os.path.normpath(manifest)
     out.update({
         "id": rid,
         "title": _s(reg.get("title")) or rid,
@@ -100,6 +112,10 @@ def normalise(reg):
         "synced_at": _s(reg.get("synced_at")),
         "access": _s(reg.get("access")),
         "source_version": _s(reg.get("source_version")),
+        "manifest": manifest,
+        "blocks": "none" if _s(reg.get("blocks")).lower() == "none" else "",
+        "exclude": _list(reg.get("exclude")),
+        "connected_as": _s(reg.get("connected_as")).lower() if _s(reg.get("connected_as")).lower() in CONNECTED_AS else "",
         "_file": reg.get("_file", ""),
     })
     return out
@@ -121,7 +137,10 @@ def search_only(repo):
     registered for `vault_search`, references/context-provider-protocol.md §3b, or the user's own index)? It publishes
     no blocks, so `ctx provider` leaves it out of scope instead of calling it unreachable. Since v3.24.0 the question is
     put to the registration: the plugin's copy of the core (`core_from: copy`) is no folder the registration names, so a
-    search-only registration with a copy stays search-only."""
+    search-only registration with a copy stays search-only. Since v4.4.0 a registration that says `blocks: none` is
+    search only whatever folder it names (a shared core connected for search, `ctx repo add --search-only`)."""
+    if repo.get("blocks") == "none":
+        return True
     own = repo["core_root"] if repo.get("core_from") != "copy" else ""
     return not repo["blocks_file"] and not own
 
@@ -255,22 +274,55 @@ def _not_downloaded(core_root, manifest):
     return count
 
 
-def _manifest(core_root):
+def _manifest(core_root, path=""):
     """(manifest, why not) of the core's provider manifest as the bundle builder reads it. A manifest that is not there
     (never written, or evicted by iCloud: only its `.icloud` placeholder is), or that cannot be read or parsed, is
     (None, reason) — the reason in the words of `_unavailable`, with no path. It reads through `pb.read_manifest`, which
     neither prints nor exits: the process's stdout is never swapped, so a fetch the daily sync left behind in its helper
-    thread cannot take the command's own output (since v3.14; before, `load_manifest` ran under redirect_stdout)."""
+    thread cannot take the command's own output (since v3.14; before, `load_manifest` ran under redirect_stdout).
+
+    `path` (since v4.4.0) is the manifest a registration names (`manifest:`, the one `ctx repo add --infer` derives
+    beside it) for a core that ships none. The core's own manifest wins once it is there (`manifest_warning` says so),
+    and while iCloud holds it evicted the team block is «not downloaded yet» — never the registration's file instead;
+    otherwise `path` is read: a file iCloud has evicted (its `.<name>.icloud` placeholder beside it) is "the
+    registration's manifest is not downloaded yet", one that is not there "the registration's manifest not found:
+    <its name>"."""
+    if path and not pb.manifest_files(core_root) and pb.manifest_evicted(core_root):
+        return None, _unavailable("the core's own provider manifest is not downloaded yet — open the core folder in Finder")
+    if path and not pb.manifest_files(core_root):
+        if not os.path.isfile(path):
+            name = os.path.basename(path)
+            if os.path.exists(os.path.join(os.path.dirname(path), ".%s.icloud" % name)):
+                return None, _unavailable("the registration's manifest is not downloaded yet — open its folder in Finder")
+            return None, _unavailable("the registration's manifest not found: %s" % name)
+    else:
+        path = ""
     try:
-        manifest, said = pb.read_manifest(core_root, read=_read_bounded)
+        manifest, said = pb.read_manifest(core_root, path=path or None, read=_read_bounded)
     except Exception as e:
         return None, _team_why(e)
     if manifest is not None:
         return manifest, None
     if said.startswith("no provider manifest"):
         return None, _unavailable("no provider manifest in the core")
+    if path:                                            # the registration's manifest: its words after its path, never the path
+        detail = said.split(path + ": ", 1)[1] if path + ": " in said else ""
+        return None, _unavailable("the registration's manifest cannot be parsed" + (": " + detail if detail else ""))
     detail = said.split("provider-manifest.yaml: ", 1)[1] if "provider-manifest.yaml: " in said else ""
     return None, _unavailable("the provider manifest cannot be parsed" + (": " + detail if detail else ""))
+
+
+def manifest_warning(repo):
+    """The one line a registration that names a manifest (`manifest:`, since v4.4.0) earns once the core has its
+    owner's own: that one is read from now on, and the registration's key — with the file it names — can go. None
+    when the registration names no manifest, or the core folder is not here, or it still ships none. Local `isfile`
+    checks only: nothing is read, nothing fails."""
+    root = repo.get("core_root") or ""
+    if not repo.get("manifest") or not root or not os.path.isdir(root) or not pb.manifest_files(root):
+        return None
+    return ("у ядрі тепер є маніфест власника — діє він, і для командного блоку, і для пошуку; прибери `manifest:` з "
+            "реєстрації %s, а файл %s можна видалити"
+            % (os.path.basename(repo.get("_file") or "") or repo.get("id", "?"), os.path.basename(repo["manifest"])))
 
 
 def _team_block(repo, manifest, manifest_why, in_file=False):
@@ -308,7 +360,10 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, manifest_why or _unavailable("no provider manifest in the core")
     try:
         bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
-        model = json.loads(_read_bounded(os.path.join(core_root, bundles)))
+        bpath = os.path.join(core_root, bundles)
+        if not os.path.isfile(bpath) and os.path.exists(os.path.join(os.path.dirname(bpath), ".%s.icloud" % os.path.basename(bpath))):
+            return None, _unavailable("%s not downloaded yet — open the core folder in Finder" % os.path.basename(bpath))
+        model = json.loads(_read_bounded(bpath))
         teams = model["teams"]
         key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
         if key not in teams:
@@ -439,7 +494,7 @@ def manifest_namespace(repo):
     root = repo["core_root"]
     if repo.get("namespace_explicit", True) or not root or not os.path.isdir(root):
         return None
-    manifest, _ = _manifest(root)
+    manifest, _ = _manifest(root, repo.get("manifest", ""))
     return (_s(manifest.get("namespace")) or None) if manifest is not None else None
 
 
@@ -447,7 +502,7 @@ def namespace_warning(repo, namespace=None):
     """The one line a registration with no namespace earns when the core's manifest says another: the namespace the
     manifest names (`namespace`, when a fetch has found it already, else read from the core folder) and the line to add.
     None when the registration names its namespace, or the manifest agrees with the id, or there is nobody to ask."""
-    if repo.get("namespace_explicit", True):
+    if repo.get("namespace_explicit", True) or search_only(repo):     # search only (v4.4.0): no blocks, no namespace
         return None
     ns = _clean(namespace if namespace is not None else manifest_namespace(repo) or "")
     if not ns or ns == repo["namespace"]:
@@ -483,7 +538,7 @@ def reach(repo, deadline=None):
     return False, "no endpoint and no core folder in the registration"
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True):
+def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True, manifest=None):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -514,6 +569,8 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     `team` False (since v3.14; `repo status`, which wants the source's version alone) never builds the team region: the
     blocks file is read and nothing else — the core's manifest only when it names the blocks file or the namespace —
     and team, team_source, team_error stay empty.
+    `manifest` (since v4.4.0) is a manifest already read — `ctx repo add --infer` shows its plan before the inferred
+    manifest is written — used instead of reading one.
 
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
@@ -535,9 +592,11 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
     with cs.read_budget(None if deadline is None else deadline - time.monotonic()):
         blocks_file = repo["blocks_file"]
-        manifest, manifest_why = None, None
-        if core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):
-            manifest, manifest_why = _manifest(core_root)
+        given, manifest, manifest_why = manifest, None, None
+        if given is not None:
+            manifest = given
+        elif core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):
+            manifest, manifest_why = _manifest(core_root, repo.get("manifest", ""))
         if not blocks_file and manifest is not None:
             blocks_file = manifest.s("blocks_file")
         if not explicit and manifest is not None:

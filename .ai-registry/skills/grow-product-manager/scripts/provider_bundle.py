@@ -23,8 +23,9 @@ A copy of the context named local-context.existing.md in the proposal folder (el
 Last stdout lines: `CONTEXT_REPORT {json}` and `BUNDLE_RESULT {json}`.
 
 Exit codes: 0 ok · 2 UNKNOWN_TEAM (one JSON line) · 3 the core, the manifest or the
-role model is missing or unreadable, a manifest pattern does not compile, or an
-explicit --role is not in the role model (one line naming the file, line or key) ·
+role model is missing or unreadable, a manifest pattern does not compile, an
+explicit --role is not in the role model (one line naming the file, line or key), or
+the manifest is one the plugin inferred (`inferred: true`, since 1.2.1) ·
 4 a block the provider contributes matches a deny pattern (the line names the block),
 or the proposal would have nested markers — nothing written.
 Stdlib only. Idempotent: existing files are kept unless --force.
@@ -43,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 N = lambda s: unicodedata.normalize("NFC", s or "")
 BUILTIN_TEMPLATES = os.path.join(HERE, "provider_templates")
 BUILTIN_EXCLUDE = [r"\.zip$", r"\.plugin$", r"\.tgz$", r"\.tar\.gz$", r"(^|/)__pycache__/", r"\.pyc$",
@@ -112,32 +113,86 @@ class Manifest(dict):
         return default if v in (None, "", []) else v
 
 
+def manifest_files(core):
+    """The core's own provider manifests that are there, in the order `read_manifest` tries them: the root's
+    `_System/provider-manifest.yaml`, then one level down (since v4.4.0 also asked by `ctx_repos`: a core whose owner
+    has shipped a manifest beats the one a registration names)."""
+    cands = [os.path.join(core, "_System", "provider-manifest.yaml")] + \
+        sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
+    return [p for p in cands if os.path.isfile(p)]
+
+
+def manifest_evicted(core):
+    """The core's own provider manifests iCloud has evicted — `.provider-manifest.yaml.icloud` where `manifest_files`
+    looks, with no real file beside it (since v4.4.0: such a core ships a manifest; it is not one without)."""
+    cands = [os.path.join(core, "_System")] + sorted(glob.glob(os.path.join(core, "*", "_System")))
+    return [os.path.join(d, ".provider-manifest.yaml.icloud") for d in cands
+            if os.path.exists(os.path.join(d, ".provider-manifest.yaml.icloud"))
+            and not os.path.isfile(os.path.join(d, "provider-manifest.yaml"))]
+
+
+def manifest_wrappers(core):
+    """The core's own `provider-manifest.md` wrappers (since v3.24.0, for a notes server) with no `provider-manifest.yaml`
+    beside them — where `manifest_files` looks. Such a core ships a manifest the plugin does not unpack in place
+    (since v4.4.0 asked by ctx_infer: it is not a core without one)."""
+    cands = [os.path.join(core, "_System")] + sorted(glob.glob(os.path.join(core, "*", "_System")))
+    return [os.path.join(d, "provider-manifest.md") for d in cands
+            if os.path.isfile(os.path.join(d, "provider-manifest.md"))
+            and not os.path.isfile(os.path.join(d, "provider-manifest.yaml"))]
+
+
+def is_inferred(m):
+    """Is the manifest one the plugin inferred (ctx_infer, since v4.4.0)? `inferred:` true in any spelling — a bool, a
+    number 1, or the words true / yes / on / 1 in any case."""
+    v = (m or {}).get("inferred")
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v == 1
+    return isinstance(v, str) and v.strip().lower() in ("true", "yes", "on", "1")
+
+
+def with_defaults(m):
+    """The manifest with the defaults every reader assumes: the namespace is the id, the team cards and the people
+    are `<plugin_folder>/Teams` and `<plugin_folder>/People` (since v4.4.0 one function: ctx_infer applies the same)."""
+    pf = m.s("plugin_folder", ".")
+    m.setdefault("namespace", m.get("id"))
+    for k, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
+        if not m.get(k):
+            m[k] = os.path.normpath(os.path.join(pf, sub))
+    return m
+
+
 def read_manifest(core, path=None, read=None):
     """(manifest, None), or (None, why) in the words `load_manifest` prints — with nothing printed and no exit, so a
     caller in a helper thread (the daily sync's fetch, since v3.14.0) never has to swap the process's stdout. The file
     is read through `read` (see `rd`)."""
-    cands = [path] if path else [os.path.join(core, "_System", "provider-manifest.yaml")] + \
-        sorted(glob.glob(os.path.join(core, "*", "_System", "provider-manifest.yaml")))
+    cands = [path] if path else manifest_files(core)
     for p in cands:
         if p and os.path.isfile(p):
             try:
                 m = Manifest(cc.read_yaml_subset(rd(p, read)))
             except (ValueError, UnicodeDecodeError) as e:
                 return None, "provider manifest %s: %s" % (p, e)
-            m["_path"] = os.path.relpath(os.path.abspath(p), os.path.abspath(core))
-            pf = m.s("plugin_folder", ".")
-            m.setdefault("namespace", m.get("id"))
-            for k, sub in (("team_card_dir", "Teams"), ("people_dir", "People")):
-                if not m.get(k):
-                    m[k] = os.path.normpath(os.path.join(pf, sub))
-            return m, None
+            root, real = os.path.realpath(core), os.path.realpath(p)
+            if os.path.commonpath([root, real]) == root:     # since 1.2.1 (v4.4.0): only a manifest inside the core
+                m["_path"] = os.path.relpath(real, root)      # is one of its files; an outside one is read, never copied
+            return with_defaults(m), None
     return None, "no provider manifest under %s (expected _System/provider-manifest.yaml)" % core
 
 
+INFERRED_REFUSED = ("виведений маніфест — лише ctx repo add (на місці, тека ядра лише читається); пакет копіює файли "
+                    "і потребує маніфесту власника ядра з його exclude і deny_patterns (context-provider-protocol §9)")
+
+
 def load_manifest(core, path=None):
+    """The manifest, or exit 3 with the reason. Since 1.2.1 (v4.4.0) a manifest the plugin inferred (`inferred: true`,
+    ctx_infer) is refused: it knows none of the owner's filters, so it may connect a core in place, never copy one."""
     m, why = read_manifest(core, path)
     if m is None:
         sys.stdout.write(why + "\n"); sys.exit(3)
+    if is_inferred(m):
+        sys.stdout.write(INFERRED_REFUSED + "\n"); sys.exit(3)
     return m
 
 

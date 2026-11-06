@@ -1180,5 +1180,166 @@ check("…and C1 controls, the line and paragraph separators and a BOM", cr._cle
       repr(cr._clean("a\x85b\u2028c\u2029d\ufeffe")))
 check("…ordinary text, Cyrillic and a non-breaking space stay", cr._clean("  Зорг\u00a0App  ") == "Зорг\u00a0App", repr(cr._clean("  Зорг\u00a0App  ")))
 
+# =============================================================================== v4.4.0: a core with no manifest of its own
+# A registration may name its manifest (`manifest:` — the one `ctx repo add --infer` derives beside the registration,
+# never in the core) and may say it publishes no blocks (`blocks: none` — a core folder registered for search only).
+# The owner's own manifest wins once it is in the core. references/context-provider-protocol.md §3b, §9.
+MANIFEST_TEXT = read(CORE_FIX, "Core", "_System", "provider-manifest.yaml")
+
+
+def guest_env(d):
+    """The repositories fixture context migrated into a store, a run-time copy of the core fixture WITHOUT its
+    manifest, and an empty providers folder — (run, core, providers, store)."""
+    vault, home = os.path.join(d, "vault"), os.path.join(d, "home")
+    os.makedirs(os.path.join(vault, "Notes", "_System"))
+    os.makedirs(os.path.join(home, ".grow-pm", "providers"))
+    text = read(REPOS_FIX, "context.md").replace("{{VAULT}}", vault)
+    ctx_path = os.path.join(home, ".grow-pm", "local-context.md")
+    for p in (ctx_path, os.path.join(vault, "Notes", "_System", "local-context.md")):
+        open(p, "w", encoding="utf-8", newline="").write(text)
+    core = os.path.join(d, "ZorgCore")
+    shutil.copytree(CORE_FIX, core)
+    os.remove(os.path.join(core, "Core", "_System", "provider-manifest.yaml"))
+
+    def run(*args):
+        env = dict(os.environ)
+        env.pop("GROW_PM_CONTEXT_PATH", None)
+        env.pop("GROW_PM_PROVIDER_PATHS", None)
+        p = subprocess.run([sys.executable, CTX] + list(args) + ["--home", home, "--context", ctx_path],
+                           capture_output=True, text=True, env=env, timeout=120)
+        lines = [l for l in p.stdout.splitlines() if l.strip()]
+        try:
+            res = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None
+        except ValueError:
+            res = None
+        return p.returncode, p.stdout + p.stderr, res
+    return run, core, os.path.join(home, ".grow-pm", "providers"), os.path.join(vault, "Notes", "_System", "context")
+
+
+with tempfile.TemporaryDirectory() as d:
+    run, core, prov, store = guest_env(d)
+    # beside the registration, one folder down: the registrations folder is read as `*.yaml`, so a manifest right beside
+    # them would be read as a registration with the same id (and, sorted first, shadow the real one — in older plugins too)
+    outside = os.path.join(prov, "manifests", "zorg-core.manifest.yaml")
+    os.makedirs(os.path.dirname(outside))
+    open(outside, "w", encoding="utf-8").write(MANIFEST_TEXT)
+    rc, out, _ = run("migrate", "--apply")
+    check("guest env: the store is migrated", rc == 0, out[-300:])
+
+    # --- normalise: the two new keys
+    n = cr.normalise({"id": "x", "manifest": "~/regs/x.manifest.yaml", "blocks": " None "})
+    check("normalise: `manifest` expanded and normalised, `blocks: none` read in any case",
+          n["manifest"] == os.path.normpath(os.path.expanduser("~/regs/x.manifest.yaml")) and n["blocks"] == "none", n)
+    n = cr.normalise({"id": "x", "manifest": "x.manifest.yaml", "_file": os.path.join(prov, "x.yaml")})
+    check("…a relative `manifest` is the registration's neighbour, never the working folder's",
+          n["manifest"] == os.path.join(prov, "x.manifest.yaml"), n)
+    n = cr.normalise({"id": "x", "blocks": "some"})
+    check("…no keys → '' and '' (any other `blocks` word is not 'none')", n.get("manifest") == "" and n.get("blocks") == ""
+          and cr.normalise({"id": "x"}).get("manifest") == "" and cr.normalise({"id": "x"}).get("blocks") == "", n)
+
+    # --- manifest_key_read: the registration's manifest stands in for the one the core does not ship
+    before = tree_state(core)
+    reg = {"id": "zorg-core", "kind": "folder", "paths": [core], "manifest": outside, "team": "team-alpha", "jira_write": "own"}
+    f = cr.fetch(repo_of(reg))
+    check("manifest_key_read: blocks and the team from a core with no manifest, through the registration's",
+          f["error"] is None and set(f["blocks"]) == {"scope", "product", "teams"} and f["namespace"] == "zorg-core"
+          and f["team"] is not None and f["team_error"] is None, f)
+    check("…the same core without the key: no manifest, no blocks file to read", cr.fetch(repo_of(dict(reg, manifest="")))["error"]
+          is not None, cr.fetch(repo_of(dict(reg, manifest=""))))
+    check("…manifest_namespace reads it too", cr.manifest_namespace(repo_of(reg)) == "zorg-core", cr.manifest_namespace(repo_of(reg)))
+    mwarn = getattr(cr, "manifest_warning", lambda r: "no manifest_warning yet")
+    check("…and no warning while the core has no manifest of its own", mwarn(repo_of(reg)) is None, mwarn(repo_of(reg)))
+
+    # --- blocks_none_is_search_only: a core folder registered for search publishes no blocks
+    search = repo_of({"id": "zorg-search", "kind": "folder", "paths": [core], "blocks": "none"})
+    check("blocks_none_is_search_only: blocks: none is search only, whatever folder it has",
+          cr.search_only(search) and cr.search_only(repo_of({"id": "s", "kind": "folder", "paths": [core], "blocks": "none",
+                                                             "blocks_file": CORE_BLOCKS_FILE}))
+          and not cr.search_only(repo_of({"id": "s", "kind": "folder", "paths": [core]})), search)
+    open(os.path.join(prov, "zorg-search.yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/2\nid: zorg-search\nkind: folder\npaths:\n  - %s\nblocks: none\n" % json.dumps(core))
+    rc, out, res = run("provider", "plan")
+    check("…`ctx provider plan` says «лише пошук: zorg-search» and leaves it out (exit 0)",
+          rc == 0 and "лише пошук: zorg-search" in out and res is not None and res.get("search_only") == ["zorg-search"]
+          and not res.get("repos"), (rc, out[-500:]))
+    rc, out, _ = run("provider", "plan", "zorg-search")
+    check("…naming it is exit 3 that says why", rc == 3 and "search-only" in out and "blocks: none" in out, (rc, out[-300:]))
+    os.remove(os.path.join(prov, "zorg-search.yaml"))
+
+    # --- owner_manifest_wins: the core gained its owner's manifest — that one is read, and the plan says so once
+    gone_cards = MANIFEST_TEXT.replace("team_card_dir: Core/Teams", "team_card_dir: Core/NoSuchTeams")
+    open(outside, "w", encoding="utf-8").write(gone_cards)
+    f = cr.fetch(repo_of(reg))
+    check("…(the registration's manifest alone names a team-card folder that is not there → no team)",
+          f["error"] is None and f["team"] is None and "team card not found" in (f["team_error"] or ""), f)
+    open(os.path.join(core, "Core", "_System", "provider-manifest.yaml"), "w", encoding="utf-8").write(MANIFEST_TEXT)
+    f = cr.fetch(repo_of(reg))
+    check("owner_manifest_wins: once the core has its owner's manifest, that one is read (the team is built)",
+          f["error"] is None and f["team"] is not None and f["team_error"] is None, f)
+    warn = mwarn(repo_of(reg)) or ""
+    check("…manifest_warning says the core now has its owner's manifest and what to do",
+          "у ядрі тепер є маніфест власника" in warn and "manifest:" in warn and outside not in warn, warn)
+    open(os.path.join(prov, "zorg-core.yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/2\nid: zorg-core\nkind: folder\npaths:\n  - %s\nmanifest: %s\nteam: team-alpha\n"
+        "jira_write: own\n" % (json.dumps(core), json.dumps(outside)))
+    ctx_text_g = read(REPOS_FIX, "context.md").replace("{{VAULT}}", os.path.join(d, "vault"))
+    loaded = cr.load_repos(ctx_text_g, os.path.join(d, "home"))
+    check("a manifest in the providers folder's manifests/ is never read as a registration",
+          [r["id"] for r in loaded] == ["zorg-core"] and loaded[0]["_file"].endswith("zorg-core.yaml")
+          and loaded[0]["manifest"] == outside, [(r["id"], r["_file"]) for r in loaded])
+    rc, out, res = run("provider", "plan", "zorg-core")
+    check("…`ctx provider plan` prints that line once, and the plan is read from the owner's manifest",
+          rc == 0 and sum(1 for l in out.splitlines() if l.startswith("увага: у ядрі тепер є маніфест власника")) == 1
+          and res is not None
+          and "у ядрі тепер є маніфест власника" in (res.get("manifest_warning") or ""), (rc, out[-600:]))
+
+    # --- inferred_manifest_evicted: iCloud left only the placeholder of the registration's manifest
+    os.remove(os.path.join(core, "Core", "_System", "provider-manifest.yaml"))
+    os.remove(outside)
+    open(os.path.join(prov, "manifests", ".zorg-core.manifest.yaml.icloud"), "wb").write(b"bplist00")
+    open(os.path.join(prov, "zorg-core.yaml"), "w", encoding="utf-8").write(
+        "schema: provider-registration/2\nid: zorg-core\nkind: folder\npaths:\n  - %s\nmanifest: %s\nnamespace: zorg-core\n"
+        "blocks_file: %s\nteam: team-alpha\njira_write: own\n" % (json.dumps(core), json.dumps(outside), CORE_BLOCKS_FILE))
+    f = cr.fetch(cr.load_repos(read(REPOS_FIX, "context.md").replace("{{VAULT}}", os.path.join(d, "vault")),
+                               os.path.join(d, "home"))[0])
+    check("inferred_manifest_evicted: the blocks still come, the team is unavailable — the manifest is not downloaded",
+          f["error"] is None and set(f["blocks"]) == {"scope", "product", "teams"} and f["team"] is None
+          and "not downloaded" in (f["team_error"] or "") and outside not in (f["team_error"] or ""), f)
+    state_before = tree_state(store)
+    rc, out, res = run("provider", "plan", "zorg-core")
+    team_row = next((l for l in out.splitlines() if re.match(r"^\s*·\s+team\b", l)), "")
+    check("…the plan shows the team row as '·' with the reason, and nothing is written",
+          rc == 0 and team_row and "not downloaded" in out and tree_state(store) == state_before, (rc, out[-600:]))
+    home_ctx = os.path.join(d, "home", ".grow-pm", "local-context.md")
+    rc, out, res = run("provider", "apply", "zorg-core")
+    check("…apply leaves the team region you hold alone", "zorg-core:begin id=team" in read(home_ctx)
+          and "### Team: Alpha (A)" in read(home_ctx), (rc, out[-300:]))
+    os.remove(os.path.join(prov, "manifests", ".zorg-core.manifest.yaml.icloud"))
+    f = cr.fetch(repo_of(dict(reg, namespace="zorg-core", blocks_file=CORE_BLOCKS_FILE)))
+    check("…a registration's manifest that is simply not there: the reason names the file, not its path",
+          f["team"] is None and "manifest not found: zorg-core.manifest.yaml" in (f["team_error"] or "")
+          and prov not in (f["team_error"] or ""), f)
+    # review M8: the role model iCloud has evicted is «not downloaded», never «not found»
+    open(outside, "w", encoding="utf-8").write(MANIFEST_TEXT)
+    model_path = os.path.join(core, "Core", "_System", "access-bundles.json")
+    model_bytes = open(model_path, "rb").read()
+    os.remove(model_path)
+    open(os.path.join(core, "Core", "_System", ".access-bundles.json.icloud"), "wb").write(b"bplist00")
+    f = cr.fetch(repo_of(reg))
+    check("M8: an evicted role model → the team block is «not downloaded yet», the blocks still come",
+          f["error"] is None and f["team"] is None and "not downloaded" in (f["team_error"] or ""), f)
+    os.remove(os.path.join(core, "Core", "_System", ".access-bundles.json.icloud"))
+    open(model_path, "wb").write(model_bytes)
+    # review I4: the core ships its owner's manifest but iCloud evicted it — never a silent fallback to the registration's
+    open(os.path.join(core, "Core", "_System", ".provider-manifest.yaml.icloud"), "wb").write(b"bplist00")
+    f = cr.fetch(repo_of(dict(reg, namespace="zorg-core", blocks_file=CORE_BLOCKS_FILE)))
+    check("I4: the owner's manifest evicted → the team block «the core's own manifest is not downloaded yet»",
+          f["error"] is None and f["team"] is None and "core's own provider manifest is not downloaded" in (f["team_error"] or ""), f)
+    os.remove(os.path.join(core, "Core", "_System", ".provider-manifest.yaml.icloud"))
+    os.remove(outside)
+    files_of = lambda st: {k: v[3] for k, v in st.items() if stat.S_ISREG(v[0])}
+    check("the core is only read in all of this (its files byte for byte; the test itself put the owner's manifest in and out)",
+          files_of(tree_state(core)) == files_of(before), "")
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

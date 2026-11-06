@@ -193,10 +193,87 @@ def index_dir(home):
 
 
 # ------------------------------------------------------------------ scope and names
-def Root(source, path, vault=""):
+def Root(source, path, vault="", exclude=(), guarded=False):
     """One folder the index walks: `source` is "own" (the plugin folder of a vault) or a repository id; `vault` is the
-    vault the folder lies in ("" outside every vault)."""
-    return {"source": source, "path": path, "vault": vault}
+    vault the folder lies in ("" outside every vault); `exclude` (since v4.4.0) the regular expressions, relative to the
+    folder, of what the walk leaves out — a registration's `exclude:` (a shared core connected without its owner's
+    manifest: the owner's personal layer stays out of search); `guarded` — such a core (`connected_as`): the walk also
+    leaves out every note of the owner's People contour (`people_output`)."""
+    return {"source": source, "path": path, "vault": vault, "exclude": list(exclude or ()), "guarded": bool(guarded)}
+
+
+class _AnyOf(object):
+    """The expressions of a root's `exclude`, each compiled on its own: `search` is true when one of them matches."""
+
+    def __init__(self, rxs):
+        self.rxs = rxs
+
+    def search(self, text):
+        return any(rx.search(text) for rx in self.rxs)
+
+
+HIDE_ALL = "."                                          # an `exclude` that leaves out every path of its folder
+
+
+def _exclusion(patterns):
+    """The expressions of a root's `exclude` as one matcher, or None for none — case-folded, as the index folds its own
+    folder names (a case-insensitive disk holds `meetings/` and `Meetings/` alike). Each is compiled on its own (joined,
+    a flag such as `(?i)` stands in the middle: Python 3.11+ refuses that). One that does not compile — or only warns,
+    as 3.9 does where 3.11+ refuses — makes the matcher leave out the whole folder: an owner's filter the plugin
+    cannot apply never lets that layer into search (fail closed)."""
+    import warnings
+    rxs = []
+    for p in patterns or ():
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                rxs.append(re.compile(p, re.IGNORECASE))
+        except (re.error, Warning, TypeError):
+            return _AnyOf([re.compile(HIDE_ALL)])
+    return _AnyOf(rxs) if rxs else None
+
+
+def people_output(rel, text):
+    """Is a note the People contour's own output — a 1-1 (`one_on_one`), a note of a people type other than the
+    registry's `people` / `person`, or one that carries a person profile's judgement field (STEP_P_FIELDS)? Such a note
+    is never a shared core's content: the walk leaves it out of a guarded root (data-policy.md → Search, rule 1). The
+    core's own registry cards stay."""
+    fm, _ = _frontmatter(text or "")
+    fm = fm if isinstance(fm, dict) else {}
+    title = _text(fm.get("title"))
+    if one_on_one(rel, title):
+        return True
+    types = fm.get("type") if isinstance(fm.get("type"), list) else [fm.get("type")]
+    if any(_text(x).lower() in PEOPLE_TYPES - {"people", "person"} for x in types):
+        return True
+    maps = [fm] + [v for v in fm.values() if isinstance(v, dict)]
+    return any(_filled(m.get(k)) for m in maps for k in STEP_P_FIELDS)
+
+
+def hidden_in(roots, vaults, path):
+    """Does the root that holds the index name `path` leave it out — its `exclude`, matched against the path relative to
+    its folder? For `ctx search --get`, which reads a file the walk never indexed (since v4.4.0)."""
+    best = None
+    for r in roots or ():
+        top = rel_path(r["path"], vaults or [], r)
+        if (path == top or path.startswith(top + "/")) if top else not path.startswith("@"):
+            if best is None or len(top) > len(best[1]):
+                best = (r, top)
+    if best is None:
+        return False
+    r, top = best
+    rx = _exclusion(r.get("exclude"))
+    sub = path[len(top) + 1:] if top else path
+    return bool(rx and sub and rx.search(sub))
+
+
+def guarded_root(roots, vaults, path):
+    """Is the root that holds `path` a guarded one (a core connected in mode A, B or C)?"""
+    for r in roots or ():
+        top = rel_path(r["path"], vaults or [], r)
+        if top and (path == top or path.startswith(top + "/")):
+            return bool(r.get("guarded"))
+    return False
 
 
 @functools.lru_cache(maxsize=8192)
@@ -230,24 +307,48 @@ def _vault_of(path, vaults):
 def scope(context_text, repos):
     """The roots of the index: `own` for `<vault>/<plugin folder>` of every vault of local-context.md, and the
     repository's id for the core folder (`core_root`, else its first path) of every registration whose folder is on
-    disk. A folder named twice is walked once (the first name)."""
+    disk. A folder named twice is walked once (the first name). Since v4.4.0 a registration's `exclude` goes with its
+    root (`Root`), with the core's own manifest's exclusions once the core ships one (`_live_exclude`)."""
     entries = cc.vault_entries(context_text)
     vaults = [v for v, _ in entries]
     out, seen = [], set()
 
-    def add(source, path, vault):
+    def add(source, path, vault, exclude=(), guarded=False):
         key = os.path.normpath(path)
         if key not in seen:
             seen.add(key)
-            out.append(Root(source, key, vault))
+            out.append(Root(source, key, vault, exclude, guarded))
 
     for vault, folder in entries:
         add("own", os.path.join(vault, folder) if folder else vault, vault)
     for r in repos or []:
         path = r.get("core_root") or next(iter(r.get("paths") or []), "")
         if path and os.path.isdir(path):
-            add(r.get("id") or "", path, _vault_of(path, vaults))
+            add(r.get("id") or "", path, _vault_of(path, vaults), _live_exclude(r, path), bool(r.get("connected_as")))
     return out
+
+
+def _live_exclude(repo, path):
+    """A registration's `exclude` and — for a core connected in mode A, B or C (`connected_as`, v4.4.0) — the exclusions
+    of the core's own manifest once the core ships one: its `exclude` and its `personal_overlay`
+    (ctx_infer.registration_exclude), read at each scope. The owner's manifest wins in search as it does for the team
+    block, without a new registration. A manifest the core visibly ships that cannot be read now — evicted by iCloud,
+    only its `.md` wrapper, one that does not parse, an expression that will not compile — leaves the whole folder out
+    of search until it reads again (fail closed: its filters are unknown, so nothing under it is shown)."""
+    ex = list(repo.get("exclude") or [])
+    if not repo.get("connected_as"):
+        return ex
+    try:
+        import ctx_infer as cinf                     # here: ctx_infer reads provider_bundle, the index needs it only now
+        m, problem = cinf.owner_manifest(path)
+        if problem:
+            return ex + [HIDE_ALL]
+        for x in cinf.registration_exclude(m) if m is not None else ():
+            if x not in ex:
+                ex.append(x)
+    except Exception:  # noqa: BLE001 — a manifest that cannot even be asked about is one that does not read
+        return ex + [HIDE_ALL]
+    return ex
 
 
 def rel_path(abs_path, vaults, root=None):
@@ -1665,6 +1766,7 @@ class _Walk:
         self.roots = [dict(r, path=os.path.normpath(r["path"])) for r in roots]
         for r in self.roots:
             r["rel"] = rel_path(r["path"], vaults, r)
+            r["_rx"] = _exclusion(r.get("exclude"))      # since v4.4.0: what this root leaves out
         self.root_paths = {N(r["path"]) for r in self.roots}
         self.by_rel = sorted(range(len(self.roots)), key=lambda i: -len(self.roots[i]["rel"]))
         self.store_rel = _slash(N(store_rel or "")).rstrip("/")
@@ -1715,12 +1817,23 @@ class _Walk:
 
     def _owner(self, path):
         """The root an index name belongs to: the one with the longest name that holds it (a vault walked whole holds
-        every name but those outside every vault), or None."""
+        every name but those outside every vault), or None — None too when that root's `exclude` leaves the name out
+        (since v4.4.0: the rows of a path a registration now excludes go as orphans)."""
         for i in self.by_rel:
             rel = self.roots[i]["rel"]
             if (path == rel or path.startswith(rel + "/")) if rel else not self._outside(path):
-                return i
+                return None if self._hidden(i, path) else i
         return None
+
+    def _hidden(self, ri, rel, folder=False):
+        """Does root `ri`'s `exclude` leave the index name `rel` out? Matched against the path relative to the root's
+        folder (as a manifest's `exclude` is), a folder with a trailing `/`."""
+        rx = self.roots[ri].get("_rx")
+        if rx is None:
+            return False
+        top = self.roots[ri]["rel"]
+        sub = rel[len(top) + 1:] if top and rel.startswith(top + "/") else ("" if top else rel)
+        return bool(sub) and bool(rx.search(sub + ("/" if folder else "")))
 
     def _due(self):
         return self.deadline is not None and _clock() >= self.deadline
@@ -1742,6 +1855,8 @@ class _Walk:
         stack = list(reversed(items))
         while stack and not self._due():
             kind, ri, path, rel = stack.pop()
+            if self._hidden(ri, rel, folder=kind == "d"):     # a saved queue from before the root excluded it
+                continue
             if kind == "d":
                 stack.extend(reversed(self._list(ri, path, rel)))
             else:
@@ -1803,12 +1918,14 @@ class _Walk:
             child = rel + "/" + name if rel else name
             try:
                 if e.is_dir(follow_symlinks=False):
-                    if _skip_folder(child, self.store_rel) or _copy_service(e.path):
+                    if _skip_folder(child, self.store_rel) or _copy_service(e.path) or self._hidden(ri, child, True):
                         continue
                     present.add(name)
                     if N(os.path.normpath(e.path)) not in self.root_paths:   # another root walks it itself
                         dirs.append(("d", ri, e.path, child))
                 elif e.is_file(follow_symlinks=False):      # a link to a file is not followed (v3.16.2)
+                    if self._hidden(ri, child):             # since v4.4.0: the root's exclude — its rows go below
+                        continue
                     present.add(name)
                     files.append(("f", ri, e.path, child))
             except OSError:
@@ -1825,10 +1942,11 @@ class _Walk:
         regular = info is not None and stat.S_ISREG(info.st_mode)
         md = rel.lower().endswith(".md")
         dataless = bool(regular and md and is_dataless(path))
+        hidden = False
         try:
-            self._note(ri, path, rel, info, dataless)
+            hidden = self._note(ri, path, rel, info, dataless) == "hidden"
         finally:
-            if regular and not _skip_folder(rel, self.store_rel) and not _dotted(rel):
+            if regular and not hidden and not _skip_folder(rel, self.store_rel) and not _dotted(rel):
                 self._name(ri, rel, dataless, md)
             elif rel in self.names:
                 self._forget(rel)
@@ -1889,6 +2007,10 @@ class _Walk:
         except OSError:
             return
         digest = hashlib.sha1(data).hexdigest()
+        if self.roots[ri].get("guarded") and people_output(rel, data.decode("utf-8", errors="replace")):
+            if rel in self.rows:                         # since v4.4.0: the owner's People contour in a guarded core —
+                self._remove(rel)                        # a 1-1, a profile — is no content of the core (its name neither)
+            return "hidden"
         if row and row["hash"] == digest:            # touched, not changed: the columns this build's rules of
             meta = note_meta(rel, data.decode("utf-8", errors="replace").replace("\r\n", "\n"), mtime=info.st_mtime)
             self.con.execute("UPDATE notes SET sensitive=?, mtime=?, size=? WHERE id=?",   # note_meta changed (v3.17.0)

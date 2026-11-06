@@ -159,7 +159,7 @@ def context_for(home, context_text, store_root=None, repos=None):
         name = r.get("blocks_file") or ""
         root = by_source.get(r.get("id"))
         if not name and root:
-            manifest, _ = crp._manifest(root["path"])
+            manifest, _ = crp._manifest(root["path"], r.get("manifest", ""))
             name = manifest.s("blocks_file") if manifest is not None else ""
         if name:
             rel = _repo_name(r, name, vaults)
@@ -190,7 +190,7 @@ def class_ttl(repos, vaults=None):
         folder = _folder(repo)
         if not folder or not os.path.isdir(folder):
             continue
-        manifest, _ = crp._manifest(folder)
+        manifest, _ = crp._manifest(folder, repo.get("manifest", ""))
         ttl = manifest.get("ttl_days") if manifest is not None else None
         if not isinstance(ttl, dict):
             continue
@@ -1797,6 +1797,8 @@ def _note_of(sctx, path):
     note. GetError 3 — a file not downloaded that no local index holds (ICLOUD_MISSING), one not read in time, or a
     file that lies under an excluded folder after all (ctx_index.excluded of its real path, case-folded: a link, a
     spelling in another case); 5 — the server did not answer."""
+    if ci.hidden_in(sctx.get("roots"), sctx.get("vaults"), path):   # since v4.4.0: a registration's `exclude`
+        raise GetError(3, EXCLUDED_NOTE % path)
     entry = _mcp_entry(sctx, path)       # a name only a server holds now: never the index's or a local copy (v3.16.2)
     if entry:
         body, date, meta, _ = _from_mcp(sctx, entry)
@@ -1820,6 +1822,8 @@ def _note_of(sctx, path):
             body = cst.read_text(found)
         except (OSError, UnicodeError, cst.StoreError) as e:
             raise GetError(3, "the note cannot be read: %s (%s)" % (path, e))
+        if ci.guarded_root(sctx.get("roots"), sctx.get("vaults"), path) and ci.people_output(path, body):
+            raise GetError(3, EXCLUDED_NOTE % path)     # the owner's People contour in a core connected in A–C (v4.4.0)
         meta = ci.note_meta(path, body, mtime=mtime)
         return (_root_source(sctx, path) or "vault", meta.get("date"), _marks(meta), None, ci.split_sections(body),
                 _section_of(body, ""))
@@ -2052,6 +2056,8 @@ def get(sctx, cid, full=False):
         entry = _in_index(idx, cid)
     if not entry:
         return _get_path(sctx, arg, full)       # a note named like an id; else NO_CANDIDATE, as for a name
+    if ci.hidden_in(sctx.get("roots"), sctx.get("vaults"), N(str(entry["path"]))):   # an id from before an exclude
+        raise GetError(3, EXCLUDED_NOTE % entry["path"])
     heading, date, text, marks = entry.get("heading") or "", entry.get("date") or "", None, ""
     said, following = None, []
     secs = lambda: (idx.note(entry["path"]) or (None, []))[1]  # noqa: E731 — the note's sections, for a cut text

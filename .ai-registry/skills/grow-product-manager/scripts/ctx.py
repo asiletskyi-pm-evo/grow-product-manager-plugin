@@ -340,6 +340,7 @@ import ctx_eslots as es  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_history as chi  # noqa: E402
 import ctx_identity as cid  # noqa: E402
+import ctx_infer as cinf  # noqa: E402
 import ctx_kit as ckit  # noqa: E402
 import ctx_inbox as ci_  # noqa: E402
 import ctx_index as ci  # noqa: E402
@@ -358,6 +359,7 @@ import ctx_show as csh  # noqa: E402
 import ctx_slots as sl  # noqa: E402
 import ctx_sources as csrc  # noqa: E402
 import ctx_synced as sy  # noqa: E402
+import provider_bundle as pbm  # noqa: E402
 
 HEADINGS = {"product": "### Product: %s", "team": "### Team: %s", "org": "## Organization: %s",
             "setting": "## %s", "custom": "## %s"}
@@ -1485,7 +1487,7 @@ def cmd_repo_list(a, c):
     rows, bad = [], []
     for r in repos:
         blocks, version, checked, error = _list_state(c, r["id"])
-        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked))
+        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked, search_only=crp.search_only(r)))
         if error is not None:
             rows[-1]["state_error"] = error
             bad.append((r["id"], error))
@@ -1494,7 +1496,8 @@ def cmd_repo_list(a, c):
         for r in rows:
             cells = ("!", "!", "!") if r.get("state_error") else (
                 str(r["blocks"]) if r["blocks"] else "—", r["base_version"] or "—", r["checked"] or "—")
-            table.append((r["id"] + (" (paused)" if r["status"] == "paused" else ""), r["kind"] or "—",
+            table.append((r["id"] + (" (paused)" if r["status"] == "paused" else "") + (" (лише пошук)" if r["search_only"] else ""),
+                          r["kind"] or "—",
                           ", ".join(r["products"]) or "all", str(r["rank"]), r["access"] or "—") + cells)
         print(_table(table))
     else:
@@ -1507,7 +1510,7 @@ def cmd_repo_list(a, c):
     for rid, error in bad:
         print("block state unreadable: %s (%s)" % (cb.clip(rid, cb.HEADER_CLIP), error))
     for r in rows:
-        warning = crp.namespace_warning(r)
+        warning = None if r["search_only"] else crp.namespace_warning(r)   # the row's `blocks` is the count by now
         if warning:
             print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
         r["namespace_warning"] = warning
@@ -1528,6 +1531,11 @@ def cmd_repo_status(a, c):
     for r in repos:
         ok, why = crp.reach(r)
         why = cb.clip(why, cb.NOTE_CLIP)                # reach clips already; kept, harmless (clip is idempotent)
+        if crp.search_only(r):                          # since v4.4.0: it publishes no blocks — no blocks file to read
+            rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": crp.public_url(r["endpoint"]["url"]),
+                         "reachable": ok, "reason": why, "source_version": None, "registration_version": r["source_version"],
+                         "base_version": None, "namespace_warning": None, "search_only": True})
+            continue
         # the version on the source is what its blocks carry now, and only that: when the source was not read there is
         # none (the registration's own version, a note from whoever wrote it, goes in its own key and is never shown as
         # the source's). The base is the version most of the blocks the store holds a base for are at. Only the blocks
@@ -1555,6 +1563,9 @@ def cmd_repo_status(a, c):
             where = row["url"] or "—"
             print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
             print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
+            if row.get("search_only"):
+                print("  лише пошук — блоків не публікує")
+                continue
             print("  version on source: %s · base: %s" % (row["source_version"] or "—", row["base_version"] or "—"))
             if row.get("fetch_error"):
                 print("  blocks file: %s" % row["fetch_error"])
@@ -1741,10 +1752,36 @@ def cmd_repo_copy(a, c):
 
 
 def cmd_repo_kit_check(a, c):
-    """`repo kit-check <folder>` (since v3.23.0): is the folder a sound provider kit (context-provider-protocol.md §9)?
-    Reads only. Exit 0 sound (warnings said), 3 with every fault named."""
+    """`repo kit-check <folder> [--infer [--id I]]` (since v3.23.0): is the folder a sound provider kit
+    (context-provider-protocol.md §9)? Reads only. Exit 0 sound (warnings said), 3 with every fault named. With --infer
+    (since v4.4.0) the manifest the plugin would infer for a core that ships none is printed — for its owner to place in
+    the core — with where each key came from and the check under it; nothing is written."""
     warnings = []
-    m, model, problems = ckit.check(os.path.abspath(os.path.expanduser(a.folder)), warnings)
+    folder = os.path.abspath(os.path.expanduser(a.folder))
+    if getattr(a, "id", None) and not getattr(a, "infer", False):
+        raise Usage("--id лише з --infer — інакше id дає маніфест ядра")
+    if pbm.manifest_evicted(folder) and not pbm.manifest_files(folder):   # since v4.4.0: never «no manifest» for it
+        why = "маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори"
+        print("вада: %s" % why)
+        return 3, {"command": "repo", "action": "kit-check", "problems": [why], "warnings": [], "id": None}
+    if getattr(a, "infer", False):
+        r = cinf.infer(folder, rid=a.id or "", today=now()[:10])
+        if not r["ok"]:
+            print("вада: %s" % r["why"])
+            return 3, {"command": "repo", "action": "kit-check", "inferred": True, "problems": [r["why"]], "warnings": [],
+                       "candidates": r["candidates"], "id": None}
+        m, model, problems = ckit.check(folder, warnings, manifest=r["manifest"])
+        if pbm.manifest_files(folder):
+            print("увага: у ядрі вже є маніфест власника — він і діє; нижче лише те, що плагін вивів би без нього")
+        shown = r["text"].rstrip("\n").split("\n")
+        if problems:                                    # a manifest with faults is nothing the owner may place: no header
+            shown = [l for l in shown if not l.startswith("# ")]
+        print("\n".join(shown))
+        print("з чого:")
+        for k, v in r["from"].items():
+            print("  %s — %s" % (k, v))
+    else:
+        m, model, problems = ckit.check(folder, warnings)
     for p in problems:
         print("вада: %s" % p)
     for w in warnings:
@@ -1752,78 +1789,282 @@ def cmd_repo_kit_check(a, c):
     if not problems:
         print("набір у порядку: %s · ядро %s · команд %d · блоків у файлі — див. ctx repo add" % (
             m.s("id"), (model or {}).get("version") or "?", len((model or {}).get("teams") or {})))
-    return (3 if problems else 0), {"command": "repo", "action": "kit-check", "problems": problems, "warnings": warnings,
-                                    "id": m.s("id") if m else None}
+    res = {"command": "repo", "action": "kit-check", "problems": problems, "warnings": warnings,
+           "id": m.s("id") if m else None}
+    if getattr(a, "infer", False):
+        res.update(inferred=True, manifest_text=r["text"])
+        print("нічого не записано" + ("" if problems else " — власник ядра може покласти цей маніфест у %s" % "/".join(
+            x for x in (m.s("plugin_folder", "."), "_System", "provider-manifest.yaml") if x != ".")))
+    return (3 if problems else 0), res
+
+
+def _owner_line(ident, m, model, manifest_where):
+    """The line for the core's owner, ready to forward (C7 of v4.4.0) — the plugin sends nothing itself: a guest the
+    role model does not list asks to be added; an inferred manifest asks to be placed in the core. "" when neither."""
+    add = ("внеси, будь ласка, %s · команда: <назви сам> · роль: %s у `%s`" % (
+        ident["email"], ident["role"], os.path.basename(m.s("bundles_file") or "access-bundles.json"))
+        if not ident["team"] and not ident.get("known") else "")
+    place = ""
+    if manifest_where:                                  # the file's name only: the owner cannot open the colleague's path
+        target = "/".join(x for x in (m.s("plugin_folder", "."), "_System", "provider-manifest.yaml") if x != ".")
+        place = ("маніфест %s (файл додаю; його ж покаже ctx repo kit-check <тека ядра> --infer) у %s — перед тим прибери "
+                 "рядок inferred: true і додай свої exclude, deny_patterns" % (os.path.basename(manifest_where), target))
+    if add and place:
+        return "Власнику ядра: %s і поклади %s" % (add, place)
+    if add:
+        return "Власнику ядра: " + add
+    return "Власнику ядра: поклади, будь ласка, " + place if place else ""
+
+
+OLDER_HOSTS_LINE = ("увага: Grow PM до 4.4.0 на іншому хості чи Mac, що читає цю реєстрацію, не знає exclude: — там "
+                    "особистий шар власника видно в пошуку, а реєстрацію лише для пошуку він називає недоступною "
+                    "(provider plan, exit 5); онови плагін усюди")
+
+
+def _taken(c, rid, mode_flags, regs_dir, takes_id=False, folder=""):
+    """The usage error for an id a registration already has (`ctx repo add`). A plain kit add keeps the v3.23.0 words
+    (refresh through `provider plan`); a mode of v4.4.0 — or a registration of one (search only, an inferred manifest) —
+    says how to change it: remove the registration file (and its manifest) — or give another --id, when the mode asked
+    for takes one (`takes_id`: --infer, --search-only). Since v4.4.0 a registration of the same core folder under another
+    id (`folder`: search only takes its id from the folder's name, the kit and a guest from the manifest) is taken too —
+    a core is registered once. None when free."""
+    skipped = []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    have = next((r for r in repos if r["id"] == rid), None)
+    if have is None and folder:
+        real = os.path.realpath(folder)
+        have = next((r for r in repos if r.get("core_root") and os.path.realpath(r["core_root"]) == real), None)
+        if have is not None:
+            mode_flags, rid = True, have["id"]
+    if have is None:
+        return None
+    if not mode_flags and not crp.search_only(have) and not have.get("manifest"):
+        return "%s уже зареєстровано — оновлення: ctx provider plan %s" % (rid, rid)
+    extra = " і %s" % have["manifest"] if have.get("manifest") else ""
+    return ("%s уже зареєстровано (%s) — щоб змінити режим, прибери файл реєстрації%s і запусти ctx repo add знову%s"
+            % (rid, have.get("_file") or os.path.join(regs_dir, rid + ".yaml"), extra, ", або дай інший --id" if takes_id else ""))
+
+
+def _inside_core(regs, folder):
+    """The usage error when the providers folder — where `repo add` writes the registration and an inferred manifest —
+    lies inside the core folder being connected (a storage root inside the core, since v4.4.0): the plugin never
+    writes into a core. "" when it does not."""
+    real, root = os.path.realpath(regs), os.path.realpath(folder)
+    if os.path.commonpath([real, root]) != root:
+        return ""
+    return ("сховище лежить у теці ядра (%s) — реєстрація лягла б у ядро, а плагін у ядро не пише; підключи ядро з "
+            "окремим сховищем або без вейлту в теці ядра" % regs)
+
+
+def _stale_manifest(man_where):
+    """The usage error for an inferred manifest already at `man_where` that no registration names any more — left by a
+    registration removed by hand: name it, and what to do (the plugin never deletes it on its own)."""
+    return ("лишився виведений маніфест від попередньої реєстрації: %s — жодна реєстрація його не називає; видали його "
+            "(або дай інший --id) і запусти ctx repo add знову" % man_where)
+
+
+SEARCH_OWNER_LINE = ("Власнику ядра: щоб ядро підключалось повністю, у ньому потрібні _System/access-bundles.json і "
+                     "_System/provider-manifest.yaml (references/context-provider-protocol.md §9)")
+SEARCH_OWNER_LINE_MODEL = ("Власнику ядра: щоб ядро підключалось повністю, у ньому потрібен _System/provider-manifest.yaml — "
+                           "модель ролей уже є (references/context-provider-protocol.md §9)")
+
+
+def _search_add_plan(c, a, folder):
+    """(facts, text) of `repo add <folder> --search-only [--id I]` (since v4.4.0): a core folder registered for search
+    alone — `blocks: none`, no role model, no manifest, no e-mail; the owner's personal layer left out of the index."""
+    given = [f for f, v in (("--infer", a.infer), ("--guest", a.guest), ("--team", a.team), ("--role", a.role),
+                            ("--email", a.email)) if v]
+    if given:
+        raise Usage("--search-only бере лише теку (і --id), не %s" % ", ".join(given))
+    if not os.path.isdir(folder):
+        raise Usage("немає теки: %s" % folder)
+    rid = a.id or cinf.kebab(os.path.basename(folder))
+    if not rid:
+        raise Usage("назва теки «%s» не дає id латиницею — дай --id" % os.path.basename(folder))
+    if not cinf.KEBAB.match(rid):
+        raise Usage("id %r — не kebab-case до 64 символів: --id" % rid)
+    owner_m, problem = cinf.owner_manifest(folder)     # a core that ships one: its filters too — or none of it
+    if problem:
+        raise Usage("%s — без фільтрів власника ядро не підключається; повтори, коли маніфест читатиметься" % problem)
+    regs = ckit.registrations_dir(c.store.root, c.text, c.home)
+    inside = _inside_core(regs, folder)
+    if inside:
+        raise Usage(inside)
+    taken = _taken(c, rid, True, regs, takes_id=True, folder=folder)
+    if taken:
+        raise Usage(taken)
+    title, _ = cinf.title_of(folder)
+    exclude = cinf.registration_exclude(owner_m)
+    text = ckit.registration(folder, pbm.Manifest({"id": rid, "title": title}), None, None, now()[:10], search_only=True,
+                             exclude=exclude, connected_as="search")
+    where = os.path.join(regs, "%s.yaml" % rid)
+    if os.path.lexists(where):
+        raise Usage("файл реєстрації вже є: %s — нічого не записано" % where)
+    code = cs.sha_text(json.dumps([text], ensure_ascii=False))[:8]
+    owner = ("" if owner_m is not None else
+             SEARCH_OWNER_LINE_MODEL if cinf._plugin_folders(folder)[0] else SEARCH_OWNER_LINE)
+    lines = ["тека %s · %s" % (rid, folder),
+             "режим: лише пошук (blocks: none) — без блоків і командного блоку; шукають context-navigator і ctx search",
+             "поза пошуком: Meetings/, Focus/, _personal/, TODO…, Now.md, .xlsx, _archive/, копії контексту, сховище "
+             "власника" + (", особистий шар із маніфесту ядра" if owner_m is not None else ""),
+             "реєстрація: %s (sync: off)" % where, OLDER_HOSTS_LINE] + ([owner] if owner else []) + ["код: %s" % code]
+    return {"id": rid, "mode": "search", "text": text, "where": where, "code": code, "adds": [], "manifest": "",
+            "manifest_text": "", "owner_line": owner, "ident": {"team": "", "role": ""}}, "\n".join(lines)
 
 
 def _kit_add_plan(c, a):
-    """(the dry run's facts, its text): the kit checked, the identity, the registration, the blocks it brings."""
+    """(the dry run's facts, its text): the kit checked, the identity, the registration, the blocks it brings. Since
+    v4.4.0 also for a core that ships no manifest: --infer (one inferred beside the registration, ctx_infer), --guest
+    (no team), --search-only (`_search_add_plan`)."""
     folder = os.path.abspath(os.path.expanduser(a.folder))
-    warnings = []
-    m, model, problems = ckit.check(folder, warnings)
-    if problems:
-        raise Usage("набір має вади — ctx repo kit-check %s:\n  %s" % (a.folder, "\n  ".join(problems)))
+    if a.search_only:
+        return _search_add_plan(c, a, folder)
+    if not a.email:
+        raise Usage("--email is required (except with --search-only)")
+    if a.guest and a.team:
+        raise Usage("--guest і --team разом не можна: гість підключається без команди")
+    if a.id and not a.infer:
+        raise Usage("--id лише з --infer або --search-only — інакше id дає маніфест ядра")
+    warnings, inferred = [], None
+    if pbm.manifest_evicted(folder) and not pbm.manifest_files(folder):   # never «no manifest» for one iCloud holds
+        raise Usage("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і повтори "
+                    "ctx repo add %s --email %s" % (a.folder, a.email))
+    if pbm.manifest_wrappers(folder) and not pbm.manifest_files(folder):  # it ships one, only as a note
+        raise Usage("маніфест власника ядра є лише як обгортка provider-manifest.md — плагін її на місці не розгортає; "
+                    "попроси власника покласти provider-manifest.yaml поруч (context-provider-protocol §9)")
+    if a.infer:
+        if pbm.manifest_files(folder):
+            raise Usage("у ядрі є маніфест власника — запусти без --infer: ctx repo add %s --email %s" % (a.folder, a.email))
+        inferred = cinf.infer(folder, rid=a.id or "", today=now()[:10])
+        if not inferred["ok"]:
+            raise Usage("маніфест не вивести: %s" % inferred["why"])
+        m, model, problems = ckit.check(folder, warnings, manifest=inferred["manifest"])
+        if problems:
+            why = (inferred["from"].get("blocks_file", "") if not inferred["manifest"].s("blocks_file")
+                   else "ядро має вади, з якими його не підключити:\n  " + "\n  ".join(problems))
+            raise Usage("маніфест не вивести: %s — лише пошук: ctx repo add %s --search-only" % (why, a.folder))
+    else:
+        m, model, problems = ckit.check(folder, warnings, quiet=a.guest)
+        if problems and m is None and problems[0].startswith("no provider manifest"):
+            raise Usage("у ядрі немає маніфесту власника (_System/provider-manifest.yaml) — підключи з виведеним: "
+                        "ctx repo add %s --email %s --infer%s (його покаже ctx repo kit-check %s --infer), або лише пошук: "
+                        "--search-only" % (a.folder, a.email, " --guest" if a.guest else "", a.folder))
+        if problems and a.guest:                        # a guest is not the owner: the count, never the cards' names
+            raise Usage("набір має вади (%d) — справа власника ядра; перелік — ctx repo kit-check %s"
+                        % (len(problems), a.folder))
+        if problems:
+            raise Usage("набір має вади — ctx repo kit-check %s:\n  %s" % (a.folder, "\n  ".join(problems)))
+        if a.guest:                                     # the owner's filters must apply everywhere, or not at all
+            bad = cinf.expression_problems(m.get("exclude") or [])
+            if bad:
+                raise Usage("маніфест власника ядра: %s — повідом власника; без його фільтрів гість не підключається"
+                            % "; ".join(bad))
     rid = m.s("id")
-    skipped = []
-    if rid in [r["id"] for r in crp.load_repos(c.text, c.home, skipped=skipped)]:
-        raise Usage("%s уже зареєстровано — оновлення: ctx provider plan %s" % (rid, rid))
+    regs = ckit.registrations_dir(c.store.root, c.text, c.home)
+    if inferred or a.guest:
+        inside = _inside_core(regs, folder)
+        if inside:
+            raise Usage(inside)
+    taken = _taken(c, rid, bool(a.infer or a.guest), regs, takes_id=bool(a.infer), folder=folder if (a.infer or a.guest) else "")
+    if taken:
+        raise Usage(taken)
     try:
-        ident = ckit.identity(folder, m, model, a.email, team=a.team, role=a.role)
+        ident = ckit.identity(folder, m, model, a.email, team=a.team, role=a.role, guest=a.guest)
     except ValueError as e:
         raise Usage(str(e))
-    text = ckit.registration(folder, m, model, ident, now()[:10])
-    where = os.path.join(ckit.registrations_dir(c.store.root, c.text, c.home), "%s.yaml" % rid)
+    where = os.path.join(regs, "%s.yaml" % rid)
+    man_where = os.path.join(regs, "manifests", "%s.manifest.yaml" % rid) if inferred else ""
+    exclude = cinf.registration_exclude(m) if (inferred or a.guest) else None
+    text = ckit.registration(folder, m, model, ident, now()[:10], manifest_path=man_where, exclude=exclude,
+                             connected_as="guest" if a.guest else ("inferred" if inferred else ""))
     if os.path.lexists(where):
         raise Usage("файл реєстрації вже є: %s — нічого не записано" % where)
+    if man_where and os.path.lexists(man_where):
+        raise Usage(_stale_manifest(man_where))
     repo = crp.normalise(cc.read_yaml_subset(text))
-    fetched = crp.fetch(repo)
+    fetched = crp.fetch(repo, manifest=inferred["manifest"] if inferred else None)
     if fetched.get("error"):
         raise Usage("блоки набору не читаються: %s" % fetched["error"])
     p = cb.plan(c.store, c.copies, repo, fetched, now())
     adds = [r["block"] for r in p["rows"] if r["sign"] == "+"]
-    code = cs.sha_text(json.dumps([text, adds, fetched.get("version")], ensure_ascii=False))[:8]
-    lines = ["набір %s · ядро %s · %s" % (rid, model.get("version") or "?", folder),
-             "команда: %s (%s) · %s" % (ident["team"], ident["team_title"], ident["team_from"]),
-             "роль: %s · %s" % (ident["role"], ident["role_from"]),
-             "Jira: запис — ask (context-connect спитає, чи є в тебе свій проєкт)",
-             "реєстрація: %s (sync: off — щоденний синк вмикає context-connect)" % where,
-             "блоки: %s → %s" % (", ".join("+ " + b for b in adds) or "жодного нового",
-                                 cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
-    lines += ["увага: %s" % w for w in warnings] + ["код: %s" % code]
-    return {"id": rid, "ident": ident, "text": text, "where": where, "repo": repo, "fetched": fetched, "adds": adds,
-            "code": code}, "\n".join(lines)
+    mtext = inferred["text"] if inferred else ""
+    code = cs.sha_text(json.dumps([text, adds, fetched.get("version")] + ([mtext] if mtext else []), ensure_ascii=False))[:8]
+    mode = "guest" if a.guest else ("inferred" if inferred else "kit")
+    owner = _owner_line(ident, m, model, man_where)
+    team_line = ("команда: — (гість, без командного блоку) · --guest" if a.guest else
+                 "команда: %s (%s) · %s" % (ident["team"], ident["team_title"], ident["team_from"]))
+    lines = ["набір %s · ядро %s · %s" % (rid, model.get("version") or "?", folder)]
+    if inferred:
+        lines.append("маніфест: виведено → %s (у ядро не пишеться; лише на місці)" % man_where)
+        lines.append("з чого: " + " · ".join("%s — %s" % (k, inferred["from"][k]) for k in
+                                             ("plugin_folder", "blocks_file") if inferred["from"].get(k)))
+    lines += [team_line,
+              "роль: %s · %s" % (ident["role"], ident["role_from"]),
+              "Jira: запис — ask (context-connect спитає, чи є в тебе свій проєкт)",
+              "реєстрація: %s (sync: off — щоденний синк вмикає context-connect)" % where,
+              "блоки: %s → %s" % (", ".join("+ " + b for b in adds) or "жодного нового",
+                                  cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
+    if exclude:
+        lines.append("поза пошуком у теці ядра: Meetings/, Focus/, _personal/, TODO…, Now.md, .xlsx, _archive/, копії контексту, "
+                     "сховище власника" + ("" if inferred else ", особистий шар із маніфесту ядра"))
+        lines.append(OLDER_HOSTS_LINE)
+    owner_faults = [w for w in warnings if w.endswith("— справа власника ядра")]   # an inferred manifest's
+    lines += ["увага: %s" % w for w in warnings if w not in owner_faults]               # softened faults: one count
+    if owner_faults:
+        lines.append("увага: вад, які виправляє лише власник ядра — справа власника ядра: %d (на підключення не впливають; "
+                     "перелік — ctx repo kit-check %s --infer)" % (len(owner_faults), a.folder))
+    if owner:
+        lines.append(owner)
+    lines.append("код: %s" % code)
+    return {"id": rid, "mode": mode, "ident": ident, "text": text, "where": where, "repo": repo, "fetched": fetched,
+            "adds": adds, "code": code, "manifest": man_where, "manifest_text": mtext, "owner_line": owner}, "\n".join(lines)
 
 
 def cmd_repo_add(a, c):
-    """`repo add <folder> --email E [--team T] [--role R] [--apply --code C]` (since v3.23.0): a provider kit from
-    nothing in one command once shown — the kit checked, your team and role resolved, the registration written beside
-    your store, every block of the kit added (`provider apply --add`, its own snapshot and journal line). Without
-    --apply it reads only and prints a code; another code → exit 4, nothing written. The core folder is only read."""
+    """`repo add <folder> --email E [--team T | --guest] [--role R] [--infer [--id I]] [--apply --code C]`, or
+    `repo add <folder> --search-only [--id I] [--apply --code C]` (since v3.23.0; the three modes since v4.4.0): a
+    provider kit from nothing in one command once shown — the kit checked, your team and role resolved, the
+    registration written beside your store, every block of the kit added (`provider apply --add`, its own snapshot and
+    journal line). A core that ships no manifest: --infer writes the inferred one beside the registration
+    (`manifests/<id>.manifest.yaml`, never into the core); --guest connects without a team; --search-only registers the
+    folder for search alone (`blocks: none`, no blocks written). Without --apply it reads only and prints a code;
+    another code → exit 4, nothing written. The core folder is only read."""
     c.need_store()
     facts, text = _kit_add_plan(c, a)
+    out = {"command": "repo", "action": "add", "id": facts["id"], "mode": facts["mode"], "registration": facts["where"],
+           "manifest": facts["manifest"], "owner_line": facts["owner_line"], "blocks": facts["adds"],
+           "team": facts["ident"]["team"], "role": facts["ident"]["role"]}
     if not a.apply:
         print(text)
-        return 0, {"command": "repo", "action": "add", "id": facts["id"], "code": facts["code"], "blocks": facts["adds"],
-                   "registration": facts["where"], "team": facts["ident"]["team"], "role": facts["ident"]["role"]}
+        return 0, dict(out, code=facts["code"])
     if not a.code:
-        raise Usage("--apply needs the code the dry run printed: ctx repo add %s --email %s" % (a.folder, a.email))
+        raise Usage("--apply needs the code the dry run printed: ctx repo add %s %s" % (
+            a.folder, "--search-only" if a.search_only else "--email %s" % a.email))
+    res = None
     with co.lock(c.home):
         c.guard()
         c.import_first()
         facts, text = _kit_add_plan(c, a)
         if facts["code"] != a.code:
-            raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s --email %s" % (a.folder, a.email))
-        res = cb.apply(c.store, c.copies, c.home, facts["repo"], facts["fetched"], {}, facts["adds"], now())
+            raise co.Refused("набір або сховище змінились — переглянь ще раз: ctx repo add %s %s" % (
+                a.folder, "--search-only" if a.search_only else "--email %s" % a.email))
+        if facts["mode"] != "search":
+            res = cb.apply(c.store, c.copies, c.home, facts["repo"], facts["fetched"], {}, facts["adds"], now())
         os.makedirs(cs.check_target(os.path.dirname(facts["where"])), exist_ok=True)    # after the blocks: a failed
-        cs.atomic_write(facts["where"], facts["text"])                                  # apply leaves no registration
+        if facts["manifest"]:                                                           # apply leaves no registration
+            os.makedirs(cs.check_target(os.path.dirname(facts["manifest"])), exist_ok=True)
+            cs.atomic_write(facts["manifest"], facts["manifest_text"])
+        cs.atomic_write(facts["where"], facts["text"])
         card = _refresh_card(c)
     print(text)
-    print(cb.render_apply(res))
+    if res is not None:
+        print(cb.render_apply(res))
+    if facts["manifest"]:
+        print("маніфест записано: %s" % facts["manifest"])
     print("реєстрацію записано: %s" % facts["where"])
     if card:
         print(card)
-    return 0, {"command": "repo", "action": "add", "id": facts["id"], "registration": facts["where"], "written": res["written"],
-               "snapshot": res["snapshot"], "blocks": facts["adds"]}
+    return 0, dict(out, written=res["written"] if res else [], snapshot=res["snapshot"] if res else None)
 
 
 def _index_scope(c):
@@ -2487,8 +2728,8 @@ def _repository(c, rid):
     if not repos:
         raise Usage(_not_registered(rid, skipped))
     if crp.search_only(repos[0]):
-        raise Usage("%s is a search-only registration (no blocks_file and no core folder): it publishes no blocks for "
-                    "`ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
+        raise Usage("%s is a search-only registration (blocks: none, or no blocks_file and no core folder): it publishes "
+                    "no blocks for `ctx provider`" % cb.clip(rid, cb.HEADER_CLIP))
     return repos[0]
 
 
@@ -2622,6 +2863,9 @@ def cmd_provider_plan(a, c):
         plan["namespace_warning"] = crp.namespace_warning(repo, fetched["namespace"])
         if plan["namespace_warning"]:
             print("warning: %s" % plan["namespace_warning"])
+        plan["manifest_warning"] = crp.manifest_warning(repo)          # since v4.4.0: the core now ships its own
+        if plan["manifest_warning"]:
+            print("увага: %s" % plan["manifest_warning"])
         plans.append(plan)
     rc = 5 if down else 0
     if a.repo:
@@ -3674,10 +3918,13 @@ def build_parser():
     sp = rp.add_parser("list", parents=[common]); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("status", parents=[common]); sp.add_argument("id", nargs="?"); sp.add_argument("--json", action="store_true")
     sp = rp.add_parser("kit-check", parents=[common]); sp.add_argument("folder")
+    sp.add_argument("--infer", action="store_true"); sp.add_argument("--id")
     sp = rp.add_parser("copy", parents=[common]); sp.add_argument("id"); sp.add_argument("--restore"); sp.add_argument("--now")
     sp.add_argument("--background", action="store_true"); sp.add_argument("--json", action="store_true")
-    sp = rp.add_parser("add", parents=[common]); sp.add_argument("folder"); sp.add_argument("--email", required=True)
+    sp = rp.add_parser("add", parents=[common]); sp.add_argument("folder"); sp.add_argument("--email")
     sp.add_argument("--team"); sp.add_argument("--role"); sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")
+    sp.add_argument("--infer", action="store_true"); sp.add_argument("--guest", action="store_true")
+    sp.add_argument("--search-only", dest="search_only", action="store_true"); sp.add_argument("--id")
     ip = sub.add_parser("index").add_subparsers(dest="action", required=True, parser_class=Parser)
     ip.add_parser("status", parents=[common])
     ip.add_parser("rebuild", parents=[common]).add_argument("--download", action="store_true")
