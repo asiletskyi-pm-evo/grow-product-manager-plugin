@@ -30,13 +30,27 @@ it. local-context.md and the records of the context store are not the gate's (a
 human edit inside a provider's block is kept there, context-provider-protocol.md §12);
 a file iCloud has not downloaded, or over 2 MB, is not read.
 
-Metadata-only edits (status, labels, title) pass silently. The gate is opt-out:
-`/grow-product-manager:setup --write-gate off` writes {"write_gate": "off"} to
-the plugin data dir. Fail open: any error → exit 0, no output (= allow).
+Metadata-only edits (status, labels, title) pass silently, and so does an
+updateConfluenceContent with `dryRun: true` (the JSON boolean): it validates and
+previews, and persists nothing. No other tool has a dry run — `dryRun` on a create
+or a Jira edit still asks.
+
+A pause for a bulk job: `/grow-product-manager:setup --write-gate pause <minutes>`
+writes {"write_gate_pause_until": "<ISO UTC>"} (1–240 minutes ahead). While now is
+before it, the Jira / Confluence question is skipped; once it has passed, the gate
+asks again on its own. The pause covers that question alone — the provider-boundary
+and generated-region questions stay on. A pause that cannot be read as a zoned ISO
+time, or ends more than MAX_PAUSE_MINUTES ahead (a hand-written permanent off), is
+ignored and the gate asks, saying so: the pause fails closed.
+
+The gate is opt-out: `/grow-product-manager:setup --write-gate off` writes
+{"write_gate": "off"} to the plugin data dir — all three questions off. Fail open:
+any other error → exit 0, no output (= allow).
 """
 import json
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -46,6 +60,9 @@ MIN_CONTENT = 200  # characters — below this an edit is metadata, not an artif
 GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage",
              "createConfluenceContent", "updateConfluenceContent")  # v1 names, then the v2 Confluence names
 UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
+DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
+PAUSE_KEY = "write_gate_pause_until"
+MAX_PAUSE_MINUTES = 240
 
 
 def config_paths():
@@ -57,17 +74,53 @@ def config_paths():
     return out
 
 
-def write_gate_enabled():
+def load_config():
+    """The first config file that reads as a JSON object — {} when none does."""
     for p in config_paths():
         try:
             with open(p, encoding="utf-8") as f:
                 cfg = json.load(f)
-            if str(cfg.get("write_gate", "on")).lower() in ("off", "false", "0"):
-                return False
-            return True
+            if isinstance(cfg, dict):
+                return cfg
         except Exception:
             continue
-    return True
+    return {}
+
+
+def write_gate_enabled(cfg=None):
+    cfg = load_config() if cfg is None else cfg
+    return str(cfg.get("write_gate", "on")).lower() not in ("off", "false", "0")
+
+
+def parse_utc(raw):
+    """A zoned ISO time as an aware datetime, or None — a naive time, a number or a typo is not a time here."""
+    if not isinstance(raw, str):
+        return None
+    raw = raw.strip()
+    if raw[-1:] in ("Z", "z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        t = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    return t if t.tzinfo is not None and t.utcoffset() is not None else None
+
+
+def pause_state(cfg, now=None):
+    """('none' | 'active' | 'expired' | 'invalid', the pause's end as an aware datetime or None). Fails closed: only
+    a zoned time after now and at most MAX_PAUSE_MINUTES (and a minute of slack) ahead is 'active'."""
+    raw = cfg.get(PAUSE_KEY)
+    if raw is None:
+        return "none", None
+    until = parse_utc(raw)
+    if until is None:
+        return "invalid", None
+    now = now or datetime.now(timezone.utc)
+    if until <= now:
+        return "expired", until
+    if until - now > timedelta(minutes=MAX_PAUSE_MINUTES, seconds=60):
+        return "invalid", until
+    return "active", until
 
 
 def content_size(obj):
@@ -214,7 +267,8 @@ def main():
     data = json.loads(raw) if raw.strip() else {}
     tool = str(data.get("tool_name", ""))
     tool_input = data.get("tool_input") or {}
-    if not tool or not write_gate_enabled():
+    cfg = load_config()
+    if not tool or not write_gate_enabled(cfg):
         return
     if tool in FILE_TOOLS:
         hit, path, late = provider_hit(tool_input, data.get("cwd"))
@@ -223,12 +277,14 @@ def main():
                 "'%s', which is read-only for this plugin (references/context-provider-protocol.md §7). "
                 "Write the note in your own vault layer instead, or record a correction in your overlay "
                 "note for this provider; confirm only if you mean to edit the provider's copy. "
-                "Disable with /grow-product-manager:setup --write-gate off." % (path, hit.get("title") or hit.get("id")))
+                "A write-gate pause does not cover this question; disable it with "
+                "/grow-product-manager:setup --write-gate off." % (path, hit.get("title") or hit.get("id")))
         elif late:
             ask("Grow PM provider boundary: a shared-context provider registration could not be read: %s — not available "
                 "locally (still downloading?), so whether %s is inside a provider's read-only folder cannot be checked "
                 "(references/context-provider-protocol.md §7). Confirm only if it is not; or wait until the registration "
-                "has downloaded and try again. Disable with /grow-product-manager:setup --write-gate off."
+                "has downloaded and try again. A write-gate pause does not cover this question; disable it with "
+                "/grow-product-manager:setup --write-gate off."
                 % (", ".join(late), path))
         elif tool in ("Write", "Edit", "MultiEdit"):
             region, path = region_hit(tool, tool_input, data.get("cwd"))
@@ -236,7 +292,8 @@ def main():
                 ask("Grow PM generated region: this write changes %s in %s — text its script writes and rewrites on its "
                     "next run (references/vault-schema.md, Generated regions). Change the source and re-run the "
                     "generator (`ctx vault normalize` for the ctx regions), or write outside the markers; confirm only if "
-                    "you mean to edit the region by hand. Disable with /grow-product-manager:setup --write-gate off."
+                    "you mean to edit the region by hand. A write-gate pause does not cover this question; disable it with "
+                    "/grow-product-manager:setup --write-gate off."
                     % (region, path))
         return
     op = tool.rsplit("__", 1)[-1]
@@ -244,6 +301,11 @@ def main():
         return  # not a gated operation (defensive: the matcher should already exclude it)
     if op in UPDATE_OPS and content_size(tool_input) < MIN_CONTENT:
         return  # metadata-only edit — no prompt
+    if op in DRY_RUN_OPS and tool_input.get("dryRun") is True:
+        return  # a dry run validates and previews; it persists nothing
+    state, until = pause_state(cfg)
+    if state == "active":
+        return  # the user paused the Jira / Confluence question for a bulk job; it returns at `until` on its own
     target = "Jira issue" if "Jira" in op else "Confluence page"
     verb = "create" if op.startswith("create") else "update"
     reason = (
@@ -251,9 +313,16 @@ def main():
         "(1) the artifact quality gate report line (\"checker: …\" / maker–checker findings applied) — "
         "references/artifact-style-gate.md; (2) your explicit go-ahead to publish this artifact; "
         "(3) that this is the intended space/project, not a sandbox. "
-        "Disable this prompt with /grow-product-manager:setup --write-gate off."
-        % (verb, target, tool)
+        "For a bulk job, /grow-product-manager:setup --write-gate pause <minutes> skips this question for up to %d "
+        "minutes (Jira/Confluence only — the provider-boundary and generated-region questions stay on); "
+        "--write-gate off disables it."
+        % (verb, target, tool, MAX_PAUSE_MINUTES)
     )
+    if state == "expired":
+        reason += " The write-gate pause ended at %s UTC." % until.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M")
+    elif state == "invalid":
+        reason += (" The %s value in the plugin config is not a valid pause (a zoned ISO time at most %d minutes "
+                   "ahead) and was ignored." % (PAUSE_KEY, MAX_PAUSE_MINUTES))
     ask(reason)
 
 
