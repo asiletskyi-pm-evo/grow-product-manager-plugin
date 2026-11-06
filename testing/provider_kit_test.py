@@ -699,5 +699,41 @@ with tempfile.TemporaryDirectory() as d:
     check("M9: a guest of a kit with faults gets their count, never the card names", rc == 3 and "dev-lane.md" not in out
           and "kit-check" in out, out[-400:])
 
+# ===================================================================== context-connect 0.9.1: the Jira question
+# The live run of TC-skill-4400-modes (2026-11-06): a guest's dry run promised «context-connect спитає, чи є в тебе свій
+# проєкт», but a guest has no team block — where the Jira write scope lives — so the answer changed nothing. A dry run
+# with a team still promises it; a guest's says there is nothing to ask.
+JIRA_ASK = "context-connect спитає, чи є в тебе свій проєкт"
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer")
+    check("jira_promise_team: a dry run with a team (mode B) promises the Jira question", rc == 0 and JIRA_ASK in out, out[-600:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--team", "beta")
+    check("jira_promise_team: …and so does B with a team the user names", rc == 0 and JIRA_ASK in out, out[-600:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest")
+    check("jira_promise_guest: a guest's dry run promises no Jira question and says why (no team block)",
+          rc == 0 and JIRA_ASK not in out and any(l.startswith("Jira: —") and "командного блоку" in l for l in out.splitlines()),
+          out[-600:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "new@zorg.example", "--guest")
+    check("jira_promise_guest: …a guest of a core that ships its manifest too", rc == 0 and JIRA_ASK not in out, out[-600:])
+
+with tempfile.TemporaryDirectory() as d:
+    # connect-steps §2: a registration `ctx repo add` wrote has no bundle run to pass --jira-write to — the answer is its
+    # `jira_write:` line, then `ctx provider apply <id>` rebuilds the team block with the scope.
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer")
+    ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer", "--apply", "--code", res.get("code") or "x")
+    reg = os.path.join(home, ".grow-pm", "providers", "zorg-core.yaml")
+    text = open(reg, encoding="utf-8").read()
+    open(reg, "w", encoding="utf-8").write(text.replace("\njira_write: ask\n", "\njira_write: none\n", 1))
+    rc, out, res = ctx(home, ctxp, "provider", "plan", "zorg-core")
+    check("jira_answer: after `jira_write: none` the plan updates the team block alone",
+          rc == 0 and "\njira_write: ask\n" in text and re.search(r"^~\s+team\s", out, re.M) and res.get("changes") == 1, out[-600:])
+    rc, out, res = ctx(home, ctxp, "provider", "apply", "zorg-core")
+    team = cb.find_regions(store.load(), "zorg-core")[0].get("team", {}).get("text", "")
+    check("jira_answer: …`ctx provider apply` writes the read-only scope into it", rc == 0 and "read only" in team, team[-400:])
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

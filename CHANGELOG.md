@@ -18,6 +18,8 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 Proposed class: MINOR — a new option of a host toggle and a new rule in the write gate; nothing that worked before changes.
 
+Also here: **`context-connect` 0.9.1 — the Jira question after `ctx repo add`** (PATCH; Fixed below), found by the live run of TC-skill-4400-modes after the v4.4.0 release.
+
 ### Added
 
 - **`write_gate_pause_until`** in the plugin config (`$CLAUDE_PLUGIN_DATA/config.json`, else `~/.grow-pm/plugin-data/config.json`): a UTC time. While now is before it, `scripts/write_gate.py` skips the Jira/Confluence question; once it has passed, the question is back, and the gate says when the pause ended. The pause covers that question alone — the provider-boundary and generated-region questions stay on, and every question says so. **Fails closed:** a value that is not a zoned ISO time (a typo, a naive time, a number) or ends more than 240 minutes ahead (a permanent off in disguise) is ignored, and the gate asks, naming it; the script still fails open on any other error.
@@ -29,6 +31,11 @@ Proposed class: MINOR — a new option of a host toggle and a new rule in the wr
 - **The questions' text** — the Jira/Confluence one names the pause and that it covers Jira/Confluence only; the provider-boundary and generated-region ones say a pause does not cover them.
 - **`plugin-configurator` 2.17.2** — «вимкни підтвердження на годину» / one bulk job → explain the typed `--write-gate pause <minutes>`; the configurator still never edits the hook config itself.
 - **`references/artifact-style-gate.md`** → Host write gate (the pause, the dry run, and that the chat go-ahead for the listed batch still comes first); **`references/host-profiles.md`** §1 (the gate can be paused too, so it is never relied on); **`references/context-provider-protocol.md`** §7; **`commands/setup.md`**, **`hooks/hooks.json`** description, README (commands and hooks tables).
+
+### Fixed
+
+- **Where the Jira answer goes after `ctx repo add`.** The v4.4.0 procedure asked the Jira question after connecting a core in mode B, but named only the bundle builder's `--jira-write` as the place for the answer — a registration `ctx repo add` wrote has no such run. `connect-steps.md` §2 now says: change that registration's one line `jira_write: ask` to `own` or `none`, then `ctx provider apply <id>` rebuilds the team block with the scope. A kit connected with `ctx repo add` (§9 item 3) asks the question too: its dry run always promised it.
+- **A guest is not asked about Jira.** A guest (mode C) has no team block, where the Jira write scope lives, so the answer changed nothing. The dry run of `--guest` now says `Jira: — (у гостя немає командного блоку …)` instead of promising the question, and the procedure asks it for a registration with a team only (`connect-steps.md` §0 item 2, `SKILL.md` Step 2 and the kit row, protocol §9 row C).
 
 ### Files
 
@@ -42,6 +49,11 @@ Proposed class: MINOR — a new option of a host toggle and a new rule in the wr
 | `references/artifact-style-gate.md`, `references/host-profiles.md`, `references/context-provider-protocol.md` | the pause and its scope |
 | `testing/ctx_cli_test.py` | the pinned `plugin-configurator` version follows |
 | `testing/test-cases.md`, `testing/Testing-process.md` | TC-hook-gate-pause |
+| `scripts/ctx.py` | a guest's dry run promises no Jira question |
+| `skills/context-connect/SKILL.md`, `skills/context-connect/references/connect-steps.md` | 0.9.1 — the Jira answer of a `ctx repo add` registration; no question for a guest; the kit path asks it |
+| `references/context-provider-protocol.md` | §9 row C: no Jira write scope |
+| `testing/provider_kit_test.py` | the Jira promise by mode, and `jira_write:` + `ctx provider apply` — red first |
+| `testing/test-cases.md`, `testing/provider_bundle_test.py`, `testing/ctx_cli_test.py`, `README.md` | TC-skill-4400-modes passed live, TC-ctx-connect-jira; the pinned `context-connect` version follows |
 
 ### Backwards compatibility
 
@@ -52,6 +64,7 @@ A config without `write_gate_pause_until` behaves exactly as before; `--write-ga
 - The pause is read from the first config file that parses — `$CLAUDE_PLUGIN_DATA/config.json` before `~/.grow-pm/plugin-data/config.json`, as the on/off switch is; `setup.py` writes where it finds `CLAUDE_PLUGIN_DATA`, so a Bash without that variable writes the fallback file (unchanged since v2.6.0; `--show` reports which).
 - The host gate is never relied on (`host-profiles.md` §1); a pause changes the host's question, not the skill's own go-ahead.
 - The clock is the machine's; a pause written on one machine means nothing on another.
+- `context-connect` Step 1 takes the e-mail of the host account before the profile's `Work Email` (not changed here). A colleague whose Claude account is a personal address gets «not in the role model» and the guest or team choice even when their work e-mail is listed — say the work e-mail in the request. In the live run the skill retried with the profile's e-mail once, not every time.
 
 ---
 
