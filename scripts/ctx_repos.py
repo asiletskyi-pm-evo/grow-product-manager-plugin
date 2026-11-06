@@ -279,10 +279,13 @@ def _manifest(core_root, path=""):
     thread cannot take the command's own output (since v3.14; before, `load_manifest` ran under redirect_stdout).
 
     `path` (since v4.4.0) is the manifest a registration names (`manifest:`, the one `ctx repo add --infer` derives
-    beside it) for a core that ships none. The core's own manifest wins once it is there (`manifest_warning` says so);
+    beside it) for a core that ships none. The core's own manifest wins once it is there (`manifest_warning` says so),
+    and while iCloud holds it evicted the team block is «not downloaded yet» — never the registration's file instead;
     otherwise `path` is read: a file iCloud has evicted (its `.<name>.icloud` placeholder beside it) is "the
     registration's manifest is not downloaded yet", one that is not there "the registration's manifest not found:
     <its name>"."""
+    if path and not pb.manifest_files(core_root) and pb.manifest_evicted(core_root):
+        return None, _unavailable("the core's own provider manifest is not downloaded yet — open the core folder in Finder")
     if path and not pb.manifest_files(core_root):
         if not os.path.isfile(path):
             name = os.path.basename(path)
@@ -353,7 +356,10 @@ def _team_block(repo, manifest, manifest_why, in_file=False):
         return None, manifest_why or _unavailable("no provider manifest in the core")
     try:
         bundles = manifest.s("bundles_file") or os.path.join(manifest.s("plugin_folder", "."), "_System", "access-bundles.json")
-        model = json.loads(_read_bounded(os.path.join(core_root, bundles)))
+        bpath = os.path.join(core_root, bundles)
+        if not os.path.isfile(bpath) and os.path.exists(os.path.join(os.path.dirname(bpath), ".%s.icloud" % os.path.basename(bpath))):
+            return None, _unavailable("%s not downloaded yet — open the core folder in Finder" % os.path.basename(bpath))
+        model = json.loads(_read_bounded(bpath))
         teams = model["teams"]
         key = team if team in teams else (team[len("team-"):] if team.startswith("team-") else team)
         if key not in teams:

@@ -13,6 +13,7 @@ builder refuses (a selective copy needs the owner's filters). An ambiguous layou
 
 The core is only read; the text goes beside the registration (ctx.py), never into the core. Stdlib only.
 """
+import fnmatch
 import os
 import re
 import sys
@@ -28,8 +29,9 @@ INFERRED_EXCLUDE = [
     r"local-context\.(existing|proposed)\.md$", r"context-merge-report\.md$", r"(^|/)_archive/",
 ]
 # …and, in a registration of a core connected without its owner's manifest (search only, inferred, a guest), the
-# owner's current-focus note too: Review Focus 1 of v4.4.0 names it, the eight above do not cover it.
-PERSONAL_EXCLUDE = [r"(^|/)Now\.md$"]
+# owner's current-focus note and the owner's own context store, when the core is the owner's vault: Review Focus 1
+# of v4.4.0 names Now.md, the review of tasks 1–4 the store (`<pf>/_System/context/`, persistent-storage.md).
+PERSONAL_EXCLUDE = [r"(^|/)Now\.md$", r"(^|/)_System/context/"]
 # What an inferred manifest never carries: a command the plugin would run, an address it would reach, the owner's
 # filters and rewrites, a write scope, a tools list (C4) — named so in context-provider-protocol.md §9.
 NEVER_INFERRED = ("people_resolver", "mcp", "deny_patterns", "delink_*", "dashboard_rewrites", "write_scope", "tools_file")
@@ -45,12 +47,25 @@ def excluded(rel):
     return any(re.search(p, rel) for p in INFERRED_EXCLUDE)
 
 
+def glob_expression(glob):
+    """A `personal_overlay` glob (relative to the core) as a regular expression of `exclude` — matched the way
+    `ctx_common._writable` matches it: a trailing `/` is the folder and everything under it, otherwise `fnmatch`."""
+    g = glob.strip().replace(os.sep, "/")
+    if g.endswith("/"):
+        return "^" + re.escape(g)
+    return "^" + fnmatch.translate(g)
+
+
 def registration_exclude(manifest=None):
     """The `exclude:` of a registration `ctx repo add --search-only | --infer | --guest` writes: INFERRED_EXCLUDE, the
-    owner's Now.md, and the expressions of the core's own manifest when there is one (a guest of a core that ships
-    its manifest) — each once, in that order. The index walks the core folder without them (ctx_index.scope)."""
+    owner's Now.md and store, and — when the core ships a manifest (a guest, or search only, of such a core) — that
+    manifest's own `exclude` and its `personal_overlay` as expressions; each once, in that order. The index walks the
+    core folder without them (ctx_index.scope), case-folded."""
+    m = manifest or {}
+    own = [str(v) for v in (m.get("exclude") or []) if str(v).strip()]
+    overlay = [glob_expression(str(g)) for g in (m.get("personal_overlay") or []) if str(g).strip()]
     out = []
-    for x in INFERRED_EXCLUDE + PERSONAL_EXCLUDE + [str(v) for v in ((manifest or {}).get("exclude") or []) if str(v).strip()]:
+    for x in INFERRED_EXCLUDE + PERSONAL_EXCLUDE + own + overlay:
         if x not in out:
             out.append(x)
     return out
@@ -80,7 +95,8 @@ def _subdirs(folder):
 
 def _plugin_folders(folder):
     """([plugin folders holding the role model], [plugin folders whose role model iCloud has evicted]) — the core's
-    root ('.') and one level down, where the bundle builder looks for a manifest."""
+    root ('.') and one level down, where the bundle builder looks for a manifest. An evicted one is a candidate as
+    much as a found one: with both, the plugin does not guess (the review of tasks 1–4, M2)."""
     found, evicted = [], []
     for pf in ["."] + _subdirs(folder):
         sysd = os.path.join(folder, pf, "_System")
@@ -99,9 +115,15 @@ def _blocks_file(folder, pf):
     sysd = os.path.join(folder, pf, "_System")
     cands = []
     try:
-        names = sorted(n for n in os.listdir(sysd) if n.endswith(".md") and not n.startswith("."))
+        listed = os.listdir(sysd)
     except OSError:
-        names = []
+        listed = []
+    names = sorted(n for n in listed if n.endswith(".md") and not n.startswith("."))
+    evicted = sorted(n[1:-len(".icloud")] for n in listed if n.startswith(".") and n.endswith(".md.icloud")
+                     and not excluded(_join(pf, "_System", n[1:-len(".icloud")])))
+    if evicted:                                         # an evicted .md may be the blocks file: never guess past it
+        return None, None, ("%s ще не завантажено з iCloud (%s) — не вгадую; відкрий теку ядра у Finder"
+                            % (_join(pf, "_System"), ", ".join(evicted)))
     for n in names:
         rel = _join(pf, "_System", n)
         if excluded(rel):
@@ -119,9 +141,8 @@ def _blocks_file(folder, pf):
         return cands[0][0], cands[0][1], "єдиний файл %s/*.md з маркерами блоків (простір імен %s)" % (
             _join(pf, "_System"), cands[0][1])
     if not cands:
-        return None, None, ("у %s немає файлу з маркерами блоків одного простору імен — лише командний блок "
-                            "і пошук" % _join(pf, "_System"))
-    return None, None, "кілька файлів блоків (%s) — не вгадую; лише командний блок і пошук" % ", ".join(r for r, _ in cands)
+        return None, None, "у %s немає файлу з маркерами блоків одного простору імен" % _join(pf, "_System")
+    return None, None, "кілька файлів блоків (%s) — не вгадую" % ", ".join(r for r, _ in cands)
 
 
 def title_of(folder):
@@ -152,7 +173,13 @@ def infer(folder, rid="", today=""):
     folder = os.path.abspath(os.path.expanduser(folder))
     if not os.path.isdir(folder):
         return _fail("немає теки ядра: %s" % folder)
+    if pb.manifest_evicted(folder):                     # the core ships its owner's manifest: nothing to infer
+        return _fail("маніфест власника ядра ще не завантажений з iCloud — відкрий теку ядра у Finder і підключи "
+                     "без --infer; виводити маніфест не треба")
     found, evicted = _plugin_folders(folder)
+    if found and evicted:
+        return _fail("тека з моделлю ролей ще не завантажена з iCloud (%s) поруч із %s — не вгадую; відкрий теку ядра "
+                     "у Finder" % (", ".join(evicted), ", ".join(found)), found + evicted)
     if len(found) > 1:
         return _fail("кілька тек із _System/access-bundles.json: %s — не вгадую; лише пошук (--search-only) або "
                      "маніфест від власника ядра" % ", ".join(found), found)
@@ -169,7 +196,9 @@ def infer(folder, rid="", today=""):
             return _fail("id %r — не kebab-case до 64 символів" % rid)
         mid, origin["id"] = rid, "--id"
     else:
-        mid = kebab(name) or "core"
+        mid = kebab(name)
+        if not mid:
+            return _fail("назва теки «%s» не дає id латиницею — дай --id" % name)
         origin["id"] = "назва теки «%s»" % name
     title, origin["title"] = title_of(folder)
     blocks, ns, origin["blocks_file"] = _blocks_file(folder, pf)

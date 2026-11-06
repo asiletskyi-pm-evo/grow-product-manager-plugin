@@ -202,8 +202,9 @@ def Root(source, path, vault="", exclude=()):
 
 
 def _exclusion(patterns):
-    """One compiled expression of a root's `exclude`, or None for none. An expression that does not compile is left
-    out — the registration's author (`ctx repo add`) writes only ones that do."""
+    """One compiled expression of a root's `exclude`, or None for none — case-folded, as the index folds its own folder
+    names (a case-insensitive disk holds `meetings/` and `Meetings/` alike). An expression that does not compile is
+    left out — the registration's author (`ctx repo add`) writes only ones that do."""
     good = []
     for p in patterns or ():
         try:
@@ -211,7 +212,7 @@ def _exclusion(patterns):
             good.append("(?:%s)" % p)
         except re.error:
             continue
-    return re.compile("|".join(good)) if good else None
+    return re.compile("|".join(good), re.IGNORECASE) if good else None
 
 
 @functools.lru_cache(maxsize=8192)

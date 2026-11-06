@@ -346,5 +346,124 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "pat.moss@zorg.example", "--infer")
     check("--infer on a core that ships its owner's manifest: exit 3, «без --infer»", rc == 3 and "без --infer" in out, out[-300:])
 
+# ===================================================================== review of tasks 1–4 (v4.4.0)
+import ctx_common as ccm  # noqa: E402
+
+
+def put(core, rel, text):
+    os.makedirs(os.path.dirname(os.path.join(core, rel)), exist_ok=True)
+    open(os.path.join(core, rel), "w", encoding="utf-8").write(text)
+
+
+def hits_of(home, ctxp, word):
+    rc, out, res = ctx(home, ctxp, "search", "--q", word, "--json")
+    return [c.get("path", "") for c in (res.get("candidates") or [])]
+
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    put(core, "Core/Playbook/02 Zebrafish.md", "# Zebrafish rule\n\nzebrafishword is read twice.\n")
+    put(core, "Core/_System/context/records/profile.md", "# Profile\n\nzebrafishword in the owner's own store.\n")  # I1
+    for rel in ("Core/Sub/meetings/m.md", "Core/Sub/_Personal/p.md", "Core/Sub/todo.md", "Core/Sub/now.md", "Core/Sub/_Archive/a.md"):
+        put(core, rel, "# Note\n\nzebrafishword, another case.\n")                                           # M3
+    put(core, "Core/_personal/secret-name.md", "# x\n")                                                          # M10
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest")
+    regs = os.path.join(home, ".grow-pm", "providers")
+    check("M5: the line for the owner names the manifest's file, never the colleague's local path",
+          rc == 0 and "zorg-core.manifest.yaml" in (res.get("owner_line") or "") and home not in (res.get("owner_line") or "")
+          and d not in (res.get("owner_line") or ""), res.get("owner_line"))
+    check("M10: a guest's dry run counts the owner's personal files, never names them", rc == 0 and "secret-name" not in out, out[-600:])
+    check("M1: modes A–C say once that an older plugin on another host or Mac ignores exclude:", "4.4.0" in out, out[-600:])
+    ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest", "--apply", "--code", res.get("code") or "x")
+    reg = os.path.join(regs, "zorg-core.yaml")
+    text = open(reg, encoding="utf-8").read() if os.path.isfile(reg) else ""
+    rr = ccm.find_registrations([], extra_dirs=[regs])
+    check("I3: an inferred or guest registration writes `writable: []` — the owner's Now.md is no file of yours",
+          "writable: []" in text and rr and ccm.boundary_hit(os.path.join(core, "Core", "Now.md"), rr) is not None
+          and ccm.boundary_hit(os.path.join(core, "Core", "_personal", "x.md"), rr) is not None, text)
+    found = hits_of(home, ctxp, "zebrafishword")
+    check("I1: the owner's store in the core (<pf>/_System/context/) is never found", found and not [h for h in found if "_System/context/" in h], found)
+    check("M3: meetings/, _Personal/, todo, now.md, _Archive/ in another case are never found either",
+          found and not [h for h in found if "/Sub/" in h], found)
+    rc2, out2, res2 = ctx(home, ctxp, "repo", "add", core, "--search-only", "--id", "zorg-search")
+    check("acceptance: search only on a core that has a role model — the owner is asked for the manifest alone",
+          rc2 == 0 and "provider-manifest.yaml" in (res2.get("owner_line") or "")
+          and "access-bundles.json" not in (res2.get("owner_line") or ""), res2.get("owner_line"))
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--search-only")
+    check("M4: another mode for a core already registered: exit 3 saying how — remove the registration file, or another --id",
+          rc == 3 and "прибери" in out and reg in out and "provider plan" not in out, out[-400:])
+    os.remove(reg)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest")
+    check("M4: a manifest left by a removed registration: exit 3 naming it as left over, and what to do",
+          rc == 3 and "лишився" in out and "zorg-core.manifest.yaml" in out, out[-400:])
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    os.remove(os.path.join(core, "Core", "_System", "access-bundles.json"))
+    os.remove(os.path.join(core, "Core", "_System", "access-bundles.md"))
+    put(core, "Core/Playbook/02 Zebrafish.md", "# Zebrafish rule\n\nzebrafishword is read twice.\n")
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--search-only")
+    check("acceptance: search only on a core with no role model — the owner is asked for both files",
+          "access-bundles.json" in (res.get("owner_line") or "") and "provider-manifest.yaml" in (res.get("owner_line") or ""), res.get("owner_line"))
+    ctx(home, ctxp, "repo", "add", core, "--search-only", "--apply", "--code", res.get("code") or "x")
+    rc, out, res = ctx(home, ctxp, "repo", "status")
+    check("M9: `repo status` of a search-only core says «лише пошук», no blocks-file error",
+          rc == 0 and "лише пошук" in out and "blocks file:" not in out, out[-400:])
+    cyr = bare(d, "Ядро")
+    rc, out, res = ctx(home, ctxp, "repo", "add", cyr, "--search-only")
+    check("M4: a folder name with no Latin letters: exit 3 asking for --id (never the id «core» for every such core)",
+          rc == 3 and "--id" in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    kit = os.path.join(d, "kit")
+    shutil.copytree(KIT, kit)
+    os.remove(os.path.join(kit, "Core", "_System", "provider-manifest.md"))      # the wrapper would differ after the edit
+    mpath = os.path.join(kit, "Core", "_System", "provider-manifest.yaml")
+    mtext = open(mpath, encoding="utf-8").read()
+    assert "  - Core/_personal/\n" in mtext
+    open(mpath, "w", encoding="utf-8").write(mtext.replace("  - Core/_personal/\n", "  - Core/_personal/\n  - Core/Journal/\n"))
+    put(kit, "Core/Journal/2026-11-05.md", "# Journal\n\nzebrafishword in the owner's journal.\n")                  # I2
+    put(kit, "Core/_drafts/d.md", "# Draft\n\nzebrafishword in the owner's draft.\n")
+    put(kit, "Core/Playbook/02 Zebrafish.md", "# Zebrafish rule\n\nzebrafishword is read twice.\n")
+    rc, out, res = ctx(home, ctxp, "repo", "add", kit, "--email", "new@zorg.example", "--guest")
+    ctx(home, ctxp, "repo", "add", kit, "--email", "new@zorg.example", "--guest", "--apply", "--code", res.get("code") or "x")
+    found = hits_of(home, ctxp, "zebrafishword")
+    check("I2: a guest of a core that ships its manifest: the owner's declared personal layer (Core/Journal/) and exclude never found",
+          found and not [h for h in found if "Journal" in h or "_drafts" in h], found)
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    kit = os.path.join(d, "kit")
+    shutil.copytree(KIT, kit)
+    put(kit, "Core/_drafts/d.md", "# Draft\n\nzebrafishword in the owner's draft.\n")
+    put(kit, "Core/Playbook/02 Zebrafish.md", "# Zebrafish rule\n\nzebrafishword is read twice.\n")
+    rc, out, res = ctx(home, ctxp, "repo", "add", kit, "--search-only")
+    ctx(home, ctxp, "repo", "add", kit, "--search-only", "--apply", "--code", res.get("code") or "x")
+    found = hits_of(home, ctxp, "zebrafishword")
+    check("I4: search only on a core that ships its manifest keeps the owner's exclude (_drafts/ never found)",
+          found and not [h for h in found if "_drafts" in h], found)
+    kit2 = os.path.join(d, "kit2")
+    shutil.copytree(KIT, kit2)
+    sysd = os.path.join(kit2, "Core", "_System")
+    os.rename(os.path.join(sysd, "provider-manifest.yaml"), os.path.join(sysd, ".provider-manifest.yaml.icloud"))
+    os.remove(os.path.join(sysd, "provider-manifest.md"))
+    for args in (("--email", "pat.moss@zorg.example"), ("--email", "pat.moss@zorg.example", "--infer"), ("--search-only", "--id", "zorg-two")):
+        rc, out, res = ctx(home, ctxp, "repo", "add", kit2, *args)
+        check("I4: the owner's manifest evicted by iCloud (%s): exit 3, «не завантажений», never --infer offered"
+              % " ".join(args), rc == 3 and "не завантажений" in out and "підключи з виведеним" not in out, out[-300:])
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", kit2, "--infer")
+    check("I4: kit-check --infer on it: exit 3, «не завантажений»", rc == 3 and "не завантажений" in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    put(core, "Core/_System/other-blocks.md", "<!-- zorg-more:begin id=x v=1 -->\nX\n<!-- zorg-more:end id=x -->\n")
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", core, "--infer")
+    check("M7: kit-check --infer with a fault never ends saying the owner may place the manifest",
+          rc == 3 and "нічого не записано" in out and not [l for l in out.splitlines() if l.startswith("нічого не записано —")], out[-400:])
+
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

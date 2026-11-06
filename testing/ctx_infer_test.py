@@ -197,6 +197,52 @@ with tempfile.TemporaryDirectory() as d:
     check("…a blocks file with no block at all is a fault even so (nothing to connect)",
           any("жодного блоку" in p for p in problems), problems)
 
+# --- review of tasks 1–4 (v4.4.0): each finding reproduced first
+import provider_bundle as pbm  # noqa: E402
+hit = lambda pats, rel: any(re.search(p, rel, re.I) for p in pats)
+ex = ci.registration_exclude()
+check("I1: the plugin's own store kept in a core's vault (<pf>/_System/context/) is out of search",
+      hit(ex, "Core/_System/context/records/profile.md") and hit(ex, "_System/context/history/2026-11.md")
+      and not hit(ex, "Core/Playbook/01 Rules.md") and not hit(ex, "Core/_System/context-blocks.md"), ex)
+ex2 = ci.registration_exclude(pbm.Manifest({"exclude": ["(^|/)_drafts/"], "personal_overlay": ["Core/Journal/", "Core/Diary*.md", "Core/Now.md"]}))
+check("I2: the core manifest's personal_overlay is out of search too (folder glob, file glob, plain name)",
+      hit(ex2, "Core/Journal/2026-11-05.md") and hit(ex2, "Core/Diary 1.md") and hit(ex2, "Core/_drafts/x.md")
+      and not hit(ex2, "Core/Journalism.md") and not hit(ex2, "Core/Playbook/Diary.md"), ex2)
+is_inf = getattr(pbm, "is_inferred", lambda m: None)
+check("M6: «inferred» in any truthy spelling is inferred; false ones are not",
+      all(is_inf(pbm.Manifest({"inferred": v})) for v in (True, "true", "True", "yes", "YES", 1, "1", "on"))
+      and not any(is_inf(pbm.Manifest(d)) for d in ({"inferred": False}, {"inferred": "no"}, {"inferred": ""}, {})),
+      [is_inf(pbm.Manifest({"inferred": v})) for v in (True, "true", "yes", 1)])
+
+with tempfile.TemporaryDirectory() as d:
+    core = bare_kit(d)
+    sysd = os.path.join(core, "Core", "_System")
+    write(os.path.join(core, "Second", "_System", ".access-bundles.json.icloud"), "x")
+    r = ci.infer(core, today=TODAY)
+    check("M2: a second role model iCloud has evicted is a candidate too — not ok, never a guess",
+          r["ok"] is False and "не завантаж" in r["why"] and sorted(r["candidates"]) == ["Core", "Second"], r)
+    shutil.rmtree(os.path.join(core, "Second"))
+    write(os.path.join(sysd, ".other-blocks.md.icloud"), "x")
+    r = ci.infer(core, today=TODAY)
+    check("M2: an evicted .md beside the blocks file — no blocks_file, «не завантажено», never the other one",
+          r["ok"] and "blocks_file" not in r["manifest"] and "не завантаж" in r["from"].get("blocks_file", ""), r.get("from"))
+    os.remove(os.path.join(sysd, ".other-blocks.md.icloud"))
+    write(os.path.join(sysd, "other-blocks.md"), "<!-- zorg-more:begin id=x v=1 -->\nX\n<!-- zorg-more:end id=x -->\n")
+    r = ci.infer(core, today=TODAY)
+    check("M7: two blocks files — the reason says «не вгадую», never «лише командний блок»",
+          "не вгадую" in r["from"].get("blocks_file", "") and "командний блок" not in r["from"].get("blocks_file", ""), r.get("from"))
+    os.remove(os.path.join(sysd, "other-blocks.md"))
+    write(os.path.join(sysd, ".provider-manifest.yaml.icloud"), "x")
+    r = ci.infer(core, today=TODAY)
+    check("I4: the owner's manifest is there but evicted — not ok, «ще не завантажений», nothing inferred",
+          r["ok"] is False and "не завантажений" in r["why"] and r["manifest"] is None, r)
+
+with tempfile.TemporaryDirectory() as d:
+    core = bare_kit(d, "Ядро")
+    r = ci.infer(core, today=TODAY)
+    check("M4: a folder name with no Latin letters gives no id — not ok, «--id»; with --id it is fine",
+          r["ok"] is False and "--id" in r["why"] and ci.infer(core, rid="zorg-core", today=TODAY)["ok"], r)
+
 # --- validate check 25: the protocol's §9 and the code agree (a mutation of each side is caught)
 check("check_protocol: the shipped protocol and ctx_infer agree", getattr(ci, "check_protocol", lambda r: ["missing"])(ROOT) == [],
       getattr(ci, "check_protocol", lambda r: ["missing"])(ROOT))

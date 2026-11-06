@@ -1319,6 +1319,24 @@ with tempfile.TemporaryDirectory() as d:
     check("…a registration's manifest that is simply not there: the reason names the file, not its path",
           f["team"] is None and "manifest not found: zorg-core.manifest.yaml" in (f["team_error"] or "")
           and prov not in (f["team_error"] or ""), f)
+    # review M8: the role model iCloud has evicted is «not downloaded», never «not found»
+    open(outside, "w", encoding="utf-8").write(MANIFEST_TEXT)
+    model_path = os.path.join(core, "Core", "_System", "access-bundles.json")
+    model_bytes = open(model_path, "rb").read()
+    os.remove(model_path)
+    open(os.path.join(core, "Core", "_System", ".access-bundles.json.icloud"), "wb").write(b"bplist00")
+    f = cr.fetch(repo_of(reg))
+    check("M8: an evicted role model → the team block is «not downloaded yet», the blocks still come",
+          f["error"] is None and f["team"] is None and "not downloaded" in (f["team_error"] or ""), f)
+    os.remove(os.path.join(core, "Core", "_System", ".access-bundles.json.icloud"))
+    open(model_path, "wb").write(model_bytes)
+    # review I4: the core ships its owner's manifest but iCloud evicted it — never a silent fallback to the registration's
+    open(os.path.join(core, "Core", "_System", ".provider-manifest.yaml.icloud"), "wb").write(b"bplist00")
+    f = cr.fetch(repo_of(dict(reg, namespace="zorg-core", blocks_file=CORE_BLOCKS_FILE)))
+    check("I4: the owner's manifest evicted → the team block «the core's own manifest is not downloaded yet»",
+          f["error"] is None and f["team"] is None and "core's own provider manifest is not downloaded" in (f["team_error"] or ""), f)
+    os.remove(os.path.join(core, "Core", "_System", ".provider-manifest.yaml.icloud"))
+    os.remove(outside)
     files_of = lambda st: {k: v[3] for k, v in st.items() if stat.S_ISREG(v[0])}
     check("the core is only read in all of this (its files byte for byte; the test itself put the owner's manifest in and out)",
           files_of(tree_state(core)) == files_of(before), "")

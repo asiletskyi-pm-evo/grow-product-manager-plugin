@@ -415,8 +415,8 @@ skill = read_root("skills", "context-connect", "SKILL.md")
 check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and "provider apply" in steps and "provider adopt --apply" in steps, "")
 check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
       "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
-check("the skill is 0.5.0 and a refresh with a store never stamps Updated or appends a changelog",
-      "version: 0.8.1" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
+check("the skill is 0.9.0 and a refresh with a store never stamps Updated or appends a changelog",
+      "version: 0.9.0" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
 # 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
 # (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
@@ -558,6 +558,10 @@ for args in (("--email", "a.one@zorg.example"), ("--core-export",)):
     rc, o = run("--core", core, "--out", out, "--manifest", inferred, *args)
     check("refuses_inferred (%s): exit 3, «виведений маніфест — лише ctx repo add», nothing written" % args[0],
           rc == 3 and "виведений маніфест — лише ctx repo add" in o and not os.path.exists(out), (rc, o[-300:]))
+for spelling in ('"true"', "yes", "True", "1"):              # review M6: any truthy spelling is inferred
+    open(inferred, "w", encoding="utf-8").write(own + "inferred: %s\n" % spelling)
+    rc, o = run("--core", core, "--out", out, "--manifest", inferred, "--core-export")
+    check("refuses_inferred: `inferred: %s` too" % spelling, rc == 3 and "виведений маніфест" in o and not os.path.exists(out), (rc, o[-200:]))
 outside = os.path.join(d, "x.yaml")
 open(outside, "w", encoding="utf-8").write(own)
 os.remove(os.path.join(core, "Core", "_System", "provider-manifest.yaml"))

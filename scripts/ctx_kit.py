@@ -48,7 +48,7 @@ def _files(folder):
     return sorted(pb.walk(folder))
 
 
-def check(folder, warnings=None, manifest_path=None, manifest=None):
+def check(folder, warnings=None, manifest_path=None, manifest=None, quiet=False):
     """(manifest or None, model or None, [problem]) of a kit folder. A problem names the file and what is wrong.
     `warnings` (a list) gets what is no fault of the kit but worth knowing when the folder is shared as it is: a
     registry card's private fields and the owner's personal layer — the bundle builder leaves both out of a colleague's
@@ -59,7 +59,8 @@ def check(folder, warnings=None, manifest_path=None, manifest=None):
     core's owner and connects it in place: what only the owner can fix and what does not stop the connection (a team
     naming a file that is not there, a missing team card, a person card without its fields, a stray marker beside
     blocks that read, a wrapper) is a warning ending «справа власника ядра»; no role model, no blocks file, no block
-    at all stay faults."""
+    at all stay faults. Under an inferred manifest, and with `quiet` (a guest, `ctx repo add --guest`), the owner's
+    personal files and the cards with private fields are counted, never named: the person reading is not the owner."""
     out = []
     warn = warnings if warnings is not None else []
     if not os.path.isdir(folder):
@@ -72,7 +73,8 @@ def check(folder, warnings=None, manifest_path=None, manifest=None):
         m, why = pb.read_manifest(folder, path=manifest_path or None)
         if m is None:
             return None, None, [why]
-    inferred = m.get("inferred") is True
+    inferred = pb.is_inferred(m)
+    quiet = quiet or inferred
 
     def owner(problem):
         """A fault of the kit — a warning when the manifest is inferred (the owner's to fix, the connection stands)."""
@@ -133,6 +135,7 @@ def check(folder, warnings=None, manifest_path=None, manifest=None):
                 if not r["v"]:
                     owner("%s: блок %s без v=" % (m.s("blocks_file"), bid))
     pdir = os.path.join(folder, m.s("people_dir")) if m.s("people_dir") else None
+    private_cards = 0
     for name in sorted(os.listdir(pdir)) if pdir and os.path.isdir(pdir) else []:
         if not name.endswith(".md") or name.startswith(("_", ".")):
             continue
@@ -142,13 +145,18 @@ def check(folder, warnings=None, manifest_path=None, manifest=None):
             owner("%s/%s: немає %s" % (m.s("people_dir"), name, ", ".join(missing)))
         private = [k for k in (m.get("people_private_fields") or []) if pb.fget(front, k)]
         if private:
-            warn.append("%s/%s: приватні поля (%s) — у пакет колеги не підуть, але в спільній теці їх видно"
-                        % (m.s("people_dir"), name, ", ".join(private)))
+            private_cards += 1
+            if not quiet:
+                warn.append("%s/%s: приватні поля (%s) — у пакет колеги не підуть, але в спільній теці їх видно"
+                            % (m.s("people_dir"), name, ", ".join(private)))
+    if quiet and private_cards:
+        warn.append("%s: приватні поля в %d картках — у пакет колеги не підуть, але в спільній теці їх видно"
+                    % (m.s("people_dir"), private_cards))
     for glob in m.get("personal_overlay") or []:
         hits = [f for f in files if fnmatch.fnmatch(f, glob) or (glob.endswith("/") and f.startswith(glob))]
         if hits:
             warn.append("особистий шар власника в теці (%s): %s — у пакет колеги не піде, але в спільній теці його видно"
-                        % (glob, ", ".join(hits[:3])))
+                        % (glob, ("%d файл(и) — поза пошуком" % len(hits)) if quiet else ", ".join(hits[:3])))
     if m.s("tools_file"):                           # since v4.2.0: the team's tools list, read as tools_scan team reads it
         tf = str(m.s("tools_file"))
         root, real = os.path.realpath(folder), os.path.realpath(os.path.join(folder, tf))
@@ -246,7 +254,9 @@ def registration(folder, m, model, ident, today, manifest_path="", search_only=F
     """The text of the registration of this kit (provider-registration/2): a local folder, `sync: off` (the daily sync
     is asked for once by context-connect), the owner's personal layer as `writable`. Since v4.4.0: `manifest_path` —
     the manifest beside the registration (`manifest:`, absolute) for a core that ships none; `exclude` — the
-    expressions the index leaves out of the core folder (ctx_infer.registration_exclude); `search_only` — a core
+    expressions the index leaves out of the core folder (ctx_infer.registration_exclude), given for modes A–C only,
+    which then write `writable: []` (the owner's personal layer is someone else's: the write gate asks for it);
+    `search_only` — a core
     folder registered for search alone (`blocks: none`: no blocks, no team, no role model; `m` gives only the id and
     the title, `model` and `ident` are not read)."""
     folder = os.path.abspath(folder)
@@ -260,7 +270,7 @@ def registration(folder, m, model, ident, today, manifest_path="", search_only=F
         if manifest_path:
             lines.append("manifest: %s" % _q(os.path.abspath(manifest_path)))
         lines.append("products: []")
-        ov = m.get("personal_overlay") or []
+        ov = [] if exclude else (m.get("personal_overlay") or [])   # modes A–C: the owner's layer is no file of yours
         lines += (["writable:"] + ["  - %s" % _q(g) for g in ov]) if ov else ["writable: []"]
     if exclude:
         lines += ["exclude:"] + ["  - %s" % _q(x) for x in exclude]

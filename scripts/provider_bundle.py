@@ -122,6 +122,26 @@ def manifest_files(core):
     return [p for p in cands if os.path.isfile(p)]
 
 
+def manifest_evicted(core):
+    """The core's own provider manifests iCloud has evicted — `.provider-manifest.yaml.icloud` where `manifest_files`
+    looks, with no real file beside it (since v4.4.0: such a core ships a manifest; it is not one without)."""
+    cands = [os.path.join(core, "_System")] + sorted(glob.glob(os.path.join(core, "*", "_System")))
+    return [os.path.join(d, ".provider-manifest.yaml.icloud") for d in cands
+            if os.path.exists(os.path.join(d, ".provider-manifest.yaml.icloud"))
+            and not os.path.isfile(os.path.join(d, "provider-manifest.yaml"))]
+
+
+def is_inferred(m):
+    """Is the manifest one the plugin inferred (ctx_infer, since v4.4.0)? `inferred:` true in any spelling — a bool, a
+    number 1, or the words true / yes / on / 1 in any case."""
+    v = (m or {}).get("inferred")
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v == 1
+    return isinstance(v, str) and v.strip().lower() in ("true", "yes", "on", "1")
+
+
 def with_defaults(m):
     """The manifest with the defaults every reader assumes: the namespace is the id, the team cards and the people
     are `<plugin_folder>/Teams` and `<plugin_folder>/People` (since v4.4.0 one function: ctx_infer applies the same)."""
@@ -161,7 +181,7 @@ def load_manifest(core, path=None):
     m, why = read_manifest(core, path)
     if m is None:
         sys.stdout.write(why + "\n"); sys.exit(3)
-    if m.get("inferred") is True:
+    if is_inferred(m):
         sys.stdout.write(INFERRED_REFUSED + "\n"); sys.exit(3)
     return m
 
