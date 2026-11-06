@@ -549,6 +549,20 @@ else
   ok "published field: vault-schema.md, artifact-publishing.md, publications.py and the registry's publishes agree"
 fi
 
+# --- 25. The inferred manifest is what the protocol says (v4.4.0) -------------------
+# A core with no manifest is connected through one scripts/ctx_infer.py infers (context-provider-protocol.md §9). The
+# protocol tells a core's owner and a reviewer what search leaves out of such a core and what is never inferred; an
+# expression added to the code alone, or a key the code starts to infer, would leave the owner's notes in a colleague's
+# search with nobody told.
+INF_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import ctx_infer; print('\n'.join(ctx_infer.check_protocol('.')))" 2>&1)
+if [ -n "$INF_ERRS" ]; then
+  while IFS= read -r line; do err "inferred manifest: $line"; done <<EOF
+$INF_ERRS
+EOF
+else
+  ok "inferred manifest: context-provider-protocol.md §9 and ctx_infer.py agree (exclusions, never-inferred keys)"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

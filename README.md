@@ -636,7 +636,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.8.1) — NEW in v3.10.0
+### 32. Context Connect (v0.9.0) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
@@ -684,7 +684,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.3 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.8.1 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Connect | v0.9.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
 | Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---

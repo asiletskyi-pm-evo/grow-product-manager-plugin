@@ -197,5 +197,25 @@ with tempfile.TemporaryDirectory() as d:
     check("…a blocks file with no block at all is a fault even so (nothing to connect)",
           any("жодного блоку" in p for p in problems), problems)
 
+# --- validate check 25: the protocol's §9 and the code agree (a mutation of each side is caught)
+check("check_protocol: the shipped protocol and ctx_infer agree", getattr(ci, "check_protocol", lambda r: ["missing"])(ROOT) == [],
+      getattr(ci, "check_protocol", lambda r: ["missing"])(ROOT))
+with tempfile.TemporaryDirectory() as d:
+    os.makedirs(os.path.join(d, "references"))
+    proto = open(os.path.join(ROOT, "references", "context-provider-protocol.md"), encoding="utf-8").read()
+    mutations = [("an exclusion dropped from the protocol", "`(^|/)Focus/`, ", ""),
+                 ("a never-inferred key dropped", "`dashboard_rewrites`, ", ""),
+                 ("the owner's Now.md dropped from the search paragraph", "`(^|/)Now\\.md$`", "`Now`")]
+    for name, old_s, new_s in mutations:
+        open(os.path.join(d, "references", "context-provider-protocol.md"), "w", encoding="utf-8").write(proto.replace(old_s, new_s, 1))
+        errs = getattr(ci, "check_protocol", lambda r: [])(d)
+        check("check_protocol catches %s" % name, old_s in proto and errs, errs)
+    saved = list(ci.INFERRED_EXCLUDE)
+    open(os.path.join(d, "references", "context-provider-protocol.md"), "w", encoding="utf-8").write(proto)
+    ci.INFERRED_EXCLUDE.append(r"(^|/)Secret/")
+    errs = getattr(ci, "check_protocol", lambda r: [])(d)
+    ci.INFERRED_EXCLUDE[:] = saved
+    check("check_protocol catches an exclusion added to the code alone", any("Secret" in e for e in errs), errs)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)

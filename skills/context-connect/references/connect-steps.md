@@ -7,7 +7,12 @@ Talk about teams, roles, bundles and context — not about paths, regular expres
 ## §0 Where the provider, the target and the context are
 
 1. **The user's context.** The digest's `local-context.md: FOUND at …` line; otherwise `~/.grow-pm/local-context.md`, then connected folders (`$HOME/mnt/*/`). Found → **merge mode** (the builder gets `--existing-context`). Not found → **new-context mode**: a minimal context from the provider's skeleton, extended later by `plugin-configurator`. "Not found from this shell" is not "not configured" when the digest says otherwise — ask.
-2. **The provider.** In order: (a) a folder with `_System/provider-manifest.yaml` at its root or one level below; (b) a registration already in `{vault}/{plugin_folder}/_System/providers/`; (c) an MCP server in the session exposing `vault_search` and `vault_get_note` — then §7. A folder with a role model but no manifest is not a provider yet: tell the user its owner has to add `_System/provider-manifest.yaml` (protocol §9) and stop.
+2. **The provider.** In order: (a) a folder with `_System/provider-manifest.yaml` at its root or one level below; (b) a registration already in `{vault}/{plugin_folder}/_System/providers/`; (c) an MCP server in the session exposing `vault_search` and `vault_get_note` — then §7. **A folder without a manifest** (since v4.4.0, with a store and SHELL; protocol §9 «A core with no manifest») is connected in place, in one of three modes. Find out what the folder has: `ctx repo kit-check <folder> --infer` (exit 3 «немає моделі ролей» → no role model), then the dry run `ctx repo add <folder> --email <e-mail> --infer` (exit 3 naming `--guest` → the role model does not list the e-mail). Then **one** choice of three, the recommended answer first by what the folder has, the other two still offered:
+   - a role model that lists the e-mail → «Підключити з виведеним маніфестом (Б)» — `ctx repo add <folder> --email <e-mail> --infer`;
+   - a role model without the e-mail → «Підключити гостем (Б+В)» — `… --infer --guest` (the blocks, no team block);
+   - no role model, or a layout the plugin will not guess (two role models, two blocks files) → «Лише пошук (А)» — `ctx repo add <folder> --search-only`.
+
+   Show the dry run in one message as in §9 item 2; «так» → the same command with `--apply --code <code>`. Every mode ends with the line for the core's owner the dry run prints (`Власнику ядра: …`) — give it to the user to forward; never send it. Never write a manifest into the core and never offer to: when the user wants to send the owner one, `ctx repo kit-check <folder> --infer` prints it. Without a store or SHELL: tell the user its owner has to add `_System/provider-manifest.yaml` (protocol §9), and stop.
 3. **Placement.** Two layouts are supported:
    - **Separate folder** (recommended): the core is its own Obsidian vault next to the user's; no link collisions.
    - **Nested** in the user's vault (`<vault>/<core folder>/`): one graph, but Obsidian resolves `[[basename]]` across the whole vault, so notes with the same name outside the core (`_index`, `README`, `Dashboard`) can capture the core's links. Say so once when you see this layout.
@@ -23,7 +28,7 @@ python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<targe
 ```
 
 - The first line, `email … → team … · role …`, becomes one sentence for the user; the role is inferred from the registry card's role title (`role_hints`) — the user may correct it.
-- `UNKNOWN_TEAM {json}` (exit 2) — the e-mail is not in the role model: (1) look it up in the provider's directory (`directory_label`) if the user has access, and map the unit to a team card; (2) otherwise one question with the team titles and the role profiles from the JSON; (3) repeat with `--team <slug> --role <profile>`; (4) at the end, a line for the owner to add the person to the registry.
+- `UNKNOWN_TEAM {json}` (exit 2) — the e-mail is not in the role model: (1) look it up in the provider's directory (`directory_label`) if the user has access, and map the unit to a team card; (2) otherwise one question with the team titles and the role profiles from the JSON — and, with a store and SHELL (since v4.4.0), a fourth answer, «гостем, без команди»: `ctx repo add <core> --email <e-mail> --guest` (§9) connects the core in place with its blocks and no team block, and its dry run prints the line for the owner; (3) repeat with `--team <slug> --role <profile>`; (4) at the end, a line for the owner to add the person to the registry.
 - An umbrella team (a department lead) means the union of its teams: warn that the bundle is large.
 - The first line ends with `inferred '<role>' is not in the role model, using '<profile>'` — say which profile was used in the same sentence and offer to pick another (`--role`).
 - Exit 3 prints one line naming the file, the line or the key: the core or its manifest is missing or does not parse, a pattern does not compile, the role model does not load, or an explicit `--role` is not in it. Show the line, nothing was written; a defect in the core goes to its owner.
@@ -172,8 +177,9 @@ A prose note of corrections to a core («Оверлей … — поправки
 For a folder that is a provider kit (`references/context-provider-protocol.md` §9; the plugin's example: `examples/provider-kit/zorg-core/`) and is not registered yet:
 
 1. `ctx repo kit-check <folder>` — a fault (exit 3) is said as it is and goes to the kit's owner; a warning is one line.
-2. `ctx repo add <folder> --email <e-mail>` — one message from its dry run: team and role with their sources, the registration path, the blocks and where they go. `UNKNOWN`-like exit 3 (the e-mail is not in the role model) → one question with the teams it names, then `--team <key>`.
+2. `ctx repo add <folder> --email <e-mail>` — one message from its dry run: team and role with their sources, the registration path, the blocks and where they go. `UNKNOWN`-like exit 3 (the e-mail is not in the role model) → one question with the teams it names, then `--team <key>` — or, the last answer (since v4.4.0), `--guest`: no team block, and the line for the owner to add the person.
 3. On «так» → `ctx repo add <folder> --email <e-mail> --apply --code <code>`; then Step 6 item 2 (the daily sync, asked once) and, when the user keeps a prose note of corrections to this core, §8.
+4. A folder with no manifest (since v4.4.0): §0 item 2 — `--infer`, `--guest`, `--search-only`. The dry run of `--infer` also names the manifest it would write beside the registration (`маніфест: виведено → …`, never in the core) and the line for the core's owner; a search-only registration publishes no blocks, so the daily-sync question (Step 6 item 2) is not asked for it.
 
 ## §7 MCP-only providers
 

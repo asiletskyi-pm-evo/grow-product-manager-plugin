@@ -30,6 +30,10 @@ INFERRED_EXCLUDE = [
 # …and, in a registration of a core connected without its owner's manifest (search only, inferred, a guest), the
 # owner's current-focus note too: Review Focus 1 of v4.4.0 names it, the eight above do not cover it.
 PERSONAL_EXCLUDE = [r"(^|/)Now\.md$"]
+# What an inferred manifest never carries: a command the plugin would run, an address it would reach, the owner's
+# filters and rewrites, a write scope, a tools list (C4) — named so in context-provider-protocol.md §9.
+NEVER_INFERRED = ("people_resolver", "mcp", "deny_patterns", "delink_*", "dashboard_rewrites", "write_scope", "tools_file")
+PROTOCOL = os.path.join("references", "context-provider-protocol.md")
 MODEL = os.path.join("_System", "access-bundles.json")
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 MARKER = re.compile(r"<!--\s*([a-z0-9][a-z0-9-]*):begin\s+id=([A-Za-z0-9_.-]+)")
@@ -205,3 +209,44 @@ def infer(folder, rid="", today=""):
     text = "\n".join(lines) + "\n"
     manifest = pb.with_defaults(pb.Manifest(cc.read_yaml_subset(text)))
     return {"ok": True, "text": text, "manifest": manifest, "from": origin, "why": "", "candidates": []}
+
+
+def _paragraph(text, lead):
+    """The paragraph of `text` that starts with `lead` (up to the next blank line), or ""."""
+    at = text.find(lead)
+    if at < 0:
+        return ""
+    end = text.find("\n\n", at)
+    return text[at:end if end >= 0 else len(text)]
+
+
+def check_protocol(root):
+    """[problem] — what context-provider-protocol.md §9 («A core with no manifest», v4.4.0) and this module disagree on:
+    every INFERRED_EXCLUDE expression in backticks in its «*The inferred manifest*» paragraph and no other there, every
+    NEVER_INFERRED key after «Never inferred», and PERSONAL_EXCLUDE in its «*Search in the core.*» paragraph
+    (testing/validate-consistency.sh, check 25). [] when they agree."""
+    try:
+        text = open(os.path.join(root, PROTOCOL), encoding="utf-8").read()
+    except OSError as e:
+        return ["%s: %s" % (PROTOCOL, e.strerror or type(e).__name__)]
+    out = []
+    inferred = _paragraph(text, "*The inferred manifest*")
+    if not inferred:
+        return ["%s §9: no «*The inferred manifest*» paragraph" % PROTOCOL]
+    listed = inferred.split("the built-in list", 1)[1].split(". The file", 1)[0] if "the built-in list" in inferred else ""
+    shown = re.findall(r"`([^`]+)`", listed)
+    for x in INFERRED_EXCLUDE:
+        if x not in shown:
+            out.append("%s §9: the exclusion `%s` of ctx_infer.INFERRED_EXCLUDE is not in the built-in list" % (PROTOCOL, x))
+    for x in shown:
+        if x not in INFERRED_EXCLUDE:
+            out.append("%s §9: the built-in list has `%s`, which ctx_infer.INFERRED_EXCLUDE does not" % (PROTOCOL, x))
+    never = inferred.split("Never inferred:", 1)[1].split(". ", 1)[0] if "Never inferred:" in inferred else ""
+    for k in NEVER_INFERRED:
+        if "`%s`" % k not in never:
+            out.append("%s §9: «Never inferred» does not name `%s`" % (PROTOCOL, k))
+    search = _paragraph(text, "*Search in the core.*")
+    for x in PERSONAL_EXCLUDE:
+        if "`%s`" % x not in search:
+            out.append("%s §9: «Search in the core» does not name `%s`" % (PROTOCOL, x))
+    return out
