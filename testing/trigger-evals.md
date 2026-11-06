@@ -304,6 +304,10 @@ Collisions: v3.10.0 adds two skills. Connecting to a team's shared core, refresh
 | T12 | what does team Alpha own | context-navigator |
 | T13 | які джерела маємо по чекауту | knowledge-library — NOT context-navigator |
 | T14 | де описане правило модерації відгуків | context-navigator |
+| T15 | підключи ядро команди, в ньому немає provider-manifest | context-connect (v4.4.0: a core with no manifest, connect-steps §0 item 2) |
+| T16 | мене немає в реєстрі ядра — підключи мене гостем | context-connect (v4.4.0: `repo add --guest`) |
+| T17 | connect the shared core folder for search only | context-connect (v4.4.0: `repo add --search-only`) — NOT context-navigator |
+| T18 | знайди в спільному ядрі правило модерації відгуків | context-navigator — NOT context-connect (answering from a connected core) |
 
 
 ### Group U — Search your context (added 2026-10-22, v3.17.0)
