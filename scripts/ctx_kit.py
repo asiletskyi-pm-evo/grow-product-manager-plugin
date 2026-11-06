@@ -48,14 +48,14 @@ def _files(folder):
     return sorted(pb.walk(folder))
 
 
-def check(folder, warnings=None, manifest_path=None):
+def check(folder, warnings=None, manifest_path=None, manifest=None):
     """(manifest or None, model or None, [problem]) of a kit folder. A problem names the file and what is wrong.
     `warnings` (a list) gets what is no fault of the kit but worth knowing when the folder is shared as it is: a
     registry card's private fields and the owner's personal layer — the bundle builder leaves both out of a colleague's
     bundle, but anyone who opens the folder itself sees them.
 
     `manifest_path` (since v4.4.0) is a manifest from outside the folder — the one `ctx repo add --infer` derives —
-    checked as the folder's own would be. Under an inferred manifest (`inferred: true`) the person checking is not the
+    checked as the folder's own would be; `manifest` the same already read (ctx_infer's, before it is written). Under an inferred manifest (`inferred: true`) the person checking is not the
     core's owner and connects it in place: what only the owner can fix and what does not stop the connection (a team
     naming a file that is not there, a missing team card, a person card without its fields, a stray marker beside
     blocks that read, a wrapper) is a warning ending «справа власника ядра»; no role model, no blocks file, no block
@@ -64,11 +64,14 @@ def check(folder, warnings=None, manifest_path=None):
     warn = warnings if warnings is not None else []
     if not os.path.isdir(folder):
         return None, None, ["немає теки набору: %s" % folder]
-    if manifest_path and not os.path.isfile(manifest_path):
-        return None, None, ["немає маніфесту: %s" % manifest_path]
-    m, why = pb.read_manifest(folder, path=manifest_path or None)
-    if m is None:
-        return None, None, [why]
+    if manifest is not None:
+        m = manifest
+    else:
+        if manifest_path and not os.path.isfile(manifest_path):
+            return None, None, ["немає маніфесту: %s" % manifest_path]
+        m, why = pb.read_manifest(folder, path=manifest_path or None)
+        if m is None:
+            return None, None, [why]
     inferred = m.get("inferred") is True
 
     def owner(problem):
@@ -198,22 +201,31 @@ def _wrapper_problems(folder, files, m):
     return out
 
 
-def identity(folder, m, model, email, team=None, role=None):
-    """{email, team, team_title, team_from, role, role_title, role_from} as the bundle builder resolves an e-mail;
-    ValueError when the e-mail has no team and none is named."""
+def identity(folder, m, model, email, team=None, role=None, guest=False):
+    """{email, team, team_title, team_from, role, role_title, role_from, known} as the bundle builder resolves an e-mail
+    (`known`: the role model lists it); ValueError when the e-mail has no team and none is named. `guest` (since
+    v4.4.0, `ctx repo add --guest`): no team at all — `team` "", `team_title` "гість" — and the role `role` names when
+    the model has it, else pm, else the first; with a team named it is a ValueError."""
     email = (email or "").strip().lower()
+    known = email in (model.get("emails") or {})
+    roles = model.get("roles") or {}
+    if guest:
+        if team:
+            raise ValueError("--guest і --team разом не можна: гість підключається без команди")
+        got = role if role in roles else ("pm" if "pm" in roles else (sorted(roles)[0] if roles else ""))
+        return {"email": email, "team": "", "team_title": "гість", "team_from": "--guest", "role": got, "role_title": "",
+                "role_from": "--role" if role and role in roles else "типово → %s" % got, "known": known}
     named = team
     team = team or (model.get("emails") or {}).get(email)
     if not team or team not in (model.get("teams") or {}):
-        raise ValueError("пошти %s немає в моделі ролей набору — назви команду: --team (є: %s)"
-                         % (email, ", ".join(sorted(model.get("teams") or {}))))
+        raise ValueError("пошти %s немає в моделі ролей набору — назви команду: --team (є: %s) або підключись гостем, "
+                         "без команди: --guest" % (email, ", ".join(sorted(model.get("teams") or {}))))
     tb = model["teams"][team]
     people_pre = m.s("people_dir").rstrip("/") + "/"
     local = email.split("@")[0].replace(".", "-")
     pslug = next((os.path.basename(f)[:-3] for f in tb.get("files", []) if f.startswith(people_pre)
                   and os.path.basename(f)[:-3] == local), None)
     title = (model.get("people_role") or {}).get(pslug or "", "")
-    roles = model.get("roles") or {}
     inferred = pb.infer_role(title, m)
     got = role or inferred
     if got not in roles:
@@ -223,25 +235,41 @@ def identity(folder, m, model, email, team=None, role=None):
             "team_from": "--team" if named else "access-bundles.json: emails",
             "role": got, "role_title": title,
             "role_from": "--role" if role else ("%s/%s.md: «%s» → %s" % (word, pslug, title, inferred) if pslug and title
-                                                else "типово → %s" % got)}
+                                                else "типово → %s" % got), "known": known}
 
 
 def _q(s):
     return json.dumps(str(s), ensure_ascii=False)
 
 
-def registration(folder, m, model, ident, today):
+def registration(folder, m, model, ident, today, manifest_path="", search_only=False, exclude=None):
     """The text of the registration of this kit (provider-registration/2): a local folder, `sync: off` (the daily sync
-    is asked for once by context-connect), the owner's personal layer as `writable`."""
+    is asked for once by context-connect), the owner's personal layer as `writable`. Since v4.4.0: `manifest_path` —
+    the manifest beside the registration (`manifest:`, absolute) for a core that ships none; `exclude` — the
+    expressions the index leaves out of the core folder (ctx_infer.registration_exclude); `search_only` — a core
+    folder registered for search alone (`blocks: none`: no blocks, no team, no role model; `m` gives only the id and
+    the title, `model` and `ident` are not read)."""
     folder = os.path.abspath(folder)
     lines = ["schema: provider-registration/2", "id: %s" % m.s("id"), "title: %s" % _q(m.s("title") or m.s("id")),
              "kind: folder", "contract: %s" % (m.s("contract") or "vault/v1"), "authority: %s" % (m.s("authority") or "org"),
-             "mode: snapshot", "access: local", "paths:", "  - %s" % _q(folder), "core_root: %s" % _q(folder),
-             "namespace: %s" % (m.s("namespace") or m.s("id")), "blocks_file: %s" % _q(m.s("blocks_file")), "products: []"]
-    ov = m.get("personal_overlay") or []
-    lines += (["writable:"] + ["  - %s" % _q(g) for g in ov]) if ov else ["writable: []"]
-    lines += ["skip_blocks: []", "team: %s" % ident["team"], "role: %s" % ident["role"], "jira_write: ask", "sync: off",
-              "status: active", "synced_at: %s" % today, "source_version: %s" % _q("core %s" % (model.get("version") or "?"))]
+             "mode: snapshot", "access: local", "paths:", "  - %s" % _q(folder), "core_root: %s" % _q(folder)]
+    if search_only:
+        lines += ["blocks: none", "products: []", "writable: []"]
+    else:
+        lines += ["namespace: %s" % (m.s("namespace") or m.s("id")), "blocks_file: %s" % _q(m.s("blocks_file"))]
+        if manifest_path:
+            lines.append("manifest: %s" % _q(os.path.abspath(manifest_path)))
+        lines.append("products: []")
+        ov = m.get("personal_overlay") or []
+        lines += (["writable:"] + ["  - %s" % _q(g) for g in ov]) if ov else ["writable: []"]
+    if exclude:
+        lines += ["exclude:"] + ["  - %s" % _q(x) for x in exclude]
+    if search_only:
+        lines += ["sync: off", "status: active", "synced_at: %s" % today]
+        return "\n".join(lines) + "\n"
+    lines += ["skip_blocks: []", "team: %s" % pb.yaml_value(ident["team"]), "role: %s" % pb.yaml_value(ident["role"]),
+              "jira_write: ask", "sync: off", "status: active", "synced_at: %s" % today,
+              "source_version: %s" % _q("core %s" % (model.get("version") or "?"))]
     return "\n".join(lines) + "\n"
 
 

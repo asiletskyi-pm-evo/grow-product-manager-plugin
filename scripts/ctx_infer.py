@@ -27,6 +27,9 @@ INFERRED_EXCLUDE = [
     r"(^|/)Meetings/", r"(^|/)Focus/", r"(^|/)_personal/", r"(^|/)TODO", r"\.xlsx$",
     r"local-context\.(existing|proposed)\.md$", r"context-merge-report\.md$", r"(^|/)_archive/",
 ]
+# …and, in a registration of a core connected without its owner's manifest (search only, inferred, a guest), the
+# owner's current-focus note too: Review Focus 1 of v4.4.0 names it, the eight above do not cover it.
+PERSONAL_EXCLUDE = [r"(^|/)Now\.md$"]
 MODEL = os.path.join("_System", "access-bundles.json")
 KEBAB = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 MARKER = re.compile(r"<!--\s*([a-z0-9][a-z0-9-]*):begin\s+id=([A-Za-z0-9_.-]+)")
@@ -36,6 +39,17 @@ README_NAMES = ("readme.md", "readme-core.md")
 def excluded(rel):
     """Is the core-relative path `rel` (with `/`) one search leaves out under an inferred manifest?"""
     return any(re.search(p, rel) for p in INFERRED_EXCLUDE)
+
+
+def registration_exclude(manifest=None):
+    """The `exclude:` of a registration `ctx repo add --search-only | --infer | --guest` writes: INFERRED_EXCLUDE, the
+    owner's Now.md, and the expressions of the core's own manifest when there is one (a guest of a core that ships
+    its manifest) — each once, in that order. The index walks the core folder without them (ctx_index.scope)."""
+    out = []
+    for x in INFERRED_EXCLUDE + PERSONAL_EXCLUDE + [str(v) for v in ((manifest or {}).get("exclude") or []) if str(v).strip()]:
+        if x not in out:
+            out.append(x)
+    return out
 
 
 def kebab(name):
@@ -106,7 +120,7 @@ def _blocks_file(folder, pf):
     return None, None, "кілька файлів блоків (%s) — не вгадую; лише командний блок і пошук" % ", ".join(r for r, _ in cands)
 
 
-def _title(folder):
+def title_of(folder):
     """(title, where from): the first `# ` heading of README.md or README-core.md at the core's root, else its name. A
     README with another suffix is a letter to someone, not the core's title."""
     for n in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
@@ -153,7 +167,7 @@ def infer(folder, rid="", today=""):
     else:
         mid = kebab(name) or "core"
         origin["id"] = "назва теки «%s»" % name
-    title, origin["title"] = _title(folder)
+    title, origin["title"] = title_of(folder)
     blocks, ns, origin["blocks_file"] = _blocks_file(folder, pf)
     keys = [("schema", "provider-manifest/1"), ("id", mid), ("title", title)]
     if ns:

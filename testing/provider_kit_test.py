@@ -9,7 +9,7 @@ registration and adds every block (`ctx read` shows them with their origin); a s
 changed, `v` moved) comes in with `ctx provider apply` and no question — with an overlay of yours on it. The kit
 folder is never written. Semantics: references/context-provider-protocol.md §9. Stdlib only; run from the repo root.
 """
-import json, os, shutil, subprocess, sys, tempfile
+import json, os, re, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -211,6 +211,140 @@ try:
           [p for p in _probs if "поза набором" in p] and not [p for p in _probs if _d in p], _probs)
 finally:
     shutil.rmtree(_d, ignore_errors=True)
+
+# ===================================================================== v4.4.0: a core that ships no manifest
+# `ctx repo add <folder> --infer | --guest | --search-only` (C1): a manifest inferred beside the registration (never in
+# the core), a guest whose e-mail the role model does not know, a core folder registered for search only. The core
+# is only read; search in it leaves the owner's personal layer out (Review Focus 1).
+import ctx_infer as cinf  # noqa: E402
+
+
+def bare(d, name="zorg-core"):
+    """The example kit without its owner's manifest (YAML and wrapper)."""
+    k = os.path.join(d, name)
+    shutil.copytree(KIT, k)
+    for f in ("provider-manifest.yaml", "provider-manifest.md"):
+        os.remove(os.path.join(k, "Core", "_System", f))
+    return k
+
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    before = tree(core)
+    regs = os.path.join(home, ".grow-pm", "providers")
+    reg, man = os.path.join(regs, "zorg-core.yaml"), os.path.join(regs, "manifests", "zorg-core.manifest.yaml")
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example")
+    check("a core with no manifest, no flag: exit 3, and the error offers --infer",
+          rc == 3 and "--infer" in out and not os.path.exists(regs), out[-400:])
+    store_before = tree(store.root)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer")
+    check("add_infer_dry: a code, «маніфест: виведено → <providers>/manifests/zorg-core.manifest.yaml», nothing written",
+          rc == 0 and res.get("code") and "маніфест: виведено → %s" % man in out and res.get("mode") == "inferred"
+          and res.get("manifest") == man and not os.path.exists(regs) and tree(store.root) == store_before, out[-900:])
+    check("…the team and role from the role model, the blocks of the core, the line for the core's owner (place the manifest)",
+          "команда: alpha" in out and "+ scope" in out and "+ key-metrics" in out and "+ team" in out
+          and "Власнику ядра" in out and "Core/_System/provider-manifest.yaml" in (res.get("owner_line") or "")
+          and "внеси" not in (res.get("owner_line") or ""), out[-900:])
+    rc, out, res2 = ctx(home, ctxp, "repo", "add", core, "--email", "ana.lyst@zorg.example", "--infer", "--apply",
+                        "--code", res.get("code") or "x")
+    text = open(reg, encoding="utf-8").read() if os.path.isfile(reg) else ""
+    check("add_infer_apply: the registration (with manifest: and exclude:) and the manifest beside it, in manifests/",
+          rc == 0 and os.path.isfile(man) and ("manifest: %s" % json.dumps(man)) in text and "exclude:" in text
+          and sorted(os.listdir(regs)) == ["manifests", "zorg-core.yaml"]
+          and open(man, encoding="utf-8").read().startswith("# ctx:inferred"), (rc, out[-600:], text))
+    regions = cb.find_regions(store.load(), "zorg-core")[0]
+    check("…the blocks are added, the team block built for alpha", {"scope", "key-metrics", "metric-rules", "teams", "team"}
+          <= set(regions) and "Ana" in regions["team"]["text"], sorted(regions))
+    rc, out, res = ctx(home, ctxp, "read", "--skill", "product-analysis")
+    check("…ctx read shows them with their origin", rc == 0 and "zorg-core · v0.1" in out and "Review rate" in out, out[-600:])
+    rc, out, res = ctx(home, ctxp, "provider", "plan", "zorg-core")
+    check("…the next plan reads the core through the manifest beside the registration: nothing to change",
+          rc == 0 and res.get("changes") == 0 and not res.get("error"), out[-600:])
+    check("…and the core folder is byte for byte the same", tree(core) == before, "")
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer")
+    check("unknown_email_hint: an e-mail the model does not know → exit 3 naming both --team and --guest",
+          rc == 3 and "--team" in out and "--guest" in out, out[-400:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest", "--team", "alpha")
+    check("…--guest with --team is an error (exit 3)", rc == 3 and "--guest" in out and "--team" in out, out[-300:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest")
+    check("add_guest: no team, role pm, no team block in the plan, the line for the owner with this e-mail",
+          rc == 0 and res.get("mode") == "guest" and res.get("team") == "" and res.get("role") == "pm"
+          and not re.search(r"\+ team(?!s)", out) and "+ teams" in out and "гість" in out
+          and "new@zorg.example" in (res.get("owner_line") or "")
+          and "внеси" in (res.get("owner_line") or "") and "Core/_System/provider-manifest.yaml" in (res.get("owner_line") or ""),
+          out[-900:])
+    rc, out, res2 = ctx(home, ctxp, "repo", "add", core, "--email", "new@zorg.example", "--infer", "--guest", "--apply",
+                        "--code", res.get("code") or "x")
+    reg = os.path.join(home, ".grow-pm", "providers", "zorg-core.yaml")
+    text = open(reg, encoding="utf-8").read() if os.path.isfile(reg) else ""
+    regions = cb.find_regions(store.load(), "zorg-core")[0]
+    check("…--apply: `team: \"\"`, the blocks without the team block", rc == 0 and 'team: ""' in text
+          and "scope" in regions and "team" not in regions, (rc, out[-500:], sorted(regions)))
+
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "new@zorg.example", "--guest")
+    check("a guest of a core that ships its manifest: mode guest, no manifest written, the owner asked only to add the e-mail",
+          rc == 0 and res.get("mode") == "guest" and res.get("manifest") == "" and "внеси" in (res.get("owner_line") or "")
+          and "поклади" not in (res.get("owner_line") or ""), out[-600:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "pat.moss@zorg.example", "--id", "zorg-x")
+    check("--id without --infer or --search-only: exit 3 (the core's manifest gives the id)", rc == 3 and "--id" in out, out[-300:])
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    os.remove(os.path.join(core, "Core", "_System", "access-bundles.json"))
+    os.remove(os.path.join(core, "Core", "_System", "access-bundles.md"))
+    write = lambda rel, s: (os.makedirs(os.path.dirname(os.path.join(core, rel)), exist_ok=True),
+                            open(os.path.join(core, rel), "w", encoding="utf-8").write(s))
+    write("Core/Playbook/02 Zebrafish.md", "# Zebrafish rule\n\nEvery zebrafishword review is read twice.\n")
+    write("Core/_personal/note.md", "# Mine\n\nzebrafishword in the owner's personal note.\n")
+    write("Core/Meetings/m.md", "# Sync\n\nzebrafishword said in a meeting.\n")
+    write("Core/Now.md", "# Now\n\nzebrafishword on the owner's mind.\n")
+    write("Core/TODO — owner.md", "# TODO\n\nzebrafishword to do.\n")
+    before = tree(core)
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--infer", "--email", "ana.lyst@zorg.example")
+    check("no role model: --infer is refused, and the reason offers --search-only", rc == 3 and "--search-only" in out, out[-400:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", core, "--search-only")
+    check("add_search_only (dry run): no e-mail needed, «лише пошук», a code, nothing written",
+          rc == 0 and res.get("mode") == "search" and res.get("code") and "лише пошук" in out
+          and not os.path.exists(os.path.join(home, ".grow-pm", "providers")), out[-600:])
+    rc, out, res2 = ctx(home, ctxp, "repo", "add", core, "--search-only", "--apply", "--code", res.get("code") or "x")
+    reg = os.path.join(home, ".grow-pm", "providers", "zorg-core.yaml")
+    text = open(reg, encoding="utf-8").read() if os.path.isfile(reg) else ""
+    check("…--apply: the registration says blocks: none, with exclude:", rc == 0 and "blocks: none" in text
+          and "exclude:" in text and "manifest:" not in text, (rc, out[-400:], text))
+    rc, out, res = ctx(home, ctxp, "provider", "plan")
+    check("…`ctx provider plan` → «лише пошук: zorg-core»", rc == 0 and "лише пошук: zorg-core" in out, out[-400:])
+    rc, out, res = ctx(home, ctxp, "search", "--q", "zebrafishword", "--json")
+    hits = json.dumps(res, ensure_ascii=False)
+    check("…`ctx search` finds the core's note", rc == 0 and "Zebrafish" in hits, out[-600:])
+    check("search_skips_personal: _personal/, Meetings/, Now.md and TODO… of the owner are never found",
+          "_personal" not in hits and "Meetings" not in hits and "Now.md" not in hits and "TODO" not in hits, hits[:1500])
+    rc, out, res = ctx(home, ctxp, "index", "status")
+    check("…and the index does not count them", rc == 0 and "_personal" not in out and "Meetings/m.md" not in out, out[-400:])
+    check("…the core folder is byte for byte the same", tree(core) == before, "")
+
+with tempfile.TemporaryDirectory() as d:
+    home, ctxp, store = fresh(d)
+    core = bare(d)
+    before = tree(core)
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", core, "--infer")
+    check("kit_check_infer: prints the inferred manifest and where each key came from, writes nothing",
+          rc == 0 and "# ctx:inferred" in out and "blocks_file: Core/_System/context-blocks.md" in out and "з чого" in out
+          and tree(core) == before and not os.path.exists(os.path.join(home, ".grow-pm", "providers")), out[-900:])
+    os.makedirs(os.path.join(core, "Second", "_System"))
+    open(os.path.join(core, "Second", "_System", "access-bundles.json"), "w").write("{}")
+    rc, out, res = ctx(home, ctxp, "repo", "kit-check", core, "--infer")
+    check("…an ambiguous layout: exit 3, both folders named", rc == 3 and "Core" in out and "Second" in out, out[-400:])
+    rc, out, res = ctx(home, ctxp, "repo", "add", KIT, "--email", "pat.moss@zorg.example", "--infer")
+    check("--infer on a core that ships its owner's manifest: exit 3, «без --infer»", rc == 3 and "без --infer" in out, out[-300:])
 
 print("RESULT: GREEN ✅" if not fails else "RESULT: RED ❌")
 sys.exit(1 if fails else 0)

@@ -193,10 +193,25 @@ def index_dir(home):
 
 
 # ------------------------------------------------------------------ scope and names
-def Root(source, path, vault=""):
+def Root(source, path, vault="", exclude=()):
     """One folder the index walks: `source` is "own" (the plugin folder of a vault) or a repository id; `vault` is the
-    vault the folder lies in ("" outside every vault)."""
-    return {"source": source, "path": path, "vault": vault}
+    vault the folder lies in ("" outside every vault); `exclude` (since v4.4.0) the regular expressions, relative to the
+    folder, of what the walk leaves out — a registration's `exclude:` (a shared core connected without its owner's
+    manifest: the owner's personal layer stays out of search)."""
+    return {"source": source, "path": path, "vault": vault, "exclude": list(exclude or ())}
+
+
+def _exclusion(patterns):
+    """One compiled expression of a root's `exclude`, or None for none. An expression that does not compile is left
+    out — the registration's author (`ctx repo add`) writes only ones that do."""
+    good = []
+    for p in patterns or ():
+        try:
+            re.compile(p)
+            good.append("(?:%s)" % p)
+        except re.error:
+            continue
+    return re.compile("|".join(good)) if good else None
 
 
 @functools.lru_cache(maxsize=8192)
@@ -230,23 +245,24 @@ def _vault_of(path, vaults):
 def scope(context_text, repos):
     """The roots of the index: `own` for `<vault>/<plugin folder>` of every vault of local-context.md, and the
     repository's id for the core folder (`core_root`, else its first path) of every registration whose folder is on
-    disk. A folder named twice is walked once (the first name)."""
+    disk. A folder named twice is walked once (the first name). Since v4.4.0 a registration's `exclude` goes with its
+    root (`Root`)."""
     entries = cc.vault_entries(context_text)
     vaults = [v for v, _ in entries]
     out, seen = [], set()
 
-    def add(source, path, vault):
+    def add(source, path, vault, exclude=()):
         key = os.path.normpath(path)
         if key not in seen:
             seen.add(key)
-            out.append(Root(source, key, vault))
+            out.append(Root(source, key, vault, exclude))
 
     for vault, folder in entries:
         add("own", os.path.join(vault, folder) if folder else vault, vault)
     for r in repos or []:
         path = r.get("core_root") or next(iter(r.get("paths") or []), "")
         if path and os.path.isdir(path):
-            add(r.get("id") or "", path, _vault_of(path, vaults))
+            add(r.get("id") or "", path, _vault_of(path, vaults), r.get("exclude") or ())
     return out
 
 
@@ -1665,6 +1681,7 @@ class _Walk:
         self.roots = [dict(r, path=os.path.normpath(r["path"])) for r in roots]
         for r in self.roots:
             r["rel"] = rel_path(r["path"], vaults, r)
+            r["_rx"] = _exclusion(r.get("exclude"))      # since v4.4.0: what this root leaves out
         self.root_paths = {N(r["path"]) for r in self.roots}
         self.by_rel = sorted(range(len(self.roots)), key=lambda i: -len(self.roots[i]["rel"]))
         self.store_rel = _slash(N(store_rel or "")).rstrip("/")
@@ -1715,12 +1732,23 @@ class _Walk:
 
     def _owner(self, path):
         """The root an index name belongs to: the one with the longest name that holds it (a vault walked whole holds
-        every name but those outside every vault), or None."""
+        every name but those outside every vault), or None — None too when that root's `exclude` leaves the name out
+        (since v4.4.0: the rows of a path a registration now excludes go as orphans)."""
         for i in self.by_rel:
             rel = self.roots[i]["rel"]
             if (path == rel or path.startswith(rel + "/")) if rel else not self._outside(path):
-                return i
+                return None if self._hidden(i, path) else i
         return None
+
+    def _hidden(self, ri, rel, folder=False):
+        """Does root `ri`'s `exclude` leave the index name `rel` out? Matched against the path relative to the root's
+        folder (as a manifest's `exclude` is), a folder with a trailing `/`."""
+        rx = self.roots[ri].get("_rx")
+        if rx is None:
+            return False
+        top = self.roots[ri]["rel"]
+        sub = rel[len(top) + 1:] if top and rel.startswith(top + "/") else ("" if top else rel)
+        return bool(sub) and bool(rx.search(sub + ("/" if folder else "")))
 
     def _due(self):
         return self.deadline is not None and _clock() >= self.deadline
@@ -1742,6 +1770,8 @@ class _Walk:
         stack = list(reversed(items))
         while stack and not self._due():
             kind, ri, path, rel = stack.pop()
+            if self._hidden(ri, rel, folder=kind == "d"):     # a saved queue from before the root excluded it
+                continue
             if kind == "d":
                 stack.extend(reversed(self._list(ri, path, rel)))
             else:
@@ -1803,12 +1833,14 @@ class _Walk:
             child = rel + "/" + name if rel else name
             try:
                 if e.is_dir(follow_symlinks=False):
-                    if _skip_folder(child, self.store_rel) or _copy_service(e.path):
+                    if _skip_folder(child, self.store_rel) or _copy_service(e.path) or self._hidden(ri, child, True):
                         continue
                     present.add(name)
                     if N(os.path.normpath(e.path)) not in self.root_paths:   # another root walks it itself
                         dirs.append(("d", ri, e.path, child))
                 elif e.is_file(follow_symlinks=False):      # a link to a file is not followed (v3.16.2)
+                    if self._hidden(ri, child):             # since v4.4.0: the root's exclude — its rows go below
+                        continue
                     present.add(name)
                     files.append(("f", ri, e.path, child))
             except OSError:

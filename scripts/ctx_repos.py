@@ -66,7 +66,8 @@ def normalise(reg):
     sync writes without asking, so it is switched on per repository, by an explicit word (the D6 write boundary).
     Since v4.4.0 `manifest` is the provider manifest the registration names for a core that ships none (an absolute
     path; a relative one is taken beside the registration file; "" for none) and `blocks` is "none" when the
-    registration says `blocks: none` (any case) — a core folder registered for search only — else ""."""
+    registration says `blocks: none` (any case) — a core folder registered for search only — else ""; `exclude` the
+    expressions (relative to the core folder) the index leaves out of it, [] for none."""
     out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
@@ -111,6 +112,7 @@ def normalise(reg):
         "source_version": _s(reg.get("source_version")),
         "manifest": manifest,
         "blocks": "none" if _s(reg.get("blocks")).lower() == "none" else "",
+        "exclude": _list(reg.get("exclude")),
         "_file": reg.get("_file", ""),
     })
     return out
@@ -526,7 +528,7 @@ def reach(repo, deadline=None):
     return False, "no endpoint and no core folder in the registration"
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True):
+def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True, manifest=None):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -557,6 +559,8 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     `team` False (since v3.14; `repo status`, which wants the source's version alone) never builds the team region: the
     blocks file is read and nothing else — the core's manifest only when it names the blocks file or the namespace —
     and team, team_source, team_error stay empty.
+    `manifest` (since v4.4.0) is a manifest already read — `ctx repo add --infer` shows its plan before the inferred
+    manifest is written — used instead of reading one.
 
     Returns {source: "mcp"|"folder"|None, version: the v= most blocks carry (the first met on a tie; counted
     before skip_blocks, it is the source's), blocks: {id: region text} without skip_blocks (unless `include_skipped`),
@@ -578,8 +582,10 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     explicit = repo.get("namespace_explicit", True)         # a repository built by hand has no flag: its namespace is meant
     with cs.read_budget(None if deadline is None else deadline - time.monotonic()):
         blocks_file = repo["blocks_file"]
-        manifest, manifest_why = None, None
-        if core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):
+        given, manifest, manifest_why = manifest, None, None
+        if given is not None:
+            manifest = given
+        elif core_root and os.path.isdir(core_root) and ((team and repo["team"]) or not blocks_file or not explicit):
             manifest, manifest_why = _manifest(core_root, repo.get("manifest", ""))
         if not blocks_file and manifest is not None:
             blocks_file = manifest.s("blocks_file")
