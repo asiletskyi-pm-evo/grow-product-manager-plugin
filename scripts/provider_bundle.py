@@ -23,8 +23,9 @@ A copy of the context named local-context.existing.md in the proposal folder (el
 Last stdout lines: `CONTEXT_REPORT {json}` and `BUNDLE_RESULT {json}`.
 
 Exit codes: 0 ok · 2 UNKNOWN_TEAM (one JSON line) · 3 the core, the manifest or the
-role model is missing or unreadable, a manifest pattern does not compile, or an
-explicit --role is not in the role model (one line naming the file, line or key) ·
+role model is missing or unreadable, a manifest pattern does not compile, an
+explicit --role is not in the role model (one line naming the file, line or key), or
+the manifest is one the plugin inferred (`inferred: true`, since 1.2.1) ·
 4 a block the provider contributes matches a deny pattern (the line names the block),
 or the proposal would have nested markers — nothing written.
 Stdlib only. Idempotent: existing files are kept unless --force.
@@ -43,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 N = lambda s: unicodedata.normalize("NFC", s or "")
 BUILTIN_TEMPLATES = os.path.join(HERE, "provider_templates")
 BUILTIN_EXCLUDE = [r"\.zip$", r"\.plugin$", r"\.tgz$", r"\.tar\.gz$", r"(^|/)__pycache__/", r"\.pyc$",
@@ -143,15 +144,25 @@ def read_manifest(core, path=None, read=None):
                 m = Manifest(cc.read_yaml_subset(rd(p, read)))
             except (ValueError, UnicodeDecodeError) as e:
                 return None, "provider manifest %s: %s" % (p, e)
-            m["_path"] = os.path.relpath(os.path.abspath(p), os.path.abspath(core))
+            root, real = os.path.realpath(core), os.path.realpath(p)
+            if os.path.commonpath([root, real]) == root:     # since 1.2.1 (v4.4.0): only a manifest inside the core
+                m["_path"] = os.path.relpath(real, root)      # is one of its files; an outside one is read, never copied
             return with_defaults(m), None
     return None, "no provider manifest under %s (expected _System/provider-manifest.yaml)" % core
 
 
+INFERRED_REFUSED = ("виведений маніфест — лише ctx repo add (на місці, тека ядра лише читається); пакет копіює файли "
+                    "і потребує маніфесту власника ядра з його exclude і deny_patterns (context-provider-protocol §9)")
+
+
 def load_manifest(core, path=None):
+    """The manifest, or exit 3 with the reason. Since 1.2.1 (v4.4.0) a manifest the plugin inferred (`inferred: true`,
+    ctx_infer) is refused: it knows none of the owner's filters, so it may connect a core in place, never copy one."""
     m, why = read_manifest(core, path)
     if m is None:
         sys.stdout.write(why + "\n"); sys.exit(3)
+    if m.get("inferred") is True:
+        sys.stdout.write(INFERRED_REFUSED + "\n"); sys.exit(3)
     return m
 
 
