@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.4.0
+**Version:** 4.5.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.5.0** — **«Пауза запису»: the write gate can be paused for one bulk job, and it asks again by itself** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `/grow-product-manager:setup --write-gate pause <minutes>` (1–240) skips the Jira/Confluence question until the pause ends, then the gate asks again — a bulk sync no longer needs `--write-gate off` that stays off until someone remembers. The provider-boundary and generated-region questions stay on; a malformed or over-long pause is ignored and the gate asks; `updateConfluenceContent` with `dryRun: true` is never asked about. `context-connect` 0.9.1: after `ctx repo add` the Jira answer goes into the registration's `jira_write:` line and `ctx provider apply` rebuilds the team block; a guest, who has no team block, is no longer asked about Jira.
 
 **New in v4.4.0** — **«Гість ядра»: a shared core connects even when it ships no manifest, or its registry does not list you** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `ctx repo add` connects such a core in one of three modes, the safest first, none of them changing the core: **search only** (`--search-only` — the folder as a search source, no role model or e-mail needed), an **inferred manifest** (`--infer` — read from the core's layout, kept with your registrations (`manifests/`), never in the core, in place only; never a command, an address or the owner's filters) and a **guest** (`--guest` — the core's blocks without a team block). The owner's meetings, personal folder, TODO lists, `Now.md`, store, 1-1 logs and profiles stay out of your search; a manifest the owner ships later wins at once. Each mode ends with one line for the core's owner, ready to forward — the plugin sends nothing. `context-connect` 0.9.0 offers only the modes the folder allows, the recommended first.
 
@@ -377,7 +379,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.17.1)
+### 10. Plugin Configurator (v2.17.2)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -638,7 +640,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.9.0) — NEW in v3.10.0
+### 32. Context Connect (v0.9.1) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
@@ -666,7 +668,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.19.0 | Process meetings and extract action items |
-| Plugin Configurator | v2.17.1 | Configure plugin for your organization |
+| Plugin Configurator | v2.17.2 | Configure plugin for your organization |
 | Knowledge Library | v0.10.0 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.10.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
@@ -686,7 +688,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.3 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.9.0 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Connect | v0.9.1 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
 | Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
@@ -928,7 +930,7 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | `/grow-product-manager:config` | `validate \| view` | Straight into `plugin-configurator`'s Validate / View mode |
 | `/grow-product-manager:release` | `patch \| minor \| major` | `release-manager` with the bump class pre-answered — for the plugin repo only |
 | `/grow-product-manager:glossary-lint` | `[file]` | Gate 3 team-language lint over a file or pasted text, standalone |
-| `/grow-product-manager:setup` | `--show \| --write-gate on\|off` | Host-level toggles (the write gate) and whether the hooks environment is wired in this session |
+| `/grow-product-manager:setup` | `--show \| --write-gate on\|off \| --write-gate pause <minutes>` | Host-level toggles (the write gate, and a pause of its Jira/Confluence question for one bulk job, 1–240 minutes, that ends on its own) and whether the hooks environment is wired in this session |
 | `/grow-product-manager:find` | `<запит> [--list] [--all]` | The search of your context, typed (since v3.17.0): `context-navigator`'s answer with a source and a date for every statement, `--list` for the notes instead, `--all` for the session's live sources too; ends with `Де шукав: …` |
 | `/grow-product-manager:context` | `show [запис] \| health \| inbox \| recheck \| consolidate \| overlay \| history` | Your context, typed (since v3.21.0): `show` — what the plugin knows about you, who wrote each record last and when it was verified, since v3.22.0 the source of each field; `health` — what wants looking after, each line with the command that fixes it; `inbox` — what skills learned, taken or rejected in one answer; since v3.22.0 `recheck` — your records against the connectors, `consolidate` — duplicates and stale dates as proposals; since v3.23.0 `overlay` — your corrections to a core, `history` — what changed, a note a month |
 
@@ -937,8 +939,8 @@ Every protocol keeps a fallback chain (named agent → `general-purpose` with th
 | Hook | Event | Does |
 |---|---|---|
 | Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. |
-| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` (on Atlassian MCP v2 the Confluence two are `createConfluenceContent`, `updateConfluenceContent`) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. Opt-out: `/grow-product-manager:setup --write-gate off`. |
-| Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate. |
+| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` (on Atlassian MCP v2 the Confluence two are `createConfluenceContent`, `updateConfluenceContent`) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits and an `updateConfluenceContent` dry run (`dryRun: true`) pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. For one bulk job (a docs sync, a batch of tasks): `/grow-product-manager:setup --write-gate pause <minutes>` skips this question for up to 240 minutes and it comes back on its own; the provider-boundary and generated-region questions stay on. Opt-out: `/grow-product-manager:setup --write-gate off`. |
+| Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate; a write-gate pause does not cover it. |
 
 
 ---
@@ -1106,5 +1108,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.4.0  
-**Last Updated:** October 2026
+**Version:** 4.5.0  
+**Last Updated:** November 2026

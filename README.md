@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.4.0
+**Version:** 4.5.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.5.0** — **«Пауза запису»: the write gate can be paused for one bulk job, and it asks again by itself** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `/grow-product-manager:setup --write-gate pause <minutes>` (1–240) skips the Jira/Confluence question until the pause ends, then the gate asks again — a bulk sync no longer needs `--write-gate off` that stays off until someone remembers. The provider-boundary and generated-region questions stay on; a malformed or over-long pause is ignored and the gate asks; `updateConfluenceContent` with `dryRun: true` is never asked about. `context-connect` 0.9.1: after `ctx repo add` the Jira answer goes into the registration's `jira_write:` line and `ctx provider apply` rebuilds the team block; a guest, who has no team block, is no longer asked about Jira.
 
 **New in v4.4.0** — **«Гість ядра»: a shared core connects even when it ships no manifest, or its registry does not list you** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `ctx repo add` connects such a core in one of three modes, the safest first, none of them changing the core: **search only** (`--search-only` — the folder as a search source, no role model or e-mail needed), an **inferred manifest** (`--infer` — read from the core's layout, kept with your registrations (`manifests/`), never in the core, in place only; never a command, an address or the owner's filters) and a **guest** (`--guest` — the core's blocks without a team block). The owner's meetings, personal folder, TODO lists, `Now.md`, store, 1-1 logs and profiles stay out of your search; a manifest the owner ships later wins at once. Each mode ends with one line for the core's owner, ready to forward — the plugin sends nothing. `context-connect` 0.9.0 offers only the modes the folder allows, the recommended first.
 
@@ -1106,5 +1108,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.4.0  
-**Last Updated:** October 2026
+**Version:** 4.5.0  
+**Last Updated:** November 2026

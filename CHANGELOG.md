@@ -12,11 +12,11 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
-## Unreleased
+## v4.5.0 (2026-11-09)
 
-**A pause of the write gate for one bulk job — it ends on its own.** The write gate asked before every Confluence and Jira write, dry runs of `updateConfluenceContent` included, and a hook's «ask» beats the host's «always allow»; the only way out was `--write-gate off`, which also switched off the provider-boundary and generated-region questions and stayed off until someone remembered. On 2026-11-06 a 38-page docs sync took dozens of answers one by one, then a config file written by hand and deleted after. Now `/grow-product-manager:setup --write-gate pause <minutes>` skips the Jira/Confluence question for 1–240 minutes and the gate asks again by itself afterwards; a dry run is never asked about.
+**«Пауза запису»: a pause of the write gate for one bulk job — it ends on its own.** The write gate asked before every Confluence and Jira write, dry runs of `updateConfluenceContent` included, and a hook's «ask» beats the host's «always allow»; the only way out was `--write-gate off`, which also switched off the provider-boundary and generated-region questions and stayed off until someone remembered. On 2026-11-06 a 38-page docs sync took dozens of answers one by one, then a config file written by hand and deleted after. Now `/grow-product-manager:setup --write-gate pause <minutes>` skips the Jira/Confluence question for 1–240 minutes and the gate asks again by itself afterwards; a dry run is never asked about.
 
-Proposed class: MINOR — a new option of a host toggle and a new rule in the write gate; nothing that worked before changes.
+MINOR: a new option of a host toggle and a new rule in the write gate; nothing that worked before changes.
 
 Also here: **`context-connect` 0.9.1 — the Jira question after `ctx repo add`** (PATCH; Fixed below), found by the live run of TC-skill-4400-modes after the v4.4.0 release.
 
@@ -54,6 +54,8 @@ Also here: **`context-connect` 0.9.1 — the Jira question after `ctx repo add`*
 | `references/context-provider-protocol.md` | §9 row C: no Jira write scope |
 | `testing/provider_kit_test.py` | the Jira promise by mode, and `jira_write:` + `ctx provider apply` — red first |
 | `testing/test-cases.md`, `testing/provider_bundle_test.py`, `testing/ctx_cli_test.py`, `README.md` | TC-skill-4400-modes passed live, TC-ctx-connect-jira; the pinned `context-connect` version follows |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.5.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.5.0 |
 
 ### Backwards compatibility
 
