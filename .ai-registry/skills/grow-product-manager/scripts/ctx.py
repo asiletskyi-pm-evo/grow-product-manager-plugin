@@ -2000,7 +2000,8 @@ def _kit_add_plan(c, a):
                                              ("plugin_folder", "blocks_file") if inferred["from"].get(k)))
     lines += [team_line,
               "роль: %s · %s" % (ident["role"], ident["role_from"]),
-              "Jira: запис — ask (context-connect спитає, чи є в тебе свій проєкт)",
+              ("Jira: — (у гостя немає командного блоку, де живе рівень запису в Jira, тож питати нема про що)" if a.guest else
+               "Jira: запис — ask (context-connect спитає, чи є в тебе свій проєкт)"),
               "реєстрація: %s (sync: off — щоденний синк вмикає context-connect)" % where,
               "блоки: %s → %s" % (", ".join("+ " + b for b in adds) or "жодного нового",
                                   cb._home_record(repo, {}, c.store.load(), m.s("title") or rid) or "новий запис «%s»" % (m.s("title") or rid))]
