@@ -564,6 +564,21 @@ else
   ok "inferred manifest: context-provider-protocol.md §9 and ctx_infer.py agree (exclusions, never-inferred keys)"
 fi
 
+# --- 26. The story map is one schema (v4.6.0) --------------------------------------
+# roadmap-architect's `story-map` mode follows references/story-map-protocol.md, and scripts/story_map.py parses the
+# note it describes. A frontmatter field, a column, a script finding or a command added to one of them alone would
+# have the skill write a note the script misreads; a status canon that drifts from planning-core.md §3 would count a
+# slice's progress against words initiative-status never gives. Also: the skill cites the protocol, vault-schema's
+# roadmap row names the story map, and artifact-publishing.md §5 has the map's key row.
+MAP_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import story_map; print('\n'.join(story_map.check_protocol('.')))" 2>&1)
+if [ -n "$MAP_ERRS" ]; then
+  while IFS= read -r line; do err "story map: $line"; done <<EOF
+$MAP_ERRS
+EOF
+else
+  ok "story map: story-map-protocol.md, story_map.py, planning-core.md §3, vault-schema, artifact-publishing §5 and roadmap-architect agree"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.
