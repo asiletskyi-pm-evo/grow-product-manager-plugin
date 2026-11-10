@@ -296,7 +296,7 @@ try:
     check("6.5 one moved card, from R1 to MVP", len(mo) == 1 and mo[0]["id"] == "3458764000000003004"
           and mo[0].get("card") == "c4" and mo[0]["frame_from"].startswith("R1") and mo[0]["frame_to"].startswith("MVP"), mo)
     check("6.6 markup inside a sticky (<p>) is not a change", not any(c["id"] == "3458764000000002002" for c in ch), ch)
-    check("6.7 counts", res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1, "backbone": 0}, res.get("counts"))
+    check("6.7 counts", res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1, "backbone": 0, "orphaned": 0}, res.get("counts"))
     sc = res.get("scope", {})
     check("6.8 the area to read back covers the last state", sc.get("x", 1) <= 0 and sc.get("y", 1) <= 0
           and sc.get("x", 0) + sc.get("width", 0) >= 2000 and sc.get("y", 0) + sc.get("height", 0) >= 1520, sc)
@@ -311,7 +311,7 @@ try:
     rc, out, res = run("board-diff", "--last", last, "--now", broken)
     check("6.12 a board read that does not parse is exit 2", rc == 2 and res.get("ok") is False, out)
     rc, out, res = run("board-diff", "--last", last, "--now", last)
-    check("6.13 the same board twice is no change", res.get("counts") == {"changed": 0, "moved": 0, "added": 0, "removed": 0, "backbone": 0}, res)
+    check("6.13 the same board twice is no change", res.get("counts") == {"changed": 0, "moved": 0, "added": 0, "removed": 0, "backbone": 0, "orphaned": 0}, res)
 
     # 8. review 1 (frozen cbd5714): each finding reproduced first
     # I-2 a short row is kept (GFM pads it) — render and baseline keep its card
@@ -372,7 +372,7 @@ try:
     write(nb, nbt)
     rc, out, res = run("board-diff", "--last", state, "--now", nb, "--note", note)
     check("8.10 m-10 a step's sticky renamed is a backbone change; loose text is other; card counts unchanged",
-          res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1, "backbone": 1}
+          res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1, "backbone": 1, "orphaned": 0}
           and any(b.get("role") == "step" for b in res.get("backbone", [])) and len(res.get("other", [])) == 1,
           (res.get("counts"), res.get("backbone"), res.get("other")))
 
@@ -462,6 +462,71 @@ try:
     run("render-html", "--note", dup, "--out", page7)
     h7 = open(page7, encoding="utf-8").read() if os.path.exists(page7) else ""
     check("9.5 a feature code shown once in a card's caption", h7.count("PROJ-1234.1") == 1, h7.count("PROJ-1234.1"))
+
+    # 10. review of the whole branch (frozen 79f263d)
+    # I-1 a card named like its step maps to its own sticky, never to the step's
+    sn = os.path.join(d, "map-stepname.md")
+    write(sn, open(note, encoding="utf-8").read().replace("Список найближчих поштоматів за адресою", "Вибрати поштомат на карті"))
+    sb = os.path.join(d, "board-stepname.svg")
+    write(sb, lt.replace("Список найближчих поштоматів за адресою&lt;br&gt;", "Вибрати поштомат на карті&lt;br&gt;"))
+    snst = os.path.join(d, "stepname.board.json")
+    rc, out, res = run("board-state", "--read", sb, "--note", sn, "--out", snst)
+    check("10.1 I-1 a card named like its step maps to the sticky in its slice frame, the step to the spine's",
+          res.get("cards", {}).get("c3") == "3458764000000003003" and res.get("roles", {}).get("step") == 2, res)
+    # I-2 a link with no scheme, or with credentials, never reaches the page, and check names it
+    nl = os.path.join(d, "map-noscheme.md")
+    write(nl, open(note, encoding="utf-8").read()
+          .replace("| FR-9 |", "| bob:hunter2@wiki.zorg.example/pages/9 |")
+          .replace("Оплата частинами", "Оплата частинами, див. confluence.zorg.example/pages/123?access_token=xyz987"))
+    page8 = os.path.join(d, "noscheme.html")
+    run("render-html", "--note", nl, "--out", page8)
+    h8 = open(page8, encoding="utf-8").read() if os.path.exists(page8) else "zorg.example"
+    check("10.2 I-2 links without a scheme or with credentials are removed from the page", "zorg.example" not in h8
+          and "hunter2" not in h8 and "xyz987" not in h8, re.findall(r".{0,20}zorg\.example.{0,20}", h8)[:3])
+    rc, out, res = run("check", "--note", nl)
+    fl = {(f["finding"], f.get("card")) for f in res.get("findings", [])}
+    check("10.3 I-2 check names both cards", ("link", "c7") in fl and ("link", "c14") in fl, fl)
+    rc, out, res = run("parse", "--note", nl)
+    bt = {c["id"]: c.get("board_text", "") for c in res.get("cards", [])}
+    check("10.4 I-2 the parse gives each card the text the board may carry — no link in it",
+          "zorg.example" not in bt.get("c7", "zorg.example") and bt.get("c1") == "Поштомат як спосіб доставки в кошику", bt.get("c7"))
+    rc, out, res = run("parse", "--note", note)
+    check("10.5 I-2 «README.md» or a feature code is no link", not any("[link removed]" in c.get("board_text", "") for c in res.get("cards", [])),
+          [c.get("board_text") for c in res.get("cards", []) if "[" in c.get("board_text", "")])
+    # I-4 a card dropped from the note leaves a named orphan, kept as one in the next state
+    dr = os.path.join(d, "map-dropped.md")
+    write(dr, "\n".join(l for l in open(note, encoding="utf-8").read().split("\n") if not l.startswith("| c5 |")))
+    rc, out, res = run("board-diff", "--last", state, "--now", last, "--note", dr)
+    check("10.6 I-4 a card removed from the note names its sticky as orphaned (counted)", res.get("counts", {}).get("orphaned") == 1
+          and [o.get("card") for o in res.get("orphaned", [])] == ["c5"], (res.get("counts"), res.get("orphaned")))
+    ost = os.path.join(d, "orphan.board.json")
+    rc, out, res = run("board-state", "--read", last, "--note", dr, "--last", state, "--out", ost)
+    check("10.7 I-4 the next state keeps the orphan as the plugin's own, never a team sticky", res.get("orphans") == {"c5": "3458764000000003005"}
+          and res.get("roles", {}).get("orphan") == 1, res)
+    # m-7 the stored state prints which card is which sticky
+    rc, out, res = run("board-diff", "--last", state)
+    check("10.8 m-7 the state's card → sticky map is printed for the next version", res.get("cards", {}).get("c1") == "3458764000000003001"
+          and len(res.get("cards", {})) == 5, res.get("cards"))
+    # m-6 a team copy of a mapped card's sticky is the team's addition; two equal texts take two cards; the first read wins
+    cp = os.path.join(d, "board-copy.svg")
+    write(cp, lt.replace("</svg>", '<rect data-type="sticky" data-miro-id="3458764000000007777" x="3000" y="3000" width="199" height="228" '
+                                    'data-content="Карта поштоматів з фільтром «працює цілодобово»" />\n</svg>'))
+    rc, out, res = run("board-diff", "--last", state, "--now", cp, "--note", note)
+    check("10.9 m-6 a copy of a mapped card's sticky is added by the team, not unrecorded",
+          [a["id"] for a in res.get("added", [])] == ["3458764000000007777"], (res.get("added"), res.get("unrecorded")))
+    tw = os.path.join(d, "map-twins.md")
+    write(tw, open(note, encoding="utf-8").read().replace("Ціна й строк доставки в поштомат поруч зі способом", "Карта поштоматів з фільтром «працює цілодобово»"))
+    tb = os.path.join(d, "board-twins.svg")
+    write(tb, lt.replace('data-content="Ціна й строк доставки в поштомат поруч зі способом"', 'data-content="Карта поштоматів з фільтром «працює цілодобово»"'))
+    rc, out, res = run("board-state", "--read", tb, "--note", tw, "--out", os.path.join(d, "twins.board.json"))
+    cm = res.get("cards", {})
+    check("10.10 m-6 two cards of one text take two stickies (named ambiguous)", cm.get("c2") and cm.get("c4") and cm["c2"] != cm["c4"]
+          and len(res.get("ambiguous", [])) == 2, res)
+    r1 = os.path.join(d, "read-first.svg")
+    write(r1, lt.replace('data-content="Карта поштоматів з фільтром «працює цілодобово»"', 'data-content="Перше читання"'))
+    rc, out, res = run("board-diff", "--last", state, "--now", r1, last, "--note", note)
+    check("10.11 m-6 of two reads, the first read of an element wins", any(c.get("now") == "Перше читання" for c in res.get("changed", [])),
+          res.get("changed"))
 
     # 7. schema — check 26
     sys.path.insert(0, os.path.join(ROOT, "scripts"))

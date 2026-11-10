@@ -234,7 +234,9 @@ vault_save(artifact, product, options):
      (profiles are addressed by person, not by date — see people-context-protocol.md)
      IF artifact.type == "roadmap" AND subtype == "story-map":
        file_path = {target_vault.path}/Roadmaps/{key_slug}/story-map-{topic_slug}.md
-     (a story map is addressed by name and updated in place — story-map-protocol.md §4; since v4.6.0)
+     (a story map is addressed by name and updated in place — story-map-protocol.md §4; since v4.6.0. When the note
+      exists, the save rewrites its body and the `slices` field only: `published`, `baseline`, `created` and
+      `related` — fields other writers own — stay byte for byte.)
 
 4. Create directory structure:
    mkdir -p {file_path_parent_dir}

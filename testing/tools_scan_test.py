@@ -547,6 +547,27 @@ try:
     rc, out, res, rows = run("merge", "--store", s9, "--home", h9, "--no-apps")
     check("9.5 skills the user set are never widened by the seed", reg(s9)["figma"].get("skills") == ["design-bridge"],
           reg(s9)["figma"].get("skills"))
+    # the seed view: a registry merged before v4.6.0 and never merged again reads as the seed names it now
+    s9c = os.path.join(d, "store9c")
+    run("merge", "--store", s9c, "--home", h9, "--no-apps")
+    data = json.load(open(os.path.join(s9c, "registry.json")))
+    for tr9 in data["tools"]:
+        if tr9["id"] == "miro":
+            tr9["skills"] = ["diagram-prototyper", "brainstorm-features"]
+        if tr9["id"] == "atlassian":
+            tr9.pop("needs", None)
+    w(os.path.join(s9c, "registry.json"), json.dumps(data))
+    rc, out, res, rows = run("suggest", "--store", s9c, "--skill", "roadmap-architect", "--need", "board")
+    check("9.6 an old registry with no re-merge offers Miro, never Atlassian (suggest reads the seed view)",
+          res.get("suggest") == "miro", res)
+    for tr9 in data["tools"]:
+        if tr9["id"] == "miro":
+            tr9["user_set"] = ["skills"]
+        if tr9["id"] == "atlassian":
+            tr9["cleared"] = ["needs"]
+    w(os.path.join(s9c, "registry.json"), json.dumps(data))
+    rc, out, res, rows = run("suggest", "--store", s9c, "--skill", "roadmap-architect", "--need", "board")
+    check("9.7 skills the user set and needs the user cleared stay theirs in the seed view", res.get("suggest") == "atlassian", res)
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

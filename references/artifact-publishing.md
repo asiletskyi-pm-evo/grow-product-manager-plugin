@@ -128,7 +128,7 @@ The question names the result as the key does (the deck's title, the report's pe
 
 - **A place people edit** (DOCS, Confluence, another registry record's page) is checked before it is overwritten — a board by reading it back and comparing it with its last state (`story-map-protocol.md` §8), the rest as follows: when its own version is not the record's `remote_version`, or — where it has none — it changed after the record's `published` time (both UTC), or it cannot say, the skill asks one question: «замінити / додати новим розділом / новий документ». A place whose versions are immutable (Atlassian Artifacts, ARTIFACT) loses nothing and needs no such question.
 - **A place that is gone** — deleted, or the user has no access any more — is never recreated silently: «Деки в Atlassian Artifacts більше немає — створити нову?». The new place starts at version 1 and the old id goes to `replaced`.
-- A surface whose new version the plugin has not measured (ARTIFACT `page`, DOCS `connector`) keeps its record; the next run offers a new version only when the tool takes that id, otherwise it offers a new place and says why, once.
+- A surface whose new version the plugin has not measured (DOCS `connector`) keeps its record; the next run offers a new version only when the tool takes that id, otherwise it offers a new place and says why, once. ARTIFACT `page` is measured (2026-11-10, Claude Code desktop): publishing the same file again gives the same link its next version.
 
 ## 7. Sharing — a separate question
 

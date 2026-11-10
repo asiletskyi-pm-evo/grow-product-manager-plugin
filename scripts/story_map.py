@@ -39,7 +39,9 @@ COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-stat
 SUBITEM = re.compile(r"<br\s*/?>|•|[:;]\s*[-*]\s+\S", re.I)
 WORK = r"(?:FE|BE|QA|iOS|Android|Design|DevOps)"
 WORK_TYPE = re.compile(r"^\s*(?:\[%s\]|\(%s\)|%s\s*:)" % (WORK, WORK, WORK))
-LINK = re.compile(r"https?://\S+|\bwww\.\S+", re.I)
+LINK = re.compile(r"(?:https?|ftp)://\S+|\bwww\.\S+"                       # a link with a scheme, or www.
+                  r"|[\w.+-]+:[^\s@/]+@[\w-]+(?:\.[\w-]+)+\S*"               # user:password@host…
+                  r"|\b(?:[a-z0-9-]+\.)+[a-z]{2,}/\S*", re.I)                # host.domain/path, no scheme
 FEATURE_CODE = re.compile(r"^([A-Z][A-Z0-9]*-\d+)((?:\.\d+)+)$")
 EPIC_KEY = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 SLICE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
@@ -191,7 +193,7 @@ def parse(note):
         rank[(a, s)] = rank.get((a, s), 0) + 1
         cards.append({"id": r["id"], "activity": a, "step": s, "card": r["card"], "slice": r["slice"],
                       "feature": r["feature"], "epic": r["epic"] or note["epic"], "source": r["source"],
-                      "edge_of": r["edge_of"], "rank": rank[(a, s)], "row": r["row"]})
+                      "edge_of": r["edge_of"], "rank": rank[(a, s)], "row": r["row"], "board_text": safe(r["card"])})
     columns = [{"activity": a, "step": s} for a in acts for s in steps_of[a]]
     col_ix = {(c["activity"], c["step"]): i for i, c in enumerate(columns)}
     known = [s["slice"] for s in note["slices"]]
@@ -570,7 +572,10 @@ def _scope(items):
 
 
 def _rendered(c):
-    return [_plain(c["card"]), _plain((c["card"] + " " + c["feature"]).strip())]
+    texts = []
+    for base in dict.fromkeys((c["card"], c.get("board_text") or c["card"])):
+        texts += [_plain(base), _plain((base + " " + c["feature"]).strip())]
+    return list(dict.fromkeys(texts))
 
 
 def assign_roles(items, p):
@@ -584,7 +589,7 @@ def assign_roles(items, p):
     steps = {s for a in (p["activities"] if p else []) for s in a["steps"]}
     slices = [s["slice"] for s in (p["slices"] if p else [])]
     taken = set()
-    for it in items.values():
+    for it in items.values():                      # frames first: a sticky's frame says whether it is a card's place
         it.pop("card", None); it.pop("slice", None)
         if it["kind"] == "frame":
             low = it["text"].lower()
@@ -592,21 +597,30 @@ def assign_roles(items, p):
             it["role"] = "slice" if sid else "backlog" if low.startswith(("backlog", "беклог")) else "frame"
             if sid:
                 it["slice"] = sid
-        elif it["kind"] == "sticky":
-            cands = [cid for cid in by_text.get(it["text"], []) if cid not in taken]
-            if cands:
-                it["role"], it["card"] = "card", cands[0]
-                taken.add(cands[0])
-                if len(by_text[it["text"]]) > 1:
-                    ambiguous.append(it["id"])
-            elif it["text"] in acts:
-                it["role"] = "activity"
-            elif it["text"] in steps:
-                it["role"] = "step"
-            else:
-                it["role"] = "sticky"
-        else:
+
+    def as_card(it):
+        cands = [cid for cid in by_text.get(it["text"], []) if cid not in taken]
+        if not cands:
+            return False
+        it["role"], it["card"] = "card", cands[0]
+        taken.add(cands[0])
+        if len(by_text[it["text"]]) > 1:
+            ambiguous.append(it["id"])
+        return True
+
+    def as_backbone(it):
+        it["role"] = "activity" if it["text"] in acts else "step" if it["text"] in steps else None
+        return it["role"] is not None
+    for it in items.values():
+        if it["kind"] == "frame":
+            continue
+        if it["kind"] != "sticky":
             it["role"] = "other"
+            continue
+        parent = items.get(it.get("frame") or "")
+        in_band = parent is not None and parent.get("role") in ("slice", "backlog")
+        if not ((as_card(it) or as_backbone(it)) if in_band else (as_backbone(it) or as_card(it))):
+            it["role"] = "sticky"
     return ambiguous
 
 
@@ -634,6 +648,10 @@ def board_diff(last, now, p):
         for t in _rendered(c):
             card_now.setdefault(t, c["id"])
     mapped = {it.get("card") for it in last.values() if it.get("card")}
+    in_note = {c["id"] for c in p["cards"]} if p else None
+    orphaned = [{"id": mid, "card": it.get("card"), "text": it["text"], "kind": it["kind"]} for mid, it in sorted(last.items())
+                if in_note is not None and it.get("role") in ("card", "orphan") and it.get("card") not in in_note]
+    gone = {o["id"] for o in orphaned}
     fresh = {mid: dict(it) for mid, it in now.items() if mid not in last}
     assign_roles(fresh, dict(p, cards=[c for c in p["cards"] if c["id"] not in mapped]) if p else None)
 
@@ -655,6 +673,8 @@ def board_diff(last, now, p):
                 other.append(dict(entry, change="added"))
             continue
         role = old.get("role") or ("sticky" if old["kind"] == "sticky" else "other")
+        if mid in gone:                            # the plugin's own sticky of a card the note no longer has
+            continue
         is_card = role in ("card", "sticky")
         if old["text"] != it["text"]:
             entry = {"id": mid, "kind": it["kind"], "role": role, "last": old["text"], "now": it["text"]}
@@ -676,7 +696,7 @@ def board_diff(last, now, p):
             else:
                 backbone.append(dict(entry, change="moved"))
     for mid, old in last.items():
-        if mid in now:
+        if mid in now or mid in gone:
             continue
         role = old.get("role") or "other"
         entry = {"id": mid, "kind": old["kind"], "role": role, "text": old["text"]}
@@ -686,7 +706,7 @@ def board_diff(last, now, p):
             other.append(dict(entry, change="removed"))
         else:
             backbone.append(dict(entry, change="removed"))
-    return changed, moved, added, removed, backbone, other, unrecorded
+    return changed, moved, added, removed, backbone, other, unrecorded, orphaned
 
 
 # ------------------------------------------------------------------ check 26
@@ -845,6 +865,13 @@ def cmd_board_state(args):
     p = parse(load(args.note))
     items = read_boards(args.read)
     ambiguous = assign_roles(items, p)
+    if args.last and os.path.isfile(args.last):      # a card the note dropped keeps its sticky as the plugin's own
+        in_note = {c["id"] for c in p["cards"]}
+        for mid, old in load_state(args.last, p).items():
+            it = items.get(mid)
+            if it is not None and old.get("role") in ("card", "orphan") and old.get("card") not in in_note \
+                    and it.get("role") != "card":
+                it["role"], it["card"] = "orphan", old.get("card")
     state = {"version": 1, "note": os.path.basename(args.note),
              "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items}
     out = os.path.abspath(args.out)
@@ -862,8 +889,14 @@ def cmd_board_state(args):
     for it in items.values():
         roles[it["role"]] = roles.get(it["role"], 0) + 1
     result(ok=True, out=out, cards=cards, slices={it["slice"]: mid for mid, it in items.items() if it.get("slice")},
-           roles=roles, unmapped_cards=[c["id"] for c in p["cards"] if c["id"] not in cards], ambiguous=ambiguous)
+           roles=roles, unmapped_cards=[c["id"] for c in p["cards"] if c["id"] not in cards], ambiguous=ambiguous,
+           orphans={it["card"]: mid for mid, it in items.items() if it.get("role") == "orphan"})
     return 0
+
+
+def _card_ids(items):
+    """{card id: element id} of the stickies a state maps to cards — what the next version updates by id."""
+    return {it["card"]: mid for mid, it in items.items() if it.get("role") == "card" and it.get("card")}
 
 
 def cmd_board_diff(args):
@@ -873,15 +906,15 @@ def cmd_board_diff(args):
     p = parse(load(args.note)) if args.note else None
     last = load_state(args.last, p)
     if not args.now:
-        result(ok=True, state="scope", scope=_scope(last), ids=sorted(last))
+        result(ok=True, state="scope", scope=_scope(last), ids=sorted(last), cards=_card_ids(last))
         return 0
     now = read_boards(args.now)
-    changed, moved, added, removed, backbone, other, unrecorded = board_diff(last, now, p)
+    changed, moved, added, removed, backbone, other, unrecorded, orphaned = board_diff(last, now, p)
     result(ok=True, state="diff", changed=changed, moved=moved, added=added, removed=removed, backbone=backbone,
-           other=other, unrecorded=unrecorded,
+           other=other, unrecorded=unrecorded, orphaned=orphaned,
            counts={"changed": len(changed), "moved": len(moved), "added": len(added), "removed": len(removed),
-                   "backbone": len(backbone)},
-           scope=_scope(last), ids=sorted(last))
+                   "backbone": len(backbone), "orphaned": len(orphaned)},
+           scope=_scope(last), ids=sorted(last), cards=_card_ids(last))
     return 0
 
 
@@ -911,6 +944,7 @@ def main(argv=None):
     p = sub.add_parser("board-state")
     p.add_argument("--read", required=True, nargs="+", help="the board read back (by ids first, then the area)")
     p.add_argument("--note", required=True)
+    p.add_argument("--last", help="the previous state: a card the note dropped keeps its sticky as an orphan")
     p.add_argument("--out", required=True, help="~/.grow-pm/story-maps/<key>.board.json")
     p = sub.add_parser("board-diff")
     p.add_argument("--last", help="the board's state (board-state JSON) or an older board SVG")
