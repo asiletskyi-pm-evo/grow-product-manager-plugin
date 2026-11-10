@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="1800">
+<g id="spine" data-frame="Zorg: доставка в поштомат" data-miro-id="3458764000000001001" transform="translate(0,0)">
+  <rect data-type="frame" x="0" y="0" width="2000" height="560" fill="#ffffff" data-title="Zorg: доставка в поштомат" />
+  <rect data-type="sticky" data-miro-id="3458764000000002001" x="20" y="20" width="350" height="228" data-color="orange" data-content="Обрати доставку" />
+  <rect data-type="sticky" data-miro-id="3458764000000002002" x="20" y="300" width="199" height="228" data-color="light_blue" data-content="Побачити поштомат у кошику" />
+  <rect data-type="sticky" data-miro-id="3458764000000002003" x="240" y="300" width="199" height="228" data-color="light_blue" data-content="Вибрати поштомат на карті" />
+</g>
+<g id="mvp" data-frame="MVP — частка замовлень у поштомат ≥ 15 %" data-miro-id="3458764000000001002" transform="translate(0,600)">
+  <rect data-type="frame" x="0" y="0" width="2000" height="280" fill="#ffffff" data-title="MVP — частка замовлень у поштомат ≥ 15 %" />
+  <rect data-type="sticky" data-miro-id="3458764000000003001" x="20" y="20" width="199" height="228" data-color="yellow" data-content="Поштомат як спосіб доставки в кошику&lt;br&gt;PROJ-1234.1" />
+  <rect data-type="sticky" data-miro-id="3458764000000003003" x="240" y="20" width="199" height="228" data-color="yellow" data-content="Список найближчих поштоматів за адресою&lt;br&gt;PROJ-1234.2" />
+</g>
+<g id="r1" data-frame="R1 — повторні замовлення в поштомат ≥ 40 %" data-miro-id="3458764000000001003" transform="translate(0,920)">
+  <rect data-type="frame" x="0" y="0" width="2000" height="280" fill="#ffffff" data-title="R1 — повторні замовлення в поштомат ≥ 40 %" />
+  <rect data-type="sticky" data-miro-id="3458764000000003002" x="20" y="20" width="199" height="228" data-color="yellow" data-content="Ціна й строк доставки в поштомат поруч зі способом" />
+  <rect data-type="sticky" data-miro-id="3458764000000003004" x="240" y="20" width="199" height="228" data-color="yellow" data-content="Карта поштоматів з фільтром «працює цілодобово»" />
+</g>
+<g id="r2" data-frame="R2 — звернень у підтримку ≤ 2 %" data-miro-id="3458764000000001004" transform="translate(0,1240)">
+  <rect data-type="frame" x="0" y="0" width="2000" height="280" fill="#ffffff" data-title="R2 — звернень у підтримку ≤ 2 %" />
+  <rect data-type="sticky" data-miro-id="3458764000000003005" x="240" y="20" width="199" height="228" data-color="yellow" data-content="Поштомат переповнений — запропонувати сусідній" />
+</g>
+</svg>

@@ -1,0 +1,3 @@
+{"source": "product-reporter initiative-status PROJ-1234, depth feature", "date": "2026-11-10",
+ "features": {"PROJ-1234.1": "done", "PROJ-1234.2": "done", "PROJ-1234.3": "in_progress",
+              "PROJ-1234.4": "blocked", "PROJ-1234.5": "planned", "PROJ-1234.9": "done"}}
