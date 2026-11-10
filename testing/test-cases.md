@@ -470,7 +470,7 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 
 ### Stage 4 — Integration
 - **TC-int-250-onboarding** | plugin-configurator Step 3a | with the six connectors connected, no registry search is proposed; Tableau/Notion still pinged by pattern | expected: readiness table lists 6 declared + pattern rows
-- **TC-int-250-fallback** | any host without plugin agents | gate/debate/fan-out fall back to `general-purpose`, report says so | expected: marker present, behavior unchanged
+- **TC-int-250-fallback** | any host without plugin agents | gate and fan-out fall back to sequential in-session passes with a role reset, debate to inline simulation — never to `general-purpose` (since v4.6.0, validate check 27) | expected: the level's marker present («checker: sequential in-session», «inline simulation: role independence reduced»), no subagent with wider tools than the named agent
 
 ### Stage 5 — Regression
 - **TC-reg-250** | Groups B / D / F / I re-run | no routing change from the description edits in four skills | expected: 100%
