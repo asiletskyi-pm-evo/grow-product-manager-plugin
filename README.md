@@ -479,13 +479,13 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 15. Roadmap Architect (v0.6.2) — Planning Suite
+### 15. Roadmap Architect (v0.7.0) — Planning Suite
 
-**Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
+**Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Since v4.6.0 it also builds the user story map: a backbone of activities and steps, cards of value under it, release slices with an outcome and no date; a slice goes into the feature structure in one «так», and the map is published as a board the team edits and a progress dashboard (the vault note stays the source of truth).
 
-**Modes:** audit / map / tree / onboard
+**Modes:** audit / map / tree / onboard / story-map
 
-**Trigger phrases:** "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal"
+**Trigger phrases:** "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "build a user story map", "slice the MVP", «мапа історій»
 
 ---
 
@@ -673,7 +673,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.10.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.12.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
-| Roadmap Architect | v0.6.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
+| Roadmap Architect | v0.7.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
 | Project Planning | v0.6.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
