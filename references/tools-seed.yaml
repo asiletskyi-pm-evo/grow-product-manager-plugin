@@ -24,6 +24,7 @@ tools:
     access: corporate
     connect: "the plugin's Connectors tab → Atlassian; sign in with the work account"
     publishes: [page, deck, dashboard]
+    needs: [internal-docs]
     aliases: [atlassian-rovo, atlassian_rovo, jira, confluence]
   - id: figma
     name: "Figma"

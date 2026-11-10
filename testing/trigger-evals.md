@@ -373,6 +373,9 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | X7 | створи задачі FE і BE для фічі PROJ-1234.3 з її вимог | task-creator — NOT roadmap-architect |
 | X8 | намалюй дошку з блок-схемою процесу повернення товару | diagram-prototyper — NOT roadmap-architect |
 | X9 | побудуй карту шляху клієнта (CJM) для оформлення доставки | cjm-research — NOT roadmap-architect |
+| X10 | зроби дошку в Miro для ретро команди | diagram-prototyper or brainstorm-features — NOT roadmap-architect |
+| X11 | намалюй шлях покупця від кошика до отримання посилки | cjm-research or diagram-prototyper — NOT roadmap-architect |
+| X12 | що з мапи історій беремо в план на Q1 з урахуванням місткості команди | quarterly-planning — NOT roadmap-architect |
 
 ## Results log
 

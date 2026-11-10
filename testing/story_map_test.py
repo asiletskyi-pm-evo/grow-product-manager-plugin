@@ -296,7 +296,7 @@ try:
     check("6.5 one moved card, from R1 to MVP", len(mo) == 1 and mo[0]["id"] == "3458764000000003004"
           and mo[0].get("card") == "c4" and mo[0]["frame_from"].startswith("R1") and mo[0]["frame_to"].startswith("MVP"), mo)
     check("6.6 markup inside a sticky (<p>) is not a change", not any(c["id"] == "3458764000000002002" for c in ch), ch)
-    check("6.7 counts", res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1}, res.get("counts"))
+    check("6.7 counts", res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1, "backbone": 0}, res.get("counts"))
     sc = res.get("scope", {})
     check("6.8 the area to read back covers the last state", sc.get("x", 1) <= 0 and sc.get("y", 1) <= 0
           and sc.get("x", 0) + sc.get("width", 0) >= 2000 and sc.get("y", 0) + sc.get("height", 0) >= 1520, sc)
@@ -311,7 +311,7 @@ try:
     rc, out, res = run("board-diff", "--last", last, "--now", broken)
     check("6.12 a board read that does not parse is exit 2", rc == 2 and res.get("ok") is False, out)
     rc, out, res = run("board-diff", "--last", last, "--now", last)
-    check("6.13 the same board twice is no change", res.get("counts") == {"changed": 0, "moved": 0, "added": 0, "removed": 0}, res)
+    check("6.13 the same board twice is no change", res.get("counts") == {"changed": 0, "moved": 0, "added": 0, "removed": 0, "backbone": 0}, res)
 
     # 8. review 1 (frozen cbd5714): each finding reproduced first
     # I-2 a short row is kept (GFM pads it) — render and baseline keep its card
@@ -351,7 +351,7 @@ try:
     write(dragged, open(last, encoding="utf-8").read().replace('transform="translate(0,600)"', 'transform="translate(0,700)"'))
     rc, out, res = run("board-diff", "--last", state, "--now", dragged)
     check("8.7 I-4 a dragged slice frame is one backbone move and no card moves",
-          res.get("counts", {}).get("moved") == 0 and len(res.get("backbone", [])) == 1
+          res.get("counts", {}).get("moved") == 0 and res.get("counts", {}).get("backbone") == 1 and len(res.get("backbone", [])) == 1
           and res["backbone"][0].get("kind") == "frame", (res.get("counts"), res.get("backbone")))
 
     # I-5 a card moved out of the area still comes back when read by id; two reads merge
@@ -372,7 +372,7 @@ try:
     write(nb, nbt)
     rc, out, res = run("board-diff", "--last", state, "--now", nb, "--note", note)
     check("8.10 m-10 a step's sticky renamed is a backbone change; loose text is other; card counts unchanged",
-          res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1}
+          res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1, "backbone": 1}
           and any(b.get("role") == "step" for b in res.get("backbone", [])) and len(res.get("other", [])) == 1,
           (res.get("counts"), res.get("backbone"), res.get("other")))
 
@@ -419,6 +419,49 @@ try:
     write(nu, read(note).replace("Zorg".encode(), b"\xff\xfe"))
     rc, out, res = run("parse", "--note", nu)
     check("8.18 m-13 a note that is not UTF-8 is exit 2 with a reason", rc == 2 and res.get("ok") is False and "Traceback" not in out, out[-300:])
+
+    # 9. review 2 (frozen d953560)
+    # I-2b a partial state (one frame) never turns the map's own stickies into the team's additions
+    part = os.path.join(d, "board-mvp-only.svg")
+    lt = open(last, encoding="utf-8").read()
+    i0 = lt.index('<g id="mvp"'); i1 = lt.index("</g>", i0) + 4
+    write(part, '<svg xmlns="http://www.w3.org/2000/svg">\n' + lt[i0:i1] + "\n</svg>\n")
+    pstate = os.path.join(d, "partial.board.json")
+    run("board-state", "--read", part, "--note", note, "--out", pstate)
+    rc, out, res = run("board-diff", "--last", pstate, "--now", last, "--note", note)
+    unrec = res.get("unrecorded", [])
+    check("9.1 I-2 stickies and frames the note names are «unrecorded», not added by the team",
+          res.get("counts", {}).get("added") == 0 and any(u.get("card") == "c2" for u in unrec)
+          and any(u.get("role") == "activity" for u in unrec) and any(u.get("role") == "slice" for u in unrec),
+          (res.get("counts"), [(u.get("role"), u.get("card")) for u in unrec]))
+    # I-2a after «лише забрати в мапу» the team's sticky is the note's new card — a second diff adds no card again
+    taken = os.path.join(d, "map-taken.md")
+    tt = open(note, encoding="utf-8").read()
+    a19 = "| c18 | Забрати | Повернути посилку | Оцінити поштомат після отримання |  |  |  | зі слів PM |  |\n"
+    write(taken, tt.replace(a19, a19 + "| c19 | Обрати доставку | Вибрати поштомат на карті | Показати години роботи поштомата | mvp |  |  | дошка команди 2026-11-10 |  |\n"))
+    rc, out, res = run("board-diff", "--last", state, "--now", now, "--note", taken)
+    check("9.2 I-2 a team sticky already taken into the note is unrecorded with its card, never «added» twice",
+          res.get("counts", {}).get("added") == 0 and any(u.get("card") == "c19" for u in res.get("unrecorded", [])),
+          (res.get("counts"), res.get("unrecorded")))
+    # I-4 a renamed activity counts: «nothing changed» is never said over a backbone edit
+    ren = os.path.join(d, "board-renamed.svg")
+    write(ren, lt.replace('data-content="Обрати доставку"', 'data-content="Обрати спосіб доставки"'))
+    rc, out, res = run("board-diff", "--last", state, "--now", ren, "--note", note)
+    check("9.3 I-4 a renamed activity is a counted backbone change", res.get("counts", {}).get("backbone") == 1
+          and sum(v for k, v in res.get("counts", {}).items() if k != "backbone") == 0, res.get("counts"))
+    # m-10 a card holding a secret is named by check — it never reaches the board
+    sec = os.path.join(d, "map-secret.md")
+    write(sec, open(note, encoding="utf-8").read().replace("Оплата частинами", "Оплата частинами, токен " + "glpat-" + "Qw8" * 7))
+    rc, out, res = run("check", "--note", sec)
+    check("9.4 m-10 check names a card holding a secret", any(f["finding"] == "secret" and f.get("card") == "c7" for f in res.get("findings", [])),
+          res.get("findings"))
+    # the card's caption names its feature code once, even when its source names it too
+    dup = os.path.join(d, "map-dup.md")
+    write(dup, open(note, encoding="utf-8").read().replace("| PROJ-1234.1 |  | концепт §2 |", "| PROJ-1234.1 |  | концепт §2 · PROJ-1234.1 |"))
+    page7 = os.path.join(d, "dup.html")
+    run("render-html", "--note", dup, "--out", page7)
+    h7 = open(page7, encoding="utf-8").read() if os.path.exists(page7) else ""
+    check("9.5 a feature code shown once in a card's caption", h7.count("PROJ-1234.1") == 1, h7.count("PROJ-1234.1"))
 
     # 7. schema — check 26
     sys.path.insert(0, os.path.join(ROOT, "scripts"))

@@ -31,7 +31,8 @@ COLUMNS = (("id", "id"), ("activity", "діяльність"), ("step", "кро�
            ("feature", "фіча"), ("epic", "епік"), ("source", "джерело"), ("edge_of", "edge_of"))
 REQUIRED = ("id", "activity", "step", "card")
 FINDINGS = ("subitem", "work_type", "skeleton_gap", "no_outcome", "no_step", "no_source", "duplicate_id",
-            "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step", "duplicate_feature", "link")
+            "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step", "duplicate_feature", "link",
+            "secret")
 STATUSES = ("done", "in_progress", "planned", "blocked")
 COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-state", "board-diff", "schema")
 
@@ -256,8 +257,12 @@ def findings(p):
                 f("duplicate_feature", card=c["id"], detail="feature %s is also card %s" % (c["feature"], feats[c["feature"]]))
             else:
                 feats[c["feature"]] = c["id"]
-        if any(LINK.search(c[k] or "") for k in ("card", "source", "feature", "epic", "slice", "edge_of")):
+        cells = [c[k] or "" for k in ("card", "source", "feature", "epic", "slice", "edge_of")]
+        if any(LINK.search(x) for x in cells):
             f("link", card=c["id"], detail="a link in the card's cells — a card carries no link")
+        kinds = cn.scan(" \n".join(cells))
+        if kinds:
+            f("secret", card=c["id"], detail="the card holds %s — never on the board or the page" % ", ".join(kinds))
     first = known[0] if known else None
     for a in p["activities"]:
         if first and not any(c["activity"] == a["name"] and c["slice"] == first for c in p["cards"]):
@@ -427,7 +432,8 @@ def render_html(p, st, prog, backlog, note_name, lang):
                 c = byid[cid]
                 k = card_status(c, st) if st else "planned"
                 cls = "card st-%s%s" % (k, " edge" if c["edge_of"] else "")
-                meta = " · ".join(x for x in (c["feature"], c["source"], (L["edge"] + " " + c["edge_of"]) if c["edge_of"] else "",
+                code = c["feature"] if c["feature"] and c["feature"] not in c["source"] else ""
+                meta = " · ".join(x for x in (code, c["source"], (L["edge"] + " " + c["edge_of"]) if c["edge_of"] else "",
                                               L[k] if st else "") if x)
                 out.append('<div class="%s"><div class="t">%s</div><div class="m">%s</div></div>' % (cls, shown(c["card"]), shown(meta)))
             col = cols[ci]
@@ -622,11 +628,14 @@ def load_state(path, p):
 
 
 def board_diff(last, now, p):
-    changed, moved, added, removed, backbone, other = [], [], [], [], [], []
+    changed, moved, added, removed, backbone, other, unrecorded = [], [], [], [], [], [], []
     card_now = {}
     for c in (p["cards"] if p else []):
         for t in _rendered(c):
             card_now.setdefault(t, c["id"])
+    mapped = {it.get("card") for it in last.values() if it.get("card")}
+    fresh = {mid: dict(it) for mid, it in now.items() if mid not in last}
+    assign_roles(fresh, dict(p, cards=[c for c in p["cards"] if c["id"] not in mapped]) if p else None)
 
     def card_of(old):
         return old.get("card") or card_now.get(old["text"])
@@ -635,7 +644,10 @@ def board_diff(last, now, p):
         if old is None:
             entry = {"id": mid, "kind": it["kind"], "text": it["text"], "at": [round(it["x"]), round(it["y"])],
                      "frame": it["frame_text"]}
-            if it["kind"] == "sticky":
+            role = fresh[mid].get("role")
+            if role in ("card", "activity", "step", "slice", "backlog"):   # the map's own, missing from the state
+                unrecorded.append(dict(entry, role=role, card=fresh[mid].get("card"), slice=fresh[mid].get("slice")))
+            elif it["kind"] == "sticky":
                 added.append(entry)
             elif it["kind"] == "frame":
                 backbone.append(dict(entry, role="frame", change="added"))
@@ -674,7 +686,7 @@ def board_diff(last, now, p):
             other.append(dict(entry, change="removed"))
         else:
             backbone.append(dict(entry, change="removed"))
-    return changed, moved, added, removed, backbone, other
+    return changed, moved, added, removed, backbone, other, unrecorded
 
 
 # ------------------------------------------------------------------ check 26
@@ -864,9 +876,11 @@ def cmd_board_diff(args):
         result(ok=True, state="scope", scope=_scope(last), ids=sorted(last))
         return 0
     now = read_boards(args.now)
-    changed, moved, added, removed, backbone, other = board_diff(last, now, p)
+    changed, moved, added, removed, backbone, other, unrecorded = board_diff(last, now, p)
     result(ok=True, state="diff", changed=changed, moved=moved, added=added, removed=removed, backbone=backbone,
-           other=other, counts={"changed": len(changed), "moved": len(moved), "added": len(added), "removed": len(removed)},
+           other=other, unrecorded=unrecorded,
+           counts={"changed": len(changed), "moved": len(moved), "added": len(added), "removed": len(removed),
+                   "backbone": len(backbone)},
            scope=_scope(last), ids=sorted(last))
     return 0
 

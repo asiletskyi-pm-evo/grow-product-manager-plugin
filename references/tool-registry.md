@@ -10,7 +10,7 @@
 |---|---|---|
 | `id`, `name` | slug and name | the scan, the seed or the user |
 | `kind` | `plugin` · `skill` · `mcp` · `app` · `cli` · `site` · `portal` · `course` | the scan, the seed or the user |
-| `job`, `skills`, `contours` | the PM work it does, and the skills and contours whose steps it serves | the seed or the user |
+| `job`, `skills`, `contours` | the PM work it does, and the skills and contours whose steps it serves; a seed that names more skills widens the record's `skills` unless the user set them (since v4.6.0 — `merge` writes it, `suggest` and `targets` read it so before) | the seed or the user |
 | `hosts` | where it was seen: `claude-code`, `claude-desktop`, `codex`, `agents` (a cross-host skills folder), `session`, `account`, `standalone` | the scan |
 | `access` | `free` · `paid` · `corporate` · `unknown` | the seed or the user |
 | `connect` | how to connect it, in one line — never a key, a token or a URL with credentials | the seed or the user |

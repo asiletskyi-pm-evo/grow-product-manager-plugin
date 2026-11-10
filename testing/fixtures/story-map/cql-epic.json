@@ -1,0 +1,10 @@
+{"cql": "title ~ \"PROJ-1234.\"", "fixture": "fictional Zorg pages under the epic PROJ-1234 (a Confluence CQL result, trimmed)",
+ "results": [
+  {"title": "PROJ-1234.1 - Поштомат у кошику", "labels": ["feature", "team-zorg-delivery"], "body": "Status: in dev"},
+  {"title": "PROJ-1234.2 - Список найближчих поштоматів", "labels": ["feature", "team-zorg-delivery"], "body": "Status: Done"},
+  {"title": "PROJ-1234.3 - Оплата карткою онлайн", "labels": ["feature", "team-zorg-delivery"], "body": "Status: in dev"},
+  {"title": "PROJ-1234.4 - Сповіщення з кодом комірки", "labels": ["feature", "team-zorg-delivery"], "body": "Status: waiting for details"},
+  {"title": "PROJ-1234.5 - Відкрити комірку кодом", "labels": ["feature", "team-zorg-delivery"], "body": "Status: Requirements"},
+  {"title": "PROJ-1234.6 - Повернення через поштомат", "labels": ["team-zorg-delivery"], "body": "Status: Draft"},
+  {"title": "PROJ-1234.7 - Оцінка поштомата після отримання", "labels": ["feature", "team-zorg-delivery"], "body": "Status: Draft"}
+ ]}
