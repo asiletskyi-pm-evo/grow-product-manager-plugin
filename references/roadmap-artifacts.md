@@ -18,7 +18,7 @@ Sections (validated by a real quarterly run):
 
 HTML via `updateConfluencePage`/`createConfluencePage` (`contentFormat: html`): status — `<span data-type="status" data-color="...">`, panels — `<div data-type="panel-info|success|note">`, `colspan` in tables works.
 
-> **Every artifact in this file** — the Confluence page (§1), the live dashboard (§2), the project roadmap (§3), the tree (§4) — is published only after the question of `native-surfaces.md` §3 (what it holds, where, who can open it), and again before every update; a scheduled run publishes none of them (§4).
+> **Every artifact in this file** — the Confluence page (§1), the live dashboard (§2), the project roadmap (§3), the tree (§4), the story map (§9) — is published only after the question of `native-surfaces.md` §3 (what it holds, where, who can open it), and again before every update; a scheduled run publishes none of them (§4).
 
 ## 2. Live dashboard (an ARTIFACT, `native-surfaces.md`)
 
@@ -27,6 +27,8 @@ Self-contained HTML (light mode, `:root{color-scheme:light}`). Static: capacity 
 ## 3. Project roadmap (arc, project-planning)
 
 Multi-quarter Gantt of a single initiative: epics/features as bars across quarters, **critical path** highlighted, forecast completion date, **drift vs baseline** (for `replan`), what-if by allocation %. Format — HTML dashboard or Confluence table.
+
+**From a story map (since v4.6.0).** When the arc is built from a story-map note, its milestones are the map's slices in their order (walking skeleton / MVP, R1, R2 …); a slice's scope is its features, estimated as usual, and a card without a feature is «не оцінено» `⚠️` (`story-map-protocol.md` §9). The forecast dates stay on the arc — the map gets none back.
 
 ## 4. Structure tree (roadmap-architect)
 
@@ -50,13 +52,13 @@ A screen with per-platform load bars + feature/platform-slice toggles into the n
 | Artifact | Whose |
 | --- | --- |
 | ops-report (sprint/quarter/initiative/member review) | product-reporter (fact) |
-| quarterly roadmap, project arc, structure tree, capacity-gate, live dashboard | planning-suite (plan/forecast) |
+| quarterly roadmap, project arc, structure tree, story map, capacity-gate, live dashboard | planning-suite (plan/forecast) |
 
 The shared Jira-data source — `jira-data-protocol.md`. A planning artifact may contain a "fact" block, rendered by delegating to product-reporter.
 
 ## 8. Pre-mortem and kill criteria — quarter plan and onboard (since v3.9.0)
 
-P4 of `pm-mental-model.md`. The rules — the order of causes, the kill-criteria row, never asked, a deletion respected — are `judgment-points.md` §7; the block is `templates/built-in/partial/pre-mortem-v1.md` (a user `_partials/pre-mortem.md` first). This section adds only each step's inputs and where the block goes. Which planning steps render one, and the read-back, are `planning-core.md` §8: nothing else in this file carries one — not the live dashboard (§2), the project arc (§3), the structure tree or gap report (§4), the capacity-gate screen (§5) or a sprint plan.
+P4 of `pm-mental-model.md`. The rules — the order of causes, the kill-criteria row, never asked, a deletion respected — are `judgment-points.md` §7; the block is `templates/built-in/partial/pre-mortem-v1.md` (a user `_partials/pre-mortem.md` first). This section adds only each step's inputs and where the block goes. Which planning steps render one, and the read-back, are `planning-core.md` §8: nothing else in this file carries one — not the live dashboard (§2), the project arc (§3), the structure tree or gap report (§4), the capacity-gate screen (§5), the story map (§9) or a sprint plan.
 
 **Quarter plan** (`quarterly-planning`, plan and full modes):
 - **When** — rendered once per run, at the first scope lock; a later Step 5 edit, recompute or re-lock does not re-render it (the PM edits it at approval). It goes into the draft and is published with the page.
@@ -79,3 +81,7 @@ P4 of `pm-mental-model.md`. The rules — the order of causes, the kill-criteria
 - **Kill criterion** — one per entity: the outcome signal of the linked goal or the request; threshold and date from the request or the linked goal, else `⚠️ TBD`; then: stop, pivot or descope.
 - **Render** — `template-protocol.md` T-5 steps 1, 2, 3 and 3d only (variables, language, blocks; hint comments dropped). `onboard` skips Step T, so there is no footer (3a), no label pass (3c) and no template marker; a cited input keeps the label it carries. Shown in the existing approval preview, then written with the entity: the new page body of a mission or initiative, or the Jira epic description when no page is created.
 - **All-TBD** — when the kill criterion has neither threshold nor date (both `⚠️ TBD`), the block stays in the preview and is written nowhere — neither the page nor Jira — unless the PM sets a threshold or a date there.
+
+## 9. Story map (roadmap-architect `story-map`, since v4.6.0)
+
+A backbone of activities and steps, cards of value under it and release slices across it — each slice with an outcome, none with a date. The procedure, the note's format (`type: roadmap`, `subtype: story-map`), its quality rule, the slice that goes to work as features, the board and the progress dashboard, and what the team changed on the board: `story-map-protocol.md`. Published through `artifact-publishing.md` — the board first, the progress dashboard in the same question.

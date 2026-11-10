@@ -365,7 +365,7 @@ People artifacts key by person because that is the access pattern the contour is
 | diagram | diagram-prototyper | Diagrams/ | Diagram, prototype, or infographic (source + export link) |
 | task-breakdown | task-creator | Projects/task-breakdowns/ | Feature → Jira tasks decomposition record with links |
 | ops-report | product-reporter | Reports/ops/ | Sprint/quarter/initiative/member operational report |
-| roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, or structure tree (subtype in frontmatter) |
+| roadmap | planning suite (sprint-/quarterly-/project-planning, roadmap-architect) | Roadmaps/ | Sprint plan, quarterly roadmap, project arc, structure tree, or story map (subtype in frontmatter; the story map's own fields — `story-map-protocol.md` §4) |
 | focus-brief | focus-advisor | Focus/ | PM focus brief (daily/tactical/strategy — subtype in frontmatter) with chosen focuses and chains |
 | feedback-triage | feedback-triage | Research/feedback/ | Clustered feedback themes with pain scores and trends (baseline for next run) |
 | presentation | design-bridge | Presentations/ | Rendered deck (.pptx) — subtype in frontmatter |

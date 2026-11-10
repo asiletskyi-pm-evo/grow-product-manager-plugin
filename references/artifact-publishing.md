@@ -2,7 +2,7 @@
 
 > Shared reference (since v4.3.0). How a skill turns a finished result into a link the user opens, updates and shares: which places it can go to, in which order, the one question before it leaves, the record of where it went, and a **new version of the same place** on the next run instead of a copy. The other skills that publish keep their own question of `native-surfaces.md` §3 and do not record versions yet.
 >
-> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard), `focus-advisor` (the live board).
+> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0).
 >
 > **Rule of the file:** the same as `native-surfaces.md` — a host surface is named by its capability (ARTIFACT, DOCS), never by its brand (§6 there); Atlassian and Confluence are connectors and are named. Nothing leaves without the question of `native-surfaces.md` §3, a new version included, and a scheduled run never publishes (§4 there).
 
@@ -11,10 +11,10 @@
 | Kind | What it is | Who makes it here |
 |---|---|---|
 | `deck` | slides to present and page through | `design-bridge` |
-| `dashboard` | numbers and charts on one page, each with its source and date (§9) | `product-reporter`, `cjm-research`, `focus-advisor` (the board) |
+| `dashboard` | numbers and charts on one page, each with its source and date (§9) | `product-reporter`, `cjm-research`, `focus-advisor` (the board), `roadmap-architect` (the story map's progress) |
 | `document` | text the reader reads and may edit | `product-reporter`, `cjm-research` |
 | `page` | a wiki page in a space | the skills that already write to Confluence |
-| `board` | a whiteboard the team edits together | — (the registry's whiteboard tools) |
+| `board` | a whiteboard the team edits together | `roadmap-architect` (the story map, `story-map-protocol.md`) |
 | `design` | a design file | — (the registry's design tools) |
 
 The same six words are the `publishes` values of the tools registry (`tool-registry.md` §1) and the `kind` of a publication record (§5). The skill names its kind at its own step; it never asks for it.
@@ -30,6 +30,7 @@ Four sources, read in this order, each only when present — a missing one is no
 
 - **Atlassian Artifacts** arrive through source 2 (the `atlassian` record publishes `deck` and `dashboard`) and only when their operations are reachable (§8). The same record's `page` is Confluence — source 3, `surface: confluence` — never a second candidate.
 - **A service reached both as a host surface and as a registry record** (a document service the host offers as DOCS `connector`) is one candidate, recorded under the host capability (`docs`).
+- **A board** is a candidate only when its record carries `board` in `publishes` and its tools in this session create frames and stickies and update them by element id (`story-map-protocol.md` §6) — an observed capability, never the record's word. A whiteboard tool that draws diagrams only is not one.
 
 ## 3. The order — by audience
 
@@ -40,6 +41,8 @@ The audience comes from the skill's own step — `design-bridge` Step 2, a repor
 | colleagues — any audience of `deck-subtypes.yaml` other than `customer`, a report for the team | registry records with `access: corporate` (the company's tenant) | the host's surfaces in the user's account |
 | the user alone, or the audience is unknown | the host's surfaces in the user's account — the narrowest circle | corporate records |
 | people outside the company (`customer`) | «лише файл», marked as recommended | every other candidate, in the order above |
+
+**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table.
 
 **Already published** — the result's record (§5–§6) names a place → «нова версія» of that place comes first, before any new place.
 
@@ -56,6 +59,7 @@ One question in the user's language — a multi-choice one where the host can as
 - **A new version names its number** — the record's `version` plus one — and who will see it (§6).
 - **«Ні» or «лише файл» is final for the run**: the result stays as the file and the vault copy, and the question is not repeated in the same run.
 - **A person's profile is never a candidate**, whatever the answer (`people-context-protocol.md`).
+- **A board in the team's root folder** of the board tool may be visible to the team's members by that team's settings — not measured yet, so the question says both («бачиш ти, а можливо — й учасники команди за її налаштуваннями») and the record keeps `unknown`; a board in a space the PM names is seen by that space's members (`shared`).
 
 ## 5. Publish and record
 
@@ -73,6 +77,7 @@ python3 scripts/publications.py record --key <the result's key> [--note <the not
 | `product-reporter` | `product-reporter/<product>/<mode>-<subject>-<period>` — the board, or the epic of `initiative-status`; `member-review` and `goal-report` keep no record (they name a person) |
 | `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot |
 | `focus-advisor` | none: the board keeps its record in its own state file, `~/.grow-pm/focus/board.yaml` (`--note`) |
+| `roadmap-architect` | `roadmap-architect/<product>/story-map-<slug>` — one key for the map's board and its progress dashboard, both in one question; the slug is the note's (`story-map-protocol.md` §4) |
 
 Lower-case words (any alphabet), `-` inside a part, `/` between at most four parts; a part as the run names it — a sprint `sprint-42`, a quarter `2026-q4`, a month `2026-11`. A key file the result does not have yet is created by the first `record`; before it exists, the script reads the note given with `--note` — only its entries of the same key, or entries recorded before keys existed — so a deck's own note, an older report's `confluence_url` and a key file lost with `~/.grow-pm` all go on from the vault.
 
@@ -115,18 +120,19 @@ Before the question the skill looks the result up by its key — `publications.p
 | ARTIFACT `typed` | a publication to the same link |
 | Confluence | an update of the page by its id (`integration-strategy.md` 1c: a fresh `snapshotToken` on v2) |
 | DOCS, another registry record's page or document | an update of the same document or page by its id |
+| A board | an update of the same board by its element ids — never a new board; people edit it, so `story-map-protocol.md` §8 runs first |
 
 > «Оновити деку «Zorg: нова доставка» в Atlassian Artifacts до версії 2 (внутрішні дані: метрики воронки й задачі з Jira)? Бачиш ти і ті, з ким ти поділився. Так / ні.»
 
 The question names the result as the key does (the deck's title, the report's period) and says who will see the new version from the record's `audience`: `private` — «бачиш лише ти»; `shared` — «бачиш ти і ті, з ким ти поділився»; `space:<KEY>` — «усі, хто читає простір <KEY>»; `unknown` — both of the first two. A new version keeps the place's audience; `record` without `--audience` leaves it as it was.
 
-- **A place people edit** (DOCS, Confluence, another registry record's page) is checked before it is overwritten: when its own version is not the record's `remote_version`, or — where it has none — it changed after the record's `published` time (both UTC), or it cannot say, the skill asks one question: «замінити / додати новим розділом / новий документ». A place whose versions are immutable (Atlassian Artifacts, ARTIFACT) loses nothing and needs no such question.
+- **A place people edit** (DOCS, Confluence, another registry record's page) is checked before it is overwritten — a board by reading it back and comparing it with its last state (`story-map-protocol.md` §8), the rest as follows: when its own version is not the record's `remote_version`, or — where it has none — it changed after the record's `published` time (both UTC), or it cannot say, the skill asks one question: «замінити / додати новим розділом / новий документ». A place whose versions are immutable (Atlassian Artifacts, ARTIFACT) loses nothing and needs no such question.
 - **A place that is gone** — deleted, or the user has no access any more — is never recreated silently: «Деки в Atlassian Artifacts більше немає — створити нову?». The new place starts at version 1 and the old id goes to `replaced`.
 - A surface whose new version the plugin has not measured (ARTIFACT `page`, DOCS `connector`) keeps its record; the next run offers a new version only when the tool takes that id, otherwise it offers a new place and says why, once.
 
 ## 7. Sharing — a separate question
 
-Asked after a place that starts private is published (Atlassian Artifacts, an ARTIFACT or a DOCS document in the user's account), never in the same question as the publication (`native-surfaces.md` §3). A Confluence space has no such step: its readers are named in the publication question.
+Asked after a place that starts private is published (Atlassian Artifacts, an ARTIFACT or a DOCS document in the user's account, a board), never in the same question as the publication (`native-surfaces.md` §3). A Confluence space has no such step: its readers are named in the publication question.
 
 - **To named people, groups or teams only.** The proposal is the user's team from `local-context.md`; the skill finds each person or team through the connector's own people and team search and never invents an id; a name that matches several people is asked about.
 - **Once per place.** A place already shared is not asked about again: its next version reaches the same people, and the version question says so (§6).
