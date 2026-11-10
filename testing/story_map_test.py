@@ -141,7 +141,8 @@ try:
     write(wc, open(note, encoding="utf-8").read().replace("| c7 | Оплатити | Оплатити онлайн | Оплата частинами | r2 |",
                                                          "| c7 | Оплатити | Оплатити онлайн | Оплата частинами |"))
     rc, out, res = run("parse", "--note", wc)
-    check("1.19 a row with the wrong number of cells is named", rc == 0 and any("c7" in e or "row" in e for e in res.get("errors", [])), res.get("errors"))
+    check("1.19 a short row is padded as GFM does — kept, and named", rc == 0 and any("c7" in e for e in res.get("errors", []))
+          and any(c["id"] == "c7" and c["slice"] == "" for c in res.get("cards", [])), (res.get("errors"), len(res.get("cards", []))))
     rc, out, res = run("parse", "--note", os.path.join(d, "missing.md"))
     check("1.20 a note that is not there is exit 2", rc == 2 and res.get("ok") is False, out)
 
@@ -151,7 +152,7 @@ try:
     rc, out, res = run("check", "--note", bad)
     codes = [f["finding"] for f in res.get("findings", [])]
     want = ["subitem", "work_type", "skeleton_gap", "no_outcome", "no_step", "no_source", "duplicate_id",
-            "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step"]
+            "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step", "duplicate_feature", "link"]
     check("2.2 each script finding once", sorted(codes) == sorted(want), codes)
     by = {f["finding"]: f for f in res.get("findings", [])}
     check("2.3 findings name their card", by.get("subitem", {}).get("card") == "f1" and by.get("work_type", {}).get("card") == "f2"
@@ -312,6 +313,113 @@ try:
     rc, out, res = run("board-diff", "--last", last, "--now", last)
     check("6.13 the same board twice is no change", res.get("counts") == {"changed": 0, "moved": 0, "added": 0, "removed": 0}, res)
 
+    # 8. review 1 (frozen cbd5714): each finding reproduced first
+    # I-2 a short row is kept (GFM pads it) — render and baseline keep its card
+    sr = os.path.join(d, "short-row.md")
+    write(sr, open(note, encoding="utf-8").read().replace("| c3 | Обрати доставку | Вибрати поштомат на карті | Список найближчих поштоматів за адресою | mvp | PROJ-1234.2 |  | концепт §3 |  |",
+                                                        "| c3 | Обрати доставку | Вибрати поштомат на карті | Список найближчих поштоматів за адресою | mvp | PROJ-1234.2 |"))
+    page5 = os.path.join(d, "short.html")
+    rc, out, res = run("render-html", "--note", sr, "--out", page5)
+    h5 = open(page5, encoding="utf-8").read() if os.path.exists(page5) else ""
+    check("8.1 I-2 a short row's card is on the page and the page result names the row", "Список найближчих поштоматів" in h5
+          and any("c3" in e for e in res.get("errors", [])), res.get("errors"))
+    rc, out, res = run("baseline", "--note", sr, "--slice", "mvp", "--date", "2026-11-10")
+    check("8.2 I-2 baseline keeps a short row's card", "c3" in res.get("cards", []), res.get("cards"))
+    sep = os.path.join(d, "short-sep.md")
+    write(sep, open(note, encoding="utf-8").read().replace("|---|---|---|---|---|---|---|---|---|", "|--|--|--|--|--|--|--|--|--|"))
+    rc, out, res = run("parse", "--note", sep)
+    check("8.3 m-7 a separator of two dashes is no card", not any(c["id"].startswith("-") for c in res.get("cards", []))
+          and len(res.get("cards", [])) == 18, [c["id"] for c in res.get("cards", [])][:3])
+
+    # I-3 the board's state maps each sticky to its card while note and board agree
+    state = os.path.join(d, "state.board.json")
+    rc, out, res = run("board-state", "--read", last, "--note", note, "--out", state)
+    check("8.4 I-3 board-state maps stickies to cards, activities, steps and slices", rc == 0
+          and res.get("cards", {}).get("c1") == "3458764000000003001" and res.get("cards", {}).get("c5") == "3458764000000003005"
+          and res.get("roles", {}).get("activity") == 1 and res.get("roles", {}).get("step") == 2
+          and res.get("slices", {}).get("mvp") == "3458764000000001002", res)
+    check("8.5 I-3 cards without a sticky are named for the next version", "c6" in res.get("unmapped_cards", []), res.get("unmapped_cards"))
+    edited = os.path.join(d, "map-edited.md")
+    write(edited, open(note, encoding="utf-8").read().replace("Поштомат як спосіб доставки в кошику", "Поштомат першим у списку доставок"))
+    rc, out, res = run("board-diff", "--last", state, "--now", now, "--note", edited)
+    ch = res.get("changed", [])
+    check("8.6 I-3 after the PM edits the note, the team's change still names its card (from the state)",
+          len(ch) == 1 and ch[0].get("card") == "c1", ch)
+
+    # I-4 dragging a frame moves the frame, not every card in it
+    dragged = os.path.join(d, "board-dragged.svg")
+    write(dragged, open(last, encoding="utf-8").read().replace('transform="translate(0,600)"', 'transform="translate(0,700)"'))
+    rc, out, res = run("board-diff", "--last", state, "--now", dragged)
+    check("8.7 I-4 a dragged slice frame is one backbone move and no card moves",
+          res.get("counts", {}).get("moved") == 0 and len(res.get("backbone", [])) == 1
+          and res["backbone"][0].get("kind") == "frame", (res.get("counts"), res.get("backbone")))
+
+    # I-5 a card moved out of the area still comes back when read by id; two reads merge
+    rc, out, res = run("board-diff", "--last", state)
+    check("8.8 I-5 the state gives the ids to read back as well as the area", "3458764000000003005" in res.get("ids", [])
+          and res.get("scope"), res)
+    far = os.path.join(d, "board-far.svg")
+    write(far, '<svg xmlns="http://www.w3.org/2000/svg"><rect data-type="sticky" data-miro-id="3458764000000003005" '
+               'x="9000" y="9000" width="199" height="228" data-content="Поштомат переповнений — запропонувати сусідній" /></svg>')
+    rc, out, res = run("board-diff", "--last", state, "--now", now, far, "--note", note)
+    check("8.9 I-5 a card read back by id far away is moved, not removed", res.get("counts", {}).get("removed") == 0
+          and any(m.get("card") == "c5" for m in res.get("moved", [])), (res.get("counts"), res.get("moved")))
+
+    # m-10 backbone and other items are not counted as card changes
+    nb = os.path.join(d, "board-backbone.svg")
+    nbt = open(now, encoding="utf-8").read().replace('data-content="Вибрати поштомат на карті"', 'data-content="Вибрати поштомат"')
+    nbt = nbt.replace("</svg>", '<text data-miro-id="3458764000000009001" x="10" y="1700">нотатка команди</text>\n</svg>')
+    write(nb, nbt)
+    rc, out, res = run("board-diff", "--last", state, "--now", nb, "--note", note)
+    check("8.10 m-10 a step's sticky renamed is a backbone change; loose text is other; card counts unchanged",
+          res.get("counts") == {"changed": 1, "moved": 1, "added": 1, "removed": 1}
+          and any(b.get("role") == "step" for b in res.get("backbone", [])) and len(res.get("other", [])) == 1,
+          (res.get("counts"), res.get("backbone"), res.get("other")))
+
+    # I-6 a link never reaches the page; a secret is redacted; check names the link
+    tok = "glpat-" + "Zx9" * 7
+    lk = os.path.join(d, "map-link.md")
+    write(lk, open(note, encoding="utf-8").read().replace("| FR-9 |", "| https://user:pw@zorg.example.com/wiki/x?token=abc |")
+          .replace("Оплата частинами", "Оплата частинами, ключ " + tok))
+    page6 = os.path.join(d, "link.html")
+    run("render-html", "--note", lk, "--out", page6)
+    h6 = open(page6, encoding="utf-8").read() if os.path.exists(page6) else "http"
+    check("8.11 I-6 no URL and no secret reaches the page", "zorg.example.com" not in h6 and "http" not in h6 and tok not in h6, "")
+    rc, out, res = run("check", "--note", lk)
+    check("8.12 I-6 check names a link in a card's cells", any(f["finding"] == "link" and f.get("card") == "c14" for f in res.get("findings", [])),
+          res.get("findings"))
+
+    # m-8 a slice id is written quoted and reads back as written
+    q = os.path.join(d, "map-true.md")
+    write(q, open(note, encoding="utf-8").read().replace("  - slice: r2\n", '  - slice: "true"\n').replace("| r2 |", "| true |"))
+    run("baseline", "--note", q, "--slice", "true", "--date", "2026-11-10")
+    run("baseline", "--note", q, "--slice", "mvp", "--date", "2026-11-10")
+    rc, out, res = run("parse", "--note", q)
+    check("8.13 m-8 a slice id like «true» survives a baseline round trip", any(b["slice"] == "true" for b in res.get("baseline", [])),
+          res.get("baseline"))
+    up = os.path.join(d, "map-upper.md")
+    write(up, open(note, encoding="utf-8").read().replace("  - slice: r2\n", "  - slice: R2 next\n"))
+    rc, out, res = run("parse", "--note", up)
+    check("8.14 m-8 a slice id that is not a lower-case id is named", any("R2 next" in e for e in res.get("errors", [])), res.get("errors"))
+
+    # m-12 edge_of itself, one feature on two cards, work-type forms
+    m12 = os.path.join(d, "map-m12.md")
+    write(m12, open(note, encoding="utf-8").read()
+          .replace("| концепт §3 | c3 |", "| концепт §3 | c5 |")
+          .replace("| c7 | Оплатити | Оплатити онлайн | Оплата частинами | r2 |  |", "| c7 | Оплатити | Оплатити онлайн | [FE] Екран оплати частинами | r2 | PROJ-1234.3 |")
+          .replace("Оплата карткою на терміналі поштомата", "Android — оплата карткою на терміналі"))
+    rc, out, res = run("check", "--note", m12)
+    fs = [(f["finding"], f.get("card")) for f in res.get("findings", [])]
+    check("8.15 m-12 edge_of pointing at its own card is named", ("edge_unknown", "c5") in fs, fs)
+    check("8.16 m-12 one feature code on two cards is named", ("duplicate_feature", "c7") in fs, fs)
+    check("8.17 m-12 «[FE] …» is a work type, «Android — …» is not", ("work_type", "c7") in fs and ("work_type", "c8") not in fs, fs)
+
+    # m-13 a note that is not UTF-8 is exit 2, never a traceback
+    nu = os.path.join(d, "not-utf8.md")
+    write(nu, read(note).replace("Zorg".encode(), b"\xff\xfe"))
+    rc, out, res = run("parse", "--note", nu)
+    check("8.18 m-13 a note that is not UTF-8 is exit 2 with a reason", rc == 2 and res.get("ok") is False and "Traceback" not in out, out[-300:])
+
     # 7. schema — check 26
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
     import story_map as sm  # noqa: E402
@@ -329,15 +437,16 @@ try:
     rc, out, res = run("schema")
     check("7.2 schema prints the fields, columns, findings and statuses",
           rc == 0 and res.get("fields") == list(sm.FIELDS) and res.get("statuses") == list(sm.STATUSES)
-          and len(res.get("columns", [])) == 9 and len(res.get("findings", [])) == 12, out)
+          and len(res.get("columns", [])) == 9 and res.get("findings") == list(sm.FINDINGS)
+          and "board-state" in res.get("commands", []), out)
 
-    def drift(rel, old, new, expect, name):
+    def drift(rel, old, new, expect, name, count=1):
         p = os.path.join(r2, rel)
         t0 = open(p, encoding="utf-8").read()
         if old not in t0:
             check(name, False, "pattern not in %s" % rel)
             return
-        write(p, t0.replace(old, new, 1))
+        write(p, t0.replace(old, new, count))
         e = sm.check_protocol(r2)
         write(p, t0)
         check(name, any(expect in x for x in e), e)
@@ -348,7 +457,7 @@ try:
     drift("references/planning-core.md", "| `blocked` |", "| `on_hold` |", "blocked", "7.6 a canon status that drifts in planning-core is named")
     drift("references/vault-schema.md", "structure tree, or story map (subtype in frontmatter; the story map's own fields — `story-map-protocol.md` §4)", "or structure tree (subtype in frontmatter)", "story map", "7.7 vault-schema without the story map is named")
     drift("references/artifact-publishing.md", "| `roadmap-architect` | `roadmap-architect/", "| `roadmap` | `roadmap-architect/", "roadmap-architect", "7.8 artifact-publishing without the key row is named")
-    drift("skills/roadmap-architect/SKILL.md", "story-map-protocol.md", "story-map.md", "cite", "7.9 a skill that stops citing the protocol is named")
+    drift("skills/roadmap-architect/SKILL.md", "story-map-protocol.md", "story-map.md", "cite", "7.9 a skill that stops citing the protocol is named", count=-1)
     drift("references/story-map-protocol.md", "| `board-diff --last", "| `board-compare --last", "board-diff", "7.10 a command the protocol stops naming is named")
     os.remove(os.path.join(r2, "references", "story-map-protocol.md"))
     check("7.11 a missing protocol is an error, not silence", sm.check_protocol(r2) != [], sm.check_protocol(r2))

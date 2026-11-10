@@ -120,7 +120,7 @@ Before the question the skill looks the result up by its key — `publications.p
 | ARTIFACT `typed` | a publication to the same link |
 | Confluence | an update of the page by its id (`integration-strategy.md` 1c: a fresh `snapshotToken` on v2) |
 | DOCS, another registry record's page or document | an update of the same document or page by its id |
-| A board | an update of the same board by its element ids — never a new board; people edit it, so `story-map-protocol.md` §8 runs first |
+| A board | an update of the same board by its element ids — never a new board unless the user chooses one in the question of `story-map-protocol.md` §8, which runs first because people edit the board |
 
 > «Оновити деку «Zorg: нова доставка» в Atlassian Artifacts до версії 2 (внутрішні дані: метрики воронки й задачі з Jira)? Бачиш ти і ті, з ким ти поділився. Так / ні.»
 

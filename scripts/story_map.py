@@ -7,7 +7,8 @@
   render-html  one self-contained HTML page of the map: no request, no link, every text escaped, light theme
   progress     per slice: the status spread, % done, what is blocked, added / removed / moved against the baseline
   baseline     a slice's baseline into the frontmatter field `baseline` — every other byte of the note kept
-  board-diff   a board's last state against a read-back, by data-miro-id: changed, moved, added, removed
+  board-state  the board read back after a publication, kept with which sticky is which card, activity, step or slice
+  board-diff   a board's last state against a read-back, by data-miro-id: card changes apart from backbone and other items
   schema       the fields, columns, findings, statuses and commands the protocol must agree with (check 26)
 
 The note is the source of truth: a markdown table of cards under its frontmatter (`product`, `epic`, `slices`,
@@ -22,6 +23,7 @@ import xml.etree.ElementTree as ET
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
+import ctx_never as cn  # noqa: E402
 import publications as pub  # noqa: E402
 
 FIELDS = ("product", "epic", "slices", "baseline", "published")
@@ -29,12 +31,14 @@ COLUMNS = (("id", "id"), ("activity", "діяльність"), ("step", "кро�
            ("feature", "фіча"), ("epic", "епік"), ("source", "джерело"), ("edge_of", "edge_of"))
 REQUIRED = ("id", "activity", "step", "card")
 FINDINGS = ("subitem", "work_type", "skeleton_gap", "no_outcome", "no_step", "no_source", "duplicate_id",
-            "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step")
+            "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step", "duplicate_feature", "link")
 STATUSES = ("done", "in_progress", "planned", "blocked")
-COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-diff", "schema")
+COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-state", "board-diff", "schema")
 
 SUBITEM = re.compile(r"<br\s*/?>|•|[:;]\s*[-*]\s+\S", re.I)
-WORK_TYPE = re.compile(r"^\s*[\[(]?(?:FE|BE|QA|iOS|Android|Design|DevOps)[\])]?\s*[:\-–—]\s")
+WORK = r"(?:FE|BE|QA|iOS|Android|Design|DevOps)"
+WORK_TYPE = re.compile(r"^\s*(?:\[%s\]|\(%s\)|%s\s*:)" % (WORK, WORK, WORK))
+LINK = re.compile(r"https?://\S+|\bwww\.\S+", re.I)
 FEATURE_CODE = re.compile(r"^([A-Z][A-Z0-9]*-\d+)((?:\.\d+)+)$")
 EPIC_KEY = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 SLICE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
@@ -104,6 +108,8 @@ def load(path):
             text = f.read()
     except OSError as e:
         raise Bad("the note does not read: %s" % (e.strerror or type(e).__name__))
+    except UnicodeDecodeError:
+        raise Bad("the note is not UTF-8 text")
     span = pub._frontmatter(text)
     if not span:
         raise Bad("the note has no frontmatter")
@@ -130,11 +136,13 @@ def load(path):
     rows, errors = [], []
     for n, line in enumerate(table[1:], 2):
         cells = _cells(line)
-        if all(re.fullmatch(r":?-{3,}:?", c) for c in cells if c):
+        if all(re.fullmatch(r":?-+:?", c) for c in cells if c):
             continue
-        if len(cells) != len(cols):
-            errors.append("row %d (%s): %d cells, the header has %d" % (n, cells[0] if cells else "?", len(cells), len(cols)))
-            continue
+        if len(cells) != len(cols):                  # as GFM: a short row gets empty cells, the excess is dropped
+            errors.append("row %d (%s): %d cells, the header has %d — %s" % (
+                n, cells[0] if cells else "?", len(cells), len(cols),
+                "padded with empty cells" if len(cells) < len(cols) else "the extra cells dropped"))
+            cells = (cells + [""] * len(cols))[:len(cols)]
         row = {name: "" for name, _ in COLUMNS}
         for name, val in zip(cols, cells):
             if name:
@@ -144,6 +152,8 @@ def load(path):
     sl = []
     for s in slices:
         sid = str(s.get("slice") or "").strip()
+        if sid and not SLICE_ID.match(sid):
+            errors.append("slice id %r is not a lower-case id (a-z, 0-9, -)" % sid)
         if sid:
             sl.append({"slice": sid, "outcome": str(s.get("outcome") or "").strip(), "label": str(s.get("label") or "").strip()})
     bl = []
@@ -208,7 +218,7 @@ def findings(p):
     for s in p["slices"]:
         if not s["outcome"] or "TBD" in s["outcome"]:
             f("no_outcome", slice=s["slice"], detail="a slice without a metric and a target")
-    ids, where = set(), {}
+    ids, where, feats = set(), {}, {}
     for c in p["cards"]:
         if c["id"] in ids:
             f("duplicate_id", card=c["id"], detail="row %d repeats the id" % c["row"])
@@ -225,7 +235,9 @@ def findings(p):
         if not c["source"]:
             f("no_source", card=c["id"], detail="a card without a source marker")
         if c["edge_of"]:
-            if c["edge_of"] not in where:
+            if c["edge_of"] == c["id"]:
+                f("edge_unknown", card=c["id"], detail="edge_of points at its own card")
+            elif c["edge_of"] not in where:
                 f("edge_unknown", card=c["id"], detail="edge_of %s names no card" % c["edge_of"])
             elif where[c["edge_of"]] != (c["activity"], c["step"]):
                 f("edge_other_step", card=c["id"], detail="its card %s is under another step" % c["edge_of"])
@@ -239,6 +251,13 @@ def findings(p):
                 f("bad_code", card=c["id"], detail="feature %s is not of epic %s" % (c["feature"], c["epic"]))
         if c["epic"] and not EPIC_KEY.match(c["epic"]):
             f("bad_code", card=c["id"], detail="epic %s does not parse" % c["epic"])
+        if c["feature"]:
+            if c["feature"] in feats:
+                f("duplicate_feature", card=c["id"], detail="feature %s is also card %s" % (c["feature"], feats[c["feature"]]))
+            else:
+                feats[c["feature"]] = c["id"]
+        if any(LINK.search(c[k] or "") for k in ("card", "source", "feature", "epic", "slice", "edge_of")):
+            f("link", card=c["id"], detail="a link in the card's cells — a card carries no link")
     first = known[0] if known else None
     for a in p["activities"]:
         if first and not any(c["activity"] == a["name"] and c["slice"] == first for c in p["cards"]):
@@ -352,6 +371,17 @@ def esc(s):
     return html.escape(str(s), quote=True)
 
 
+def safe(s):
+    """A string fit for the page: links removed, a string holding a secret or an identifier hidden whole (ctx_never)."""
+    s = LINK.sub("[link removed]", str(s or ""))
+    kinds = cn.scan(s)
+    return "[hidden: %s]" % ", ".join(kinds) if kinds else s
+
+
+def shown(s):
+    return esc(safe(s))
+
+
 def render_html(p, st, prog, backlog, note_name, lang):
     L = LABELS.get(lang, LABELS["en"])
     cols = p["layout"]["columns"]
@@ -360,20 +390,20 @@ def render_html(p, st, prog, backlog, note_name, lang):
         byid.setdefault(c["id"], c)
     out = ["<!doctype html>", '<html lang="%s"><head><meta charset="utf-8">' % esc(lang),
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), esc(p["title"] or note_name), CSS),
-           "<h1>%s: %s</h1>" % (esc(L["title"]), esc(p["title"] or note_name)),
-           '<p class="meta">%s: %s · %s · %s</p>' % (esc(L["note"]), esc(note_name), esc(p["product"]), esc(p["epic"]))]
+           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(p["title"] or note_name), CSS),
+           "<h1>%s: %s</h1>" % (esc(L["title"]), shown(p["title"] or note_name)),
+           '<p class="meta">%s: %s · %s · %s</p>' % (esc(L["note"]), shown(note_name), shown(p["product"]), shown(p["epic"]))]
     if st:
-        out.append('<p class="meta">%s: %s · %s</p>' % (esc(L["status"]), esc(st["source"]), esc(st["date"])))
+        out.append('<p class="meta">%s: %s · %s</p>' % (esc(L["status"]), shown(st["source"]), shown(st["date"])))
     else:
         out.append('<p class="meta">%s: %s</p>' % (esc(L["status"]), esc(L["no_status"])))
     out.append('<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(datetime.date.today().isoformat())))
     out.append('<div class="wrap"><table class="map"><thead><tr><th></th>')
     for a in p["activities"]:
-        out.append('<th class="act" colspan="%d">%s</th>' % (len(a["steps"]), esc(a["name"])))
+        out.append('<th class="act" colspan="%d">%s</th>' % (len(a["steps"]), shown(a["name"])))
     out.append("</tr><tr><th></th>")
     for c in cols:
-        out.append('<th class="step">%s</th>' % esc(c["step"]))
+        out.append('<th class="step">%s</th>' % shown(c["step"]))
     out.append("</tr></thead><tbody>")
     gaps = {(g["activity"], g["step"]) for g in p["gaps"]}
     pr = {r["slice"]: r for r in prog}
@@ -381,13 +411,13 @@ def render_html(p, st, prog, backlog, note_name, lang):
         sid = band["slice"]
         if sid:
             r = pr.get(sid, {})
-            head = '<div class="s">%s</div><div class="o">%s</div>' % (esc(sid), esc(band["outcome"] or L["no_outcome"]))
+            head = '<div class="s">%s</div><div class="o">%s</div>' % (shown(sid), shown(band["outcome"] or L["no_outcome"]))
             line = "%d %s" % (r.get("cards", 0), L["cards"])
             if st and r.get("done_pct") is not None:
                 line += " · %s %d%%" % (L["done"], r["done_pct"])
             if r.get("growth_pct") is not None:
                 line += " · +%d %s (%d%%)" % (len(r["added"]), L["growth"], r["growth_pct"])
-            head += '<div class="p">%s</div>' % esc(line)
+            head += '<div class="p">%s</div>' % shown(line)
         else:
             head = '<div class="s">%s</div><div class="o">%d %s</div>' % (esc(L["backlog"]), backlog, esc(L["cards"]))
         out.append('<tr class="slice"><th class="band">%s</th>' % head)
@@ -399,7 +429,7 @@ def render_html(p, st, prog, backlog, note_name, lang):
                 cls = "card st-%s%s" % (k, " edge" if c["edge_of"] else "")
                 meta = " · ".join(x for x in (c["feature"], c["source"], (L["edge"] + " " + c["edge_of"]) if c["edge_of"] else "",
                                               L[k] if st else "") if x)
-                out.append('<div class="%s"><div class="t">%s</div><div class="m">%s</div></div>' % (cls, esc(c["card"]), esc(meta)))
+                out.append('<div class="%s"><div class="t">%s</div><div class="m">%s</div></div>' % (cls, shown(c["card"]), shown(meta)))
             col = cols[ci]
             if bi == 0 and (col["activity"], col["step"]) in gaps:
                 out.append('<div class="card gap">⚠️ %s</div>' % esc(L["gap"]))
@@ -412,12 +442,12 @@ def render_html(p, st, prog, backlog, note_name, lang):
             out.append("<th>%s</th>" % esc(L[k]))
         out.append("<th>%%</th><th>%s</th><th>%s</th></tr>" % (esc(L["blocked_list"]), esc(L["growth"])))
         for r in prog:
-            out.append("<tr><td>%s</td>" % esc(r["slice"]))
+            out.append("<tr><td>%s</td>" % shown(r["slice"]))
             for k in STATUSES + ("unknown",):
                 out.append("<td>%d</td>" % r["spread"][k])
             g = "" if r["growth_pct"] is None else "+%d (%d%%)" % (len(r["added"]), r["growth_pct"])
             out.append("<td>%d%%</td><td>%s</td><td>%s</td></tr>" % (
-                r["done_pct"], esc(", ".join("%s %s" % (b["id"], b["card"]) for b in r["blocked"])), esc(g)))
+                r["done_pct"], shown(", ".join("%s %s" % (b["id"], b["card"]) for b in r["blocked"])), esc(g)))
         out.append("</table>")
     out.append('<p class="legend meta">%s</p>' % "".join(
         '<span class="st-%s">%s</span>' % (k, esc(L[k])) for k in STATUSES + ("unknown",)))
@@ -429,7 +459,7 @@ def render_html(p, st, prog, backlog, note_name, lang):
 def render_baseline(entries, eol):
     lines = ["baseline:"]
     for b in entries:
-        lines.append("  - slice: %s" % b["slice"])
+        lines.append("  - slice: %s" % json.dumps(b["slice"], ensure_ascii=False))
         lines.append("    date: %s" % json.dumps(b["date"]))
         lines.append("    cards: [%s]" % ", ".join(json.dumps(c, ensure_ascii=False) for c in b["cards"]))
     return eol.join(lines) + eol
@@ -471,7 +501,9 @@ def _own_text(el):
 
 
 def read_board(path):
-    """{id: item} of the elements of a board SVG that carry a data-miro-id — raises Bad."""
+    """{id: item} of the elements of a board SVG that carry a data-miro-id — raises Bad. An item's `x`, `y` are absolute;
+    `rx`, `ry` are relative to the frame it sits in (a frame's own translate is relative to its parent frame), so a
+    dragged frame moves the frame, not every card in it."""
     try:
         root = ET.parse(path).getroot()
     except (ET.ParseError, OSError) as e:
@@ -483,16 +515,15 @@ def read_board(path):
         dx, dy = _translate(el.get("transform")) if tag == "g" else (0.0, 0.0)
         nox, noy = ox + dx, oy + dy
         mid = el.get("data-miro-id")
-        is_frame = tag == "g" and el.get("data-frame") is not None
-        if is_frame:
+        if tag == "g" and el.get("data-frame") is not None:
             rect = next((c for c in el if c.get("data-type") == "frame"), None)
             title = el.get("data-frame") or (rect.get("data-title") if rect is not None else "") or ""
             mid = mid or (rect.get("data-miro-id") if rect is not None else None)
             w = _num(rect.get("width")) if rect is not None else None
             h = _num(rect.get("height")) if rect is not None else None
             if mid:
-                items[mid] = {"id": mid, "kind": "frame", "text": _plain(title), "x": nox, "y": noy, "w": w, "h": h,
-                              "frame": frame, "frame_text": frame_text}
+                items[mid] = {"id": mid, "kind": "frame", "text": _plain(title), "x": nox, "y": noy, "rx": dx, "ry": dy,
+                              "w": w, "h": h, "frame": frame, "frame_text": frame_text}
             for c in el:
                 if c is not rect:
                     walk(c, nox, noy, mid or frame, _plain(title) if mid else frame_text)
@@ -500,16 +531,24 @@ def read_board(path):
         if mid and el.get("data-type") != "frame":
             x = _num(el.get("x")) if el.get("x") is not None else _num(el.get("cx"))
             y = _num(el.get("y")) if el.get("y") is not None else _num(el.get("cy"))
-            text = el.get("data-content")
-            if text is None:
-                text = el.get("data-title") or _own_text(el)
-            items[mid] = {"id": mid, "kind": el.get("data-type") or tag, "text": _plain(text),
-                          "x": (x or 0.0) + nox, "y": (y or 0.0) + noy, "w": _num(el.get("width")),
-                          "h": _num(el.get("height")), "frame": frame, "frame_text": frame_text}
+            body = el.get("data-content")
+            if body is None:
+                body = el.get("data-title") or _own_text(el)
+            items[mid] = {"id": mid, "kind": el.get("data-type") or tag, "text": _plain(body),
+                          "x": (x or 0.0) + nox, "y": (y or 0.0) + noy, "rx": (x or 0.0) + nox - ox, "ry": (y or 0.0) + noy - oy,
+                          "w": _num(el.get("width")), "h": _num(el.get("height")), "frame": frame, "frame_text": frame_text}
         for c in el:
             walk(c, nox, noy, frame, frame_text)
 
     walk(root, 0.0, 0.0, None, "")
+    return items
+
+
+def read_boards(paths):
+    items = {}
+    for path in paths:
+        for mid, it in read_board(path).items():
+            items.setdefault(mid, it)               # the first read of an element wins (the read by ids comes first)
     return items
 
 
@@ -524,33 +563,118 @@ def _scope(items):
     return {"x": x0, "y": y0, "width": int(max(xe)) + SCOPE_MARGIN - x0, "height": int(max(ye)) + SCOPE_MARGIN - y0}
 
 
-def _card_of(text, cards):
-    t = _plain(text)
-    for c in cards:
-        if t in (_plain(c["card"]), _plain((c["card"] + " " + c["feature"]).strip())):
-            return c["id"]
-    return None
+def _rendered(c):
+    return [_plain(c["card"]), _plain((c["card"] + " " + c["feature"]).strip())]
 
 
-def board_diff(last, now, cards):
-    changed, moved, added, removed = [], [], [], []
+def assign_roles(items, p):
+    """Give each item its role — card (with its id), activity, step, slice (with its id), backlog, frame, sticky or
+    other — by what the note says now. Two stickies of one text take that text's cards in order (`ambiguous`)."""
+    by_text, ambiguous = {}, []
+    for c in (p["cards"] if p else []):
+        for t in dict.fromkeys(_rendered(c)):
+            by_text.setdefault(t, []).append(c["id"])
+    acts = {a["name"] for a in (p["activities"] if p else [])}
+    steps = {s for a in (p["activities"] if p else []) for s in a["steps"]}
+    slices = [s["slice"] for s in (p["slices"] if p else [])]
+    taken = set()
+    for it in items.values():
+        it.pop("card", None); it.pop("slice", None)
+        if it["kind"] == "frame":
+            low = it["text"].lower()
+            sid = next((s for s in slices if re.match(r"%s(?:[\s—:–-]|$)" % re.escape(s.lower()), low)), None)
+            it["role"] = "slice" if sid else "backlog" if low.startswith(("backlog", "беклог")) else "frame"
+            if sid:
+                it["slice"] = sid
+        elif it["kind"] == "sticky":
+            cands = [cid for cid in by_text.get(it["text"], []) if cid not in taken]
+            if cands:
+                it["role"], it["card"] = "card", cands[0]
+                taken.add(cands[0])
+                if len(by_text[it["text"]]) > 1:
+                    ambiguous.append(it["id"])
+            elif it["text"] in acts:
+                it["role"] = "activity"
+            elif it["text"] in steps:
+                it["role"] = "step"
+            else:
+                it["role"] = "sticky"
+        else:
+            it["role"] = "other"
+    return ambiguous
+
+
+def load_state(path, p):
+    """The last state: a board-state JSON, or a board SVG whose roles are read against the note as it is now."""
+    if path.lower().endswith(".json"):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            items = data["elements"]
+            if not isinstance(items, dict):
+                raise ValueError
+        except (OSError, ValueError, KeyError, TypeError):
+            raise Bad("the board's state does not read")
+        return items
+    items = read_board(path)
+    assign_roles(items, p)
+    return items
+
+
+def board_diff(last, now, p):
+    changed, moved, added, removed, backbone, other = [], [], [], [], [], []
+    card_now = {}
+    for c in (p["cards"] if p else []):
+        for t in _rendered(c):
+            card_now.setdefault(t, c["id"])
+
+    def card_of(old):
+        return old.get("card") or card_now.get(old["text"])
     for mid, it in now.items():
         old = last.get(mid)
         if old is None:
-            added.append({"id": mid, "kind": it["kind"], "text": it["text"], "at": [round(it["x"]), round(it["y"])],
-                          "frame": it["frame_text"]})
+            entry = {"id": mid, "kind": it["kind"], "text": it["text"], "at": [round(it["x"]), round(it["y"])],
+                     "frame": it["frame_text"]}
+            if it["kind"] == "sticky":
+                added.append(entry)
+            elif it["kind"] == "frame":
+                backbone.append(dict(entry, role="frame", change="added"))
+            else:
+                other.append(dict(entry, change="added"))
             continue
+        role = old.get("role") or ("sticky" if old["kind"] == "sticky" else "other")
+        is_card = role in ("card", "sticky")
         if old["text"] != it["text"]:
-            changed.append({"id": mid, "kind": it["kind"], "card": _card_of(old["text"], cards), "last": old["text"],
-                            "now": it["text"]})
-        if abs(old["x"] - it["x"]) > MOVE_EPS or abs(old["y"] - it["y"]) > MOVE_EPS or old["frame"] != it["frame"]:
-            moved.append({"id": mid, "kind": it["kind"], "card": _card_of(old["text"], cards), "text": it["text"],
-                          "from": [round(old["x"]), round(old["y"])], "to": [round(it["x"]), round(it["y"])],
-                          "frame_from": old["frame_text"], "frame_to": it["frame_text"]})
+            entry = {"id": mid, "kind": it["kind"], "role": role, "last": old["text"], "now": it["text"]}
+            if is_card:
+                changed.append(dict(entry, card=card_of(old)))
+            elif role == "other":
+                other.append(dict(entry, change="text"))
+            else:
+                backbone.append(dict(entry, change="text", slice=old.get("slice")))
+        if old.get("frame") != it["frame"] or abs(old.get("rx", old["x"]) - it["rx"]) > MOVE_EPS \
+                or abs(old.get("ry", old["y"]) - it["ry"]) > MOVE_EPS:
+            entry = {"id": mid, "kind": it["kind"], "role": role, "text": it["text"],
+                     "from": [round(old["x"]), round(old["y"])], "to": [round(it["x"]), round(it["y"])],
+                     "frame_from": old.get("frame_text", ""), "frame_to": it["frame_text"]}
+            if is_card:
+                moved.append(dict(entry, card=card_of(old)))
+            elif role == "other":
+                other.append(dict(entry, change="moved"))
+            else:
+                backbone.append(dict(entry, change="moved"))
     for mid, old in last.items():
-        if mid not in now:
-            removed.append({"id": mid, "kind": old["kind"], "card": _card_of(old["text"], cards), "text": old["text"]})
-    return changed, moved, added, removed
+        if mid in now:
+            continue
+        role = old.get("role") or "other"
+        entry = {"id": mid, "kind": old["kind"], "role": role, "text": old["text"]}
+        if role in ("card", "sticky"):
+            removed.append(dict(entry, card=card_of(old)))
+        elif role == "other":
+            other.append(dict(entry, change="removed"))
+        else:
+            backbone.append(dict(entry, change="removed"))
+    return changed, moved, added, removed, backbone, other
 
 
 # ------------------------------------------------------------------ check 26
@@ -661,7 +785,7 @@ def cmd_render(args):
     except OSError as e:
         result(ok=False, error="the page cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    result(ok=True, out=args.out, bytes=len(page.encode("utf-8")), cards=len(p["cards"]), status=bool(st))
+    result(ok=True, out=args.out, bytes=len(page.encode("utf-8")), cards=len(p["cards"]), status=bool(st), errors=p["errors"])
     return 0
 
 
@@ -669,7 +793,7 @@ def cmd_progress(args):
     _, p = _loaded(args)
     st = load_status(args.status)
     prog, backlog = progress(p, st)
-    result(ok=True, source=st["source"], date=st["date"], slices=prog, backlog=backlog)
+    result(ok=True, source=st["source"], date=st["date"], slices=prog, backlog=backlog, errors=p["errors"])
     return 0
 
 
@@ -701,7 +825,32 @@ def cmd_baseline(args):
     except OSError as e:
         result(ok=False, error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    result(ok=True, slice=args.slice, date=day, cards=ids)
+    result(ok=True, slice=args.slice, date=day, cards=ids, errors=p["errors"])
+    return 0
+
+
+def cmd_board_state(args):
+    p = parse(load(args.note))
+    items = read_boards(args.read)
+    ambiguous = assign_roles(items, p)
+    state = {"version": 1, "note": os.path.basename(args.note),
+             "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items}
+    out = os.path.abspath(args.out)
+    try:
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        tmp = out + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(state, fh, ensure_ascii=False, indent=1)
+        os.replace(tmp, out)
+    except OSError as e:
+        result(ok=False, error="the state cannot be written: %s" % (e.strerror or type(e).__name__))
+        return 1
+    cards = {it["card"]: mid for mid, it in items.items() if it.get("role") == "card"}
+    roles = {}
+    for it in items.values():
+        roles[it["role"]] = roles.get(it["role"], 0) + 1
+    result(ok=True, out=out, cards=cards, slices={it["slice"]: mid for mid, it in items.items() if it.get("slice")},
+           roles=roles, unmapped_cards=[c["id"] for c in p["cards"] if c["id"] not in cards], ambiguous=ambiguous)
     return 0
 
 
@@ -709,16 +858,16 @@ def cmd_board_diff(args):
     if not args.last or not os.path.isfile(args.last):
         result(ok=True, state="unknown", why="no last state of the board on this machine")
         return 0
-    last = read_board(args.last)
+    p = parse(load(args.note)) if args.note else None
+    last = load_state(args.last, p)
     if not args.now:
-        result(ok=True, state="scope", scope=_scope(last))
+        result(ok=True, state="scope", scope=_scope(last), ids=sorted(last))
         return 0
-    now = read_board(args.now)
-    cards = parse(load(args.note))["cards"] if args.note else []
-    changed, moved, added, removed = board_diff(last, now, cards)
-    result(ok=True, state="diff", changed=changed, moved=moved, added=added, removed=removed,
-           counts={"changed": len(changed), "moved": len(moved), "added": len(added), "removed": len(removed)},
-           scope=_scope(last))
+    now = read_boards(args.now)
+    changed, moved, added, removed, backbone, other = board_diff(last, now, p)
+    result(ok=True, state="diff", changed=changed, moved=moved, added=added, removed=removed, backbone=backbone,
+           other=other, counts={"changed": len(changed), "moved": len(moved), "added": len(added), "removed": len(removed)},
+           scope=_scope(last), ids=sorted(last))
     return 0
 
 
@@ -745,14 +894,19 @@ def main(argv=None):
     p.add_argument("--note", required=True)
     p.add_argument("--slice", required=True)
     p.add_argument("--date")
+    p = sub.add_parser("board-state")
+    p.add_argument("--read", required=True, nargs="+", help="the board read back (by ids first, then the area)")
+    p.add_argument("--note", required=True)
+    p.add_argument("--out", required=True, help="~/.grow-pm/story-maps/<key>.board.json")
     p = sub.add_parser("board-diff")
-    p.add_argument("--last")
-    p.add_argument("--now")
+    p.add_argument("--last", help="the board's state (board-state JSON) or an older board SVG")
+    p.add_argument("--now", nargs="+", help="the board read back now: by the state's ids, then over its area")
     p.add_argument("--note")
     sub.add_parser("schema")
     args = ap.parse_args(argv)
     fn = {"parse": cmd_parse, "check": cmd_check, "render-html": cmd_render, "progress": cmd_progress,
-          "baseline": cmd_baseline, "board-diff": cmd_board_diff, "schema": cmd_schema}.get(args.cmd)
+          "baseline": cmd_baseline, "board-state": cmd_board_state, "board-diff": cmd_board_diff,
+          "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2

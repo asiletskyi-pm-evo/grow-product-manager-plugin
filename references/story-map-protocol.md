@@ -33,17 +33,19 @@ Checked when the cards are built (Step 7b) and again before a slice is written (
 | `two_values` | model | one card holds two values the user could get separately | split it into two cards under the same step |
 | `edge_inline` | model | an edge case written inside another card | its own card under the same step, `edge_of` = the card; it may go to a later slice |
 | `subitem` | script | a sub-item inside a card: a `<br>`, a `•`, or a `- ` item after `:` or `;` | the sub-item becomes its own card (with `edge_of` when it is an edge case) |
-| `work_type` | script | a card named by a type of work — `FE`, `BE`, `QA`, `iOS`, `Android`, `Design`, `DevOps` before its text | the value behind it; the work is `task-creator`'s |
+| `work_type` | script | a card named by a type of work — `[FE] …` or `FE: …` (also `BE`, `QA`, `iOS`, `Android`, `Design`, `DevOps`) | the value behind it; the work is `task-creator`'s |
 | `skeleton_gap` | script | an activity with no card in the first slice | the thinnest card of that activity into the first slice |
 | `no_outcome` | script | a slice whose outcome is empty or `⚠️ TBD` | a metric and a target from the concept or the goal, else it stays `⚠️ TBD` |
 | `no_step` | script | a card without its activity or step | place it |
 | `no_source` | script | a card without a source marker | name the source, or drop the card |
 | `duplicate_id` | script | two rows with one id | a new id for the later row |
-| `edge_unknown` | script | `edge_of` names no card | fix the id |
+| `edge_unknown` | script | `edge_of` names no card, or the card itself | fix the id |
 | `edge_other_step` | script | an edge card under another step than its card | move it under its card's step |
 | `unknown_slice` | script | a slice that `slices` does not declare | declare it, or fix the cell |
 | `bad_code` | script | a feature or epic code that does not parse (`planning-core.md` §2) | fix the code |
 | `empty_step` | script | a gap row: a step with no card yet | a card from the inputs, or the gap stays |
+| `duplicate_feature` | script | one feature code on two cards (§2: never two cards for one feature) | one card keeps the code; merge or relink the other |
+| `link` | script | a link in a card's cells (§2: a card carries no link) | drop the link; the source marker names the page |
 
 ## 4. The note
 
@@ -72,7 +74,7 @@ slices:
 baseline: []
 ```
 
-**The cards — one markdown table** under the heading `## Мапа` (`## Map` in English), easy to edit in Obsidian and parsed by the script. The rows of a step, from top to bottom, are its order of importance; activities and steps keep the order of their first row. A header may be written in the note's language:
+**The cards — one markdown table** under the heading `## Мапа` (`## Map` in English), easy to edit in Obsidian and parsed by the script. The rows of a step, from top to bottom, are its order of importance; activities and steps keep the order of their first row. A short row gets empty cells, as Markdown shows it, and the script names it. A header may be written in the note's language:
 
 | Column | Ukrainian header | What |
 |---|---|---|
@@ -92,7 +94,7 @@ Then two sections the skill writes and the PM may edit: **«Прогрес»** (
 
 1. **Check** — `story_map.py check` and the semantic pass (§3).
 2. **Linked or new.** A card with a feature code is linked: nothing is written for it. A card without one is new.
-3. **A stub for each new card** — a feature page `{PROJ}-{epic}.{n} - {card text}` (`planning-core.md` §2). `n` is the next free number under the epic by CQL (the pages labelled `feature` whose name starts with `{PROJ}-{epic}.`), then consecutive for the next stubs — never guessed: without Confluence the stubs show `n = ?` and nothing is written. Labels: `feature`, the team label, the slice label (`slice-<id>`, or the slice's `label`); a quarter label only when the PM names the quarter in this message — otherwise `audit` shows the gap later. The body: `Status: planned`, the card text, its source marker, the map note's name, the slice and its outcome.
+3. **A stub for each new card** — a feature page `{PROJ}-{epic}.{n} - {card text}` (`planning-core.md` §2). `n` is the next free number under the epic by CQL over every page whose name starts with `{PROJ}-{epic}.`, labelled or not (a page that lost its `feature` label keeps its number), then consecutive for the next stubs — never guessed: without Confluence the stubs show `n = ?` and nothing is written. Labels: `feature`, the team label, the slice label (`slice-<id>`, or the slice's `label`); a quarter label only when the PM names the quarter in this message — otherwise `audit` shows the gap later. The body: `Status: planned`, the card text, its source marker, the map note's name, the slice and its outcome.
 4. **One message** names: the linked cards and the new stubs (names, labels); the findings of §3; the write checklist (`artifact-style-gate.md` → Host write gate); who reads the Confluence space (`native-surfaces.md` §3); and, for a card with no epic, the question which epic it goes to.
 5. **One «так»** → `roadmap-architect` Step 4b writes the stubs, one page each, with no pre-mortem (a feature never gets one). A card still without an epic is not written. Then the new codes go into the cards' `feature` cells and `story_map.py baseline --slice <id>` records the slice's baseline (§9).
 6. **A dry run** («сухий прогін») shows the same message and writes nothing to Confluence or Jira; the baseline is recorded only when the PM asks for it («зафіксуй базову лінію»).
@@ -116,21 +118,25 @@ Through `artifact-publishing.md`, never around it:
 - **The order.** The map's primary kind is `board` (the team edits the map there): its candidates come first (`artifact-publishing.md` §3), then the dashboard's by audience, and «лише файл» always.
 - **Who sees the board.** In the team's root folder of the board tool, a board may be visible to the team's members by that team's settings — not measured yet: the question says both («бачиш ти, а можливо — й учасники команди за її налаштуваннями») and the record keeps `audience: unknown`. In a space the PM names, its members see it: `shared`.
 - **The record** after each place: `publications.py record --key <key> --note <note> --surface <registry id> --kind board --id <board id> --url <board link> [--audience unknown]`; the dashboard as `--kind dashboard` on its own surface.
-- **The board's state** — after a board publication the skill reads the board back (§8) and keeps that as its last state.
-- **A new version of the board** is an update of the same board by element ids, after §8 — never a new board unless the PM chooses one. **A new version of the dashboard** is the same place's next version (`artifact-publishing.md` §6).
+- **The board's state** — after a board publication the skill reads the board back and keeps it with `story_map.py board-state` (§8).
+- **A new version of the board** is an update of the same board by element ids — each card's sticky by the id its state names, a card without one as a new sticky — after §8; never a new board unless the PM chooses «нова дошка» there. **A new version of the dashboard** is the same place's next version (`artifact-publishing.md` §6).
 - **Sharing** — to named people or groups only, a separate question after the publication (`artifact-publishing.md` §7).
 - **The dashboard's live parts** only where the surface re-queries the connectors on open (`artifact-publishing.md` §9); anywhere else it is a snapshot with its date.
 - A scheduled run never publishes, and a map has no scheduled refresh at all.
 
 ## 8. What the team changed on the board — only through a question
 
-- **The state.** After every successful board publication the skill reads the board back — the connector's read tool over the map's area (`story_map.py board-diff --last <state>` prints that area as `scope`) — and saves it as `~/.grow-pm/story-maps/<key>.board.svg`. A create's or an update's own result is not enough: an update returns only the elements it touched (the connector's own spec). Card texts are internal data, so the state stays on this machine, like the vault.
-- **Before a new version** the skill reads the board back the same way into a scratch file and runs `story_map.py board-diff --last <state> --now <read> --note <note>`: elements by their id — `changed` (text), `moved` (position or frame), `added` (on the board, not in the state), `removed`. Reading back is not a publication: the user's own connected tool, no question.
+- **The state.** After every successful board publication the skill reads the board back — by the ids it just wrote (a frame pulls in everything nested in it), with the connector's read tool — and keeps it: `story_map.py board-state --read <read> --note <note> --out ~/.grow-pm/story-maps/<key>.board.json`. The state holds the elements and which sticky is which card, activity, step or slice, taken while the note and the board agree; the next version updates each card's sticky by that id, and a card the state does not map (`unmapped_cards`) is a new sticky. A create's or an update's own result is not enough: an update returns only the elements it touched (the connector's own spec). Card texts are internal data, so the state stays on this machine, like the vault.
+- **Before a new version** the skill reads the board back twice into scratch files — by the state's element ids (`story_map.py board-diff --last <state>` prints them as `ids`; an element moved anywhere on the board still comes back) and over the map's area (`scope` there, for what the team added beside it) — and runs `story_map.py board-diff --last <state> --now <read by ids> <read of the area> --note <note>`. The cards come apart from the rest: `changed` (text), `moved` (another frame, or another place in its frame), `added` (stickies the state does not know), `removed`; the backbone (activities, steps, slice frames) and other items (text, connectors) are listed apart and never counted as cards. Reading back is not a publication: the user's own connected tool, no question.
 - **Nothing changed** → the version question of §7.
-- **Something changed** → one question: «На дошці змінено N карток і додано M — забрати в мапу / перезаписати мої картки / нова дошка».
-  - **«Забрати»** updates the note first, shown as a preview: changed texts into their cards; each added item a new card with source `дошка команди <date>`, under the step and in the slice its column and frame say; a moved card to its new step or slice; a card removed on the board marked in the preview, and dropped from the note only on the PM's word for that card. Then the board's new version is rendered from the note, and the team's items keep their ids.
-  - **«Перезаписати мої картки»** gives the plugin's own cards the note's text; what the team added stays on the board untouched.
+- **Something changed** → one question that is also the version question: what the team changed, and what goes where, who sees it and the version number (`artifact-publishing.md` §4, §6):
+
+> «На дошці «Zorg: доставка в поштомат» команда змінила 1 картку й додала 1. Що зробити? 1) забрати зміни в мапу й оновити дошку до версії 3; 2) оновити дошку до версії 3 моїми картками, додане командою лишити; 3) нова дошка, версія 1 (бачиш ти, а можливо — й учасники команди); 4) лише забрати в мапу, дошку не чіпати; 5) ні. Дошку бачиш ти, а можливо — й учасники команди за її налаштуваннями (внутрішні дані: картки, зрізи, коди фіч).»
+
+  - **«Забрати»** updates the note first, shown as a preview: changed texts into their cards; each added sticky a new card with source `дошка команди <date>`, under the step and in the slice its column and frame say; a moved card to its new step or slice; a card removed on the board marked in the preview, and dropped from the note only on the PM's word for that card. Then — answer 1 — the board's new version is rendered from the note, and the team's items keep their ids.
+  - **Answer 2** gives the plugin's own cards the note's text; what the team added stays on the board untouched.
   - **«Нова дошка»** creates a new board (version 1, the old id to `replaced`); the old board stays as it is.
+  - **«Ні»** is final for the run: the board is not touched, and the question is not repeated.
 - **Never a deletion of what the team added.** Any deletion from the board is one item at a time, after its own «так».
 - **No state** (another machine, a lost folder) → «Не можу сказати, що змінилось на дошці» → the same question with one more answer, «показати, що на дошці».
 
@@ -154,12 +160,13 @@ Through `artifact-publishing.md`, never around it:
 
 | Command | What |
 |---|---|
-| `parse --note P` | the table as a parse: activities with their steps, slices, cards, gap rows, `layout` (columns, and the cells of each band) — plus the structural errors of the table |
+| `parse --note P` | the table as a parse: activities with their steps, slices, cards, gap rows, `layout` (columns, and the cells of each band) — plus the structural errors of the table (a padded row, a slice id that is not lower-case) |
 | `check --note P` | the script's findings of §3, each with its card |
-| `render-html --note P --out F [--status S.json] [--lang uk\|en]` | the HTML page of §6 |
+| `render-html --note P --out F [--status S.json] [--lang uk\|en]` | the HTML page of §6 — a link removed and a string holding a secret hidden, whatever the note holds |
 | `progress --note P --status S.json` | per slice: spread, % done, blocked, added / removed / moved against the baseline |
 | `baseline --note P --slice S [--date D]` | the slice's baseline into the `baseline` field, nothing else changed |
-| `board-diff --last L [--now N] [--note P]` | elements by `data-miro-id`: changed, moved, added, removed — and the area to read (`scope`); without `--last` (or its file) the state is `unknown` |
+| `board-state --read R… --note P --out F` | the board read back, kept as its state: the elements and which sticky is which card, activity, step or slice (§8) |
+| `board-diff --last L [--now N…] [--note P]` | the cards by `data-miro-id` — changed, moved, added, removed — apart from the backbone and other items; the ids and the area to read back (`ids`, `scope`); without `--last` (or its file) the state is `unknown` |
 | `schema` | the fields, columns, findings and statuses this file and `planning-core.md` §3 must agree with (`validate-consistency.sh` check 26) |
 
 **Without SHELL** — the note only: the model builds the table, checks it by §3 itself and says in one line that the HTML page, the baseline, the progress and the board's diff need a shell. **Without FS** — the session's note, exported at the end (`host-profiles.md`); no board state and no record.

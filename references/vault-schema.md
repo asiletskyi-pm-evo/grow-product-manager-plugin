@@ -444,7 +444,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 }
 ```
 
-> The `people` profile itself is the one artifact addressed by name rather than by date: `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
+> The `people` profile itself is addressed by name rather than by date (the only other one is the story map, `Roadmaps/{product}/story-map-<slug>.md`): `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
 
 ---
 
@@ -651,7 +651,8 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 │
 ├── Roadmaps/                          # Planning suite output (subtype in frontmatter)
 │   └── {product}/
-│       └── roadmap-*.md
+│       ├── roadmap-*.md
+│       └── story-map-<slug>.md            # a story map, by name, updated in place (v4.6.0)
 │
 ├── Focus/                             # focus-advisor briefs
 │   └── {product}/
@@ -728,6 +729,7 @@ All artifact files follow a consistent naming pattern to support automated organ
 - **topic-slug**: Lowercase, hyphens for spaces, max 50 characters (e.g., checkout-flow, mobile-retention)
 - **YYYY-MM-DD**: Creation date (e.g., 2026-04-14)
 - **Duplicate handling**: If filename exists, append -2, -3, etc. (e.g., `hypothesis-checkout-flow-2026-04-14-2.md`)
+- **Addressed by name (since v4.6.0)**: a story map — `roadmap` with `subtype: story-map` — is `Roadmaps/{product}/story-map-<slug>.md`, with no date, and is updated in place: the note is the map's source of truth and its publication key carries the slug (`story-map-protocol.md` §4). A later run on the same map writes into the same note, never a dated copy.
 
 ### Naming Examples by Type
 
