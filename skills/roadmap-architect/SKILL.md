@@ -91,7 +91,7 @@ Read `references/story-map-protocol.md` whole first; it is the procedure. Three 
 - Story map: every card with its source, no dates, the note is the truth — the board and the dashboard are renders; the team's board edits reach the note only through the question of protocol §8.
 
 ## Skill Chaining
-→ `quarterly-planning` / `project-planning` (hands off clean structure; a story map's slices become the arc's milestones) · → `task-creator` (decomposition; FE/BE for a slice's features) · → `product-reporter` `initiative-status` (the map's progress).
+→ `quarterly-planning` / `project-planning` (hands off clean structure; a story map's slices become the arc's milestones) · → `task-creator` (decomposition; FE/BE for a slice's features) · ← `write-concept` / `requirements-creator` (a concept or requirements as the map's input) · → `product-reporter` `initiative-status` (the map's progress).
 
 ## Additional Resources
 `references/planning-core.md`, `dependency-model.md`, `roadmap-artifacts.md`, `local-context-protocol.md`, `template-protocol.md`, `persistent-storage.md`, `self-improvement.md`, `jira-data-protocol.md`.

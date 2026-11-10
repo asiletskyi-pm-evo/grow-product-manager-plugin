@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.16.1
+version: 0.16.2
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «опиши фічу», «дизайн-бриф», «стратегічний меморандум», «бізнес-кейс». EN — "design brief", "strategy memo".
 ---
 
@@ -258,6 +258,8 @@ After sharing the concept summary, **always** propose transitioning to the next 
 > 2. **Requirements Creator** — turn the concept into a numbered requirements document (the normal next step before development)
 > 3. **Task Creator** — go straight to Jira tasks, skipping the requirements document"
 
+For a multi-stage epic or mission, add a fourth option — **Story map** (`roadmap-architect` mode `story-map`, since v4.6.0): this concept becomes a map of activities, steps and cards with release slices, before requirements.
+
 If the user chooses **Brainstorm Features and Hypotheses**:
 - Pass the full concept context: Confluence page link, problem statement, goals, proposed solution, user stories, success metrics
 - The Brainstorm skill will use this concept as the starting point (Situation B of its workflow — concept/PRD exists)
@@ -286,7 +288,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.16.1",
+     skill_version: "0.16.2",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

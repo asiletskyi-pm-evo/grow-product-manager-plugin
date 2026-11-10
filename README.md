@@ -276,7 +276,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 5. Write Concept (v0.16.1)
+### 5. Write Concept (v0.16.2)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -286,7 +286,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 6. Requirements Creator (v0.17.2)
+### 6. Requirements Creator (v0.17.3)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -489,7 +489,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 16. Project Planning (v0.6.2) — Planning Suite
+### 16. Project Planning (v0.7.0) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -661,8 +661,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.16.1 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.17.2 | Create and analyze feature requirements |
+| Write Concept | v0.16.2 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.17.3 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.16.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
@@ -674,7 +674,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Design Bridge | v0.10.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.12.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.7.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
-| Project Planning | v0.6.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.5.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |

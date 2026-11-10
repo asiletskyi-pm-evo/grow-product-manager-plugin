@@ -1,6 +1,6 @@
 ---
 name: requirements-creator
-version: 0.17.2
+version: 0.17.3
 description: Write or review a requirements document with numbered functional requirements, incl. A/B test and AI-feature specs. Not a high-level concept/PRD (write-concept), not Jira tasks (task-creator). UA — «напиши вимоги», «вимоги до A/B-тесту», «перевір мою специфікацію». EN — "check my spec".
 ---
 
@@ -298,6 +298,8 @@ If the user agrees:
 
 If the user declines — end the workflow gracefully.
 
+For a multi-stage epic or mission, also offer the story map (`roadmap-architect` mode `story-map`, since v4.6.0): every FR of this document traces to a card, and the slices order the work.
+
 **If the approach is `ab-test` — also register the experiment.** An A/B spec that nobody tracks is how a test ends up running for six weeks with no readout. Offer:
 
 > "This is an A/B spec. Register it in the experiment tracker so it doesn't get lost between launch and readout?"
@@ -318,7 +320,7 @@ The full procedure — the offer wording, the exact `design-bridge` parameters p
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.17.2", tags: [feature area, platforms, subtype (default/ab-test/ai-feature)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
+1. `vault_save({ type: "requirements", product: active_product, skill: "requirements-creator", skill_version: "0.17.3", tags: [feature area, platforms, subtype (default/ab-test/ai-feature)], content: final requirements document, related: [[source concept]], extra_frontmatter: { confluence_url (if published), subtype } })`
 2. IF the source concept came from Vault — update it: add this artifact as `children` link.
 3. Display: "Saved to Vault: Requirements/{product}/…"
 

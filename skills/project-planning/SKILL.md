@@ -1,6 +1,6 @@
 ---
 name: project-planning
-version: 0.6.2
+version: 0.7.0
 description: Multi-quarter delivery forecast for a project or mission — dependencies, critical path, duration at a team-% share. Not one quarter (quarterly-planning), not structure (roadmap-architect). UA — «скільки займе проєкт/місія», «roadmap проєкту на 3 квартали», «критичний шлях». EN — "project roadmap".
 ---
 
@@ -46,7 +46,7 @@ Per `local-context-protocol.md` + Planning (capacity rules, sprints, goal map, D
 > a step that implements it — until one exists here, this skill's questions, gates and output stay exactly as they are.
 
 ### Step 1 — Scope
-Pick the project/mission/initiative (goal PROJ-XX, epic, or a set of epics).
+Pick the project/mission/initiative (goal PROJ-XX, epic, or a set of epics) — or a story-map note (`roadmap-architect` mode `story-map`, since v4.6.0): its slices are the arc's milestones in their order, a slice's scope is its features (estimated in Step 2 as usual), and a card without a feature is «не оцінено» `⚠️` (`references/story-map-protocol.md` §9, `roadmap-artifacts.md` sec. 3). The map gets no dates back.
 
 ### Step 2 — Project content
 Epics + features (CQL by epic, `getJiraIssue` per-key); volume by platform; **auto-estimate missing ones** (`capacity-model` sec. 8). Current state / % done — **delegate `product-reporter` `initiative-status`**.
@@ -76,10 +76,10 @@ Trigger: quarter boundary / on-demand / scheduled — a scheduled replan (SCHEDU
 - R6. Update roadmap + risks; save the new baseline.
 
 ### Step 7 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.6.2", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "project-planning", skill_version: "0.7.0", tags: [project/mission key, directions], content: project arc + forecast (or replan drift report), related: [[goal artifact]], [[quarterly roadmaps]], extra_frontmatter: { subtype: "project-arc", baseline_date, forecast_date } })` → "Saved to Vault: Roadmaps/{product}/…". The saved baseline is what `replan` mode compares drift against.
 
 ## Integration
-↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `product-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure). → `diagram-prototyper` (arc presentation). → `decision-log` (re-sequencing and scope calls made during `replan`).
+↔ `quarterly-planning` (down: arcs + allocation %; up: actuals + carryover → `replan`). ← `product-reporter` `initiative-status` (state / % done). ← `roadmap-architect` (structure; a story map's slices as milestones). → `diagram-prototyper` (arc presentation). → `decision-log` (re-sequencing and scope calls made during `replan`).
 
 **Replan decisions → decision-log.** A `replan` that changes the critical path or drops scope is a decision with a rationale worth keeping: offer to log what changed, the drift evidence that forced it, and the alternatives rejected. Since v3.9.0 the kill criteria R5a shows as fired join this offer, all together, when it is made; they never make or open the offer on their own (`references/judgment-points.md` §7, `references/planning-core.md` §8).
 
