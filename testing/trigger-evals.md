@@ -373,7 +373,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | X7 | створи задачі FE і BE для фічі PROJ-1234.3 з її вимог | task-creator — NOT roadmap-architect |
 | X8 | намалюй дошку з блок-схемою процесу повернення товару | diagram-prototyper — NOT roadmap-architect |
 | X9 | побудуй карту шляху клієнта (CJM) для оформлення доставки | cjm-research — NOT roadmap-architect |
-| X10 | зроби дошку в Miro для ретро команди | diagram-prototyper or brainstorm-features — NOT roadmap-architect |
+| X10 | зроби дошку в Miro для ретро команди | none or diagram-prototyper or brainstorm-features — NOT roadmap-architect |
 | X11 | намалюй шлях покупця від кошика до отримання посилки | cjm-research or diagram-prototyper — NOT roadmap-architect |
 | X12 | що з мапи історій беремо в план на Q1 з урахуванням місткості команди | quarterly-planning — NOT roadmap-architect |
 
@@ -409,6 +409,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-10-30 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy of `a46196f`, fictional context, model claude-opus-5-5), pre-release v4.2.0 — Group V and the library rows E3, E4, T5, T13, U7, both modes | visible 13/13 · real 12/13 | V5 «поділитися моїми інструментами з командою» → context-connect in `real` only — a visibility miss (in `visible` it routes to knowledge-library); the sources rows stay with knowledge-library. Codex not run: the user's Codex config does not load (`mcp_servers.lazyweb`). |
 | 2026-11-06 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy of `dc486b2`, fictional context, model claude-opus-5-5), pre-release v4.4.0 — T15–T18 in both modes | real T 4/4 · visible T 4/4 | None — T15–T17 → context-connect, T18 → context-navigator. |
 | 2026-11-10 | **Claude Code, live** (`testing/trigger_claude.py`, staged working tree of `feature/frameworks-v4.6.0` after task 5, fictional context, model claude-opus-5-5), pre-release v4.6.0 — Groups X (new) and C (the roadmap trio, roadmap-architect's description changed) in both modes; the miss re-run 3× in both | real C 9/9 · X 9/9 · visible C 9/9 · X 8/9 → X8 2/3 by majority (real 3/3) | X8 «намалюй дошку з блок-схемою процесу повернення товару» → another plugin's Figma diagram skill once in `visible` and once in the re-run — never roadmap-architect, the boundary this group guards. X1–X5 → roadmap-architect (build, slice, refresh, tree), X6 → project-planning, X7 → task-creator, X9 → cjm-research. Codex not run (Miro on Codex not measured; acceptance runs the map there by hand). |
+| 2026-11-10 (2) | **Claude Code, live** (same harness and model), after review 2 — the new rows X10–X12 without the neighbours' own keywords, 3× each in both modes | real X10 0/3 → `none` 3/3 · X11 3/3 · X12 3/3; visible the same | X10 «зроби дошку в Miro для ретро команди» → `none` 3/3 in both modes: no skill of the plugin owns a retro board, so the expected column now accepts `none`; the row guards the boundary — never roadmap-architect — and it held. X11 «намалюй шлях покупця…» → diagram-prototyper, X12 «що з мапи історій беремо в план на Q1…» → quarterly-planning. |
 
 ## Maintenance
 
