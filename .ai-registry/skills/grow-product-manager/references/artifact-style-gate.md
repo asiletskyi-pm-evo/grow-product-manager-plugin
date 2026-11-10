@@ -185,7 +185,7 @@ Reported as one line — `Spec readiness: n/6 — missing: …` — in the step'
 
 **The checker is the plugin agent `grow-product-manager:artifact-checker`** (`agents/artifact-checker.md`, since v2.5.0) — invoked through the Agent tool with `subagent_type: "grow-product-manager:artifact-checker"`. It is defined with `tools: Read` only, so its independence is enforced by the host, not by prose: it cannot browse, write, or spawn. Pass in the prompt exactly the checker input below plus `lens`; it reads this reference itself, so the checklists are never copied into the call.
 
-Resolution order when the named agent is not available in the session: (1) `grow-product-manager:artifact-checker` → (2) a `general-purpose` subagent given the same input and told to read this reference → (3) inline self-check with the reduced-independence marker (see *Limits and fallback*). Steps 2 and 3 are fallbacks, not alternatives — always try 1 first.
+Resolution order when the named agent is not available in the session: (1) `grow-product-manager:artifact-checker` → (2) sequential passes in the same session, one per lens, with a role reset (below) → (3) inline self-check with the reduced-independence marker (see *Limits and fallback*). Steps 2 and 3 are fallbacks, not alternatives — always try 1 first. Never a `general-purpose` subagent at step 2 (since v4.6.0): it would check with the host's whole tool set, which the read-only checker exists to deny.
 
 **On a host without SUBAGENT** (`host-profiles.md` §1 — Codex CLI by default, ChatGPT) the resolution above lands on level 2, not level 3: the checker runs as **sequential passes in the same session**, one per lens, with a role reset between them — the checker input below is re-stated from scratch and the maker's reasoning is not carried over. Where two lenses are required they therefore run one after the other rather than in parallel. The level is fixed once at Step 0-host and held for the whole run.
 
@@ -228,7 +228,7 @@ Two identical checkers add almost nothing over one; distinct perspectives catch 
 
 - ≤ 2 checkers per artifact; 1 re-check pass.
 - Checkers that read Atlassian MCP run **sequentially** (parallel subagents on one Atlassian MCP are known to cross-wire responses).
-- If the named agent is unavailable → a `general-purpose` subagent with the same input; if subagents are unavailable at all → inline self-check with an explicit marker in the gate report: **"незалежність перевірки знижена (inline)"** — same pattern as the Debate Mode inline-simulation marker. A `general-purpose` fallback is reported as **"checker: general-purpose"** so the user knows the tool restriction was not enforced.
+- If the named agent is unavailable, or subagents are unavailable at all → sequential in-session lens passes with a role reset (level 2); when even those cannot run, an inline self-check with an explicit marker in the gate report: **"незалежність перевірки знижена (inline)"** — same pattern as the Debate Mode inline-simulation marker. Never a `general-purpose` subagent with the same input (since v4.6.0): the restriction to `Read` would not hold.
 - **Markers are per level.** Sequential in-session lens passes with a role reset carry **"checker: sequential in-session"** — the check did happen, only its isolation is weaker. The reduced-independence marker **"незалежність перевірки знижена (inline)"** belongs to level 3 alone, where a single self-check runs without a role reset. Do not use the level-3 marker for level 2.
 
 ### Configuration
