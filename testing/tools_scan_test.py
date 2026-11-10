@@ -516,6 +516,58 @@ try:
     check("8.12 check 23: a scalar publishes and a kind outside the list are named",
           any("publishes is not a list" in e for e in e1) and any("slides" in e for e in e2) and ts.check_seed(ROOT) == [],
           (e1, e2, ts.check_seed(ROOT)))
+
+    # 9. v4.6.0 — roadmap-architect asks for a board (story-map Step 7d); review 2 of the branch
+    s9 = os.path.join(d, "store9")
+    h9 = os.path.join(d, "home9")
+    os.makedirs(h9)
+    rc, out, res, rows = run("merge", "--store", s9, "--home", h9, "--no-apps")
+    rc, out, res, rows = run("suggest", "--store", s9, "--skill", "roadmap-architect", "--need", "board")
+    check("9.1 a fresh registry offers Miro to roadmap-architect for a board", res.get("suggest") == "miro", res)
+    data = json.load(open(os.path.join(s9, "registry.json")))
+    for tr9 in data["tools"]:
+        if tr9["id"] == "miro":
+            tr9["skills"] = ["diagram-prototyper", "brainstorm-features"]          # a v4.2.0–v4.5.0 record
+        if tr9["id"] == "atlassian":
+            tr9.pop("needs", None)
+    w(os.path.join(s9, "registry.json"), json.dumps(data))
+    rc, out, res, rows = run("merge", "--store", s9, "--home", h9, "--no-apps")
+    r9 = reg(s9)
+    check("9.2 a record written before v4.6.0 gains the skill the seed now names (skills widen like publishes)",
+          "roadmap-architect" in (r9["miro"].get("skills") or []), r9["miro"].get("skills"))
+    rc, out, res, rows = run("suggest", "--store", s9, "--skill", "roadmap-architect", "--need", "board")
+    check("9.3 …so the old registry offers Miro too", res.get("suggest") == "miro", res)
+    s9b = os.path.join(d, "store9b")
+    run("merge", "--store", s9b, "--home", h9, "--no-apps")
+    rc, out, res, rows = run("decline", "--store", s9b, "--skill", "roadmap-architect", "--id", "miro")
+    rc, out, res, rows = run("suggest", "--store", s9b, "--skill", "roadmap-architect", "--need", "board")
+    check("9.4 with Miro declined, no tool that cannot hold a board is offered for one (never Atlassian)",
+          res.get("suggest") != "atlassian", res)
+    rc, out, res, rows = run("set", "--store", s9, "--id", "figma", "skills=design-bridge")
+    rc, out, res, rows = run("merge", "--store", s9, "--home", h9, "--no-apps")
+    check("9.5 skills the user set are never widened by the seed", reg(s9)["figma"].get("skills") == ["design-bridge"],
+          reg(s9)["figma"].get("skills"))
+    # the seed view: a registry merged before v4.6.0 and never merged again reads as the seed names it now
+    s9c = os.path.join(d, "store9c")
+    run("merge", "--store", s9c, "--home", h9, "--no-apps")
+    data = json.load(open(os.path.join(s9c, "registry.json")))
+    for tr9 in data["tools"]:
+        if tr9["id"] == "miro":
+            tr9["skills"] = ["diagram-prototyper", "brainstorm-features"]
+        if tr9["id"] == "atlassian":
+            tr9.pop("needs", None)
+    w(os.path.join(s9c, "registry.json"), json.dumps(data))
+    rc, out, res, rows = run("suggest", "--store", s9c, "--skill", "roadmap-architect", "--need", "board")
+    check("9.6 an old registry with no re-merge offers Miro, never Atlassian (suggest reads the seed view)",
+          res.get("suggest") == "miro", res)
+    for tr9 in data["tools"]:
+        if tr9["id"] == "miro":
+            tr9["user_set"] = ["skills"]
+        if tr9["id"] == "atlassian":
+            tr9["cleared"] = ["needs"]
+    w(os.path.join(s9c, "registry.json"), json.dumps(data))
+    rc, out, res, rows = run("suggest", "--store", s9c, "--skill", "roadmap-architect", "--need", "board")
+    check("9.7 skills the user set and needs the user cleared stay theirs in the seed view", res.get("suggest") == "atlassian", res)
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

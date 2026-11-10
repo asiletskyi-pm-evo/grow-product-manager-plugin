@@ -1,6 +1,6 @@
 # tool-registry.md
 
-> Shared reference (since v4.2.0). The **tools registry** keeps what helps the user's work and is not part of the plugin — other plugins, skills, MCP connectors, apps, CLIs, sites, portals, courses — with what each one is for, whether it is on this machine, how to connect it and what the user thinks of it. `knowledge-library` owns it (section «Інструменти», workflows in `skills/knowledge-library/references/tools-workflows.md`); `scripts/tools_scan.py` reads and writes it; three skills offer a missing tool at their step (§4). A team's core may publish its own list (§5).
+> Shared reference (since v4.2.0). The **tools registry** keeps what helps the user's work and is not part of the plugin — other plugins, skills, MCP connectors, apps, CLIs, sites, portals, courses — with what each one is for, whether it is on this machine, how to connect it and what the user thinks of it. `knowledge-library` owns it (section «Інструменти», workflows in `skills/knowledge-library/references/tools-workflows.md`); `scripts/tools_scan.py` reads and writes it; four skills offer a missing tool at their step (§4). A team's core may publish its own list (§5).
 >
 > **Rule of the file:** a tool is a name, a job and a way to connect — never a value from a host's configuration. The scan reads names only (§3), and nothing here is ever published or connected without the user.
 
@@ -10,7 +10,7 @@
 |---|---|---|
 | `id`, `name` | slug and name | the scan, the seed or the user |
 | `kind` | `plugin` · `skill` · `mcp` · `app` · `cli` · `site` · `portal` · `course` | the scan, the seed or the user |
-| `job`, `skills`, `contours` | the PM work it does, and the skills and contours whose steps it serves | the seed or the user |
+| `job`, `skills`, `contours` | the PM work it does, and the skills and contours whose steps it serves; a seed that names more skills widens the record's `skills` unless the user set them (since v4.6.0 — `merge` writes it, `suggest` and `targets` read it so before) | the seed or the user |
 | `hosts` | where it was seen: `claude-code`, `claude-desktop`, `codex`, `agents` (a cross-host skills folder), `session`, `account`, `standalone` | the scan |
 | `access` | `free` · `paid` · `corporate` · `unknown` | the seed or the user |
 | `connect` | how to connect it, in one line — never a key, a token or a URL with credentials | the seed or the user |
@@ -63,6 +63,7 @@ A skill that a tool would help at one of its steps asks `tools_scan.py suggest -
 | `diagram-prototyper` | Step 4 — after the tool question, never a tool that question offered | boards and visuals | the visualization type |
 | `product-research` | Step 2 — gather data | market data | «market-data» |
 | `meeting-processor` | M1 — the meeting source | transcripts | «transcript» |
+| `roadmap-architect` | Step 7d — when no board tool is in the session (`story-map-protocol.md` §6) | the story map | «board» |
 
 Other skills do not suggest yet.
 

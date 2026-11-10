@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.10.0
+version: 0.10.1
 description: Curated source library and tools registry — «які джерела маємо», «які інструменти в мене є» — trust scores, glossary, style. Not templates (template-library), competitor research (product-research), competitor apps (product-landscape). UA — «додай у бібліотеку», «знайди інструмент для…», «збери глосарій», «як ми називаємо…».
 ---
 
@@ -198,7 +198,7 @@ When `product-research` or `brainstorm-features` are running and Knowledge Libra
 
 ### As the owner of the tools registry (since v0.10.0)
 
-Three skills offer a missing tool at one of their steps (`references/tool-registry.md` §4): they call `scripts/tools_scan.py suggest --skill <name> --need <tag>` themselves and say one line; a «ні» is `decline`, which marks the record for that skill. Scanning, adding and every other change stay here.
+The skills of `references/tool-registry.md` §4 offer a missing tool at one of their steps: they call `scripts/tools_scan.py suggest --skill <name> --need <tag>` themselves and say one line; a «ні» is `decline`, which marks the record for that skill. Scanning, adding and every other change stay here.
 
 ### As the Gate 3 lint service
 

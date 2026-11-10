@@ -12,6 +12,89 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.6.0 (2026-11-10)
+
+**«Мапа історій»: from a concept to release slices you see on a board, write into the feature structure with one «так» and follow to done.** The plugin built the epic → feature → task tree and the roadmap's arc, but there was no step between a concept and that tree where a PM sees the whole journey, cuts it into releases by value and agrees the cut with the team. `roadmap-architect` gets a `story-map` mode after Jeff Patton: a backbone of activities and steps, cards of value under each step with a source each, release slices — walking skeleton / MVP, R1, R2 — each with a measurable outcome and no date. A slice goes into the feature structure in one message and one «так»; the map is published as a board the team edits and as a progress dashboard, each after the question; what the team changes on the board comes back into the note only through a question, and nothing the team added is ever deleted. The first release of the programme «Фреймворки».
+
+MINOR: a new mode of an existing skill, a new shared protocol and script, a new kind of publication; nothing that worked before changes.
+
+Also here: **a restricted plugin agent never falls back to `general-purpose`** (Security below).
+
+### Added
+
+- **`roadmap-architect` mode `story-map`** (Step 7a–7e) — one mode, three ways in: «побудуй мапу історій» (from a concept, requirements, an existing epic or the conversation), «зріж реліз / запиши MVP», «онови мапу». Every card carries a source marker (`концепт §2`, `зі слів PM`, `дошка команди <date>`); a card that came from no source is never added.
+- **`references/story-map-protocol.md`** — the model, the inputs, the quality pass, the note, slice → features, the renders, publication, the team's board edits, progress and the baseline, the script, and what never happens.
+- **The quality pass** proposes and never blocks. The script finds 15 kinds of finding by rule — a sub-item in a card, a work type (`[FE]`) in a card, an activity with no card in the walking skeleton (`skeleton_gap`), a slice without an outcome, a card without a step or a source, duplicate ids, an `edge_of` that points nowhere or to another step, an undeclared slice, a malformed feature code, an empty step, a feature on two cards, a link and a secret in a card's text. The model adds two by reading: a card with two values (`two_values`) and an edge case written inside a card (`edge_inline`), each turned into a card of its own with `edge_of`.
+- **The note is the source of truth** — one markdown table (`id`, `activity`, `step`, `card`, `slice`, `feature`, `epic`, `source`, `edge_of`; Ukrainian headers read as well) plus the frontmatter `product`, `epic`, `slices`, `baseline`, `published`. A story map is addressed by name and updated in place, keeping `published`, `baseline`, `created` and `related` (`vault-schema.md`, `vault-protocol.md`) — never a `-2` copy.
+- **Slice → features in one message and one «так»:** the cards already linked to a feature by code, a stub for each new card with the next free number over every `{PROJ}-{epic}.` page in Confluence (never guessed: without Confluence the stubs show `n = ?` and nothing is written), the labels (`feature`, the team, `slice-<id>`, a quarter only when named), the findings, the write checklist and who reads the space. FE/BE tasks come later through `task-creator` — never a Jira issue per card. The slice's baseline is recorded with the write.
+- **The board** — the first consumer of kind `board` in `artifact-publishing.md`: frames for the backbone, each slice and the backlog, a sticky per activity, step and card; the next version updates each sticky by its element id, never a copy. Measured on Miro (Claude Code desktop, 2026-11-10). The question puts the board first, the dashboard second, «лише файл» last, with who sees each (`audience: unknown` for a board in the team's root, until measured).
+- **The team's edits come back only through a question.** After every publication the skill reads the whole map back and keeps a board state on this machine (`~/.grow-pm/story-maps/<key>.board.json`: which sticky is which card, activity, step or slice). Before the next version it reads the board twice — by the recorded ids and over the map's area — and `board-diff` counts the cards changed, moved, added and removed, the backbone edits and the plugin's own stickies of cards the note has dropped. Anything counted → one question that is also the version question, with five answers: take the changes into the note and update the board (and the dashboard), give the board the note's text (naming each team edit it undoes), a new board, take into the note only, or no.
+- **Progress** — «онови мапу» runs `product-reporter` `initiative-status` at depth `feature` and gives per slice the spread of done / in progress / planned / blocked, the % done, what is blocked and, against the baseline, the cards added, removed and moved. In the note as a dated «Прогрес» section and in the self-contained HTML page.
+- **`scripts/story_map.py`** (stdlib, every command ends with a `MAP_RESULT {json}` line, exit 2 on an input that does not read): `parse`, `check`, `render-html` (self-contained, no link, a secret hidden, every string escaped), `progress`, `baseline` (writes that field alone, through `publications.write_field`), `board-state`, `board-diff`, `schema`.
+- **`project-planning` 0.7.0** — Step 1 takes a map note: the slices become the arc's milestones in order; a card without a feature is «не оцінено ⚠️» and the estimate a lower bound. Dates stay in the arc, never in the map.
+- **Validator check 26** — `story-map-protocol.md` and `story_map.py` are one schema: the fields, the columns, the script's findings, the commands, the canons of `planning-core.md`, the `vault-schema.md` row and the `artifact-publishing.md` §5 key row.
+- **Tests** — `testing/story_map_test.py` (117 checks in 10 sections, every one red first; the mutations of a baseline that rewrites another field, a render without escaping and a check without the skeleton rule are caught), `tools_scan_test.py` section 9 (the seed view), fixtures under `testing/fixtures/story-map/` (fictional Zorg data), trigger evals Group X (12 rows), test cases «Release v4.6.0», an output rubric for a map, a `host-matrix.md` note.
+
+### Changed
+
+- **`references/artifact-publishing.md`** — `roadmap-architect` among the consumers; kinds `board` and `dashboard` (§1); a board's candidate places (§2) and audience (§4); the primary kind (§3); the key `roadmap-architect/<product>/story-map-<slug>` (§5); a board's new version, «нова дошка» only by choice (§6); sharing a board (§7); a host page's new version measured on 2026-11-10.
+- **`references/roadmap-artifacts.md`** §3 «From a story map», §7, §8, new §9.
+- **The tools registry** — `references/tools-seed.yaml`: Miro serves `roadmap-architect`; Atlassian `needs: [internal-docs]`, so it is never suggested for a board. `scripts/tools_scan.py`: a merge widens a record's `skills` from the seed as it does `publishes`, unless the user set them; `suggest` and `targets` read the seed view (`_seed_view`), so a registry written before v4.6.0 suggests Miro, not Atlassian, for a board. `references/tool-registry.md` §4: «four skills» and the `roadmap-architect` Step 7d row.
+- **`scripts/publications.py`** — `write_field()` writes one frontmatter field and keeps every other byte; the `published` writer and the map's `baseline` share it.
+- **`write-concept` 0.16.2**, **`requirements-creator` 0.17.3** — one chaining line each (→ `roadmap-architect` story-map).
+- **`knowledge-library` 0.10.1** — «the skills of `tool-registry.md` §4 offer a missing tool» instead of a count that went stale.
+- **`roadmap-architect` 0.7.0** — the description adds «user story map with release slices» and «мапа історій»; Modes row, Step T, chaining and `## Routing`.
+- `AGENTS.md` «Where things live»; README.
+
+### Security
+
+- **A restricted plugin agent never falls back to `general-purpose`.** `debater` (no tools), `extractor` (Read, Glob, Grep) and `artifact-checker` (Read) are restricted on purpose, and `debate-protocol.md`, `subagent-delegation.md` and `artifact-style-gate.md` told a skill to spawn a `general-purpose` agent with the same card when the host had not loaded the named one — an agent that carries every tool of the main session (Bash, Write, the connectors) and acts on untrusted text (transcripts, pages, tickets). Now the fallback is the level hosts without SUBAGENT already use: inline simulation for a debate (marked «role independence reduced»), sequential in-session batches with a role reset for extraction, sequential in-session lens passes for the checker. Tools never widen. **Validator check 27** fails when a fallback to `general-purpose` comes back into a file that names a restricted agent. Found by an external scan; no escalation beyond the main session's own tools. The v2.5.0 entry below, which introduced the fallback, is history and stays as written.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/story-map-protocol.md` | new — the story map protocol (§1–§11) |
+| `scripts/story_map.py` | new — `parse`, `check`, `render-html`, `progress`, `baseline`, `board-state`, `board-diff`, `schema`; `check_protocol()` for check 26 |
+| `skills/roadmap-architect/SKILL.md` | 0.7.0 — mode `story-map`, Step 7a–7e, description, Routing |
+| `skills/project-planning/SKILL.md` | 0.7.0 — a map's slices as milestones |
+| `skills/write-concept/SKILL.md`, `skills/requirements-creator/SKILL.md` | 0.16.2, 0.17.3 — one chaining line each |
+| `skills/knowledge-library/SKILL.md` | 0.10.1 — a stale count |
+| `references/artifact-publishing.md` | kinds `board` and `dashboard`, the consumer, the key row, a board's version and sharing |
+| `references/roadmap-artifacts.md` | §3, §7, §8, §9 |
+| `references/vault-schema.md`, `references/vault-protocol.md` | a story map by name, updated in place |
+| `references/tool-registry.md`, `references/tools-seed.yaml`, `scripts/tools_scan.py` | Miro for `roadmap-architect`; seed skills widen; the seed view; never Atlassian for a board |
+| `scripts/publications.py` | `write_field()` |
+| `references/debate-protocol.md`, `references/subagent-delegation.md`, `references/artifact-style-gate.md` | no `general-purpose` fallback for a restricted agent |
+| `testing/validate-consistency.sh` | checks 26 and 27 |
+| `testing/story_map_test.py`, `testing/tools_scan_test.py`, `testing/fixtures/story-map/` | 117 checks; section 9; Zorg fixtures |
+| `testing/trigger-evals.md`, `testing/test-cases.md`, `testing/output-evals.md`, `testing/host-matrix.md` | Group X (12 rows) and its runs; «Release v4.6.0», TC-int-250-fallback; the map rubric; a note |
+| `AGENTS.md`, `README.md` | «Where things live»; «New in v4.6.0», skill entries, the fallback line |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.6.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.6.0 |
+
+### Backwards compatibility
+
+Nothing changes for a user who never asks for a story map: `roadmap-architect`'s other modes, `project-planning` without a map note and every existing publication work as before. A tools registry written before v4.6.0 is read through the seed view and is never rewritten by it. A host that loads the plugin's agents spawns them as before; only the fallback when it does not changes.
+
+### Known limits
+
+- A board only where a tool creates frames and stickies and updates them by element id — measured on Miro on 2026-11-10. FigJam builds no map: its diagram tool draws Mermaid types only (measured 2026-11-09), and stickies through the Figma connector's plugin API are not measured.
+- The team's edits come back into the note only through a question. The board state lives on this machine; on another machine the skill reads the board back and rebuilds the state first, and says «Не можу сказати, що змінилось на дошці».
+- Stickies are matched to cards by text when the state is kept: a card retyped in the note before then, or two cards with the same text, is named as ambiguous and can cost a duplicate sticky on the next version.
+- What the team added is seen by the recorded ids and inside the map's area plus a 200-unit margin; a sticky placed further away is not counted.
+- Who sees a board in the team's root of the board tool depends on that team's settings — not measured, so the record keeps `audience: unknown`.
+- No scheduled refresh of a map; a scheduled run never publishes.
+- A stub's quarter label only when the PM names the quarter; otherwise `audit` shows the gap.
+- Codex: the Miro connector is not measured — the map goes out as the HTML page.
+- The progress dashboard is a dated snapshot on every surface: `render-html` has no live parts.
+- A card dropped from the note keeps its sticky on the board until the PM says yes to that one item.
+- Every board publication costs one read-back of the board.
+- Growth (+N after the baseline) only for slices with a baseline.
+- `baseline` rewrites the other slices' entries of that field in its own format (an extra key dropped, a bare date quoted); every byte outside the field stays.
+
+---
+
 ## v4.5.0 (2026-11-09)
 
 **«Пауза запису»: a pause of the write gate for one bulk job — it ends on its own.** The write gate asked before every Confluence and Jira write, dry runs of `updateConfluenceContent` included, and a hook's «ask» beats the host's «always allow»; the only way out was `--write-gate off`, which also switched off the provider-boundary and generated-region questions and stayed off until someone remembered. On 2026-11-06 a 38-page docs sync took dozens of answers one by one, then a config file written by hand and deleted after. Now `/grow-product-manager:setup --write-gate pause <minutes>` skips the Jira/Confluence question for 1–240 minutes and the gate asks again by itself afterwards; a dry run is never asked about.

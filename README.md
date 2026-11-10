@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.5.0
+**Version:** 4.6.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.6.0** — **«Мапа історій»: from a concept to release slices you see on a board, write into the feature structure with one «так» and follow to done** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `roadmap-architect` gets a `story-map` mode (`references/story-map-protocol.md`): a backbone of activities and steps, cards of value under it with a source each, release slices — walking skeleton / MVP, R1, R2 — each with a measurable outcome and no date. A quality pass keeps one value per card and edge cases on cards of their own, and proposes, never blocks. A slice goes into the feature structure in one message and one «так»: linked features by code, new ones as stubs with the next free number from Confluence, FE/BE later through `task-creator`, never a Jira issue per card. The vault note is the source of truth; the map is published as a board the team edits (the first consumer of kind `board`, measured on Miro) and a progress dashboard, each after the question, a new version of the same board by element ids instead of a copy — and what the team changed on the board comes back into the note only after a question, nothing the team added ever deleted. «Онови мапу» counts each slice's progress from `initiative-status`, with growth against a baseline; `project-planning` takes the slices as the arc's milestones. `scripts/story_map.py` does the parsing, checks, the self-contained HTML page, progress, baseline and the board's diff; validator check 26 keeps the protocol and the script one schema. The first release of the programme «Фреймворки». Also: a restricted plugin agent (`debater`, `extractor`, `artifact-checker`) never falls back to a `general-purpose` stand-in with the host's whole tool set — the in-session level hosts without subagents already use; validator check 27 keeps it so.
 
 **New in v4.5.0** — **«Пауза запису»: the write gate can be paused for one bulk job, and it asks again by itself** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `/grow-product-manager:setup --write-gate pause <minutes>` (1–240) skips the Jira/Confluence question until the pause ends, then the gate asks again — a bulk sync no longer needs `--write-gate off` that stays off until someone remembers. The provider-boundary and generated-region questions stay on; a malformed or over-long pause is ignored and the gate asks; `updateConfluenceContent` with `dryRun: true` is never asked about. `context-connect` 0.9.1: after `ctx repo add` the Jira answer goes into the registration's `jira_write:` line and `ctx provider apply` rebuilds the team block; a guest, who has no team block, is no longer asked about Jira.
 
@@ -276,7 +278,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 5. Write Concept (v0.16.1)
+### 5. Write Concept (v0.16.2)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -286,7 +288,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 6. Requirements Creator (v0.17.2)
+### 6. Requirements Creator (v0.17.3)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -397,7 +399,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.10.0)
+### 11. Knowledge Library (v0.10.1)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -479,17 +481,17 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 15. Roadmap Architect (v0.6.2) — Planning Suite
+### 15. Roadmap Architect (v0.7.0) — Planning Suite
 
-**Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree.
+**Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Since v4.6.0 it also builds the user story map: a backbone of activities and steps, cards of value under it, release slices with an outcome and no date; a slice goes into the feature structure in one «так», and the map is published as a board the team edits and a progress dashboard (the vault note stays the source of truth).
 
-**Modes:** audit / map / tree / onboard
+**Modes:** audit / map / tree / onboard / story-map
 
-**Trigger phrases:** "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal"
+**Trigger phrases:** "tidy up the structure", "label epics/features", "find labeling gaps", "build the roadmap tree", "link an epic to a goal", "build a user story map", "slice the MVP", «мапа історій»
 
 ---
 
-### 16. Project Planning (v0.6.2) — Planning Suite
+### 16. Project Planning (v0.7.0) — Planning Suite
 
 **Description:** Plans and forecasts delivery of a project/mission/initiative beyond a single quarter — estimates the total volume of epics/features, builds a dependency graph with critical path, computes duration under a given team allocation %, and lays out a multi-quarter roadmap with rolling-reforecast.
 
@@ -661,20 +663,20 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.16.1 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.17.2 | Create and analyze feature requirements |
+| Write Concept | v0.16.2 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.17.3 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.16.0 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.19.0 | Process meetings and extract action items |
 | Plugin Configurator | v2.17.2 | Configure plugin for your organization |
-| Knowledge Library | v0.10.0 | Manage curated knowledge sources and the tools registry |
+| Knowledge Library | v0.10.1 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.10.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.12.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
-| Roadmap Architect | v0.6.2 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree |
-| Project Planning | v0.6.2 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast |
+| Roadmap Architect | v0.7.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
+| Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.5.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
@@ -920,7 +922,7 @@ Besides skills, the plugin ships four kinds of host-level components. They are d
 | `debater` | none (`tools: []`) | `brainstorm-features` Step 3D and every skill that chains to Debate Mode | "No web, no vault, no files" is the protocol's core guardrail |
 | `extractor` | `Read, Glob, Grep` | fan-out steps in 8 skills (`references/subagent-delegation.md`) | Read-only by definition — safe under `data-policy.md` |
 
-Every protocol keeps a fallback chain (named agent → `general-purpose` with the same prompt, reported → sequential in-session passes with a role reset, reported → inline with the reduced-independence marker), so nothing breaks in a host without plugin agents. Codex does not load `agents/*.md`; `.codex/agents/*.toml` ports the three for manual use there, generated from these files (check 14 keeps them paired, and since v3.8.0 keeps their instructions identical apart from the host note).
+Every protocol keeps a fallback chain that never widens an agent's tools (named agent → sequential in-session passes with a role reset, reported → inline with the reduced-independence marker; since v4.6.0 never a `general-purpose` stand-in, which would run with the host's whole tool set), so nothing breaks in a host without plugin agents. Codex does not load `agents/*.md`; `.codex/agents/*.toml` ports the three for manual use there, generated from these files (check 14 keeps them paired, and since v3.8.0 keeps their instructions identical apart from the host note).
 
 **Commands — `commands/` (7 commands).** Service entry points that are **user-only** (`disable-model-invocation: true`) — the model never routes a conversation into them, which also keeps them out of trigger collisions. On Codex, which migrates commands into routable skills, the same guarantee comes from each description opening with *"Typed command … only"* (validator check 13, trigger-evals L):
 
@@ -1108,5 +1110,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.5.0  
+**Version:** 4.6.0  
 **Last Updated:** November 2026

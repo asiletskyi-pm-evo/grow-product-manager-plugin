@@ -152,6 +152,41 @@ if [ -d agents ]; then
   ok "agents frontmatter: $(ls agents/*.md | wc -l | tr -d ' ') agents checked"
 fi
 
+# --- 27. A restricted agent never falls back to an unrestricted one (v4.6.0) ----
+# Every plugin agent declares `tools:` or `disallowedTools:` (check 7) — the restriction is the point: a debater
+# without web, an extractor that only reads, a checker that cannot write. Up to v4.5.0 three protocols handed the same
+# prompt to `general-purpose` when the named agent was missing, which runs with the host's whole tool set (an external
+# scanner's finding). The fallback is the level a host without SUBAGENT already uses — inline or sequential in-session
+# passes; a line in references/, skills/, agents/ or commands/ that names `general-purpose` in a file that names a
+# restricted agent must say it is never used.
+GP_ERRS=$(python3 - <<'PY_GP'
+import glob, os, re
+agents = []
+for f in sorted(glob.glob("agents/*.md")):
+    head = "".join(open(f, encoding="utf-8").readlines()[:12])
+    if re.search(r"^(tools|disallowedTools):", head, re.M):
+        agents.append(os.path.basename(f)[:-3])
+files = [f for d in ("references", "skills", "agents", "commands") for f in glob.glob(os.path.join(d, "**", "*.md"), recursive=True)]
+NEG = re.compile(r"\b(?:never|no|not|without)\s+(?:[\w-]+\s+){0,3}\W?general-purpose", re.I)   # «never a general-purpose …»
+for f in sorted(files):
+    text = open(f, encoding="utf-8").read()
+    named = [a for a in agents if a in text]
+    if not named:
+        continue
+    for n, line in enumerate(text.splitlines(), 1):
+        if "general-purpose" in line and not NEG.search(line):
+            print("%s:%d: names general-purpose as a stand-in where %s is named - a restricted agent falls back to an "
+                  "in-session level, never to an unrestricted subagent" % (f, n, ", ".join(named)))
+PY_GP
+)
+if [ -n "$GP_ERRS" ]; then
+  while IFS= read -r line; do err "agent fallback: $line"; done <<EOF
+$GP_ERRS
+EOF
+else
+  ok "agent fallback: no protocol hands a restricted agent's prompt to general-purpose"
+fi
+
 # --- 8. Plugin commands (commands/*.md) --------------------------------------
 # Every command is user-only by policy: they are service entry points, and the
 # reason they exist is to stay OUT of the model's auto-routing (trigger-evals L).
@@ -562,6 +597,21 @@ $INF_ERRS
 EOF
 else
   ok "inferred manifest: context-provider-protocol.md §9 and ctx_infer.py agree (exclusions, never-inferred keys)"
+fi
+
+# --- 26. The story map is one schema (v4.6.0) --------------------------------------
+# roadmap-architect's `story-map` mode follows references/story-map-protocol.md, and scripts/story_map.py parses the
+# note it describes. A frontmatter field, a column, a script finding or a command added to one of them alone would
+# have the skill write a note the script misreads; a status canon that drifts from planning-core.md §3 would count a
+# slice's progress against words initiative-status never gives. Also: the skill cites the protocol, vault-schema's
+# roadmap row names the story map, and artifact-publishing.md §5 has the map's key row.
+MAP_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import story_map; print('\n'.join(story_map.check_protocol('.')))" 2>&1)
+if [ -n "$MAP_ERRS" ]; then
+  while IFS= read -r line; do err "story map: $line"; done <<EOF
+$MAP_ERRS
+EOF
+else
+  ok "story map: story-map-protocol.md, story_map.py, planning-core.md §3, vault-schema, artifact-publishing §5 and roadmap-architect agree"
 fi
 
 # --- 10. Component counts in README ------------------------------------------

@@ -731,7 +731,7 @@ def cmd_merge(args):
                     continue
                 if rec.get(k) in (None, "", []) and s.get(k) not in (None, "", []):
                     rec[k] = s[k]
-                elif k == "publishes" and k not in (rec.get("user_set") or []):     # a seed that lists more widens
+                elif k in WIDEN and k not in (rec.get("user_set") or []):     # a seed that lists more widens
                     have = as_list(rec.get(k))
                     rec[k] = as_list(s.get(k)) + [x for x in have if x not in as_list(s.get(k))]
             rec["sources"] = _add_unique(rec.get("sources"), "seed")
@@ -826,8 +826,30 @@ def cmd_merge(args):
     return 0
 
 
+WIDEN = ("publishes", "skills")                     # list fields a seed that names more widens, unless the user set them
+
+
+def _seed_view(tools):
+    """A registry as the seed reads it now, without writing it: a seed record's `publishes` and `skills` widened by what
+    the seed names since (a registry merged before v4.3.0 / v4.6.0), and an empty `needs` filled from the seed — never
+    a field the user set or cleared. `merge` writes the same; `suggest` and `targets` read it before the next merge."""
+    seed = {s["id"]: s for s in load_seed()}
+    for t in tools:
+        s = seed.get(t.get("id"))
+        if not s:
+            continue
+        mine, gone = t.get("user_set") or [], t.get("cleared") or []
+        for k in WIDEN:
+            if k in mine or k in gone or not s.get(k):
+                continue
+            t[k] = as_list(s.get(k)) + [x for x in as_list(t.get(k)) if x not in as_list(s.get(k))]
+        if t.get("needs") in (None, "", []) and s.get("needs") and "needs" not in gone:
+            t["needs"] = list(s["needs"])
+    return tools
+
+
 def _candidates(store, skill, need=None, exclude=()):
-    own = load_registry(store)
+    own = _seed_view(load_registry(store))
     team = load_team(store)
     declined_team = {(norm(d.get("name")), d.get("skill")) for d in load_team_declined(store)}
     own_idx = index(own)
@@ -911,11 +933,7 @@ def cmd_targets(args):
         except Unreadable:
             result(targets=[], kind=args.kind, why="registry.json does not read")
             return 0
-    seed = {s["id"]: as_list(s.get("publishes")) for s in load_seed()}
-    for t in tools:                    # a registry merged before v4.3.0 holds the seed's single value: read it widened
-        if t.get("id") in seed and "publishes" not in (t.get("user_set") or []) and \
-                "publishes" not in (t.get("cleared") or []):
-            t["publishes"] = seed[t["id"]] + [x for x in as_list(t.get("publishes")) if x not in seed[t["id"]]]
+    _seed_view(tools)                  # a registry merged before v4.3.0 holds the seed's single value: read it widened
     out = [t for t in tools if args.kind in as_list(t.get("publishes")) and t.get("verdict") != "deprecated" and
            (args.any_state or t.get("state") in ("connected", "installed"))]
     for t in out:

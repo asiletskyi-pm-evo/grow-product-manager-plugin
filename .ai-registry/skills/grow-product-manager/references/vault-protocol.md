@@ -232,6 +232,11 @@ vault_save(artifact, product, options):
       last level. There is no `artifacts/` level.)
      IF artifact.type == "people": file_path = {target_vault.path}/People/{slugify(name)}.md
      (profiles are addressed by person, not by date — see people-context-protocol.md)
+     IF artifact.type == "roadmap" AND subtype == "story-map":
+       file_path = {target_vault.path}/Roadmaps/{key_slug}/story-map-{topic_slug}.md
+     (a story map is addressed by name and updated in place — story-map-protocol.md §4; since v4.6.0. When the note
+      exists, the save rewrites its body and the `slices` field only: `published`, `baseline`, `created` and
+      `related` — fields other writers own — stay byte for byte.)
 
 4. Create directory structure:
    mkdir -p {file_path_parent_dir}
@@ -313,7 +318,8 @@ vault_save(artifact, product, options):
 - See [Hypothesis Lifecycle Updates](#hypothesis-lifecycle-updates) section
 
 **Duplicate Prevention**: If file already exists:
-- Append incrementing suffix: `-2`, `-3`, etc.
+- A story map (`subtype: story-map`) is updated in place, never suffixed (`story-map-protocol.md` §4).
+- Otherwise append incrementing suffix: `-2`, `-3`, etc.
 - Example: `competitive-checkout-flow-2026-04-14-2.md`
 
 ---

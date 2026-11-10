@@ -146,16 +146,21 @@ def _doc(text, is_yaml):
     return _frontmatter(text)
 
 
-def _block(text, start, end):
-    """(b0, b1) — the `published` key and its own lines (indented or `-` items) inside text[start:end], or None.
+def _key_line(name):
+    return KEY_LINE if name == "published" else re.compile(r"^%s[ \t]*:(?P<val>.*)$" % re.escape(name))
+
+
+def _block(text, start, end, name="published"):
+    """(b0, b1) — the top-level key `name` and its own lines (indented or `-` items) inside text[start:end], or None.
     Blank lines and column-0 comments after its last own line are the note's, not the field's."""
+    key_line = _key_line(name)
     pos, b0, b1 = start, None, None
     while pos < end:
         nl = text.find("\n", pos, end)
         stop = end if nl < 0 else nl + 1
         line = text[pos:stop].rstrip("\r\n")
         if b0 is None:
-            if KEY_LINE.match(line):
+            if key_line.match(line):
                 b0, b1 = pos, stop
         elif not line.strip() or line.startswith("#"):
             pass
@@ -301,15 +306,23 @@ def render(entries, eol):
 
 
 def write(path, text, is_yaml, entries):
+    write_field(path, text, is_yaml, "published", lambda eol: render(entries, eol))
+
+
+def write_field(path, text, is_yaml, name, block_for):
+    """Put the top-level field `name` — `block_for(eol)` gives its lines, the key line first — into the frontmatter of
+    `text` (or the whole YAML file), replacing the field's own lines or adding it before the closing line; every other
+    byte stays as it was, and the file is replaced atomically where it lives (a link kept). Shared with story_map.py
+    (`baseline`), so both fields are written by one code path."""
     doc = _doc(text, is_yaml)
     if doc is None:                                  # a note without a frontmatter: one in front, the rest as it was
         eol = "\r\n" if "\r\n" in text else "\n"
         bom = "﻿" if text.startswith("﻿") else ""
-        new = bom + "---" + eol + render(entries, eol) + "---" + eol + text[len(bom):]
+        new = bom + "---" + eol + block_for(eol) + "---" + eol + text[len(bom):]
     else:
         start, end, eol = doc
-        span = _block(text, start, end)
-        block = render(entries, eol)
+        span = _block(text, start, end, name)
+        block = block_for(eol)
         if span:
             new = text[:span[0]] + block + text[span[1]:]
         else:
