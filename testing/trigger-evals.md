@@ -358,6 +358,22 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | W6 | онови живий борд фокусів | focus-advisor |
 | W7 | намалюй блок-схему онбордингу | diagram-prototyper — NOT design-bridge |
 
+### Group X — Story map vs neighbours (added 2026-11-10, v4.6.0)
+
+`roadmap-architect` mode `story-map` builds, slices and refreshes a user story map; the tree stays its `tree` mode; dates for slices are `project-planning`'s, FE/BE tasks `task-creator`'s, a quick board picture `diagram-prototyper`'s, a customer journey map `cjm-research`'s.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| X1 | побудуй мапу історій з концепту доставки в поштомат | roadmap-architect |
+| X2 | build a user story map for the parcel locker epic with release slices | roadmap-architect |
+| X3 | зріж MVP на мапі історій і запиши зріз у фічі | roadmap-architect |
+| X4 | онови мапу історій — прогрес по зрізах і що заблоковано | roadmap-architect |
+| X5 | побудуй дерево roadmap для місії доставки | roadmap-architect |
+| X6 | скільки займе реліз R1 з мапи історій при 50 % команди | project-planning — NOT roadmap-architect |
+| X7 | створи задачі FE і BE для фічі PROJ-1234.3 з її вимог | task-creator — NOT roadmap-architect |
+| X8 | намалюй дошку з блок-схемою процесу повернення товару | diagram-prototyper — NOT roadmap-architect |
+| X9 | побудуй карту шляху клієнта (CJM) для оформлення доставки | cjm-research — NOT roadmap-architect |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -389,6 +405,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-10-22 (6) | **Codex CLI 0.153.2, live** (`testing/trigger_codex.py`), pre-release v3.18.0 — Groups L, U, T on the branch; L5 and T8 2× on the branch and on `main` (v3.17.0, a temporary worktree) | branch 29/36; L5/T8 again: branch 3/4 (L5 → none once), `main` 4/4 | U11, U12 ✓. L6, L7, U8 miss as on `main` before; L8, U9 are the right command under Codex's name `source-command-…`. L5 (`none` once) and T8 (→ context-connect once in the full run) are noise: the branch changes no skill description, and Codex routes on descriptions. |
 | 2026-10-30 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy of `a46196f`, fictional context, model claude-opus-5-5), pre-release v4.2.0 — Group V and the library rows E3, E4, T5, T13, U7, both modes | visible 13/13 · real 12/13 | V5 «поділитися моїми інструментами з командою» → context-connect in `real` only — a visibility miss (in `visible` it routes to knowledge-library); the sources rows stay with knowledge-library. Codex not run: the user's Codex config does not load (`mcp_servers.lazyweb`). |
 | 2026-11-06 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy of `dc486b2`, fictional context, model claude-opus-5-5), pre-release v4.4.0 — T15–T18 in both modes | real T 4/4 · visible T 4/4 | None — T15–T17 → context-connect, T18 → context-navigator. |
+| 2026-11-10 | **Claude Code, live** (`testing/trigger_claude.py`, staged working tree of `feature/frameworks-v4.6.0` after task 5, fictional context, model claude-opus-5-5), pre-release v4.6.0 — Groups X (new) and C (the roadmap trio, roadmap-architect's description changed) in both modes; the miss re-run 3× in both | real C 9/9 · X 9/9 · visible C 9/9 · X 8/9 → X8 2/3 by majority (real 3/3) | X8 «намалюй дошку з блок-схемою процесу повернення товару» → another plugin's Figma diagram skill once in `visible` and once in the re-run — never roadmap-architect, the boundary this group guards. X1–X5 → roadmap-architect (build, slice, refresh, tree), X6 → project-planning, X7 → task-creator, X9 → cjm-research. Codex not run (Miro on Codex not measured; acceptance runs the map there by hand). |
 
 ## Maintenance
 
