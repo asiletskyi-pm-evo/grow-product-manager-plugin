@@ -197,7 +197,8 @@ When `health-check` mode is configured for automation:
    - Load previous health-check for delta comparison
    - Assemble Health-Check Summary (labels only — no question, no hand-back line)
    - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[date].md`, its frontmatter as in **Save health-check snapshot** above (`health_score` and `stages` are what a journey map reads)
-   - End with one line for the next interactive run: «Новий health-check від <дата> — опублікувати можна в наступному прогоні.» (no publication from the scheduled run)
+   - **Refresh the product's journey maps (since v0.16.0)** — for each journey note of the product (`CJM/journeys/<product>/journey-*.md` in the vault, or the workspace file): `python3 scripts/journey_map.py refresh --note <note> --snapshot <the snapshot just saved> --lang <user.language>` — only the health-check rows by id, the `health` point, the page next to the note (`references/journey-protocol.md` §10). No publication, no question; a note that does not parse is named in one line and left as it is
+   - End with one line for the next interactive run: «Новий health-check від <дата> — опублікувати можна в наступному прогоні.» (no publication from the scheduled run); after a journey refresh also «Карту шляху оновлено локально — опублікувати можна в наступному прогоні.»
 
 3. **Escalation:**
    - If any **Critical** anomaly detected → highlight in report, suggest full mode

@@ -215,9 +215,9 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.15.0)
+### 1. CJM Research (v0.16.0)
 
-**Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
+**Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
 **Modes:**
 - **Anomalies** — Detect unexpected patterns in customer funnel behavior
@@ -225,12 +225,13 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - **Full** — Complete CJM analysis with all data points and insights
 - **Health-Check** — Assess overall funnel health and drop-off zones
 - **Comparison** — Compare customer journeys across platforms or segments
+- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`)
 
 **Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
 
 **Outputs:** Funnel impact models, hypothesis validation, risk assessments
 
-**Trigger phrases:** "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses"
+**Trigger phrases:** "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", "build a journey map", «карта шляху»
 
 ---
 
@@ -659,7 +660,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.15.0 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.16.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
