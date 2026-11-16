@@ -528,6 +528,13 @@ try:
     rc, out, res = run("board-diff", "--last", state, "--now", r1, last, "--note", note)
     check("10.11 m-6 of two reads, the first read of an element wins", any(c.get("now") == "Перше читання" for c in res.get("changed", [])),
           res.get("changed"))
+    # v4.7.0: the shared safe() also hides a person's e-mail or phone (note_table.CONTACT)
+    ct = os.path.join(d, "map-contact.md")
+    write(ct, open(note, encoding="utf-8").read().replace("Оплата частинами", "Оплата частинами, пишіть ivan@zorg.example"))
+    page_ct = os.path.join(d, "contact.html")
+    run("render-html", "--note", ct, "--out", page_ct)
+    hct = open(page_ct, encoding="utf-8").read() if os.path.exists(page_ct) else "ivan@"
+    check("10.12 v4.7.0 a person's e-mail never reaches the map's page", "ivan@zorg.example" not in hct and "[contact hidden]" in hct, "")
 
     # 7. schema — check 26
     sys.path.insert(0, os.path.join(ROOT, "scripts"))

@@ -168,7 +168,7 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 
 - `journey_map.py health --note <note> --snapshots <dir>` reads the frontmatter of every snapshot of the note's product in the folder — `type: cjm-health-check`, `product`, `date`, `health_score` (`cjm-reports.md`) — and writes the `health` field alone: the note's points joined with one per snapshot in the folder, oldest first. A point whose snapshot the folder no longer has (another machine, a cleaned folder) stays — the note is the truth. Every other byte of the note stays as it was.
 - **Every file in the folder that is not a usable snapshot of the product** is named in the result with why — no frontmatter (saved before v4.7.0), another type, no product, no date, no `health_score` — and skipped; another product's snapshots are kept apart, unnamed. A score is never read from a snapshot's text.
-- **The trend** — the section «Здоров'я» in the note (the skill writes it from the field, with the date of the newest point) and a sparkline on the page (§9). With no scored snapshot the trend is empty and the section says why.
+- **The trend** — the section «Здоров'я» in the note (the skill writes it from the field, with the date of the newest point) and a sparkline on the page (§9). With no scored snapshot the trend is empty and the section says why; a snapshots folder that does not exist yet (no health-check has run) is an empty trend too — `check` and `health` go on, the result says `folder: missing`.
 - Escalation stays the health-check's (`cjm-reports.md`): a drop of more than 10 points is named there; the map shows the points.
 
 ## 9. The script, the page and its publication
@@ -182,7 +182,7 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 | `render-html --note P --out F [--lang uk\|en]` | the page below |
 | `health --note P --snapshots D` | the `health` field from the snapshots' frontmatter (§8) |
 | `refresh --note P --snapshot S [--out F] [--lang uk\|en]` | the scheduled refresh of §10 — the language of the note's headers when `--lang` is not given |
-| `tree --stage S --note P` | the stage's opportunity tree as Mermaid text, and `few_solutions` when its target has fewer than three solutions |
+| `tree --stage S --note P [--out F]` | the stage's opportunity tree as Mermaid text (also into `F`), and `few_solutions` when its target has fewer than three solutions |
 | `schema` | the fields, columns, lanes, levels, findings and commands this file must agree with (`validate-consistency.sh` check 28) |
 
 **The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note.

@@ -366,7 +366,7 @@ def parse(path, extra_dirs=None, home=None):
         facts["index"] = index_info(home)
     except Exception:  # noqa: BLE001
         facts["index"] = None
-    facts["cjm_section"] = any(re.search(r"stages|funnel|template", "\n".join(_content(sec[:6])), re.I)
+    facts["cjm_section"] = any(re.search(r"stage|funnel|template", "\n".join(_content(sec[:6])), re.I)
                                for sec in _sections(text, "CJM Configuration"))
     facts["terminology_section"] = bool(_sections(text, "Terminology & Style"))
     return facts

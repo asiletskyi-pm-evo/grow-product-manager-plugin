@@ -554,7 +554,7 @@ with tempfile.TemporaryDirectory() as d:
 
 # ------------------------------------------------------------------ search_types and check 19
 check("skill_types: the manifest's search_types", cs_.skill_types("cjm-research")
-      == ["cjm-analysis", "cjm-health-check", "funnel-anomaly", "ab-test-results", "hypothesis"], cs_.skill_types("cjm-research"))
+      == ["cjm-analysis", "cjm-health-check", "funnel-anomaly", "ab-test-results", "hypothesis", "cjm-journey"], cs_.skill_types("cjm-research"))
 check("…write-concept: the main types, not the build-first ones", cs_.skill_types("write-concept")
       == ["competitive-analysis", "market-research", "ux-benchmark", "hypothesis", "decision", "requirements"],
       cs_.skill_types("write-concept"))

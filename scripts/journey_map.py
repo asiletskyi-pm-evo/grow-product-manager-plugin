@@ -288,6 +288,8 @@ def findings(note, today, newest=None):
                 f("simulated_pain", row=rid, stage=sid, detail="simulated input is never a pain")
             elif cls not in LANE_CLASSES[lane]:
                 f("wrong_class", row=rid, stage=sid, detail="%s does not take %s (it takes %s)" % (lane, cls, ", ".join(LANE_CLASSES[lane])))
+        elif cls and lane in LANE_IDS:
+            f("wrong_class", row=rid, stage=sid, detail="%s takes no class (§2) — %s is for the evidence lanes" % (lane, cls))
         elif cls and cls not in CLASSES:
             f("wrong_class", row=rid, stage=sid, detail="%s is not an evidence class" % cls)
         lv = r["level"].strip().lower()
@@ -372,6 +374,8 @@ def _same_product(a, b):
 def snapshots(folder, product):
     """(points, skipped, newest date, other products' files) of the folder — raises Bad when it does not read. Every
     .md that is not a usable snapshot of the product is named with why, except another product's (kept apart)."""
+    if not os.path.exists(folder):                   # no health-check has run yet: an empty trend, never a stop
+        return [], [], None, [], True
     try:
         names = sorted(os.listdir(folder))
     except OSError as e:
@@ -399,19 +403,21 @@ def snapshots(folder, product):
             continue
         points.append({"date": s["date"], "score": s["score"], "snapshot": n})
     points.sort(key=lambda p: (p["date"], p["snapshot"]))
-    return points, skipped, newest, other
+    return points, skipped, newest, other, False
 
 
 def merge_points(kept, fresh):
     """The note's points joined with fresh ones: a fresh point replaces the note's point of the same snapshot; the
     note's other points stay (the note is the truth — a folder that lost a snapshot never erases the trend)."""
-    by = {}
+    by, loose = {}, []
     for p in kept:
-        if p.get("score") is not None and day(p.get("date")) and p.get("snapshot"):
+        if p.get("snapshot"):
             by[p["snapshot"]] = p
+        else:
+            loose.append(p)                          # a point the note keeps without its snapshot's name stays as it is
     for p in fresh:
         by[p["snapshot"]] = p
-    return sorted(by.values(), key=lambda p: (p["date"], p["snapshot"]))
+    return sorted(list(by.values()) + loose, key=lambda p: (str(p.get("date") or ""), str(p.get("snapshot") or "")))
 
 
 def render_health(points, eol):
@@ -430,6 +436,7 @@ def write_health(path, note, points):
 
 
 def trend(points):
+    points = [p for p in points if isinstance(p.get("score"), (int, float)) and day(p.get("date"))]
     if not points:
         return None
     return {"count": len(points), "first": points[0], "last": points[-1],
@@ -462,7 +469,7 @@ def wanted_rows(snap, lang, declared):
     """([(id, stage, lane, text)], skipped stages, skipped entries) — a metric per stage entry and an anomaly per
     warning/critical/positive one, for the stages the note declares; ids by the metric's slug (§10)."""
     L = REFRESH.get(lang, REFRESH["en"])
-    out, skipped_stages, skipped_entries = [], [], []
+    out, skipped_stages, skipped_entries, seen = [], [], [], set()
     for e in snap["stages"]:
         sid, metric = str(e.get("id") or "").strip(), str(e.get("metric") or "").strip()
         if not sid:
@@ -475,6 +482,11 @@ def wanted_rows(snap, lang, declared):
         if not metric or not slug(metric):
             skipped_entries.append({"stage": sid, "why": "an entry without its metric — its status is not on the map"})
             continue
+        mid = "m-%s-%s" % (sid, slug(metric))
+        if mid in seen:
+            skipped_entries.append({"stage": sid, "why": "the same metric slug as another entry (%s) — one row per id" % mid})
+            continue
+        seen.add(mid)
         v = {k: str(e.get(k) or "").strip() for k in ("value", "baseline", "deviation", "status")}
         v["metric"] = metric
         fmt = L["metric"] if v["baseline"] else L["metric_bare"]
@@ -636,7 +648,7 @@ def render_html(note, note_name, lang):
         out.append('<th class="stage">%s · %s<div class="o">%s</div></th>' % (
             shown(s["id"]), shown(s["name"]), shown(s["outcome"] or L["no_outcome"])))
     out.append("</tr></thead><tbody>")
-    has_evidence = {s["id"]: any(r["stage"] == s["id"] and evidence(r) for r in live) for s in stages}
+    has_evidence = {s["id"]: any(r["stage"] == s["id"] and evidence(r) and page_worthy(r, declared) for r in live) for s in stages}
     for li, (lane, _) in enumerate(LANES):
         out.append('<tr><th class="lane">%s</th>' % esc(L["lane"][lane]))
         for s in stages:
@@ -829,8 +841,9 @@ def cmd_check(args):
     today = _today(args)
     newest = None
     if args.snapshots:
-        _, _, newest, _ = snapshots(args.snapshots, note["product"])
-    result(ok=True, findings=findings(note, today, newest), newest_snapshot=newest, errors=note["errors"])
+        _, _, newest, _, missing = snapshots(args.snapshots, note["product"])
+    result(ok=True, findings=findings(note, today, newest), newest_snapshot=newest,
+           folder="missing" if args.snapshots and missing else "read" if args.snapshots else None, errors=note["errors"])
     return 0
 
 
@@ -859,7 +872,7 @@ def cmd_health(args):
     note = load(args.note)
     if not note["product"]:
         raise Bad("the note names no product")
-    fresh, skipped, _, other = snapshots(args.snapshots, note["product"])
+    fresh, skipped, _, other, missing = snapshots(args.snapshots, note["product"])
     points = merge_points(note["health"], fresh)
     names = {p["snapshot"] for p in fresh}
     kept = [p for p in points if p["snapshot"] not in names]
@@ -868,7 +881,8 @@ def cmd_health(args):
     except OSError as e:
         result(ok=False, error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    result(ok=True, points=points, kept=kept, skipped=skipped, other_products=other, trend=trend(points), errors=note["errors"])
+    result(ok=True, points=points, kept=kept, skipped=skipped, other_products=other, trend=trend(points),
+           folder="missing" if missing else "read", errors=note["errors"])
     return 0
 
 
@@ -885,6 +899,9 @@ def cmd_refresh(args):
     if hc_dates and max(hc_dates) > snap["date"]:
         raise Bad("the snapshot (%s) is older than the map's health-check rows (%s) — a refresh never rolls them back"
                   % (snap["date"], max(hc_dates)))
+    missing_cols = [c for c in ("source", "class", "date") if c not in note["cols"]]
+    if missing_cols:
+        raise Bad("the table has no %s column — a health-check row needs its source, class and date (§7)" % ", ".join(missing_cols))
     lang = args.lang or note["lang"]
     done = refresh_text(note, snap, lang)
     text = done["text"]
@@ -903,15 +920,16 @@ def cmd_refresh(args):
         result(ok=False, error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
     out = args.out or os.path.splitext(args.note)[0] + ".html"
+    summary = dict(snapshot=snap["name"], date=snap["date"], replaced=done["replaced"], added=done["added"],
+                   removed=done["removed"], kept=done["kept"], skipped_stages=done["skipped_stages"],
+                   skipped_entries=done["skipped_entries"], health=point, skipped=skipped, out=out, published=False,
+                   note_written=True, errors=note["errors"])
     try:
         _render_to(load(args.note), out, lang)
-    except OSError as e:
-        result(ok=False, error="the page cannot be written: %s" % (e.strerror or type(e).__name__))
+    except OSError as e:                             # the note is refreshed; only its page is not
+        result(ok=False, error="the note is refreshed, the page cannot be written: %s" % (e.strerror or type(e).__name__), **summary)
         return 1
-    result(ok=True, snapshot=snap["name"], date=snap["date"], replaced=done["replaced"], added=done["added"],
-           removed=done["removed"], kept=done["kept"], skipped_stages=done["skipped_stages"],
-           skipped_entries=done["skipped_entries"], health=point, skipped=skipped, out=out, published=False,
-           line=REFRESH.get(lang, REFRESH["en"])["line"], errors=note["errors"])
+    result(ok=True, line=REFRESH.get(lang, REFRESH["en"])["line"], **summary)
     return 0
 
 

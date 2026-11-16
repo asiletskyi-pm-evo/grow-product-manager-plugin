@@ -105,7 +105,7 @@ Follow `references/local-context-protocol.md` — Step 0g:
 
 If mode is `health-check` or `full`:
 - Check `~/.grow-pm/knowledge-library/health-checks/` for previous snapshots
-- Load the most recent one for delta comparison
+- Load the most recent one of the product (its frontmatter `product`; before v4.7.0 a `[date].md` file) for delta comparison
 - If no previous check exists → this will be the baseline
 
 **1e. Detect vault level (for all modes):**
@@ -256,11 +256,11 @@ Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypot
 ### Step J — Journey map (mode `journey`, since v0.16.0)
 
 Follow `references/journey-protocol.md` — this step only points into it. Entries: «побудуй карту шляху» (J1 → J2 → J4, J3 on request), «онови карту шляху» (J5 → J2 → J4), «дерево можливостей для етапу X» (J3). Steps 1 and 1.5 run as usual; Steps 2–12 do not, except 12.5, which saves the note. `<note>` is the journey's note (`CJM/journeys/<product>/journey-<slug>.md`; several → ask which journey); `--lang` is `uk` when `user.language` is `uk`, else `en`.
-- **J1 Build** — a draft beside the target note: the stages from 1b (ids `s<n>`), `owner` a role or a team, never a person; the newest snapshot's rows by `python3 scripts/journey_map.py refresh --note <draft> --snapshot <newest> --lang <lang>` (their ids are the health-check's); then the other inputs of §3 in order — every row with its source marker, every evidence-lane row with its 3.5.g class (Gate Check 6), the other lanes none; `simulated` never a pain; no person's name, e-mail or phone; a stage without evidence stays a gap `⚠️`.
+- **J1 Build** — a draft in the session's working folder, never in the vault (its page there too, `--out`), deleted with its page once 12.5 has saved the note: the stages from 1b (ids `s<n>`), `owner` a role or a team, never a person; the newest snapshot's rows by `python3 scripts/journey_map.py refresh --note <draft> --snapshot <newest> --lang <lang>` (their ids are the health-check's); then the other inputs of §3 in order — every row with its source marker, every evidence-lane row with its 3.5.g class (Gate Check 6), the other lanes none; `simulated` never a pain; no person's name, e-mail or phone; a stage without evidence stays a gap `⚠️`.
 - **J2 Check** — `python3 scripts/journey_map.py check --note <draft or note> --snapshots ~/.grow-pm/knowledge-library/health-checks/` and the semantic pass of §6. Then the preview — stages, lanes, gaps and every finding as a proposal, never a block — and 12.5 saves the note.
 - **J3 Tree** — the stage named by its name or id in `stages`; `python3 scripts/journey_map.py tree --stage <id> --note <note>` → Mermaid for `diagram-prototyper`; a target opportunity with fewer than three solutions → `brainstorm-features`; no target → its opportunities only, the PM picks one. No Opportunity Score.
 - **J4 Page and publication** — `python3 scripts/journey_map.py health --note <note> --snapshots <dir>`, then `render-html --note <note> --out <the note's name>.html --lang <lang>` beside it. `python3 scripts/publications.py find --key cjm-research/<product>/journey-<slug> --note <note>`, then one question by `references/artifact-publishing.md` §3–§4 (a place found first, as «нова версія N»; «лише файл» always; «ні» final for the run); after each place `publications.py record --key … --note <note> --kind dashboard …`.
-- **J5 Update** — read the note as it is; keep its stages, outcomes, owner and rows (the PM's edits and the refresh's rows included); add only evidence whose source no row cites yet, and save; then `journey_map.py refresh --note <note> --snapshot <newest> --lang <lang>` (§10) and read the note again; `reviewed` set only when the PM confirms the review. The preview of J2 shows what changed.
+- **J5 Update** — read the note as it is; keep its stages, outcomes, owner and rows (the PM's edits and the refresh's rows included); add only evidence whose source no row cites yet, as a draft like J1's; J2's preview shows what changed, then 12.5 saves; then `journey_map.py refresh --note <note> --snapshot <newest> --lang <lang>` (§10) and read the note again; `reviewed` set only when the PM confirms the review.
 - Without SHELL — the note only, plus one line that the page, the trend, the tree and the refresh need a shell (§9).
 
 ### Step 12 — Report assembly and publishing

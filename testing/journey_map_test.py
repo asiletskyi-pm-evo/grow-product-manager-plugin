@@ -280,7 +280,8 @@ try:
         run("health", "--note", mn, "--snapshots", snaps, script=m)
         check("4.11 M1 a health that rewrites another field is caught", strip_field(text(mn), "health") != strip_field(before, "health"), "")
     rc, out, res = run("health", "--note", note, "--snapshots", os.path.join(fx, "no-such"))
-    check("4.12 a snapshots folder that does not exist is refused (exit 2)", rc == 2, out)
+    check("4.12 a snapshots folder that does not exist yet is an empty trend, the note's points kept (review 3 I-2)",
+          rc == 0 and res.get("folder") == "missing" and len(res.get("points", [])) == 3, (rc, res.get("folder"), out[-200:]))
 
     # 5. refresh
     rn = os.path.join(fx, "journey-refresh.md")
@@ -424,14 +425,14 @@ try:
     # I-5 a person's contact never on the map or the page
     i5 = os.path.join(fx, "journey-i5.md")
     write(i5, text(note).replace('owner: "Команда оформлення Zorg"', 'owner: "ivan.petrenko@zorg.example"')
-          .replace("Головна сторінка, мобільний веб", "Головна сторінка, дзвінок +380 67 123 45 67"))
+          .replace("Головна сторінка, мобільний веб", "Головна сторінка, дзвінок +380 00 000 00 00"))
     rc, out, res = run("check", "--note", i5, "--today", TODAY)
     check("8.8 I-5 an e-mail as the owner and a phone in a row are `contact`", has(res, "contact") and has(res, "contact", row="t1")
           and any(f["finding"] == "contact" and "row" not in f for f in res.get("findings", [])), [f for f in res.get("findings", []) if f["finding"] == "contact"])
     pi5 = os.path.join(fx, "i5.html")
     run("render-html", "--note", i5, "--out", pi5)
     hi5 = text(pi5) if os.path.exists(pi5) else "@"
-    check("8.9 I-5 no e-mail and no phone on the page", "ivan.petrenko" not in hi5 and "123 45 67" not in hi5, "")
+    check("8.9 I-5 no e-mail and no phone on the page", "ivan.petrenko" not in hi5 and "000 00 00" not in hi5, "")
     # I-6 every file in the folder that is not a usable snapshot of the product is named
     i6 = os.path.join(fx, "snapshots-i6")
     shutil.copytree(snaps, i6)
@@ -495,6 +496,52 @@ try:
     # m-17 a wrong argument still ends with a JOURNEY_RESULT line
     rc, out, res = run("tree", "--note", note)
     check("8.19 m-17 a missing argument: exit 2 with a JOURNEY_RESULT line", rc == 2 and res.get("ok") is False, out[-300:])
+
+    # 9. review 3 (whole branch, frozen 12d5dfb)
+    rc, out, res = run("check", "--note", note, "--snapshots", os.path.join(fx, "no-such"), "--today", TODAY)
+    check("9.1 I-2 check with a snapshots folder that does not exist still gives the findings", rc == 0 and has(res, "empty_stage", stage="s5"), out[-200:])
+    nocls = os.path.join(fx, "journey-nocls.md")
+    tc = re.sub(r"^(\|[^\n]*\|) [^|]* \| [^|]* \|$", r"\1", before.split("## Карта")[1].split("## Здоров")[0], flags=re.M)
+    write(nocls, before.split("## Карта")[0] + "## Карта" + tc + "## Здоров" + before.split("## Здоров")[1])
+    t_nc = text(nocls)
+    rc, out, res = run("refresh", "--note", nocls, "--snapshot", new_snap)
+    check("9.2 M-2 a table without the class and date columns: refresh refused (exit 2), the note untouched", rc == 2 and text(nocls) == t_nc
+          and res.get("ok") is False, out[-300:])
+    dup = os.path.join(fx, "snapshot-dup.md")
+    write(dup, text(new_snap).replace("  - id: s3\n", "  - id: s2\n    metric: \"Search → Cart\"\n    value: \"28.0%\"\n    baseline: \"35.0%\"\n    deviation: \"-20.0%\"\n    status: warning\n  - id: s3\n", 1))
+    rd = os.path.join(fx, "journey-dup.md")
+    write(rd, before)
+    rc, out, res = run("refresh", "--note", rd, "--snapshot", dup)
+    ids = [l.split("|")[1].strip() for l in text(rd).split("\n") if l.startswith("| m-s2-search-cart ") or l.startswith("| a-s2-search-cart ")]
+    check("9.3 M-3 two entries with one metric slug give one row each id, the other named", sorted(ids) == ["a-s2-search-cart", "m-s2-search-cart"]
+          and any(e.get("stage") == "s2" and "slug" in e.get("why", "") for e in res.get("skipped_entries", [])), (ids, res.get("skipped_entries")))
+    hp = os.path.join(fx, "journey-hp.md")
+    write(hp, before.replace("health: []", 'health:\n  - date: "2026-08-03"\n    score: 66\n    snapshot: ""'))
+    run("health", "--note", hp, "--snapshots", snaps)
+    rc, out, res = run("parse", "--note", hp)
+    check("9.4 M-4 a note's point without its snapshot name is kept, never erased", any(p["date"] == "2026-08-03" for p in res.get("health", []))
+          and len(res.get("health", [])) == 4, res.get("health"))
+    noid = os.path.join(fx, "journey-noid.md")
+    write(noid, text(note).replace("| g1 | s5 | | pain | ⚠️ немає доказів | | | | | | | |",
+                                   "|  | s5 | | pain | Платіж відхилено без пояснення | | | | | feedback-triage 2026-10-30, тема «оплата», pain 3.0 | reported | 2026-10-30 |"))
+    pn = os.path.join(fx, "noid.html")
+    run("render-html", "--note", noid, "--out", pn, "--lang", "uk")
+    check("9.5 M-6 an evidence row without an id is not shown, and its stage keeps its gap marker", "немає доказів" in (text(pn) if os.path.exists(pn) else "")
+          and "Платіж відхилено" not in (text(pn) if os.path.exists(pn) else "x"), "")
+    fp = os.path.join(fx, "journey-fp.md")
+    write(fp, text(note).replace("Багато зусиль, щоб звузити видачу", "Багато зусиль; приріст +15 (2026-10-26), +3 2026-10-26..2026-11-01, GMV +1 234 567 890"))
+    rc, out, res = run("check", "--note", fp, "--today", TODAY)
+    check("9.6 M-7 a plus-number before a date, or a money figure, is no phone", not has(res, "contact"), [f for f in res.get("findings", []) if f["finding"] == "contact"])
+    oc = os.path.join(fx, "journey-oc.md")
+    write(oc, text(note).replace("| o1 | s2 | | opportunity | Не губити вибір покупця між кроками | | | | | зі слів PM | | |",
+                                 "| o1 | s2 | | opportunity | Не губити вибір покупця між кроками | | | | | зі слів PM | measured | |"))
+    rc, out, res = run("check", "--note", oc, "--today", TODAY)
+    check("9.7 M-8 a class on a lane that takes none is wrong_class", has(res, "wrong_class", row="o1"), res.get("findings"))
+    pw = os.path.join(fx, "journey-pw.md")
+    write(pw, before)
+    rc, out, res = run("refresh", "--note", pw, "--snapshot", new_snap, "--out", os.path.join(fx, "no-such-dir", "x.html"))
+    check("9.8 M-11 the note written but the page not: exit 1, and the result still lists what changed", rc == 1 and res.get("note_written") is True
+          and "m-s2-search-cart" in res.get("replaced", []), (rc, res))
 
     # 7. schema — check 28
     sys.path.insert(0, os.path.join(ROOT, "scripts"))

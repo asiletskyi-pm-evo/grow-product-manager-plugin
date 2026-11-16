@@ -19,8 +19,8 @@ LINK = re.compile(r"(?:https?|ftp)://\S+|\bwww\.\S+"                       # a l
 DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # a person's contact (since v4.7.0): an e-mail address, a phone number with a country code or a 0XX area code
 CONTACT = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
-                     r"|(?<![\w+])\+\d{1,3}(?:[ ()-]*\d){8,11}(?!\d)"
-                     r"|(?<![\w-])\(?0\d{2}\)?[ -]\d{3}[ -]?\d{2}[ -]?\d{2}(?![\d-])")
+                     r"|(?<![\w+])\+\d{1,3}[ -]?\(?\d{2,3}\)?[ -]?\d{3}[ -]?\d{2}[ -]?\d{2}(?![\d.-])"   # +380 67 123 45 67
+                     r"|(?<![\w-])\(?0\d{2}\)?[ -]\d{3}[ -]?\d{2}[ -]?\d{2}(?![\d-])")                      # 067 123 45 67
 
 
 class Bad(Exception):

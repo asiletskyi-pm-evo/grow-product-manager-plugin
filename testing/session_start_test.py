@@ -728,6 +728,8 @@ check("4700.11 Obsidian Vaults at level 3 (the configurator skeleton) with a pat
 check4700 = [
     ("4700.14 a `#` comment inside a fenced block does not end the section",
      cjm_variant("## CJM Configuration\n\n```yaml\n# Zorg funnel\ncjm:\n  funnel_template: e-commerce\n```\n"), "cjm: configured"),
+    ("4700.16 a stage table under «### Funnel Stages» with no template line is configured (review 3 M-1)",
+     cjm_variant("## CJM Configuration\n\n### Funnel Stages\n| Stage | Name |\n|---|---|\n| 1 | Visit |\n"), "cjm: configured"),
     ("4700.15 a sub-heading «Funnel Stages» with nothing under it is not configured",
      cjm_variant("#### CJM Configuration\n\n##### Funnel Stages\n_none yet_\n"), "cjm: not configured"),
 ]
