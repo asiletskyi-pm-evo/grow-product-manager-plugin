@@ -2,7 +2,7 @@
 
 > Shared reference (since v4.3.0). How a skill turns a finished result into a link the user opens, updates and shares: which places it can go to, in which order, the one question before it leaves, the record of where it went, and a **new version of the same place** on the next run instead of a copy. The other skills that publish keep their own question of `native-surfaces.md` §3 and do not record versions yet.
 >
-> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0).
+> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard, and the journey map's dashboard since v4.7.0), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0).
 >
 > **Rule of the file:** the same as `native-surfaces.md` — a host surface is named by its capability (ARTIFACT, DOCS), never by its brand (§6 there); Atlassian and Confluence are connectors and are named. Nothing leaves without the question of `native-surfaces.md` §3, a new version included, and a scheduled run never publishes (§4 there).
 
@@ -11,7 +11,7 @@
 | Kind | What it is | Who makes it here |
 |---|---|---|
 | `deck` | slides to present and page through | `design-bridge` |
-| `dashboard` | numbers and charts on one page, each with its source and date (§9) | `product-reporter`, `cjm-research`, `focus-advisor` (the board), `roadmap-architect` (the story map's progress) |
+| `dashboard` | numbers and charts on one page, each with its source and date (§9) | `product-reporter`, `cjm-research` (the funnel, and the journey map — `journey-protocol.md`), `focus-advisor` (the board), `roadmap-architect` (the story map's progress) |
 | `document` | text the reader reads and may edit | `product-reporter`, `cjm-research` |
 | `page` | a wiki page in a space | the skills that already write to Confluence |
 | `board` | a whiteboard the team edits together | `roadmap-architect` (the story map, `story-map-protocol.md`) |
@@ -75,7 +75,7 @@ python3 scripts/publications.py record --key <the result's key> [--note <the not
 |---|---|
 | `design-bridge` | `design-bridge/<product>/<deck slug>-<subtype>` — the deck's file name without its date |
 | `product-reporter` | `product-reporter/<product>/<mode>-<subject>-<period>` — the board, or the epic of `initiative-status`; `member-review` and `goal-report` keep no record (they name a person) |
-| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot |
+| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot; `cjm-research/<product>/journey-<slug>` for a journey map's dashboard — one per journey, apart from the funnel's, the slug the note's (`journey-protocol.md` §7) |
 | `focus-advisor` | none: the board keeps its record in its own state file, `~/.grow-pm/focus/board.yaml` (`--note`) |
 | `roadmap-architect` | `roadmap-architect/<product>/story-map-<slug>` — one key for the map's board and its progress dashboard, both in one question; the slug is the note's (`story-map-protocol.md` §4) |
 

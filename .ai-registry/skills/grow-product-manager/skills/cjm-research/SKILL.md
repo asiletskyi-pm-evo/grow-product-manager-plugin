@@ -1,7 +1,7 @@
 ---
 name: cjm-research
-version: 0.15.0
-description: CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами».
+version: 0.16.0
+description: CJM funnel research — anomalies → enrichment → hypothesis backlog — and the journey map (stages × evidence lanes). Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «карта шляху», «health-check воронки з гіпотезами».
 ---
 
 # CJM Research
@@ -24,6 +24,7 @@ Before starting, read and follow these shared references:
 - **`references/persistent-storage.md`** — persistent storage protocol (`~/.grow-pm/`)
 - **`references/vault-protocol.md`** — vault context search, artifact storage, and lifecycle management
 - **`references/vault-schema.md`** — vault artifact schema, metadata structure, and query syntax
+- **`references/journey-protocol.md`** — mode `journey` (since v0.16.0): the journey map's model, lanes, inputs, findings, note, health trend, page, publication and scheduled refresh
 
 Key context used by this skill:
 - `product.name`, `product.platforms`, `product.locales` — for scoping the analysis
@@ -39,7 +40,7 @@ Follow `references/template-protocol.md`.
 
 Declare:
 - `artifact_type: cjm`
-- `subtype: {inferred from mode — "funnel" | "comparison" | "health-check" | null}`
+- `subtype: {inferred from mode — "funnel" | "comparison" | "health-check" | null}` — Step T does not run for `journey`: no template and no fallback, the note's format is `references/journey-protocol.md` §7
 - `product_id: {from local-context.md active product}`
 - `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
@@ -49,7 +50,7 @@ For `health-check` mode (automated), use the top-ranked template silently regard
 
 If no template applies → fall back to `cjm-builtin-funnel`; if that's also missing, use the skill's internal report structure.
 
-**Judgment footer (since v3.5.0).** The artifact closes with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a); since v3.8.0 its evidence labels are confirmed by T-5 step 3c (Gate 4b), in the automated health-check too.
+**Judgment footer (since v3.5.0).** The artifact closes (a journey map: its note only, never its dashboard) with the altitude line from `templates/built-in/partial/judgment-footer-v1.md` (`references/template-protocol.md` T-5 step 3a; checked by `references/artifact-style-gate.md` Gate 4a); since v3.8.0 its evidence labels are confirmed by T-5 step 3c (Gate 4b), in the automated health-check too.
 
 ## Modes of Operation
 
@@ -60,6 +61,7 @@ If no template applies → fall back to `cjm-builtin-funnel`; if that's also mis
 | **full** | Comprehensive CJM analysis | 1–12 | 20–30 min | Full report + optional backlog |
 | **health-check** | Scheduled funnel health check | 1–4 (automated) | 2–5 min | Health summary with delta vs previous — saved as the library snapshot, **never published by the scheduled run** (`references/native-surfaces.md` §4) |
 | **comparison** | Cross-platform comparison | 1–4 per platform | 10–15 min | Side-by-side anomaly comparison |
+| **journey** | Journey map: stages × evidence lanes, health trend, opportunity tree (since v0.16.0) | 1, 1.5, J1–J5 | 5–15 min | The journey note + its page; the dashboard only after the question |
 
 ---
 
@@ -103,7 +105,7 @@ Follow `references/local-context-protocol.md` — Step 0g:
 
 If mode is `health-check` or `full`:
 - Check `~/.grow-pm/knowledge-library/health-checks/` for previous snapshots
-- Load the most recent one for delta comparison
+- Load the most recent one of the product (its frontmatter `product`; before v4.7.0 a `[date].md` file) for delta comparison
 - If no previous check exists → this will be the baseline
 
 **1e. Detect vault level (for all modes):**
@@ -123,7 +125,7 @@ Follow `references/vault-protocol.md` → "Vault Level Detection":
 
 > Requires: `references/search-protocol.md` (since v3.16.0 — the search, the rating, what is taken silently, the block of variants; it asks nothing in the middle of the run). This skill runs it here, after Step 1, rather than as Step 0.5.
 
-Follow `references/search-protocol.md` with `--skill cjm-research`. This skill's types — a weight, not a filter: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`; the request is the funnel, the stage or the anomaly the user names (in `health-check` mode: the product's funnel health).
+Follow `references/search-protocol.md` with `--skill cjm-research`. This skill's types — a weight, not a filter: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`, `cjm-journey`; the request is the funnel, the stage or the anomaly the user names (in `health-check` mode: the product's funnel health).
 
 What is taken is baseline context:
 - previous health scores → compared with the current ones;
@@ -135,7 +137,7 @@ Note in the report header: "This analysis is informed by {N} previous artifacts 
 
 ### Step 2 — Clarify scope with user
 
-Ask via AskUserQuestion (skip for automated `health-check` — use the saved parameters; its output is the library snapshot only, never 2e's destination — `references/native-surfaces.md` §4):
+Ask via AskUserQuestion (skip for automated `health-check` — use the saved parameters; its output is the library snapshot only, never 2e's destination — `references/native-surfaces.md` §4; skip for `journey` — Step J asks what it needs):
 
 **2a. Mode selection:**
 
@@ -148,6 +150,7 @@ Ask via AskUserQuestion (skip for automated `health-check` — use the saved par
 | **Full** | Deep analysis with verified hypotheses, impact model, and backlog (20–30 min) |
 | **Health-check** | Set up recurring automated funnel monitoring |
 | **Comparison** | Compare funnel performance across platforms (Web vs App, etc.) |
+| **Journey** | A living journey map — stages × evidence lanes, health trend, opportunity tree (Step J) |
 
 **2b. Target funnel stages:**
 
@@ -250,6 +253,16 @@ Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypot
 
 > **Debate hook.** If the user asks for a debate / role discussion / red-team, or top hypotheses are contested and touch ≥ 2 interest groups — after hypothesis building (Step 7) run `references/debate-protocol.md` for the top-3 hypotheses: evidence pack = anomalies + enrichment already gathered (post-Step 3.5 gate, each item with its 3.5.g class), roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. The verdict corrects ICE Confidence per the protocol's Step D4 (consensus +1…+2 only when the support cites an E#, never on `simulated` or `assumed` input alone; unresolved skeptic objection −1…−2), new risks feed the Step 11 risk assessment, and the «Debates» section embeds in the Step 12 report.
 
+### Step J — Journey map (mode `journey`, since v0.16.0)
+
+Follow `references/journey-protocol.md` — this step only points into it. Entries: «побудуй карту шляху» (J1 → J2 → J4, J3 on request), «онови карту шляху» (J5 → J2 → J4), «дерево можливостей для етапу X» (J3). Steps 1 and 1.5 run as usual; Steps 2–12 do not, except 12.5, which saves the note. `<note>` is the journey's note (`CJM/journeys/<product>/journey-<slug>.md`; several → ask which journey); `--lang` is `uk` when `user.language` is `uk`, else `en`.
+- **J1 Build** — a draft in the session's working folder, never in the vault (its page there too, `--out`), deleted with its page once 12.5 has saved the note: the stages from 1b (ids `s<n>`), `owner` a role or a team, never a person; the newest snapshot's rows by `python3 scripts/journey_map.py refresh --note <draft> --snapshot <newest> --lang <lang>` (their ids are the health-check's); then the other inputs of §3 in order — every row with its source marker, every evidence-lane row with its 3.5.g class (Gate Check 6), the other lanes none; `simulated` never a pain; no person's name, e-mail or phone; a stage without evidence stays a gap `⚠️`.
+- **J2 Check** — `python3 scripts/journey_map.py check --note <draft or note> --snapshots ~/.grow-pm/knowledge-library/health-checks/` and the semantic pass of §6. Then the preview — stages, lanes, gaps and every finding as a proposal, never a block — and 12.5 saves the note.
+- **J3 Tree** — the stage named by its name or id in `stages`; `python3 scripts/journey_map.py tree --stage <id> --note <note>` → Mermaid for `diagram-prototyper`; a target opportunity with fewer than three solutions → `brainstorm-features`; no target → its opportunities only, the PM picks one. No Opportunity Score.
+- **J4 Page and publication** — `python3 scripts/journey_map.py health --note <note> --snapshots <dir>`, then `render-html --note <note> --out <the note's name>.html --lang <lang>` beside it. `python3 scripts/publications.py find --key cjm-research/<product>/journey-<slug> --note <note>`, then one question by `references/artifact-publishing.md` §3–§4 (a place found first, as «нова версія N»; «лише файл» always; «ні» final for the run); after each place `publications.py record --key … --note <note> --kind dashboard …`.
+- **J5 Update** — read the note as it is; keep its stages, outcomes, owner and rows (the PM's edits and the refresh's rows included); add only evidence whose source no row cites yet, as a draft like J1's; J2's preview shows what changed, then 12.5 saves; then `journey_map.py refresh --note <note> --snapshot <newest> --lang <lang>` (§10) and read the note again; `reviewed` set only when the PM confirms the review.
+- Without SHELL — the note only, plus one line that the page, the trend, the tree and the refresh need a shell (§9).
+
 ### Step 12 — Report assembly and publishing
 
 **Internal logic (cjm-research).**
@@ -275,6 +288,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
    - `full` mode → type: `cjm-analysis`
    - `health-check` mode → type: `cjm-health-check`
    - `comparison` mode → type: `cjm-analysis`
+   - `journey` mode → type: `cjm-journey` — addressed by name, `CJM/journeys/{product}/journey-<slug>.md`, updated in place (`journey-protocol.md` §7)
 
 2. Build artifact:
    ```
@@ -282,12 +296,12 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.15.0",
+     skill_version: "0.16.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
      extra_frontmatter: {
-       health_score: calculated_score (if health-check mode),
+       health_score: calculated_score (if health-check mode; with date, period, stages — the snapshot's frontmatter, cjm-reports.md),
        anomalies_found: count,
        critical_anomalies: critical_count,
        comparison_baseline: analysis_setting,
@@ -328,6 +342,8 @@ After report assembly, offer the user next actions based on the mode:
 **From `comparison` mode:**
 - → **CJM Research (hypotheses mode)** — "Generate hypotheses for [specific platform]"
 
+**Mode `journey`** (`journey-protocol.md`) — pains come from ← `feedback-triage` (themes), ← `flow-walkthrough` (a pack's steps), ← `product-research`; it hands on → `brainstorm-features` (solutions for the target opportunity), → `experiment-tracker` (tests of a solution), → `diagram-prototyper` (the tree as Mermaid), → `roadmap-architect` (an initiative for a pain without action).
+
 When chaining:
 - Pass the full analysis context: report link (if published), anomalies, hypotheses, enrichment data, funnel configuration
 - The receiving skill incorporates CJM results without re-analyzing
@@ -353,20 +369,9 @@ When chaining:
 ## Additional Resources
 
 - **`references/cjm-pipeline.md`** (skill-local) — Steps 4–11: anomalies, enrichment, hypotheses, impact, verification, risk
-- **`references/cjm-reports.md`** (skill-local) — per-mode report formats, publishing, automated health-check protocol
+- **`references/cjm-reports.md`** (skill-local) — per-mode report formats, the snapshot's frontmatter, publishing, automated health-check protocol
 - **`references/examples/funnel-anomaly-report-example-v1.md`** (skill-local) — worked golden anomaly-report exemplar with period annotation, evidence classes + impact math (few-shot; load on demand in Step 8)
-
-- **`references/data-integrity-protocol.md`** — **MANDATORY (v0.4.0+)** — Gate Checks 1–6 for any cited metric (6 since v3.8.0)
-- **`references/cjm-protocol.md`** — anomaly severity, funnel impact formulas, health score, verification checklist, holiday windows, anomaly verification checklist, reference sources catalog
-- **`references/funnel-templates.md`** — standard funnel templates by product type
-- **`references/persistent-storage.md`** — `~/.grow-pm/` storage protocol
-- **`references/local-context-protocol.md`** — Step 0: reading and using local-context.md
-- **`references/integration-strategy.md`** — MCP → Registry → Browser fallback chain
-- **`references/data-policy.md`** — data confidentiality rules
-- **`references/self-improvement.md`** — self-improvement protocol
-- **`references/vault-protocol.md`** — vault context search, artifact storage, and lifecycle management
-- **`references/search-protocol.md`** — Step 1.5: the search, what is taken silently, the block of variants (since v3.16.0)
-- **`references/vault-schema.md`** — vault artifact schema, metadata structure, and query syntax
+- Shared references — the Prerequisites above, plus `references/search-protocol.md` (Step 1.5) and `references/self-improvement.md`
 
 **End of run — the inbox (since v3.21.0).** What this run learned about the user's context (a record of their store, never a person's profile or a note) goes to the inbox as deltas — urgent ones asked at once in one question, the rest one line `У скриньці +N`: `references/context-protocol.md` §5i.
 
@@ -375,3 +380,5 @@ When chaining:
 The `description` above is short on purpose: a host with many skills shows only part of the skill listing, or skill names alone (`references/host-profiles.md` §7). The full set of phrases and boundaries that route here, as the description carried them up to v3.10.0:
 
 > CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
+>
+> Since v0.16.0, the journey map (mode `journey`): UA — «побудуй карту шляху», «онови карту шляху», «карта шляху клієнта з доказами», «дерево можливостей для етапу …», «здоров'я шляху в часі». EN — "build a journey map", "update the journey map", "journey map with evidence", "opportunity solution tree for the checkout stage", "journey health over time". Not a funnel dashboard alone (product-analysis), not a story map (roadmap-architect), not a drawn CJM picture without evidence (diagram-prototyper).

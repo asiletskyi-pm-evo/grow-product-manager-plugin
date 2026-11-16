@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.6.0
+**Version:** 4.7.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.7.0** — **«Карта шляху»: a living journey map assembled from evidence, its health seen over time, and an opportunity tree growing on its stages** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `cjm-research` gets a `journey` mode (`references/journey-protocol.md`): the CJM config's funnel stages across, ten lanes down — actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments — and on every row its source and evidence class: metrics and anomalies from the newest health-check snapshot (`measured`), pains from `feedback-triage` (`reported`) and `flow-walkthrough` (`observed`), solutions from hypotheses, tests from `experiment-tracker`, initiatives as existing epic codes. Nothing is invented: a stage without evidence stays a gap, a persona's answer is never a pain. The map has an owner (a role or a team) and a review date; stale shows as findings — a pain with no action for two quarters, a review older than a quarter. The health trend comes from the snapshots' frontmatter only, which the health-check now writes. A stage's opportunity tree (Teresa Torres) is a view of its lanes: the stage's outcome metric, opportunities with pains as evidence, at least three solutions for the target, experiments as tests — Mermaid through `diagram-prototyper`, no Opportunity Score. The vault note is the source of truth; its dashboard is published only after the question, a new version instead of a copy, and the scheduled health-check refreshes the map's numbers locally, never publishing. `scripts/journey_map.py` does the parsing, the checks, the self-contained page, the trend, the refresh and the tree; validator check 28 keeps the protocol and the script one schema. Also: the session digest reads the CJM, Terminology and Obsidian Vaults sections at any heading level from 2 to 5, so a configured funnel no longer shows «cjm: not configured». The second release of the programme «Фреймворки»; the journey map's Miro board and the journey portfolio come in v4.8.0.
 
 **New in v4.6.0** — **«Мапа історій»: from a concept to release slices you see on a board, write into the feature structure with one «так» and follow to done** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `roadmap-architect` gets a `story-map` mode (`references/story-map-protocol.md`): a backbone of activities and steps, cards of value under it with a source each, release slices — walking skeleton / MVP, R1, R2 — each with a measurable outcome and no date. A quality pass keeps one value per card and edge cases on cards of their own, and proposes, never blocks. A slice goes into the feature structure in one message and one «так»: linked features by code, new ones as stubs with the next free number from Confluence, FE/BE later through `task-creator`, never a Jira issue per card. The vault note is the source of truth; the map is published as a board the team edits (the first consumer of kind `board`, measured on Miro) and a progress dashboard, each after the question, a new version of the same board by element ids instead of a copy — and what the team changed on the board comes back into the note only after a question, nothing the team added ever deleted. «Онови мапу» counts each slice's progress from `initiative-status`, with growth against a baseline; `project-planning` takes the slices as the arc's milestones. `scripts/story_map.py` does the parsing, checks, the self-contained HTML page, progress, baseline and the board's diff; validator check 26 keeps the protocol and the script one schema. The first release of the programme «Фреймворки». Also: a restricted plugin agent (`debater`, `extractor`, `artifact-checker`) never falls back to a `general-purpose` stand-in with the host's whole tool set — the in-session level hosts without subagents already use; validator check 27 keeps it so.
 
@@ -215,9 +217,9 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.15.0)
+### 1. CJM Research (v0.16.0)
 
-**Description:** Customer Journey Map (CJM) pipeline orchestrator with 5 specialized modes for analyzing customer experiences and identifying growth opportunities.
+**Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
 **Modes:**
 - **Anomalies** — Detect unexpected patterns in customer funnel behavior
@@ -225,12 +227,13 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - **Full** — Complete CJM analysis with all data points and insights
 - **Health-Check** — Assess overall funnel health and drop-off zones
 - **Comparison** — Compare customer journeys across platforms or segments
+- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`)
 
 **Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
 
 **Outputs:** Funnel impact models, hypothesis validation, risk assessments
 
-**Trigger phrases:** "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses"
+**Trigger phrases:** "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses", "build a journey map", «карта шляху»
 
 ---
 
@@ -316,7 +319,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 8. Diagram & Prototype Creator (v0.16.0)
+### 8. Diagram & Prototype Creator (v0.16.1)
 
 **Description:** Create diagrams, flowcharts, BPMN processes, mind maps, infographics, and UI prototypes to visualize product concepts.
 
@@ -549,7 +552,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 21. Experiment Tracker (v0.6.2) — NEW in v1.36.0
+### 21. Experiment Tracker (v0.6.3) — NEW in v1.36.0
 
 **Description:** Owns the experiment lifecycle the pipeline used to drop after the A/B spec: `proposed → specced → running → awaiting-readout → decided`, with a persistent registry (`~/.grow-pm/experiments/registry.yaml` + vault mirror) and stale-test reminders (overdue runs, pending readouts, idle high-ICE hypotheses).
 
@@ -659,14 +662,14 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.15.0 | Customer Journey Map analysis and hypothesis validation |
+| CJM Research | v0.16.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.2 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.3 | Create and analyze feature requirements |
 | Task Creator | v0.15.2 | Create Jira tasks from requirements |
-| Diagram & Prototype Creator | v0.16.0 | Visualize concepts with diagrams, prototypes, infographics |
+| Diagram & Prototype Creator | v0.16.1 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
 | Meeting Processor | v0.19.0 | Process meetings and extract action items |
@@ -681,7 +684,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Sprint Planning | v0.6.3 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
 | Release Manager | v0.5.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
 | Focus Advisor | v0.11.0 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
-| Experiment Tracker | v0.6.2 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
+| Experiment Tracker | v0.6.3 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.2 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
 | Feedback Triage | v0.7.2 | Feedback stream → clustered themes with frequency × severity × trend scoring, pain ranking, hypothesis seeds + SH task-formulation step |
 | Goal Setter | v0.2.2 | Set/audit goals — SMARTCBP (people) / OKR (product), cascade, Tell-and-Sell commitment |
@@ -1110,5 +1113,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.6.0  
+**Version:** 4.7.0  
 **Last Updated:** November 2026
