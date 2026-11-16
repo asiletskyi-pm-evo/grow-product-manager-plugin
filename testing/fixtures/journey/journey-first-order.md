@@ -44,7 +44,7 @@ tags: [zorg, cjm]
 | p3 | s3 | | pain | Покупці питають у підтримці про строки доставки | | | o2 | | product-research 2026-09-20, синтез інтерв'ю | reported | 2026-09-20 |
 | o2 | s3 | | opportunity | Покупець знає повну ціну й строк доставки ще в кошику | | так | | | зі слів PM | | |
 | h1 | s3 | | solution | Калькулятор доставки в кошику | | | o2 | | Hypotheses/hypothesis-delivery-calculator | | |
-| h2 | s3 | | solution | Безкоштовна доставка від порогу, показана в кошику | | | o2 | | cjm-research hypotheses 2026-10-31, H3 | | |
+| h2 | s3 | | solution | Безкоштовна доставка від порогу, показана в кошику | | | o2 | | cjm-research hypotheses 2026-10-31, H2 | | |
 | h3 | s3 | | solution | Строк доставки на картці товару | | | o2 | | Hypotheses/hypothesis-delivery-date-on-card | | |
 | x1 | s3 | | experiment | A/B калькулятора доставки | | | h1 | exp-delivery-calc-20261020 | experiment-tracker registry | | |
 | i1 | s3 | | initiative | Епік «Прозора доставка» | | | p2 | PROJ-1234 | roadmap-architect PROJ-1234 | | |

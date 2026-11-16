@@ -40,7 +40,7 @@ Follow `references/template-protocol.md`.
 
 Declare:
 - `artifact_type: cjm`
-- `subtype: {inferred from mode — "funnel" | "comparison" | "health-check" | "journey" | null}` — `journey` has no built-in template: the note's format is `references/journey-protocol.md` §7
+- `subtype: {inferred from mode — "funnel" | "comparison" | "health-check" | null}` — Step T does not run for `journey`: no template and no fallback, the note's format is `references/journey-protocol.md` §7
 - `product_id: {from local-context.md active product}`
 - `language: {from local-context.md → `user.language`; fallback `templates.default_language`}`
 
@@ -125,7 +125,7 @@ Follow `references/vault-protocol.md` → "Vault Level Detection":
 
 > Requires: `references/search-protocol.md` (since v3.16.0 — the search, the rating, what is taken silently, the block of variants; it asks nothing in the middle of the run). This skill runs it here, after Step 1, rather than as Step 0.5.
 
-Follow `references/search-protocol.md` with `--skill cjm-research`. This skill's types — a weight, not a filter: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`; the request is the funnel, the stage or the anomaly the user names (in `health-check` mode: the product's funnel health).
+Follow `references/search-protocol.md` with `--skill cjm-research`. This skill's types — a weight, not a filter: `cjm-analysis`, `cjm-health-check`, `funnel-anomaly`, `ab-test-results`, `hypothesis`, `cjm-journey`; the request is the funnel, the stage or the anomaly the user names (in `health-check` mode: the product's funnel health).
 
 What is taken is baseline context:
 - previous health scores → compared with the current ones;
@@ -137,7 +137,7 @@ Note in the report header: "This analysis is informed by {N} previous artifacts 
 
 ### Step 2 — Clarify scope with user
 
-Ask via AskUserQuestion (skip for automated `health-check` — use the saved parameters; its output is the library snapshot only, never 2e's destination — `references/native-surfaces.md` §4):
+Ask via AskUserQuestion (skip for automated `health-check` — use the saved parameters; its output is the library snapshot only, never 2e's destination — `references/native-surfaces.md` §4; skip for `journey` — Step J asks what it needs):
 
 **2a. Mode selection:**
 
@@ -255,12 +255,12 @@ Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypot
 
 ### Step J — Journey map (mode `journey`, since v0.16.0)
 
-Follow `references/journey-protocol.md` — this step only points into it. Entries: «побудуй карту шляху» (J1→J4), «онови карту шляху» (J5→J2→J4), «дерево можливостей для етапу X» (J3). Steps 1 and 1.5 run as usual (1b gives the stages); Steps 2–12 do not run.
-- **J1 Build** — the inputs of §3 in their order (the newest snapshot's rows through `journey_map.py refresh`, so their ids are the health-check's); every row with its source marker and 3.5.g class (Gate Check 6); `simulated` never a pain; no person's name, e-mail or phone; a stage without evidence stays a gap `⚠️`; `owner` a role or a team, never a person. The preview shows stages, lanes and gaps before the note is saved (12.5).
-- **J2 Check** — `python3 scripts/journey_map.py check --note <note> --snapshots ~/.grow-pm/knowledge-library/health-checks/` and the semantic pass of §6 — every finding a proposal in the preview, never a block.
-- **J3 Tree** — `journey_map.py tree --stage <id> --note <note>` → Mermaid for `diagram-prototyper`; a target opportunity with fewer than three solutions → `brainstorm-features`. No Opportunity Score.
-- **J4 Page and publication** — `journey_map.py health --note <note> --snapshots <dir>`, then `render-html --note <note> --out <next to the note> --lang <user.language>`. `python3 scripts/publications.py find --key cjm-research/<product>/journey-<slug> --note <note>`, then one question by `references/artifact-publishing.md` §3–§4 (a place found first, as «нова версія N»; «лише файл» always; «ні» final for the run); after each place `publications.py record --key … --note <note> --kind dashboard …`.
-- **J5 Refresh** — new evidence since `reviewed` through J1's inputs, the newest snapshot by `journey_map.py refresh` (§10), `reviewed` set only when the PM confirms the review.
+Follow `references/journey-protocol.md` — this step only points into it. Entries: «побудуй карту шляху» (J1 → J2 → J4, J3 on request), «онови карту шляху» (J5 → J2 → J4), «дерево можливостей для етапу X» (J3). Steps 1 and 1.5 run as usual; Steps 2–12 do not, except 12.5, which saves the note. `<note>` is the journey's note (`CJM/journeys/<product>/journey-<slug>.md`; several → ask which journey); `--lang` is `uk` when `user.language` is `uk`, else `en`.
+- **J1 Build** — a draft beside the target note: the stages from 1b (ids `s<n>`), `owner` a role or a team, never a person; the newest snapshot's rows by `python3 scripts/journey_map.py refresh --note <draft> --snapshot <newest> --lang <lang>` (their ids are the health-check's); then the other inputs of §3 in order — every row with its source marker, every evidence-lane row with its 3.5.g class (Gate Check 6), the other lanes none; `simulated` never a pain; no person's name, e-mail or phone; a stage without evidence stays a gap `⚠️`.
+- **J2 Check** — `python3 scripts/journey_map.py check --note <draft or note> --snapshots ~/.grow-pm/knowledge-library/health-checks/` and the semantic pass of §6. Then the preview — stages, lanes, gaps and every finding as a proposal, never a block — and 12.5 saves the note.
+- **J3 Tree** — the stage named by its name or id in `stages`; `python3 scripts/journey_map.py tree --stage <id> --note <note>` → Mermaid for `diagram-prototyper`; a target opportunity with fewer than three solutions → `brainstorm-features`; no target → its opportunities only, the PM picks one. No Opportunity Score.
+- **J4 Page and publication** — `python3 scripts/journey_map.py health --note <note> --snapshots <dir>`, then `render-html --note <note> --out <the note's name>.html --lang <lang>` beside it. `python3 scripts/publications.py find --key cjm-research/<product>/journey-<slug> --note <note>`, then one question by `references/artifact-publishing.md` §3–§4 (a place found first, as «нова версія N»; «лише файл» always; «ні» final for the run); after each place `publications.py record --key … --note <note> --kind dashboard …`.
+- **J5 Update** — read the note as it is; keep its stages, outcomes, owner and rows (the PM's edits and the refresh's rows included); add only evidence whose source no row cites yet, and save; then `journey_map.py refresh --note <note> --snapshot <newest> --lang <lang>` (§10) and read the note again; `reviewed` set only when the PM confirms the review. The preview of J2 shows what changed.
 - Without SHELL — the note only, plus one line that the page, the trend, the tree and the refresh need a shell (§9).
 
 ### Step 12 — Report assembly and publishing
@@ -301,7 +301,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
      extra_frontmatter: {
-       health_score: calculated_score (if health-check mode),
+       health_score: calculated_score (if health-check mode; with date, period, stages — the snapshot's frontmatter, cjm-reports.md),
        anomalies_found: count,
        critical_anomalies: critical_count,
        comparison_baseline: analysis_setting,

@@ -393,6 +393,10 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | Y8 | побудуй мапу історій для епіку доставки в поштомат | roadmap-architect — NOT cjm-research |
 | Y9 | намалюй картинку CJM для слайда презентації, без аналізу | diagram-prototyper — NOT cjm-research |
 | Y10 | згенеруй гіпотези для покращення конверсії кошика з ICE | brainstorm-features — NOT cjm-research |
+| Y11 | пройди шлях покупця від кошика до оплати в мобільному застосунку | flow-walkthrough — NOT cjm-research |
+| Y12 | розбери скарги покупців і згрупуй їх за етапами воронки | feedback-triage — NOT cjm-research |
+| Y13 | як інші компанії ведуть карти шляху клієнта — огляд практик | product-research — NOT cjm-research; accepted alternative: *deep-research* |
+| Y14 | покажи, де покупцям найболючіше на шляху від пошуку до оплати і що ми з цим уже робимо | cjm-research |
 
 ## Results log
 
@@ -428,6 +432,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-11-10 | **Claude Code, live** (`testing/trigger_claude.py`, staged working tree of `feature/frameworks-v4.6.0` after task 5, fictional context, model claude-opus-5-5), pre-release v4.6.0 — Groups X (new) and C (the roadmap trio, roadmap-architect's description changed) in both modes; the miss re-run 3× in both | real C 9/9 · X 9/9 · visible C 9/9 · X 8/9 → X8 2/3 by majority (real 3/3) | X8 «намалюй дошку з блок-схемою процесу повернення товару» → another plugin's Figma diagram skill once in `visible` and once in the re-run — never roadmap-architect, the boundary this group guards. X1–X5 → roadmap-architect (build, slice, refresh, tree), X6 → project-planning, X7 → task-creator, X9 → cjm-research. Codex not run (Miro on Codex not measured; acceptance runs the map there by hand). |
 | 2026-11-10 (2) | **Claude Code, live** (same harness and model), after review 2 — the new rows X10–X12 without the neighbours' own keywords, 3× each in both modes | real X10 0/3 → `none` 3/3 · X11 3/3 · X12 3/3; visible the same | X10 «зроби дошку в Miro для ретро команди» → `none` 3/3 in both modes: no skill of the plugin owns a retro board, so the expected column now accepts `none`; the row guards the boundary — never roadmap-architect — and it held. X11 «намалюй шлях покупця…» → diagram-prototyper, X12 «що з мапи історій беремо в план на Q1…» → quarterly-planning. |
 | 2026-11-16 | **Claude Code, live** (`testing/trigger_claude.py`, model claude-opus-5-5), pre-release v4.7.0 — Group Y in `real` and `visible` modes, then the 11 rows that name cjm-research or a funnel (A1, A2, A5, A8, G8, G10, M8, R14, W5, X9, X11) on the branch and on `main` | Y 10/10 real · 10/10 visible; regression 11/11 on the branch, 11/11 on `main` | None. cjm-research's description changed (the journey map, «карта шляху»); the neighbours held — Y7 → product-analysis, Y8 → roadmap-architect, Y9 → diagram-prototyper, Y10 → brainstorm-features. |
+| 2026-11-16 (2) | **Claude Code, live**, same harness and model, after review 2 — the new rows Y11–Y14 (the nearest neighbours: flow-walkthrough, feedback-triage, product-research, and a journey request without the keyword) and M1, N2 (the rows «карта шляху» could pull) | real: M1, N2, Y11, Y12, Y14 ✅; Y13 1/4 (3 to another installed plugin's research skill). visible: Y11, Y12, Y14 ✅; Y13 3/4 | Y13 never went to cjm-research — the boundary it tests holds; on the crowded `real` listing a generic «огляд практик» goes to another plugin's research skill, the same class as E2/R13 (2026-10-08). The row accepts that alternative. |
 
 ## Maintenance
 

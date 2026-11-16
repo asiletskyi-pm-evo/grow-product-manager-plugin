@@ -118,7 +118,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 
 | Skill | Relevant Types |
 |-------|---|
-| cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis |
+| cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis, cjm-journey |
 | write-concept | competitive-analysis, market-research, ux-benchmark, hypothesis, decision, requirements; while `judgment.build_first` is `on` also walkthrough, ab-test-results, prototype (note below) |
 | product-analysis | cjm-analysis, ab-test-results, metrics-review, post-release, hypothesis |
 | brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision, debate |

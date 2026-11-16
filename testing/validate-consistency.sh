@@ -618,15 +618,17 @@ fi
 # cjm-research's `journey` mode follows references/journey-protocol.md, and scripts/journey_map.py parses the note it
 # describes. A frontmatter field, a column, a lane, a metric level, a script finding or a command added to one of them
 # alone would have the skill write a note the script misreads, or a check the protocol never names. Also: the skill
-# cites the protocol, vault-schema has the cjm-journey type and the health-check snapshot fields the map reads (date,
-# period, health_score, stages), and artifact-publishing.md §5 has the journey dashboard's key.
+# cites the protocol and has its Step J, vault-schema has the cjm-journey type and the health-check snapshot fields the
+# map reads (date, period, health_score, stages), vault-protocol saves the note by name, the scheduled health-check runs
+# the refresh, artifact-publishing.md §5 has the journey dashboard's key, and the protocol's lane classes, parents and
+# thresholds (§2, §5, §6) are the script's (since review 2).
 JOURNEY_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import journey_map; print('\n'.join(journey_map.check_protocol('.')))" 2>&1)
 if [ -n "$JOURNEY_ERRS" ]; then
   while IFS= read -r line; do err "journey map: $line"; done <<EOF
 $JOURNEY_ERRS
 EOF
 else
-  ok "journey map: journey-protocol.md, journey_map.py, vault-schema (cjm-journey, snapshot fields), artifact-publishing §5 and cjm-research agree"
+  ok "journey map: journey-protocol.md, journey_map.py, vault-schema and vault-protocol (cjm-journey, snapshot fields), artifact-publishing §5, cjm-reports and cjm-research agree"
 fi
 
 # --- 10. Component counts in README ------------------------------------------

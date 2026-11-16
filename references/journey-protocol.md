@@ -17,10 +17,10 @@ Ten fixed lanes, in this order on every render. A row stands in one lane on one 
 
 | Lane | Ukrainian name | Evidence class |
 |---|---|---|
-| `action` | `дії` | any real: `measured`, `observed`, `reported`, `external` |
-| `touchpoint` | `точки контакту` | any real |
-| `experience` | `досвід` | any real — the effort or the emotion at the stage |
-| `pain` | `болі` | `reported`, `observed`, `measured` or `external`; `simulated` never |
+| `action` | `дії` | `measured`, `observed`, `reported`, `external` (any real) |
+| `touchpoint` | `точки контакту` | `measured`, `observed`, `reported`, `external` (any real) |
+| `experience` | `досвід` | `measured`, `observed`, `reported`, `external` (any real; the effort or the emotion at the stage) |
+| `pain` | `болі` | `measured`, `observed`, `reported`, `external` (never `simulated`) |
 | `metric` | `метрики` | `measured` |
 | `anomaly` | `аномалії` | `measured` |
 | `opportunity` | `можливості` | — (the pains under it carry the evidence, §5) |
@@ -193,7 +193,7 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 
 ## 10. The scheduled health-check
 
-When the product has a journey note, the automated health-check (`cjm-reports.md` → Automated Health-Check Protocol), after it saves its snapshot, runs `journey_map.py refresh --note <note> --snapshot <the new snapshot> --lang <user.language>`:
+When the product has a journey note in the vault, the automated health-check (`cjm-reports.md` → Automated Health-Check Protocol), after it saves its snapshot, runs `journey_map.py refresh --note <note> --snapshot <the new snapshot> --lang <uk when user.language is uk, else en>` (a note outside the vault, or a run without SHELL, waits for the next interactive run's J5):
 
 - **Ids.** A metric row is `m-<stage>-<metric slug>`, an anomaly row `a-<stage>-<metric slug>` — the slug is the metric's name in lower case, every run of characters that are not letters or digits one hyphen (`search -> cart` → `search-cart`). A stage entry with `warning`, `critical` or `positive` gives an anomaly row; a stage the note does not declare and an entry without its metric are named in the result, never a row.
 - **Replaced** — a `metric` or `anomaly` row with the id whose source starts with `health-check`: its text, source, class and date; every other cell the PM wrote (step, level, target, parent, code, a column of their own) stays. **Added** — a new id gets a row after its stage's last row, a metric at level `transition` (a funnel stage's metric is the conversion to the next stage). **Removed** — a health-check anomaly row `a-<stage>-…` of a stage the snapshot covers that the snapshot no longer has (it resolved).

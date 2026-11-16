@@ -506,7 +506,7 @@ try:
     if jm is not None:
         r2 = os.path.join(d, "root")
         for rel in ("references/journey-protocol.md", "references/vault-schema.md", "references/artifact-publishing.md",
-                    "skills/cjm-research/SKILL.md"):
+                    "skills/cjm-research/SKILL.md", "references/vault-protocol.md", "skills/cjm-research/references/cjm-reports.md"):
             os.makedirs(os.path.dirname(os.path.join(r2, rel)), exist_ok=True)
             shutil.copy(os.path.join(ROOT, rel), os.path.join(r2, rel))
         sk = os.path.join(r2, "skills", "cjm-research", "SKILL.md")
@@ -542,6 +542,13 @@ try:
         drift("references/vault-schema.md", "period: string (the analysed period", "span: string (the analysed period", "period", "7.10 a snapshot field vault-schema drops is named")
         drift("references/artifact-publishing.md", "`cjm-research/<product>/journey-<slug>`", "`cjm-research/<product>/map-<slug>`", "journey-", "7.11 artifact-publishing without the journey key is named")
         drift("skills/cjm-research/SKILL.md", "journey-protocol.md", "journey.md", "cite", "7.12 a skill that stops citing the protocol is named", count=-1)
+        # review 2: the lanes' classes, the parents, the thresholds, the vault-protocol rule, the scheduled hook, Step J
+        drift("references/journey-protocol.md", "| `metric` | `метрики` | `measured` |", "| `metric` | `метрики` | `measured`, `reported` |", "metric", "7.14 a lane's classes that drift from LANE_CLASSES are named")
+        drift("references/journey-protocol.md", "| `experiment` | a `solution` (required) |", "| `experiment` | an `opportunity` (required) |", "experiment", "7.15 a parent rule that drifts from PARENTS is named")
+        drift("references/journey-protocol.md", "older than 90 days", "older than 60 days", "90", "7.16 a threshold the protocol changes alone is named")
+        drift("references/vault-protocol.md", 'IF artifact.type == "cjm-journey":', 'IF artifact.type == "cjm-map":', "vault-protocol", "7.17 vault-protocol without the journey's save-by-name rule is named")
+        drift("skills/cjm-research/references/cjm-reports.md", "journey_map.py refresh", "journey_map.py update", "refresh", "7.18 the scheduled health-check without its refresh step is named", count=-1)
+        drift("skills/cjm-research/SKILL.md", "### Step J — Journey map", "### Step K — Journey map", "Step J", "7.19 the skill without its Step J is named")
         os.remove(os.path.join(r2, "references", "journey-protocol.md"))
         check("7.13 a missing protocol is an error, not silence", jm.check_protocol(r2) != [], jm.check_protocol(r2))
 finally:

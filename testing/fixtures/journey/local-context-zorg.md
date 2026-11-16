@@ -10,7 +10,7 @@
 
 ## Organization: Zorg
 
-### Product: Zorg Market
+### Product: Zorg
 
 - category: Shopping
 

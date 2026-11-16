@@ -713,7 +713,7 @@ def check_protocol(root):
     and the skill's citation agree."""
     errs, texts = [], {}
     for rel in ("references/journey-protocol.md", "references/vault-schema.md", "references/artifact-publishing.md",
-                "skills/cjm-research/SKILL.md"):
+                "skills/cjm-research/SKILL.md", "references/vault-protocol.md", "skills/cjm-research/references/cjm-reports.md"):
         try:
             with open(os.path.join(root, rel), encoding="utf-8") as fh:
                 texts[rel] = fh.read()
@@ -725,6 +725,14 @@ def check_protocol(root):
     skill = texts.get("skills/cjm-research/SKILL.md", "")
     if skill and "journey-protocol.md" not in skill:
         errs.append("skills/cjm-research/SKILL.md does not cite references/journey-protocol.md")
+    if skill and not re.search(r"^### Step J\b", skill, re.M):
+        errs.append("skills/cjm-research/SKILL.md has no «### Step J» — the journey mode's steps")
+    vp = texts.get("references/vault-protocol.md", "")
+    if vp and not ('IF artifact.type == "cjm-journey":' in vp and "CJM/journeys/{key_slug}/journey-{topic_slug}.md" in vp):
+        errs.append("vault-protocol.md: no save-by-name rule for cjm-journey (CJM/journeys/{key_slug}/journey-{topic_slug}.md)")
+    rep = texts.get("skills/cjm-research/references/cjm-reports.md", "")
+    if rep and "journey_map.py refresh" not in rep:
+        errs.append("cjm-reports.md: the automated health-check does not run journey_map.py refresh (journey-protocol.md §10)")
     s7 = nt.section(proto, "7. The note")
     fields = [nt.tick(r[0]) for r in nt.table_after(s7, r"\| Field \| What \|")]
     if fields != list(FIELDS):
@@ -739,6 +747,24 @@ def check_protocol(root):
     if lanes != list(LANES):
         errs.append("journey-protocol.md §2: the lanes %s ≠ journey_map.py LANES %s" % (
             "|".join("%s/%s" % l for l in lanes), "|".join("%s/%s" % l for l in LANES)))
+    classes = {nt.tick(r[0]): set(re.findall(r"`([a-z]+)`", r[2].split("(")[0])) for r in nt.table_after(s2, r"\| Lane \| Ukrainian name \|")
+               if len(r) > 2 and nt.tick(r[0])}
+    want = {l: set(LANE_CLASSES.get(l, ())) for l in LANE_IDS}
+    for l in LANE_IDS:
+        if classes.get(l, set()) != want[l]:
+            errs.append("journey-protocol.md §2: lane %s takes %s ≠ journey_map.py LANE_CLASSES %s" % (
+                l, "|".join(sorted(classes.get(l, set()))) or "—", "|".join(sorted(want[l])) or "—"))
+    s5 = nt.section(proto, "5. The opportunity tree")
+    parents, needs = {}, set()
+    for r in nt.table_after(s5, r"\| Lane \| Its parent \|"):
+        lane = nt.tick(r[0])
+        if lane and len(r) > 1:
+            parents[lane] = tuple(sorted(re.findall(r"`([a-z]+)`", r[1])))
+            if "required" in r[1]:
+                needs.add(lane)
+    if parents != {k: tuple(sorted(v)) for k, v in PARENTS.items()} or needs != set(NEEDS_PARENT):
+        errs.append("journey-protocol.md §5: the parents %s (required: %s) ≠ journey_map.py PARENTS %s (required: %s)" % (
+            parents, "|".join(sorted(needs)), {k: tuple(sorted(v)) for k, v in PARENTS.items()}, "|".join(NEEDS_PARENT)))
     s4 = nt.section(proto, "4. Metrics by level")
     levels = [nt.tick(r[0]) or "?" for r in nt.table_after(s4, r"\| Level \| Where \|")]
     if levels != list(LEVELS):
@@ -753,6 +779,13 @@ def check_protocol(root):
     if model != sorted(MODEL_FINDINGS):
         errs.append("journey-protocol.md §6: the model's findings %s ≠ journey_map.py MODEL_FINDINGS %s" % (
             "|".join(model), "|".join(sorted(MODEL_FINDINGS))))
+    rule = {nt.tick(r[0]): r[2] if len(r) > 2 else "" for r in rows6}
+    words = {3: "three"}
+    for code, phrase, const in (("stale_review", "older than %d days" % REVIEW_DAYS, "REVIEW_DAYS"),
+                                ("pain_no_action", "older than %d days" % PAIN_DAYS, "PAIN_DAYS"),
+                                ("few_solutions", "fewer than %s solutions" % words.get(MIN_SOLUTIONS, MIN_SOLUTIONS), "MIN_SOLUTIONS")):
+        if phrase not in rule.get(code, ""):
+            errs.append("journey-protocol.md §6: %s does not say «%s» (journey_map.py %s)" % (code, phrase, const))
     s9 = nt.section(proto, "9. The script")
     cmds = sorted({nt.cmd_name(r[0]) for r in nt.table_after(s9, r"\| Command \| What \|")})
     if cmds != sorted(COMMANDS):

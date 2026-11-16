@@ -9,4 +9,4 @@
 
 ## Persona interview (simulated input)
 
-> Персона «Оксана, 34»: «Я б хотіла оплату частинами вже на кроці оплати.» — a persona's answer: `simulated`, never a pain; it may inspire a solution only.
+> Персона «молода мама, перше замовлення»: «Я б хотіла оплату частинами вже на кроці оплати.» — a persona's answer: `simulated`, never a pain; it may inspire a solution only.

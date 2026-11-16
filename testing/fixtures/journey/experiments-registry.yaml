@@ -1,7 +1,9 @@
-# Zorg experiment registry (fictional, experiment-tracker shape)
+# Zorg experiment registry (fictional; the experiment-tracker registry's shape, its main fields)
+schema_version: 1.0.0
 experiments:
   - id: exp-delivery-calc-20261020
-    name: "A/B калькулятора доставки"
-    hypothesis: H1
+    title: "A/B калькулятора доставки"
+    product: zorg
     status: running
-    started: 2026-10-20
+    hypothesis_ref: "Hypotheses/hypothesis-delivery-calculator"
+    start_date: 2026-10-20
