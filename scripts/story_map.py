@@ -24,6 +24,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 import ctx_never as cn  # noqa: E402
+import note_table as nt  # noqa: E402  — reading the note, table cells, page-safe text, protocol tables (shared, v4.7.0)
 import publications as pub  # noqa: E402
 
 FIELDS = ("product", "epic", "slices", "baseline", "published")
@@ -39,13 +40,11 @@ COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-stat
 SUBITEM = re.compile(r"<br\s*/?>|•|[:;]\s*[-*]\s+\S", re.I)
 WORK = r"(?:FE|BE|QA|iOS|Android|Design|DevOps)"
 WORK_TYPE = re.compile(r"^\s*(?:\[%s\]|\(%s\)|%s\s*:)" % (WORK, WORK, WORK))
-LINK = re.compile(r"(?:https?|ftp)://\S+|\bwww\.\S+"                       # a link with a scheme, or www.
-                  r"|[\w.+-]+:[^\s@/]+@[\w-]+(?:\.[\w-]+)+\S*"               # user:password@host…
-                  r"|\b(?:[a-z0-9-]+\.)+[a-z]{2,}/\S*", re.I)                # host.domain/path, no scheme
+LINK = nt.LINK
 FEATURE_CODE = re.compile(r"^([A-Z][A-Z0-9]*-\d+)((?:\.\d+)+)$")
 EPIC_KEY = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 SLICE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
-DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DAY = nt.DAY
 MOVE_EPS = 5.0
 SCOPE_MARGIN = 200
 
@@ -54,30 +53,11 @@ def result(**kw):
     print("MAP_RESULT " + json.dumps(kw, ensure_ascii=False))
 
 
-class Bad(Exception):
-    """A note, a status file or a board that does not read — exit 2."""
+Bad = nt.Bad   # a note, a status file or a board that does not read — exit 2
 
 
 # ------------------------------------------------------------------ the note
-def _fm_scalar(fm, name):
-    m = re.search(r"^%s[ \t]*:[ \t]*(.*?)[ \t]*$" % re.escape(name), fm, re.M)
-    if not m:
-        return ""
-    try:
-        v = cc._scalar(cc._strip_comment(m.group(1)), 0)
-    except (ValueError, json.JSONDecodeError):
-        return ""
-    return str(v).strip() if isinstance(v, (str, int)) else ""
-
-
-def _cells(line):
-    """The cells of one markdown table row; `\\|` is a pipe inside a cell."""
-    s = line.strip()
-    if s.startswith("|"):
-        s = s[1:]
-    if s.endswith("|") and not s.endswith("\\|"):
-        s = s[:-1]
-    return [c.replace("\\|", "|").strip() for c in re.split(r"(?<!\\)\|", s)]
+_fm_scalar, _cells, _tables = nt.fm_scalar, nt.cells, nt.tables
 
 
 def _canon(header):
@@ -88,42 +68,14 @@ def _canon(header):
     return None
 
 
-def _tables(body):
-    """[(first line number, [lines])] — every run of lines that starts with `|`."""
-    out, cur, start = [], [], 0
-    for i, line in enumerate(body.split("\n")):
-        if line.strip().startswith("|"):
-            if not cur:
-                start = i
-            cur.append(line.rstrip("\r"))
-        elif cur:
-            out.append((start, cur))
-            cur = []
-    if cur:
-        out.append((start, cur))
-    return out
-
-
 def load(path):
     """The note as a dict — raises Bad."""
-    try:
-        with open(path, encoding="utf-8", newline="") as f:
-            text = f.read()
-    except OSError as e:
-        raise Bad("the note does not read: %s" % (e.strerror or type(e).__name__))
-    except UnicodeDecodeError:
-        raise Bad("the note is not UTF-8 text")
-    span = pub._frontmatter(text)
-    if not span:
-        raise Bad("the note has no frontmatter")
-    start, end, _ = span
-    fm = text[start:end].replace("\r\n", "\n")
+    text, fm, body = nt.read_note(path)
     try:
         slices = cc.read_yaml_records(fm, "slices")
         baseline = cc.read_yaml_records(fm, "baseline")
     except ValueError as e:
         raise Bad("the frontmatter does not read: %s" % e)
-    body = text[end:].replace("\r\n", "\n")
     title = ""
     m = re.search(r"^# (.+)$", body, re.M)
     if m:
@@ -139,7 +91,7 @@ def load(path):
     rows, errors = [], []
     for n, line in enumerate(table[1:], 2):
         cells = _cells(line)
-        if all(re.fullmatch(r":?-+:?", c) for c in cells if c):
+        if nt.is_separator(cells):
             continue
         if len(cells) != len(cols):                  # as GFM: a short row gets empty cells, the excess is dropped
             errors.append("row %d (%s): %d cells, the header has %d — %s" % (
@@ -374,19 +326,7 @@ table.prog{border-collapse:collapse;margin-top:16px;background:#fff}table.prog t
 .legend span{display:inline-block;margin-right:12px;padding-left:6px;border-left:4px solid}"""
 
 
-def esc(s):
-    return html.escape(str(s), quote=True)
-
-
-def safe(s):
-    """A string fit for the page: links removed, a string holding a secret or an identifier hidden whole (ctx_never)."""
-    s = LINK.sub("[link removed]", str(s or ""))
-    kinds = cn.scan(s)
-    return "[hidden: %s]" % ", ".join(kinds) if kinds else s
-
-
-def shown(s):
-    return esc(safe(s))
+esc, safe, shown = nt.esc, nt.safe, nt.shown
 
 
 def render_html(p, st, prog, backlog, note_name, lang):
@@ -710,30 +650,7 @@ def board_diff(last, now, p):
 
 
 # ------------------------------------------------------------------ check 26
-def _section(text, head):
-    m = re.search(r"^## %s.*?(?=^## |\Z)" % re.escape(head), text, re.M | re.S)
-    return m.group(0) if m else ""
-
-
-def _table_after(sec, header_re):
-    m = re.search(header_re + r".*?(?=\n\n|\Z)", sec, re.S)
-    if not m:
-        return []
-    rows = []
-    for line in m.group(0).split("\n")[2:]:
-        if line.strip().startswith("|"):
-            rows.append(_cells(line))
-    return rows
-
-
-def _tick(cell):
-    m = re.match(r"\s*`([^`]+)`", cell or "")
-    return m.group(1) if m else None
-
-
-def _cmd(cell):
-    m = re.match(r"\s*`([a-z-]+)", cell or "")
-    return m.group(1) if m else "?"
+_section, _table_after, _tick, _cmd = nt.section, nt.table_after, nt.tick, nt.cmd_name
 
 
 def check_protocol(root):

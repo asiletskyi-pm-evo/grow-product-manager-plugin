@@ -109,7 +109,7 @@ Checked when the map is built (Step J2) and on every refresh. The structural che
 | `opportunity_no_story` | model | an opportunity with no pain of a real class under it — a guess, not a customer's story | a pain with evidence under it, or it becomes a hypothesis |
 | `two_pains` | model | one pain row holds two different pains | split it into two rows |
 
-«A pain's chain»: the pain itself, the opportunity it hangs under, that opportunity's solutions and their experiments, and anything whose `parent` is one of those. The pain is acted on when an `initiative` or an `experiment` is in it.
+«A pain's chain»: the pain itself, the opportunity it hangs under, and every row that hangs under either of them at any depth — the opportunity's solutions and their experiments, the initiatives, the opportunity's other pains. The pain is acted on when an `initiative` or an `experiment` is in it.
 
 ## 7. The note
 
