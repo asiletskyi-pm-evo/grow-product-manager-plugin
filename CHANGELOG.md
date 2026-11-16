@@ -12,6 +12,73 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.7.0 (2026-11-16)
+
+**«Карта шляху»: a living journey map assembled from evidence, its health seen over time, and an opportunity tree growing on its stages.** The plugin found funnel anomalies, triaged feedback, walked flows and tracked experiments, but nothing put them on one map with an owner and a date. Now `cjm-research` builds and keeps a journey map: the CJM config's stages across, ten lanes down, every row with its source and its evidence class — and a stage without evidence stays a visible gap. The second release of the programme «Фреймворки» (B-4, first half); the map's Miro board and the journey portfolio come in v4.8.0.
+
+### Added
+
+- **`cjm-research` mode `journey`** (Step J1–J5) — «побудуй карту шляху», «онови карту шляху», «дерево можливостей для етапу X». J1 builds a draft outside the vault: the stages from the CJM config (`s<n>`), the newest health-check snapshot's metrics and anomalies seeded by `journey_map.py refresh`, then pains from `feedback-triage` (`reported`) and `flow-walkthrough` (`observed`), solutions from hypotheses, tests from `experiment-tracker`, initiatives as existing epic or feature codes; J2 checks it and shows the preview; 12.5 saves the note by name. A persona's answer is never a pain; no person's name, e-mail or phone on the map; `owner` is a role or a team.
+- **`references/journey-protocol.md`** — the model, ten lanes with the evidence classes each takes, the inputs in order, metrics by level (stage / transition / journey), the opportunity tree by `parent` links (Teresa Torres: the stage's outcome, opportunities with pains as their evidence, at least three solutions for the target, experiments as tests), 22 structural findings by the script and three semantic ones by the model — every finding a proposal, never a block — the note, health over time, the page and its publication, the scheduled refresh, and what never happens.
+- **The note is the source of truth** — `type: cjm-journey`, `CJM/journeys/{product}/journey-<slug>.md`, updated in place: one markdown table (`id`, `stage`, `step`, `lane`, `text`, `level`, `target`, `parent`, `code`, `source`, `class`, `date`; Ukrainian headers and lane names read as well) under the frontmatter `product`, `journey`, `owner`, `reviewed`, `stages`, `health`, `published`. Stale shows as findings: a review older than 90 days, a pain older than 182 days with no initiative or experiment in its chain, a health-check metric older than the newest snapshot.
+- **Health over time** — `journey_map.py health` writes the `health` field alone from the snapshots' frontmatter `health_score`; a score is never read from a snapshot's text, a file that is not a usable snapshot is named, and the note's points are joined, never erased. The trend is a section of the note and a sparkline on the page.
+- **The page and its publication** — `render-html` gives one self-contained page (stages × lanes, sources and classes, the trend; no request, no link, every text escaped, secrets and contacts hidden; a row that is not evidence is left out and counted). Published as kind `dashboard` through `artifact-publishing.md` under `cjm-research/<product>/journey-<slug>`, one question, «нова версія N» of the same place, «лише файл» always.
+- **The scheduled health-check refreshes the map locally** — `journey_map.py refresh` replaces only the health-check rows by id (`m-<stage>-<metric slug>`, `a-<stage>-<metric slug>`), keeps every cell the PM wrote, adds a new metric or anomaly after its stage's last row, removes a resolved anomaly, refuses an older snapshot, appends the health point and renders the page again. It never publishes and asks nothing; its one end line names the map.
+- **`scripts/journey_map.py`** (stdlib, every command ends with a `JOURNEY_RESULT {json}` line): `parse`, `check`, `render-html`, `health`, `refresh`, `tree` (Mermaid for `diagram-prototyper`), `schema`. **`scripts/note_table.py`** — the note reader, table cells, page-safe text and the protocol-table readers, shared with `story_map.py`.
+- **Validator check 28** — `journey-protocol.md` and `journey_map.py` are one schema: the fields, columns, lanes and their classes, the parents, the levels, the findings and their thresholds, the commands; `vault-schema.md` has `cjm-journey` and the snapshot fields the map reads, `vault-protocol.md` saves the note by name, the scheduled health-check runs the refresh, `artifact-publishing.md` §5 has the key, and `cjm-research` cites the protocol and has its Step J.
+- **Tests** — `testing/journey_map_test.py` (148 checks in 9 sections, every one red first; the mutations of a `health` that rewrites another field, a `refresh` that touches another row and a render without escaping are caught), Zorg fixtures in `testing/fixtures/journey/`, trigger-evals Group Y (14 rows), test-cases v4.7.0, the journey rubric in output-evals.
+
+### Changed
+
+- **The health-check snapshot carries its machine fields in frontmatter** — `type`, `product`, `date`, `period`, `health_score`, `stages` (id, metric, value, baseline, deviation, status); the body is unchanged and older snapshots read as they were. New snapshots are named `[product]-[date].md`, so two products checked on one day keep two files.
+- **The session digest** reads `CJM Configuration`, `Terminology & Style` and `Obsidian Vaults` at heading level 2 to 5, outside fenced code — a configured funnel no longer shows «cjm: not configured», a configured team language no longer «not configured».
+- **`references/artifact-publishing.md`** — `cjm-research`'s journey dashboard among the consumers (§1) and its key (§5).
+- **`references/vault-schema.md`, `references/vault-protocol.md`, `references/context-manifest.yaml`** — the `cjm-journey` type, its folder and fields, saved by name and read before it is written (other writers' `published`, `health`, `created`, `related` kept), among `cjm-research`'s search types; `cjm-health-check` gains `date`, `period`, `stages`.
+- **`cjm-research` 0.16.0** — the description adds the journey map and «карта шляху»; Modes, Step 2a, Step J, Step 12.5, chaining, `## Routing`; Step T does not run for a journey (the protocol's format).
+- **`experiment-tracker` 0.6.3**, **`diagram-prototyper` 0.16.1** — one chaining line each (tests from the journey map; the opportunity tree's Mermaid rendered as given).
+- **`note_table.safe()`** also hides a person's e-mail or phone — on the story map's page and board stickies too (`story-map-protocol.md`).
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/journey-protocol.md` | new — the journey map protocol (§1–§11) |
+| `scripts/journey_map.py` | new — `parse`, `check`, `render-html`, `health`, `refresh`, `tree`, `schema`; `check_protocol()` for check 28 |
+| `scripts/note_table.py` | new — shared by `story_map.py` and `journey_map.py` |
+| `scripts/story_map.py` | imports the shared parts; behaviour unchanged except contacts hidden |
+| `scripts/session_start.py` | `_sections()`: a config section at heading level 2–5, fence-aware |
+| `skills/cjm-research/SKILL.md` | 0.16.0 — mode `journey`, Step J, description, Routing |
+| `skills/cjm-research/references/cjm-reports.md` | the snapshot's frontmatter and file name; the scheduled refresh step |
+| `skills/experiment-tracker/SKILL.md`, `skills/diagram-prototyper/SKILL.md` | 0.6.3, 0.16.1 — one chaining line each |
+| `references/artifact-publishing.md` | the journey dashboard: consumer, §1, §5 key |
+| `references/vault-schema.md`, `references/vault-protocol.md`, `references/context-manifest.yaml` | `cjm-journey`; snapshot fields; save by name; search types |
+| `references/story-map-protocol.md` | contacts hidden on the page and the board |
+| `testing/validate-consistency.sh` | check 28 |
+| `testing/journey_map_test.py`, `testing/fixtures/journey/` | 148 checks; Zorg fixtures |
+| `testing/session_start_test.py`, `testing/story_map_test.py`, `testing/ctx_search_test.py` | the detector cases 4700.x; contacts on the story map page; cjm-journey among the search types |
+| `testing/trigger-evals.md`, `testing/test-cases.md`, `testing/output-evals.md`, `testing/host-matrix.md` | Group Y; v4.7.0 cases; the journey rubric; the journey row |
+| `AGENTS.md`, `README.md` | «Where things live»; «New in v4.7.0», skill entries |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.7.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.7.0 |
+
+### Backwards compatibility
+
+Nothing changes for a user who never asks for a journey map: `cjm-research`'s other modes, its funnel dashboard and every existing publication work as before. A health-check snapshot saved before v4.7.0 is read as it was; it just gives no point to a journey's trend. The story map's page and board stickies now hide a person's e-mail or phone.
+
+### Known limits
+
+- No Miro board of the journey map and no journey portfolio in this release — they come in v4.8.0.
+- The health trend comes only from snapshots with `health_score` in their frontmatter (the plugin's health-check writes it since v4.7.0); older snapshots and ones written outside the plugin are named and skipped. A snapshots folder that does not exist yet is an empty trend.
+- No Opportunity Score — there is no survey data behind it.
+- An initiative on the map links the code of an existing epic or feature; the map writes nothing to Jira.
+- One journey level (stages and optional steps); no nested journeys.
+- The dashboard is a dated snapshot on every surface: `render-html` has no live parts.
+- Stages come from the CJM config; a mismatch with a stage list kept elsewhere is the PM's to settle in the note or in the config.
+- The scheduled health-check refreshes journey notes in the vault only; a note kept outside the vault is refreshed by the next interactive run (J5), and the end line says so.
+- A snapshot's stages are joined to the map by their ids (`s<n>`, the config's stage number); a stage the PM declared under another id gets no health-check rows.
+
+---
+
 ## v4.6.0 (2026-11-10)
 
 **«Мапа історій»: from a concept to release slices you see on a board, write into the feature structure with one «так» and follow to done.** The plugin built the epic → feature → task tree and the roadmap's arc, but there was no step between a concept and that tree where a PM sees the whole journey, cuts it into releases by value and agrees the cut with the team. `roadmap-architect` gets a `story-map` mode after Jeff Patton: a backbone of activities and steps, cards of value under each step with a source each, release slices — walking skeleton / MVP, R1, R2 — each with a measurable outcome and no date. A slice goes into the feature structure in one message and one «так»; the map is published as a board the team edits and as a progress dashboard, each after the question; what the team changes on the board comes back into the note only through a question, and nothing the team added is ever deleted. The first release of the programme «Фреймворки».

@@ -1,6 +1,6 @@
 ---
 name: diagram-prototyper
-version: 0.16.0
+version: 0.16.1
 description: Quick diagrams, flowcharts, BPMN, wireframes, infographics, and screenshot annotation with numbered markers. Not brand decks or hi-fi on a Design System (design-bridge). UA — «намалюй діаграму/блок-схему», «вайрфрейм», «анотуй скріншот», «зроби прототип». EN — "annotate this screenshot".
 ---
 
@@ -325,7 +325,7 @@ After publishing (or if the user decided not to save), offer the next step based
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.16.0", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
+1. `vault_save({ type: "diagram", product: active_product, skill: "diagram-prototyper", skill_version: "0.16.1", tags: [diagram/prototype/infographic, topic keywords], content: source (Mermaid/HTML/XML) or brief + link to exported file and publish location, related: [source concept/requirements/hypothesis if chained] })`
 2. Display: "Saved to Vault: Diagrams/{product}/…"
 
 ## Mode: Annotate (standalone screenshot annotation)
@@ -343,7 +343,7 @@ Since `design-bridge` (v1.10.0) became the routing host for brand-themed decks, 
 | Source skill | When to offer | Suggested visualization |
 |-------------|--------------|----------------------|
 | **meeting-processor** | Complex process discussed (M9) | Flowchart/BPMN of the discussed process |
-| **cjm-research** | After the report is ready | Funnel diagram, journey map, deck of the findings |
+| **cjm-research** | After the report is ready; in mode `journey`, a stage's opportunity tree (since 0.16.1) | Funnel diagram, journey map, deck of the findings; the opportunity tree from the Mermaid text of `scripts/journey_map.py tree` — rendered as it is, never redrawn from memory (`references/journey-protocol.md` §5) |
 | **quarterly-planning** | After the roadmap is approved | Roadmap/timeline visualization |
 | **project-planning** | After the arc is built | Dependency graph, critical-path diagram |
 | **design-bridge** | Lo-fi/DS-free visual needed inside a design flow | Mermaid flow, plain wireframe. With `return_to: design-bridge` (since v3.9.0, only for design-bridge's build-first hand-off): nothing passed is asked (the platform included, so Step 1c does not ask it), Steps 8–10 do not run (design-bridge publishes and saves), and the result returns with the Prototype IR it passed filled in — screens, shown and missing states, transitions, node ids; without the parameter, unchanged |

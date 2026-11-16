@@ -280,6 +280,41 @@ def _store_summary(path, budget_s=2.0, dates_s=0.5):
         return None
 
 
+
+SECTION_LEVELS = (2, 5)   # a config section's heading level: `##` in the example, `###` in the configurator's skeleton,
+                          # `####` under a product — the digest reads it at any of them (since v4.7.0)
+
+
+def _sections(text, title):
+    """The body lines of every section titled `title` (a heading of SECTION_LEVELS outside fenced code), each up to the
+    next heading of its own level or higher — a sub-heading stays inside it, a `#` line inside a fence is no heading.
+    [] when there is none."""
+    lo, hi = SECTION_LEVELS
+    head = re.compile(r"^(#{%d,%d})[ \t]+%s(?![\w])" % (lo, hi, re.escape(title)))
+    lines, out, fence = text.split("\n"), [], False
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*(```|~~~)", line):
+            fence = not fence
+            continue
+        m = None if fence else head.match(line)
+        if not m:
+            continue
+        level, body, inner = len(m.group(1)), [], False
+        for nxt in lines[i + 1:]:
+            if re.match(r"^\s*(```|~~~)", nxt):
+                inner = not inner
+            h = None if inner else re.match(r"^(#{1,6})[ \t]", nxt)
+            if h and len(h.group(1)) <= level:
+                break
+            body.append(nxt)
+        out.append(body)
+    return out
+
+
+def _content(body):
+    """The lines of a section's body that are not headings — a sub-heading alone names no stages."""
+    return [l for l in body if not re.match(r"^#{1,6}[ \t]", l)]
+
 def parse(path, extra_dirs=None, home=None):
     """Header-level facts only. `home` (since v3.16.0) is where the search index is looked for (`~` by default)."""
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -316,7 +351,7 @@ def parse(path, extra_dirs=None, home=None):
         if m:
             deferred = [s.strip() for s in m.group(1).split(",") if s.strip()]
     facts["deferred_steps"] = [s for s in deferred if not re.fullmatch(r"_?none_?|n/a|—|-", s, re.I)]
-    vault = re.search(r"^## Obsidian Vaults", text, re.M) and re.search(r"^\s*-\s*path:\s*\S+", text, re.M)
+    vault = _sections(text, "Obsidian Vaults") and re.search(r"^\s*-\s*path:\s*\S+", text, re.M)
     facts["vault_section"] = bool(vault) or bool(cc and cc.vault_entries(text))  # table format too (v3.10.0)
     facts["unreadable_registrations"] = []
     facts["context_store"] = _store_summary(path)   # first: the providers line takes the days of the last checks from it
@@ -331,8 +366,9 @@ def parse(path, extra_dirs=None, home=None):
         facts["index"] = index_info(home)
     except Exception:  # noqa: BLE001
         facts["index"] = None
-    facts["cjm_section"] = bool(re.search(r"^## CJM Configuration\s*\n(?:.*\n){1,6}?.*(?:stages|funnel|template)", text, re.M | re.I))
-    facts["terminology_section"] = bool(re.search(r"^### Terminology & Style", text, re.M))
+    facts["cjm_section"] = any(re.search(r"stage|funnel|template", "\n".join(_content(sec[:6])), re.I)
+                               for sec in _sections(text, "CJM Configuration"))
+    facts["terminology_section"] = bool(_sections(text, "Terminology & Style"))
     return facts
 
 

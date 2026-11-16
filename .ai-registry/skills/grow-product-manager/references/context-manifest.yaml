@@ -40,6 +40,7 @@ skills:
       - funnel-anomaly
       - ab-test-results
       - hypothesis
+      - cjm-journey
     product:
       sections:
         - Analytics Dashboards

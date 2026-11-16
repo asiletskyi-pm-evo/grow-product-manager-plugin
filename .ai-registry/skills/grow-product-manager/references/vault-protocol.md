@@ -118,7 +118,7 @@ Defines which artifact types are relevant to each skill. `local-context-protocol
 
 | Skill | Relevant Types |
 |-------|---|
-| cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis |
+| cjm-research | cjm-analysis, cjm-health-check, funnel-anomaly, ab-test-results, hypothesis, cjm-journey |
 | write-concept | competitive-analysis, market-research, ux-benchmark, hypothesis, decision, requirements; while `judgment.build_first` is `on` also walkthrough, ab-test-results, prototype (note below) |
 | product-analysis | cjm-analysis, ab-test-results, metrics-review, post-release, hypothesis |
 | brainstorm-features | cjm-analysis, competitive-analysis, ab-test-results, ux-benchmark, decision, debate |
@@ -237,6 +237,12 @@ vault_save(artifact, product, options):
      (a story map is addressed by name and updated in place — story-map-protocol.md §4; since v4.6.0. When the note
       exists, the save rewrites its body and the `slices` field only: `published`, `baseline`, `created` and
       `related` — fields other writers own — stay byte for byte.)
+     IF artifact.type == "cjm-journey":
+       file_path = {target_vault.path}/CJM/journeys/{key_slug}/journey-{topic_slug}.md
+     (a journey map is addressed by name and updated in place — journey-protocol.md §7; since v4.7.0. When the note
+      exists, the save reads it as it is now — the PM's edits and the rows a scheduled refresh wrote included — and
+      writes back its table, its sections and the fields the skill owns (`journey`, `owner`, `reviewed`, `stages`)
+      only: `published`, `health`, `created` and `related` — fields other writers own — stay byte for byte.)
 
 4. Create directory structure:
    mkdir -p {file_path_parent_dir}
@@ -319,6 +325,7 @@ vault_save(artifact, product, options):
 
 **Duplicate Prevention**: If file already exists:
 - A story map (`subtype: story-map`) is updated in place, never suffixed (`story-map-protocol.md` §4).
+- A journey map (`type: cjm-journey`) is updated in place, never suffixed (`journey-protocol.md` §7).
 - Otherwise append incrementing suffix: `-2`, `-3`, etc.
 - Example: `competitive-checkout-flow-2026-04-14-2.md`
 

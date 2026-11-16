@@ -58,9 +58,10 @@ def write(p, data):
         f.write(data if isinstance(data, bytes) else data.encode("utf-8"))
 
 
-def mutant(d, name, old, new):
-    """A copy of the script (with its sibling modules) where `old` became `new`; None when `old` is not there."""
-    src = open(SCRIPT, encoding="utf-8").read()
+def mutant(d, name, old, new, target="story_map.py"):
+    """A copy of the script (with its sibling modules) where `old` became `new` in `target` — the script itself, or a
+    module it imports (note_table.py holds the escaping since v4.7.0); None when `old` is not there."""
+    src = open(os.path.join(os.path.dirname(SCRIPT), target), encoding="utf-8").read()
     if old not in src:
         return None
     mdir = os.path.join(d, "mut-" + name)
@@ -68,7 +69,7 @@ def mutant(d, name, old, new):
     for f in os.listdir(os.path.dirname(SCRIPT)):
         if f.endswith(".py"):
             shutil.copy(os.path.join(os.path.dirname(SCRIPT), f), mdir)
-    with open(os.path.join(mdir, "story_map.py"), "w", encoding="utf-8") as f:
+    with open(os.path.join(mdir, target), "w", encoding="utf-8") as f:
         f.write(src.replace(old, new, 1))
     return os.path.join(mdir, "story_map.py")
 
@@ -191,7 +192,7 @@ try:
           re.findall(r".{0,30}alert.{0,30}", h2))
     check("3.10 English labels on --lang en", "Story map" in h2 and "Backlog" in h2, "")
     check("3.11 without a status file the page says so", "no status" in h2.lower(), "")
-    m = mutant(d, "escape", "def esc(s):\n    return html.escape(", "def esc(s):\n    return str(s) or html.escape(")
+    m = mutant(d, "escape", "def esc(s):\n    return html.escape(", "def esc(s):\n    return str(s) or html.escape(", target="note_table.py")
     if m is None:
         check("3.12 M2 the escaping mutation applies", False, "pattern not in the script")
     else:
@@ -527,6 +528,13 @@ try:
     rc, out, res = run("board-diff", "--last", state, "--now", r1, last, "--note", note)
     check("10.11 m-6 of two reads, the first read of an element wins", any(c.get("now") == "Перше читання" for c in res.get("changed", [])),
           res.get("changed"))
+    # v4.7.0: the shared safe() also hides a person's e-mail or phone (note_table.CONTACT)
+    ct = os.path.join(d, "map-contact.md")
+    write(ct, open(note, encoding="utf-8").read().replace("Оплата частинами", "Оплата частинами, пишіть ivan@zorg.example"))
+    page_ct = os.path.join(d, "contact.html")
+    run("render-html", "--note", ct, "--out", page_ct)
+    hct = open(page_ct, encoding="utf-8").read() if os.path.exists(page_ct) else "ivan@"
+    check("10.12 v4.7.0 a person's e-mail never reaches the map's page", "ivan@zorg.example" not in hct and "[contact hidden]" in hct, "")
 
     # 7. schema — check 26
     sys.path.insert(0, os.path.join(ROOT, "scripts"))

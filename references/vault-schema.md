@@ -179,6 +179,24 @@ anomalies_found: int (number of anomalies detected)
 critical_anomalies: int (number of critical-severity anomalies)
 comparison_baseline: string (wikilink to baseline CJM for comparison)
 previous_health_check: string (wikilink to previous health check)
+date: date (the day of the check, YYYY-MM-DD — since v4.7.0)
+period: string (the analysed period, e.g. "2026-10-26..2026-11-01" — since v4.7.0)
+stages: list (one entry per stage: id (s<n>), metric, value, baseline, deviation, status — since v4.7.0)
+```
+
+The machine fields a journey map reads — `health_score`, `date`, `stages` — are written in the frontmatter by the health-check since v4.7.0 (`skills/cjm-research/references/cjm-reports.md` → Save health-check snapshot); a snapshot saved before then is read as it was, and a score is never taken from its text (`journey-protocol.md` §8).
+
+#### cjm-journey
+
+A journey map — the source of truth of `cjm-research` mode `journey` (since v4.7.0), addressed by name and updated in place. Its own fields and its row table are `journey-protocol.md` §7:
+
+```yaml
+journey: string (the journey's name)
+owner: string (a role or a team — never a person's name)
+reviewed: date (the last review, YYYY-MM-DD)
+stages: list (id, name, outcome)
+health: list (date, score, snapshot — written only by journey_map.py)
+published: list (the publication record's mirror — written only by publications.py)
 ```
 
 #### meeting-notes
@@ -351,6 +369,7 @@ People artifacts key by person because that is the access pattern the contour is
 | ux-benchmark | product-research | Research/ | UX benchmark study or comparison |
 | cjm-analysis | cjm-research | CJM/full-reports/ | Full Customer Journey Map analysis |
 | cjm-health-check | cjm-research | CJM/health-checks/ | Regular funnel health assessment |
+| cjm-journey | cjm-research | CJM/journeys/ | A journey map: stages × lanes with evidence, health over time, the opportunity tree (by name, updated in place — `journey-protocol.md` §7) |
 | funnel-anomaly | cjm-research | CJM/anomalies/ | Detected funnel anomaly and investigation |
 | concept | write-concept | Concepts/ | Product concept or PRD |
 | requirements | requirements-creator | Requirements/ | Feature requirements document |
@@ -411,6 +430,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
   "moc": "_MOC/",
   "cjm-analysis": "CJM/full-reports/",
   "cjm-health-check": "CJM/health-checks/",
+  "cjm-journey": "CJM/journeys/",
   "funnel-anomaly": "CJM/anomalies/",
   "concept": "Concepts/",
   "requirements": "Requirements/",
@@ -444,7 +464,7 @@ When `design-bridge` delegates hi-fi work to an external design toolkit (Step 0.
 }
 ```
 
-> The `people` profile itself is addressed by name rather than by date (the only other one is the story map, `Roadmaps/{product}/story-map-<slug>.md`): `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
+> The `people` profile itself is addressed by name rather than by date (the only others are the story map, `Roadmaps/{product}/story-map-<slug>.md`, and the journey map, `CJM/journeys/{product}/journey-<slug>.md`): `People/<slug>.md` (plus the roster index `People/_roster.md`), because Step P looks it up per person. Every other People type follows `{folder}/{person_slug}/{filename}` — see "Path composition" above for why the People key is the person, not the product.
 
 ---
 
@@ -585,6 +605,9 @@ Complete folder structure for `{Vault}/{PluginFolder}/`:
 │   ├── anomalies/
 │   │   └── {product}/
 │   │       └── funnel-anomaly-*.md
+│   ├── journeys/
+│   │   └── {product}/
+│   │       └── journey-<slug>.md      # a journey map, by name, updated in place (v4.7.0)
 │   └── full-reports/
 │       └── {product}/
 │           └── cjm-analysis-*.md
@@ -729,7 +752,7 @@ All artifact files follow a consistent naming pattern to support automated organ
 - **topic-slug**: Lowercase, hyphens for spaces, max 50 characters (e.g., checkout-flow, mobile-retention)
 - **YYYY-MM-DD**: Creation date (e.g., 2026-04-14)
 - **Duplicate handling**: If filename exists, append -2, -3, etc. (e.g., `hypothesis-checkout-flow-2026-04-14-2.md`)
-- **Addressed by name (since v4.6.0)**: a story map — `roadmap` with `subtype: story-map` — is `Roadmaps/{product}/story-map-<slug>.md`, with no date, and is updated in place: the note is the map's source of truth and its publication key carries the slug (`story-map-protocol.md` §4). A later run on the same map writes into the same note, never a dated copy.
+- **Addressed by name (since v4.6.0)**: a story map — `roadmap` with `subtype: story-map` — is `Roadmaps/{product}/story-map-<slug>.md`, with no date, and is updated in place: the note is the map's source of truth and its publication key carries the slug (`story-map-protocol.md` §4). A later run on the same map writes into the same note, never a dated copy. So is a journey map since v4.7.0 — `cjm-journey`, `CJM/journeys/{product}/journey-<slug>.md` (`journey-protocol.md` §7).
 
 ### Naming Examples by Type
 

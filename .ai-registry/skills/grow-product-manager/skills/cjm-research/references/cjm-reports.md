@@ -33,10 +33,28 @@
 - Stage weights: Entry (15%), Middle stages (25% each), Conversion (35%)
 - Penalties: Critical (-30), Warning (-15), Info (-3), Positive (+5)
 
-**Save health-check snapshot:**
-- Save to `~/.grow-pm/knowledge-library/health-checks/[date].md`
+**Save health-check snapshot** — the same file in an interactive and in the automated run:
+- Save to `~/.grow-pm/knowledge-library/health-checks/[product]-[date].md` (since v4.7.0 — two products checked on one day keep two files; a snapshot named `[date].md` before then is read as it was)
 - Include: health score, all anomalies, stage data
 - This enables delta comparison in future health-checks
+- **Its frontmatter (since v4.7.0)** — the machine fields a journey map reads (`references/journey-protocol.md` §8, §10); the body (the summary above) is unchanged, and a snapshot saved before v4.7.0 is read as it was:
+
+```yaml
+---
+type: cjm-health-check
+product: zorg                        # the product id from local-context.md
+date: 2026-11-02                     # the day of the check, YYYY-MM-DD
+period: "2026-10-26..2026-11-01"     # the analysed period
+health_score: 72                     # 0-100, the Funnel Health Score above
+stages:                              # one entry per stage analysed
+  - id: s2                           # s<n>: the stage's number in the CJM config's stage table
+    metric: "search -> cart"
+    value: "31.0%"
+    baseline: "35.0%"
+    deviation: "-11.4%"
+    status: warning                  # normal | info | warning | critical | positive (cjm-protocol.md)
+---
+```
 
 ### Report Format — Hypotheses (mode: `hypotheses`)
 
@@ -178,8 +196,9 @@ When `health-check` mode is configured for automation:
    - Run Steps 1, 3, 4 with default settings from CJM config
    - Load previous health-check for delta comparison
    - Assemble Health-Check Summary (labels only — no question, no hand-back line)
-   - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[date].md`
-   - End with one line for the next interactive run: «Новий health-check від <дата> — опублікувати можна в наступному прогоні.» (no publication from the scheduled run)
+   - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[product]-[date].md`, its frontmatter as in **Save health-check snapshot** above (`health_score` and `stages` are what a journey map reads)
+   - **Refresh the product's journey maps (since v0.16.0)** — for each journey note of the product in the vault (`CJM/journeys/<product>/journey-*.md`): `python3 scripts/journey_map.py refresh --note <note> --snapshot <the snapshot just saved> --lang <uk when user.language is uk, else en>` — only the health-check rows by id, the `health` point, the page next to the note (`references/journey-protocol.md` §10). No publication, no question; a note that does not parse, or a refresh it refuses, is named in the end line and left as it is. A journey note outside the vault, or a run without SHELL, is refreshed by the next interactive run (Step J5) — the end line says so
+   - End with one line for the next interactive run: «Новий health-check від <дата> — опублікувати можна в наступному прогоні.» (no publication from the scheduled run); after a journey refresh the same line names the map: «Новий health-check від <дата>, карту шляху оновлено локально — опублікувати можна в наступному прогоні.»
 
 3. **Escalation:**
    - If any **Critical** anomaly detected → highlight in report, suggest full mode
