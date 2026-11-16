@@ -286,19 +286,34 @@ SECTION_LEVELS = (2, 5)   # a config section's heading level: `##` in the exampl
 
 
 def _sections(text, title):
-    """The body lines of every section titled `title` (a heading of SECTION_LEVELS), each up to the next heading of its
-    own level or higher — a sub-heading stays inside it. [] when there is none."""
+    """The body lines of every section titled `title` (a heading of SECTION_LEVELS outside fenced code), each up to the
+    next heading of its own level or higher — a sub-heading stays inside it, a `#` line inside a fence is no heading.
+    [] when there is none."""
     lo, hi = SECTION_LEVELS
-    out = []
-    for m in re.finditer(r"^(#{%d,%d})[ \t]+%s(?![\w])[^\n]*$" % (lo, hi, re.escape(title)), text, re.M):
-        level, body = len(m.group(1)), []
-        for line in text[m.end():].split("\n")[1:]:
-            h = re.match(r"^(#{1,6})[ \t]", line)
+    head = re.compile(r"^(#{%d,%d})[ \t]+%s(?![\w])" % (lo, hi, re.escape(title)))
+    lines, out, fence = text.split("\n"), [], False
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*(```|~~~)", line):
+            fence = not fence
+            continue
+        m = None if fence else head.match(line)
+        if not m:
+            continue
+        level, body, inner = len(m.group(1)), [], False
+        for nxt in lines[i + 1:]:
+            if re.match(r"^\s*(```|~~~)", nxt):
+                inner = not inner
+            h = None if inner else re.match(r"^(#{1,6})[ \t]", nxt)
             if h and len(h.group(1)) <= level:
                 break
-            body.append(line)
+            body.append(nxt)
         out.append(body)
     return out
+
+
+def _content(body):
+    """The lines of a section's body that are not headings — a sub-heading alone names no stages."""
+    return [l for l in body if not re.match(r"^#{1,6}[ \t]", l)]
 
 def parse(path, extra_dirs=None, home=None):
     """Header-level facts only. `home` (since v3.16.0) is where the search index is looked for (`~` by default)."""
@@ -351,7 +366,7 @@ def parse(path, extra_dirs=None, home=None):
         facts["index"] = index_info(home)
     except Exception:  # noqa: BLE001
         facts["index"] = None
-    facts["cjm_section"] = any(re.search(r"stages|funnel|template", "\n".join(sec[:6]), re.I)
+    facts["cjm_section"] = any(re.search(r"stages|funnel|template", "\n".join(_content(sec[:6])), re.I)
                                for sec in _sections(text, "CJM Configuration"))
     facts["terminology_section"] = bool(_sections(text, "Terminology & Style"))
     return facts

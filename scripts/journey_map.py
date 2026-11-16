@@ -35,6 +35,7 @@ LANES = (("action", "дії"), ("touchpoint", "точки контакту"), ("
          ("metric", "метрики"), ("anomaly", "аномалії"), ("opportunity", "можливості"), ("solution", "рішення"),
          ("initiative", "ініціативи"), ("experiment", "експерименти"))
 LANE_IDS = tuple(l for l, _ in LANES)
+LANE_ALIAS = {uk: lid for lid, uk in LANES}                                    # a lane written by its §2 name
 LEVELS = ("stage", "transition", "journey")
 CLASSES = ("measured", "observed", "reported", "external", "simulated", "assumed")
 REAL = ("measured", "observed", "reported", "external")
@@ -46,8 +47,8 @@ NEEDS_PARENT = ("solution", "experiment")
 DATED = ("pain", "metric", "anomaly")
 FINDINGS = ("no_owner", "stale_review", "no_outcome", "empty_stage", "undeclared_stage", "unknown_lane", "no_source",
             "no_class", "wrong_class", "simulated_pain", "bad_level", "bad_target", "bad_date", "bad_code", "orphan",
-            "pain_no_action", "few_solutions", "stale_metric", "duplicate_id", "link", "secret")
-MODEL_FINDINGS = ("opportunity_no_story", "two_pains")
+            "pain_no_action", "few_solutions", "stale_metric", "duplicate_id", "link", "secret", "contact")
+MODEL_FINDINGS = ("opportunity_no_story", "two_pains", "person_name")
 COMMANDS = ("parse", "check", "render-html", "health", "refresh", "tree", "schema")
 REVIEW_DAYS, PAIN_DAYS, MIN_SOLUTIONS = 90, 182, 3
 HC_SOURCE = "health-check"
@@ -137,8 +138,12 @@ def load(path):
         for name, val in zip(cols, cs):
             if name:
                 row[name] = val
-        row["row"], row["line"] = n, i
+        lane = row["lane"].strip().lower()
+        row["lane"] = LANE_ALIAS.get(lane, lane)
+        row["row"], row["line"], row["cells"] = n, i, cs
         row["gap"] = not row["text"] or row["text"].startswith("⚠")
+        if not row["id"] and not row["gap"]:
+            errors.append("row %d: a row without an id — named, never checked or refreshed" % n)
         rows.append(row)
     st = []
     for s in stages:
@@ -148,7 +153,9 @@ def load(path):
     hp = []
     for h in health:
         hp.append({"date": str(h.get("date") or ""), "score": number(h.get("score")), "snapshot": str(h.get("snapshot") or "")})
-    return {"path": path, "text": text, "eol": eol, "lines": lines, "cols": cols, "table_end": table[-1][0],
+    header = [h.strip().strip("`*_ ").lower() for h in nt.cells(table[0][1])]
+    lang = "uk" if any(h in (uk for _, uk in COLUMNS if uk not in ("id", "parent")) for h in header) else "en"
+    return {"path": path, "text": text, "eol": eol, "lines": lines, "cols": cols, "table_end": table[-1][0], "lang": lang,
             "title": title, "product": nt.fm_scalar(fm, "product"), "journey": nt.fm_scalar(fm, "journey"),
             "owner": nt.fm_scalar(fm, "owner"), "reviewed": nt.fm_scalar(fm, "reviewed"), "stages": st, "health": hp,
             "rows": rows, "errors": errors}
@@ -156,6 +163,21 @@ def load(path):
 
 def _public(r):
     return {k: r[k] for k in [c for c, _ in COLUMNS] + ["row"]}
+
+
+def evidence(r):
+    """A row that counts as evidence: an evidence lane, a source, a class the lane takes, and a date where the lane
+    needs one — never a simulated pain, an unsourced number or a guess."""
+    lane = r["lane"]
+    return (not r["gap"] and lane in LANE_CLASSES and bool(r["source"]) and r["class"].strip().lower() in LANE_CLASSES[lane]
+            and (lane not in DATED or day(r["date"]) is not None))
+
+
+def page_worthy(r, declared):
+    """A row the page shows: placed on a declared stage and a known lane, with its source; in an evidence lane, evidence."""
+    if r["gap"] or not r["id"] or r["stage"] not in declared or r["lane"] not in LANE_IDS or not r["source"]:
+        return False
+    return evidence(r) if r["lane"] in LANE_CLASSES else True
 
 
 def tree(note, sid):
@@ -222,17 +244,19 @@ def findings(note, today, newest=None):
         out.append(e)
     if not note["owner"]:
         f("no_owner", detail="the note has no owner — a role or a team")
+    elif nt.CONTACT.search(note["owner"]):
+        f("contact", detail="the owner holds an e-mail or a phone — a role or a team, never a person")
     rv = day(note["reviewed"])
     if rv is None:
         f("stale_review", detail="no review date (YYYY-MM-DD)")
     elif (today - rv).days > REVIEW_DAYS:
         f("stale_review", detail="reviewed %s, %d days ago" % (note["reviewed"], (today - rv).days))
     declared = [s["id"] for s in note["stages"]]
-    live = [r for r in note["rows"] if not r["gap"]]
+    live = [r for r in note["rows"] if not r["gap"] and r["id"]]
     for s in note["stages"]:
         if not s["outcome"] or "TBD" in s["outcome"]:
             f("no_outcome", stage=s["id"], detail="a stage without its outcome metric and target")
-        if not any(r["stage"] == s["id"] and r["lane"] in LANE_CLASSES for r in live):
+        if not any(r["stage"] == s["id"] and evidence(r) for r in live):
             f("empty_stage", stage=s["id"], detail="no row of evidence — a gap")
     by_id, children = {}, {}
     for r in live:
@@ -300,7 +324,7 @@ def findings(note, today, newest=None):
             chain = _chain(by_id, children, r)
             if not any(by_id[c]["lane"] in ("initiative", "experiment") for c in chain if c in by_id):
                 f("pain_no_action", row=rid, stage=sid, detail="%d days, no initiative or experiment in its chain" % (today - dv).days)
-        if lane == "metric" and dv is not None and newest_day is not None and dv < newest_day:
+        if lane == "metric" and _is_hc(r) and dv is not None and newest_day is not None and dv < newest_day:
             f("stale_metric", row=rid, stage=sid, detail="%s, older than the newest snapshot %s" % (r["date"], newest_day.isoformat()))
         cells = [r[k] or "" for k in ("text", "step", "source", "code", "parent")]
         if any(nt.LINK.search(x) for x in cells):
@@ -308,6 +332,8 @@ def findings(note, today, newest=None):
         kinds = cn.scan(" \n".join(cells))
         if kinds:
             f("secret", row=rid, stage=sid, detail="the row holds %s — never on the page" % ", ".join(kinds))
+        if any(nt.CONTACT.search(x) for x in cells):
+            f("contact", row=rid, stage=sid, detail="an e-mail or a phone in the row — a person's contact never on the map")
     for r in live:
         if r["lane"] == "opportunity" and r["target"].strip().lower() in YES:
             n = sum(1 for k in children.get(r["id"], []) if k["lane"] == "solution" and k["stage"] == r["stage"])
@@ -317,21 +343,26 @@ def findings(note, today, newest=None):
 
 
 # ------------------------------------------------------------------ snapshots and health
-def read_snapshot(path):
-    """A health-check snapshot's frontmatter as a dict, or None when the file is not one."""
+def inspect_snapshot(path):
+    """(a health-check snapshot's frontmatter as a dict, or None; why it is not one)."""
     try:
         text, fm, _ = nt.read_note(path)
     except Bad:
-        return None
-    if nt.fm_scalar(fm, "type") != "cjm-health-check":
-        return None
+        return None, "no frontmatter — a snapshot saved before v4.7.0, or not a snapshot"
+    kind = nt.fm_scalar(fm, "type")
+    if kind != "cjm-health-check":
+        return None, "type is %s, not cjm-health-check" % (kind or "missing")
     try:
         stages = cc.read_yaml_records(fm, "stages")
     except ValueError:
         stages = []
+    score = nt.fm_scalar(fm, "health_score")
     return {"name": os.path.basename(path), "product": nt.fm_scalar(fm, "product"), "date": nt.fm_scalar(fm, "date"),
-            "period": nt.fm_scalar(fm, "period"), "score": number(nt.fm_scalar(fm, "health_score")) if nt.fm_scalar(fm, "health_score") else None,
-            "stages": stages}
+            "period": nt.fm_scalar(fm, "period"), "score": number(score) if score else None, "stages": stages}, ""
+
+
+def read_snapshot(path):
+    return inspect_snapshot(path)[0]
 
 
 def _same_product(a, b):
@@ -339,17 +370,25 @@ def _same_product(a, b):
 
 
 def snapshots(folder, product):
-    """(points, skipped, newest date) of the product's snapshots in a folder — raises Bad when it does not read."""
+    """(points, skipped, newest date, other products' files) of the folder — raises Bad when it does not read. Every
+    .md that is not a usable snapshot of the product is named with why, except another product's (kept apart)."""
     try:
         names = sorted(os.listdir(folder))
     except OSError as e:
         raise Bad("the snapshots folder does not read: %s" % (e.strerror or type(e).__name__))
-    points, skipped, newest = [], [], None
+    points, skipped, newest, other = [], [], None, []
     for n in names:
         if not n.endswith(".md"):
             continue
-        s = read_snapshot(os.path.join(folder, n))
-        if s is None or not _same_product(s["product"], product):
+        s, why = inspect_snapshot(os.path.join(folder, n))
+        if s is None:
+            skipped.append({"snapshot": n, "why": why})
+            continue
+        if not s["product"]:
+            skipped.append({"snapshot": n, "why": "no product in its frontmatter"})
+            continue
+        if not _same_product(s["product"], product):
+            other.append(n)
             continue
         if day(s["date"]) is None:
             skipped.append({"snapshot": n, "why": "no date (YYYY-MM-DD) in its frontmatter"})
@@ -360,7 +399,19 @@ def snapshots(folder, product):
             continue
         points.append({"date": s["date"], "score": s["score"], "snapshot": n})
     points.sort(key=lambda p: (p["date"], p["snapshot"]))
-    return points, skipped, newest
+    return points, skipped, newest, other
+
+
+def merge_points(kept, fresh):
+    """The note's points joined with fresh ones: a fresh point replaces the note's point of the same snapshot; the
+    note's other points stay (the note is the truth — a folder that lost a snapshot never erases the trend)."""
+    by = {}
+    for p in kept:
+        if p.get("score") is not None and day(p.get("date")) and p.get("snapshot"):
+            by[p["snapshot"]] = p
+    for p in fresh:
+        by[p["snapshot"]] = p
+    return sorted(by.values(), key=lambda p: (p["date"], p["snapshot"]))
 
 
 def render_health(points, eol):
@@ -387,7 +438,8 @@ def trend(points):
 
 # ------------------------------------------------------------------ refresh
 def slug(s):
-    return re.sub(r"[^\w]+", "-", str(s or "").lower(), flags=re.U).strip("-_")
+    """A metric's id part: lower case, every run of characters that are not letters or digits one hyphen."""
+    return re.sub(r"[\W_]+", "-", str(s or "").lower(), flags=re.U).strip("-")
 
 
 REFRESH = {
@@ -406,57 +458,73 @@ def _is_hc(r):
     return r["lane"] in ("metric", "anomaly") and r["source"].startswith(HC_SOURCE)
 
 
-def wanted_rows(snap, lang):
-    """[(id, stage, lane, text)] the snapshot gives — a metric per stage entry, an anomaly per warning/critical/positive."""
+def wanted_rows(snap, lang, declared):
+    """([(id, stage, lane, text)], skipped stages, skipped entries) — a metric per stage entry and an anomaly per
+    warning/critical/positive one, for the stages the note declares; ids by the metric's slug (§10)."""
     L = REFRESH.get(lang, REFRESH["en"])
-    out, n = [], {}
+    out, skipped_stages, skipped_entries = [], [], []
     for e in snap["stages"]:
         sid, metric = str(e.get("id") or "").strip(), str(e.get("metric") or "").strip()
-        if not sid or not metric:
+        if not sid:
+            skipped_entries.append({"stage": "", "why": "an entry without its stage id"})
+            continue
+        if sid not in declared:
+            if sid not in skipped_stages:
+                skipped_stages.append(sid)
+            continue
+        if not metric or not slug(metric):
+            skipped_entries.append({"stage": sid, "why": "an entry without its metric — its status is not on the map"})
             continue
         v = {k: str(e.get(k) or "").strip() for k in ("value", "baseline", "deviation", "status")}
         v["metric"] = metric
         fmt = L["metric"] if v["baseline"] else L["metric_bare"]
         out.append(("m-%s-%s" % (sid, slug(metric)), sid, "metric", fmt.format(**v)))
         if v["status"].lower() in ANOMALY_STATUSES:
-            n[sid] = n.get(sid, 0) + 1
-            out.append(("a-%s-%d" % (sid, n[sid]), sid, "anomaly",
+            out.append(("a-%s-%s" % (sid, slug(metric)), sid, "anomaly",
                         L["anomaly"].format(metric=metric, deviation=v["deviation"], status=L["status"][v["status"].lower()])))
-    return out
+    return out, skipped_stages, skipped_entries
 
 
 def refresh_text(note, snap, lang):
-    """The note's text with the health-check rows replaced, added and removed; (text, replaced, added, removed, kept)."""
+    """The note's text with the health-check rows replaced, added and removed — every other byte as it was."""
     source = "%s %s, %s" % (HC_SOURCE, snap["date"], snap["period"]) if snap["period"] else "%s %s" % (HC_SOURCE, snap["date"])
     lines, eol, cols = list(note["lines"]), note["eol"], note["cols"]
-    by_id = {}
+    declared = [s["id"] for s in note["stages"]]
+    by_id, twice = {}, set()
     for r in note["rows"]:
+        if r["id"] in by_id:
+            twice.add(r["id"])
         by_id.setdefault(r["id"], r)
-    wanted = wanted_rows(snap, lang)
+    wanted, skipped_stages, skipped_entries = wanted_rows(snap, lang, declared)
     want_ids = {w[0] for w in wanted}
     covered = {w[1] for w in wanted}
     replaced, added, removed, kept = [], [], [], []
     new_line, drop, after = {}, set(), {}
+    pos = {c: i for i, c in enumerate(cols) if c}
 
-    def line_of(values):
-        cells = [values.get(c, "") if c else "" for c in cols]
-        return nt.row_line(cells) + eol
+    def new_row(values):
+        return nt.row_line([values.get(c, "") if c else "" for c in cols]) + eol
 
     for wid, sid, lane, txt in wanted:
         r = by_id.get(wid)
         if r is None:
-            after.setdefault(sid, []).append(line_of({"id": wid, "stage": sid, "lane": lane, "text": txt,
+            after.setdefault(sid, []).append(new_row({"id": wid, "stage": sid, "lane": lane, "text": txt,
+                                                     "level": "transition" if lane == "metric" else "",
                                                      "source": source, "class": "measured", "date": snap["date"]}))
             added.append(wid)
-        elif _is_hc(r) and r["lane"] == lane:
-            vals = dict(r, text=txt, source=source, **{"class": "measured", "date": snap["date"]})
-            if any(vals[k] != r[k] for k in ("text", "source", "class", "date")):
-                new_line[r["line"]] = line_of(vals)
+        elif wid not in twice and _is_hc(r) and r["lane"] == lane:
+            vals = {"text": txt, "source": source, "class": "measured", "date": snap["date"]}
+            if any(vals[k] != r[k] for k in vals):
+                cells = list(r["cells"])                     # the PM's cells, an unknown column too, stay
+                for k, v in vals.items():
+                    cells[pos[k]] = v
+                new_line[r["line"]] = nt.row_line(cells) + eol
             replaced.append(wid)
         else:
             kept.append(wid)
     for r in note["rows"]:
-        if _is_hc(r) and r["lane"] == "anomaly" and r["stage"] in covered and r["id"] not in want_ids:
+        if (_is_hc(r) and r["lane"] == "anomaly" and r["stage"] in covered and r["id"].startswith("a-%s-" % r["stage"])
+                and r["id"] not in want_ids and r["id"] not in twice):
             drop.add(r["line"])
             removed.append(r["id"])
     last_of = {}
@@ -464,8 +532,7 @@ def refresh_text(note, snap, lang):
         if r["line"] not in drop:
             last_of[r["stage"]] = r["line"]
     tail = note["table_end"]
-    out = []
-    inserts = {}
+    out, inserts = [], {}
     for sid, ls in after.items():
         inserts.setdefault(last_of.get(sid, tail), []).extend(ls)
     for i, line in enumerate(lines):
@@ -478,7 +545,8 @@ def refresh_text(note, snap, lang):
             if not out[-1].endswith("\n"):
                 out[-1] += eol
             out.extend(inserts[i])
-    return "".join(out), replaced, added, removed, kept
+    return {"text": "".join(out), "replaced": replaced, "added": added, "removed": removed, "kept": kept,
+            "skipped_stages": skipped_stages, "skipped_entries": skipped_entries}
 
 
 def write_text(path, text):
@@ -501,10 +569,12 @@ LABELS = {
     "uk": {"title": "Карта шляху", "note": "Нотатка", "owner": "Власник", "reviewed": "Рев'ю", "generated": "Згенеровано",
            "health": "Здоров'я", "no_trend": "тренду немає — у знімках немає health_score у frontmatter",
            "gap": "немає доказів", "target": "ціль", "no_outcome": "⚠️ TBD", "lanes": "Доріжки",
+           "not_shown": "Рядків не показано: %d — без джерела чи доказу, поза етапами або доріжками; їх називають знахідки нотатки",
            "lane": dict(LANES)},
     "en": {"title": "Journey map", "note": "Note", "owner": "Owner", "reviewed": "Reviewed", "generated": "Generated",
            "health": "Health", "no_trend": "no trend — no snapshot has health_score in its frontmatter",
            "gap": "no evidence", "target": "target", "no_outcome": "⚠️ TBD", "lanes": "Lanes",
+           "not_shown": "Rows not shown: %d — no source or evidence, off the stages or lanes; the note's findings name them",
            "lane": {"action": "Actions", "touchpoint": "Touchpoints", "experience": "Experience", "pain": "Pains",
                     "metric": "Metrics", "anomaly": "Anomalies", "opportunity": "Opportunities", "solution": "Solutions",
                     "initiative": "Initiatives", "experiment": "Experiments"}},
@@ -551,25 +621,30 @@ def render_html(note, note_name, lang):
     pts = [p for p in note["health"] if p["score"] is not None and day(p["date"])]
     if pts:
         out.append(sparkline(pts))
-        out.append('<table class="pts"><tr>%s</tr><tr>%s</tr></table>' % (
-            "".join("<td>%s</td>" % esc(p["date"]) for p in pts), "".join("<td>%s</td>" % esc(p["score"]) for p in pts)))
+        out.append('<table class="pts"><tr>%s</tr><tr>%s</tr><tr>%s</tr></table>' % (
+            "".join("<td>%s</td>" % esc(p["date"]) for p in pts), "".join("<td>%s</td>" % esc(p["score"]) for p in pts),
+            "".join('<td class="m">%s</td>' % shown(p["snapshot"]) for p in pts)))
     else:
         out.append('<p class="meta">%s</p>' % esc(L["no_trend"]))
     stages = note["stages"]
+    declared = [s["id"] for s in stages]
+    hidden = sum(1 for r in live if not page_worthy(r, declared))
+    if hidden:
+        out.append('<p class="meta">%s</p>' % esc(L["not_shown"] % hidden))
     out.append('<div class="wrap"><table class="grid"><thead><tr><th></th>')
     for s in stages:
         out.append('<th class="stage">%s · %s<div class="o">%s</div></th>' % (
             shown(s["id"]), shown(s["name"]), shown(s["outcome"] or L["no_outcome"])))
     out.append("</tr></thead><tbody>")
-    evidence = {s["id"]: any(r["stage"] == s["id"] and r["lane"] in LANE_CLASSES for r in live) for s in stages}
+    has_evidence = {s["id"]: any(r["stage"] == s["id"] and evidence(r) for r in live) for s in stages}
     for li, (lane, _) in enumerate(LANES):
         out.append('<tr><th class="lane">%s</th>' % esc(L["lane"][lane]))
         for s in stages:
             out.append("<td>")
-            if li == 0 and not evidence[s["id"]]:
+            if li == 0 and not has_evidence[s["id"]]:
                 out.append('<div class="item gap">⚠️ %s</div>' % esc(L["gap"]))
             for r in live:
-                if r["stage"] != s["id"] or r["lane"] != lane:
+                if r["stage"] != s["id"] or r["lane"] != lane or not page_worthy(r, declared):
                     continue
                 tg = r["target"].strip().lower() in YES and lane == "opportunity"
                 meta = " · ".join(x for x in (r["step"], r["level"] if lane == "metric" else "", r["code"], r["source"],
@@ -721,7 +796,7 @@ def cmd_check(args):
     today = _today(args)
     newest = None
     if args.snapshots:
-        _, _, newest = snapshots(args.snapshots, note["product"])
+        _, _, newest, _ = snapshots(args.snapshots, note["product"])
     result(ok=True, findings=findings(note, today, newest), newest_snapshot=newest, errors=note["errors"])
     return 0
 
@@ -740,7 +815,9 @@ def cmd_render(args):
     except OSError as e:
         result(ok=False, error="the page cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    result(ok=True, out=args.out, bytes=size, rows=sum(1 for r in note["rows"] if not r["gap"]),
+    declared = [s["id"] for s in note["stages"]]
+    live = [r for r in note["rows"] if not r["gap"]]
+    result(ok=True, out=args.out, bytes=size, rows=len(live), not_shown=sum(1 for r in live if not page_worthy(r, declared)),
            stages=len(note["stages"]), health=len(note["health"]), errors=note["errors"])
     return 0
 
@@ -749,13 +826,16 @@ def cmd_health(args):
     note = load(args.note)
     if not note["product"]:
         raise Bad("the note names no product")
-    points, skipped, _ = snapshots(args.snapshots, note["product"])
+    fresh, skipped, _, other = snapshots(args.snapshots, note["product"])
+    points = merge_points(note["health"], fresh)
+    names = {p["snapshot"] for p in fresh}
+    kept = [p for p in points if p["snapshot"] not in names]
     try:
         write_health(args.note, note, points)
     except OSError as e:
         result(ok=False, error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    result(ok=True, points=points, skipped=skipped, trend=trend(points), errors=note["errors"])
+    result(ok=True, points=points, kept=kept, skipped=skipped, other_products=other, trend=trend(points), errors=note["errors"])
     return 0
 
 
@@ -768,7 +848,13 @@ def cmd_refresh(args):
         raise Bad("the snapshot is of product %r, the note of %r" % (snap["product"], note["product"]))
     if day(snap["date"]) is None:
         raise Bad("the snapshot has no date (YYYY-MM-DD) in its frontmatter")
-    text, replaced, added, removed, kept = refresh_text(note, snap, args.lang)
+    hc_dates = [r["date"] for r in note["rows"] if not r["gap"] and _is_hc(r) and day(r["date"])]
+    if hc_dates and max(hc_dates) > snap["date"]:
+        raise Bad("the snapshot (%s) is older than the map's health-check rows (%s) — a refresh never rolls them back"
+                  % (snap["date"], max(hc_dates)))
+    lang = args.lang or note["lang"]
+    done = refresh_text(note, snap, lang)
+    text = done["text"]
     point, skipped = None, []
     try:
         if snap["score"] is None:
@@ -777,8 +863,7 @@ def cmd_refresh(args):
                 write_text(args.note, text)
         else:
             point = {"date": snap["date"], "score": snap["score"], "snapshot": snap["name"]}
-            points = [p for p in note["health"] if p["snapshot"] != snap["name"] and p["score"] is not None]
-            points = sorted(points + [point], key=lambda p: (p["date"], p["snapshot"]))
+            points = merge_points(note["health"], [point])
             note["text"] = text
             write_health(args.note, note, points)
     except OSError as e:
@@ -786,13 +871,14 @@ def cmd_refresh(args):
         return 1
     out = args.out or os.path.splitext(args.note)[0] + ".html"
     try:
-        _render_to(load(args.note), out, args.lang)
+        _render_to(load(args.note), out, lang)
     except OSError as e:
         result(ok=False, error="the page cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    result(ok=True, snapshot=snap["name"], date=snap["date"], replaced=replaced, added=added, removed=removed,
-           kept=kept, health=point, skipped=skipped, out=out, published=False,
-           line=REFRESH.get(args.lang, REFRESH["en"])["line"], errors=note["errors"])
+    result(ok=True, snapshot=snap["name"], date=snap["date"], replaced=done["replaced"], added=done["added"],
+           removed=done["removed"], kept=done["kept"], skipped_stages=done["skipped_stages"],
+           skipped_entries=done["skipped_entries"], health=point, skipped=skipped, out=out, published=False,
+           line=REFRESH.get(lang, REFRESH["en"])["line"], errors=note["errors"])
     return 0
 
 
@@ -844,13 +930,19 @@ def main(argv=None):
     p.add_argument("--note", required=True)
     p.add_argument("--snapshot", required=True, help="the health-check snapshot the scheduled run just saved")
     p.add_argument("--out", help="the page (default: next to the note, .html)")
-    p.add_argument("--lang", default="en", choices=sorted(LABELS))
+    p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
     p = sub.add_parser("tree")
     p.add_argument("--stage", required=True)
     p.add_argument("--note", required=True)
     p.add_argument("--out", help="write the Mermaid text to this file too")
     sub.add_parser("schema")
-    args = ap.parse_args(argv)
+    try:
+        args = ap.parse_args(argv)
+    except SystemExit as e:                          # a wrong argument still ends with the result line
+        if e.code in (0, None):
+            return 0
+        result(ok=False, error="wrong arguments — see journey_map.py <command> --help")
+        return 2
     fn = {"parse": cmd_parse, "check": cmd_check, "render-html": cmd_render, "health": cmd_health,
           "refresh": cmd_refresh, "tree": cmd_tree, "schema": cmd_schema}.get(args.cmd)
     if fn is None:

@@ -41,6 +41,7 @@ health:
 | p5 | s2 | | pain | Підказки пошуку не враховують історію | | | | | walkthrough 2026-10-12, крок 3 | guess | 12.10.2026 |
 | p5 | s2 | | pain | Немає кнопки «повторити замовлення» | | | | | walkthrough 2026-10-12, крок 5 | observed | 2026-10-12 |
 | e1 | s2 | | experience | Роздратування: усе спочатку | | | | | зі слів PM | reported | 2026-10-25 |
+| m3 | s2 | | metric | search -> cart 33% | transition | | | | health-check 2026-10-05, 2026-09-28..2026-10-04 | measured | 2026-10-05 |
 | o1 | s3 | | opportunity | Повторити минуле замовлення в один дотик | | так | | | зі слів PM | | |
 | o2 | s3 | | opportunity | Бачити, що змінилось у ціні з минулого разу | | так | | | зі слів PM | | |
 | h1 | s3 | | solution | Кнопка «повторити» в історії | | | o1 | | Hypotheses/hypothesis-reorder-button | | |

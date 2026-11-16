@@ -724,6 +724,17 @@ out = run(v3)
 check("4700.11 Obsidian Vaults at level 3 (the configurator skeleton) with a path", "vault: configured" in out,
       next((l.strip() for l in out.splitlines() if "vault:" in l), "(no flags line)"))
 
+# review 1 m-1: a fenced YAML comment is not a heading; a sub-heading alone is not a stage list
+check4700 = [
+    ("4700.14 a `#` comment inside a fenced block does not end the section",
+     cjm_variant("## CJM Configuration\n\n```yaml\n# Zorg funnel\ncjm:\n  funnel_template: e-commerce\n```\n"), "cjm: configured"),
+    ("4700.15 a sub-heading «Funnel Stages» with nothing under it is not configured",
+     cjm_variant("#### CJM Configuration\n\n##### Funnel Stages\n_none yet_\n"), "cjm: not configured"),
+]
+for name, txt, want in check4700:
+    out = run(txt)
+    check(name, want in out, next((l.strip() for l in out.splitlines() if "cjm:" in l), "(no flags line)"))
+
 # the journey fixture's local-context (`#### CJM Configuration` under a product, acceptance item 7)
 fx = open(os.path.join(ROOT, "testing", "fixtures", "journey", "local-context-zorg.md"), encoding="utf-8").read()
 out = run(fx)

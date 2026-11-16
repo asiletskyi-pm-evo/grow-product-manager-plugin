@@ -240,7 +240,8 @@ vault_save(artifact, product, options):
      IF artifact.type == "cjm-journey":
        file_path = {target_vault.path}/CJM/journeys/{key_slug}/journey-{topic_slug}.md
      (a journey map is addressed by name and updated in place — journey-protocol.md §7; since v4.7.0. When the note
-      exists, the save rewrites its body and the fields the skill owns (`journey`, `owner`, `reviewed`, `stages`)
+      exists, the save reads it as it is now — the PM's edits and the rows a scheduled refresh wrote included — and
+      writes back its table, its sections and the fields the skill owns (`journey`, `owner`, `reviewed`, `stages`)
       only: `published`, `health`, `created` and `related` — fields other writers own — stay byte for byte.)
 
 4. Create directory structure:

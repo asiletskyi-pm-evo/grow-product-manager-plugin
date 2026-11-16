@@ -17,6 +17,10 @@ LINK = re.compile(r"(?:https?|ftp)://\S+|\bwww\.\S+"                       # a l
                   r"|[\w.+-]+:[^\s@/]+@[\w-]+(?:\.[\w-]+)+\S*"               # user:password@host…
                   r"|\b(?:[a-z0-9-]+\.)+[a-z]{2,}/\S*", re.I)                # host.domain/path, no scheme
 DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# a person's contact (since v4.7.0): an e-mail address, a phone number with a country code or a 0XX area code
+CONTACT = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
+                     r"|(?<![\w+])\+\d{1,3}(?:[ ()-]*\d){8,11}(?!\d)"
+                     r"|(?<![\w-])\(?0\d{2}\)?[ -]\d{3}[ -]?\d{2}[ -]?\d{2}(?![\d-])")
 
 
 class Bad(Exception):
@@ -96,8 +100,9 @@ def esc(s):
 
 
 def safe(s):
-    """A string fit for a page or a board: links removed, a string holding a secret or an identifier hidden whole (ctx_never)."""
-    s = LINK.sub("[link removed]", str(s or ""))
+    """A string fit for a page or a board: links removed, a person's e-mail or phone hidden, a string holding a secret or an
+    identifier hidden whole (ctx_never)."""
+    s = CONTACT.sub("[contact hidden]", LINK.sub("[link removed]", str(s or "")))
     kinds = cn.scan(s)
     return "[hidden: %s]" % ", ".join(kinds) if kinds else s
 

@@ -7,7 +7,7 @@
 ## 1. The model
 
 - **The journey** — one funnel of the product (the CJM config's) or one named journey inside it («повторне замовлення»). One note per journey.
-- **Stages** — in the order of the CJM config's funnel stages (`local-context.md` → CJM Configuration). A stage's id is `s<n>`, `n` its number in the config's stage table, so a health-check snapshot names the same stage by the same id (§8). The PM may add a stage of their own in the note (a new id: `s3a`, `home`); the script checks that every stage a row uses is declared (`undeclared_stage`, §6). A mismatch between the config's stages and a stage list kept elsewhere is the PM's to settle — in the note or in the config (`plugin-configurator`).
+- **Stages** — in the order of the CJM config's funnel stages (`local-context.md` → CJM Configuration). A stage's id is `s<n>`, `n` its number in the config's stage table, so a health-check snapshot names the same stage by the same id (§10). The PM may add a stage of their own in the note (a new id: `s3a`, `home`); the script checks that every stage a row uses is declared (`undeclared_stage`, §6). A mismatch between the config's stages and a stage list kept elsewhere is the PM's to settle — in the note or in the config (`plugin-configurator`).
 - **Steps** — an optional column: a smaller action inside a stage, where evidence most often attaches. Nested journeys (a step that opens a journey of its own) are not in this release.
 - **No dates on the map** except the dates of the evidence and of the review.
 
@@ -34,7 +34,7 @@ Classes are the grammar of `pm-mental-model.md` §4, checked by `data-integrity-
 
 Read in this order, each when it exists; several combine into one map. Every row carries a source marker and, in an evidence lane, its class:
 
-1. **The newest health-check snapshot** of the product (`~/.grow-pm/knowledge-library/health-checks/`, its frontmatter, `cjm-reports.md`) → `metric` and `anomaly` rows, `measured`, source `health-check <date>, <period>`, ids `m-<stage>-<metric slug>` and `a-<stage>-<n>`.
+1. **The newest health-check snapshot** of the product (`~/.grow-pm/knowledge-library/health-checks/`, its frontmatter, `cjm-reports.md`) → `metric` and `anomaly` rows, `measured`, source `health-check <date>, <period>` — written by `journey_map.py refresh` (§10) on the first build too, so their ids are the health-check's and the next refresh finds them.
 2. **`feedback-triage`** themes (`Research/feedback/`) → `pain`, `reported`, source `feedback-triage <date>, тема «…», pain <score>`.
 3. **A `flow-walkthrough` pack** → `pain`, `observed`, source `walkthrough <date>, крок N`.
 4. **`product-research`** → `pain`, `external` (a benchmark, a public source) or `reported` (an interview synthesis).
@@ -43,7 +43,7 @@ Read in this order, each when it exists; several combine into one map. Every row
 7. **Epic and feature codes** (`planning-core.md` §2) → `initiative`, the code in `код` — a code only, never a URL.
 8. **The conversation** → source `зі слів PM`, class `reported`.
 
-A persona's answer or any `simulated` input is never a pain; it may inspire a `solution` only. A stage no input gives evidence for stays a gap row `⚠️` (§7) and the finding `empty_stage`. Row texts are internal data: they stay in the note and on this machine (`data-policy.md`).
+A persona's answer or any `simulated` input is never a pain; it may inspire a `solution` only. A stage no input gives evidence for stays a gap row `⚠️` (§7) and the finding `empty_stage`. No row names a person — a customer's quote keeps its words, never their name, e-mail or phone. Row texts are internal data: they leave the note and this machine only through the publication's question (§9, `data-policy.md`).
 
 ## 4. Metrics by level
 
@@ -88,7 +88,7 @@ Checked when the map is built (Step J2) and on every refresh. The structural che
 | `no_owner` | script | the note has no `owner` | a role or a team — never a person's name |
 | `stale_review` | script | `reviewed` is empty or older than 90 days | review the map and set the date |
 | `no_outcome` | script | a stage whose `outcome` is empty or `⚠️ TBD` | a metric and a target, else it stays `⚠️ TBD` |
-| `empty_stage` | script | a declared stage with no row of evidence (a gap) | evidence from the inputs (§3), or the gap stays |
+| `empty_stage` | script | a declared stage with no row of evidence — an evidence lane, a source, a class its lane takes, a date where it needs one (a simulated pain or an unsourced number is no evidence) | evidence from the inputs (§3), or the gap stays |
 | `undeclared_stage` | script | a row on a stage `stages` does not declare | declare the stage, or fix the cell |
 | `unknown_lane` | script | a lane that is not one of the ten (§2) | fix the cell |
 | `no_source` | script | a row without a source marker | name the source, or drop the row |
@@ -102,12 +102,14 @@ Checked when the map is built (Step J2) and on every refresh. The structural che
 | `orphan` | script | a `parent` that names no row, a row of a lane §5 does not allow, or a row on another stage | fix the link |
 | `pain_no_action` | script | a pain older than 182 days from whose chain of `parent` links no initiative or experiment hangs | an initiative (`roadmap-architect`) or an experiment |
 | `few_solutions` | script | a target opportunity with fewer than three solutions | more solutions (`brainstorm-features`) |
-| `stale_metric` | script | a metric row older than the newest snapshot of the product | refresh it from the snapshot (§10) |
+| `stale_metric` | script | a health-check metric row older than the newest snapshot of the product (a metric of another source is not the snapshot's to refresh) | refresh it from the snapshot (§10) |
 | `duplicate_id` | script | two rows with one id | a new id for the later row |
 | `link` | script | a link in a row's cells — a row carries no link | drop it; the source marker names the page |
 | `secret` | script | a row's cells hold a key, a token or an identifier the never-store filter finds (`ctx_never.py`) | remove it; such a row never goes to the page as it is |
-| `opportunity_no_story` | model | an opportunity with no pain of a real class under it — a guess, not a customer's story | a pain with evidence under it, or it becomes a hypothesis |
+| `contact` | script | the owner or a row holds an e-mail address or a phone number — a person's contact | a role or a team for the owner; the words without the contact in a row |
+| `opportunity_no_story` | model | an opportunity whose pains do not tell a customer's story — none under it, or only the team's guesses and opinions however they are classed | a pain with evidence under it, or it becomes a hypothesis |
 | `two_pains` | model | one pain row holds two different pains | split it into two rows |
+| `person_name` | model | a row, a source or the owner names a person (a customer, a colleague) | the role or the segment instead of the name |
 
 «A pain's chain»: the pain itself, the opportunity it hangs under, and every row that hangs under either of them at any depth — the opportunity's solutions and their experiments, the initiatives, the opportunity's other pains. The pain is acted on when an `initiative` or an `experiment` is in it.
 
@@ -124,7 +126,7 @@ Checked when the map is built (Step J2) and on every refresh. The structural che
 | `owner` | a role or a team that keeps the map alive — never a person's name (`people-context-protocol.md`) |
 | `reviewed` | the date of the last review, YYYY-MM-DD |
 | `stages` | the stages in order, a list of `id`, `name` and `outcome` (a metric and a target, else `⚠️ TBD`) |
-| `health` | written only by `journey_map.py health` and `refresh`: a list of `date`, `score` and `snapshot` (the snapshot's file name) |
+| `health` | written only by `journey_map.py health` and `refresh`: a list of `date`, `score` and `snapshot` (the snapshot's file name) — joined, never erased (§8) |
 | `published` | the mirror of the publication record (`artifact-publishing.md` §5), written only by `publications.py` |
 
 ```yaml
@@ -150,7 +152,7 @@ health: []
 | `id` | `id` | the row's id: stable, never reused; `m-…` and `a-…` are the health-check's (§10) |
 | `stage` | `етап` | a stage id of `stages` |
 | `step` | `крок` | the step inside the stage, optional |
-| `lane` | `доріжка` | one of the ten lanes (§2) |
+| `lane` | `доріжка` | one of the ten lanes (§2), by its id or its Ukrainian name |
 | `text` | `текст` | what it is, in the customer's or the team's words |
 | `level` | `рівень` | a metric's level (§4), else empty |
 | `target` | `ціль` | `так` on the stage's target opportunity (§5), else empty |
@@ -164,8 +166,8 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 
 ## 8. Health over time
 
-- `journey_map.py health --note <note> --snapshots <dir>` reads the frontmatter of every snapshot of the note's product in the folder — `type: cjm-health-check`, `product`, `date`, `health_score` (`cjm-reports.md`) — and writes the `health` field alone: one entry per snapshot, oldest first; every other byte of the note stays as it was.
-- **A snapshot without `health_score` in its frontmatter** (older than v4.7.0, or written outside the plugin) is named in the result and skipped. A score is never read from a snapshot's text.
+- `journey_map.py health --note <note> --snapshots <dir>` reads the frontmatter of every snapshot of the note's product in the folder — `type: cjm-health-check`, `product`, `date`, `health_score` (`cjm-reports.md`) — and writes the `health` field alone: the note's points joined with one per snapshot in the folder, oldest first. A point whose snapshot the folder no longer has (another machine, a cleaned folder) stays — the note is the truth. Every other byte of the note stays as it was.
+- **Every file in the folder that is not a usable snapshot of the product** is named in the result with why — no frontmatter (saved before v4.7.0), another type, no product, no date, no `health_score` — and skipped; another product's snapshots are kept apart, unnamed. A score is never read from a snapshot's text.
 - **The trend** — the section «Здоров'я» in the note (the skill writes it from the field, with the date of the newest point) and a sparkline on the page (§9). With no scored snapshot the trend is empty and the section says why.
 - Escalation stays the health-check's (`cjm-reports.md`): a drop of more than 10 points is named there; the map shows the points.
 
@@ -179,11 +181,11 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 | `check --note P [--snapshots D] [--today D]` | the script's findings of §6, each with its row or stage |
 | `render-html --note P --out F [--lang uk\|en]` | the page below |
 | `health --note P --snapshots D` | the `health` field from the snapshots' frontmatter (§8) |
-| `refresh --note P --snapshot S [--out F] [--lang uk\|en]` | the scheduled refresh of §10 |
+| `refresh --note P --snapshot S [--out F] [--lang uk\|en]` | the scheduled refresh of §10 — the language of the note's headers when `--lang` is not given |
 | `tree --stage S --note P` | the stage's opportunity tree as Mermaid text, and `few_solutions` when its target has fewer than three solutions |
 | `schema` | the fields, columns, lanes, levels, findings and commands this file must agree with (`validate-consistency.sh` check 28) |
 
-**The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; each row's text with its source, class and date; the health trend as an inline SVG sparkline; the note's name, the owner, the review date and the date of the page at the top. No external request, no link (codes only), every text escaped, a string holding a secret hidden, light theme. Always written next to the note.
+**The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note.
 
 **Publication** — through `artifact-publishing.md`, never around it. The kind is `dashboard`; the key `cjm-research/<product>/journey-<slug>` — one dashboard per journey, apart from the funnel's `cjm-research/<product>/funnel`. `publications.py find --key <key> --note <note>` runs first; a place found is offered as «нова версія N». The question names each candidate, what goes (internal data: the map's rows, metrics, pains) and who can open it; «лише файл» is always one answer, and «ні» or «лише файл» is final for the run. After each place: `publications.py record --key <key> --note <note> --surface <surface> --kind dashboard …`. Sharing — to named people only, a separate question after the publication (`artifact-publishing.md` §7). The page is a snapshot with its date on every surface.
 
@@ -191,13 +193,15 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 
 ## 10. The scheduled health-check
 
-When the product has a journey note, the automated health-check (`cjm-reports.md` → Automated Health-Check Protocol), after it saves its snapshot, runs `journey_map.py refresh --note <note> --snapshot <the new snapshot>`:
+When the product has a journey note, the automated health-check (`cjm-reports.md` → Automated Health-Check Protocol), after it saves its snapshot, runs `journey_map.py refresh --note <note> --snapshot <the new snapshot> --lang <user.language>`:
 
-- the `metric` and `anomaly` rows whose source starts with `health-check` are replaced by id — `m-<stage>-<metric slug>` for each stage metric of the snapshot, `a-<stage>-<n>` for each stage whose status is `warning`, `critical` or `positive`: their text, source, class and date; the PM's cells (step, level, target, parent, code) stay. A stage the snapshot covers loses its old health-check anomalies the new one no longer has; a new metric or anomaly gets a new row after its stage's last row;
-- every other row, and every other byte of the note, stays as it was — a row the PM wrote with the same id but another source is kept and named, never overwritten;
-- the `health` field gets the snapshot's point, and the page is rendered again next to the note.
+- **Ids.** A metric row is `m-<stage>-<metric slug>`, an anomaly row `a-<stage>-<metric slug>` — the slug is the metric's name in lower case, every run of characters that are not letters or digits one hyphen (`search -> cart` → `search-cart`). A stage entry with `warning`, `critical` or `positive` gives an anomaly row; a stage the note does not declare and an entry without its metric are named in the result, never a row.
+- **Replaced** — a `metric` or `anomaly` row with the id whose source starts with `health-check`: its text, source, class and date; every other cell the PM wrote (step, level, target, parent, code, a column of their own) stays. **Added** — a new id gets a row after its stage's last row, a metric at level `transition` (a funnel stage's metric is the conversion to the next stage). **Removed** — a health-check anomaly row `a-<stage>-…` of a stage the snapshot covers that the snapshot no longer has (it resolved).
+- **Kept and named** — a row with the id but another source or lane, and an id that appears twice; every other row, and every other byte of the note, stays as it was.
+- **Never backwards** — a snapshot older than the map's health-check rows is refused, the note untouched.
+- The `health` field gets the snapshot's point (§8), and the page is rendered again next to the note.
 
-It never publishes, asks nothing, and ends with one line: «Карту шляху оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
+It never publishes and asks nothing. The health-check's one end line names the map too: «Новий health-check від <дата>, карту шляху оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
 
 ## 11. What never happens
 
