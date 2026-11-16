@@ -614,6 +614,21 @@ else
   ok "story map: story-map-protocol.md, story_map.py, planning-core.md §3, vault-schema, artifact-publishing §5 and roadmap-architect agree"
 fi
 
+# --- 28. The journey map is one schema (v4.7.0) ------------------------------------
+# cjm-research's `journey` mode follows references/journey-protocol.md, and scripts/journey_map.py parses the note it
+# describes. A frontmatter field, a column, a lane, a metric level, a script finding or a command added to one of them
+# alone would have the skill write a note the script misreads, or a check the protocol never names. Also: the skill
+# cites the protocol, vault-schema has the cjm-journey type and the health-check snapshot fields the map reads (date,
+# period, health_score, stages), and artifact-publishing.md §5 has the journey dashboard's key.
+JOURNEY_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import journey_map; print('\n'.join(journey_map.check_protocol('.')))" 2>&1)
+if [ -n "$JOURNEY_ERRS" ]; then
+  while IFS= read -r line; do err "journey map: $line"; done <<EOF
+$JOURNEY_ERRS
+EOF
+else
+  ok "journey map: journey-protocol.md, journey_map.py, vault-schema (cjm-journey, snapshot fields), artifact-publishing §5 and cjm-research agree"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.
