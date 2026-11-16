@@ -33,10 +33,28 @@
 - Stage weights: Entry (15%), Middle stages (25% each), Conversion (35%)
 - Penalties: Critical (-30), Warning (-15), Info (-3), Positive (+5)
 
-**Save health-check snapshot:**
+**Save health-check snapshot** — the same file in an interactive and in the automated run:
 - Save to `~/.grow-pm/knowledge-library/health-checks/[date].md`
 - Include: health score, all anomalies, stage data
 - This enables delta comparison in future health-checks
+- **Its frontmatter (since v4.7.0)** — the machine fields a journey map reads (`references/journey-protocol.md` §8, §10); the body (the summary above) is unchanged, and a snapshot saved before v4.7.0 is read as it was:
+
+```yaml
+---
+type: cjm-health-check
+product: zorg                        # the product id from local-context.md
+date: 2026-11-02                     # the day of the check, YYYY-MM-DD
+period: "2026-10-26..2026-11-01"     # the analysed period
+health_score: 72                     # 0-100, the Funnel Health Score above
+stages:                              # one entry per stage analysed
+  - id: s2                           # s<n>: the stage's number in the CJM config's stage table
+    metric: "search -> cart"
+    value: "31.0%"
+    baseline: "35.0%"
+    deviation: "-11.4%"
+    status: warning                  # normal | info | warning | critical | positive (cjm-protocol.md)
+---
+```
 
 ### Report Format — Hypotheses (mode: `hypotheses`)
 
@@ -178,7 +196,7 @@ When `health-check` mode is configured for automation:
    - Run Steps 1, 3, 4 with default settings from CJM config
    - Load previous health-check for delta comparison
    - Assemble Health-Check Summary (labels only — no question, no hand-back line)
-   - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[date].md`
+   - Save snapshot to `~/.grow-pm/knowledge-library/health-checks/[date].md`, its frontmatter as in **Save health-check snapshot** above (`health_score` and `stages` are what a journey map reads)
    - End with one line for the next interactive run: «Новий health-check від <дата> — опублікувати можна в наступному прогоні.» (no publication from the scheduled run)
 
 3. **Escalation:**
