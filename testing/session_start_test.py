@@ -683,5 +683,62 @@ with tempfile.TemporaryDirectory() as d:
     check("an index.json not read within 0.2 s: no line, the digest in time",
           not any(l.startswith("  index:") for l in out.splitlines()) and took < 1.5 and "providers:" in out, "%.2f s" % took)
 
+# --- v4.7.0: a config section's heading at any level 2–5 (TC-hook-4700-detector) ----------------------------------
+# The configurator writes `### CJM Configuration` in its skeleton, `#### CJM Configuration` under a product, `##` in the
+# example; the digest matched `## ` only and said «cjm: not configured» for a configured funnel. The same for
+# `Terminology & Style` and `Obsidian Vaults`. A heading with no stages / funnel / template inside its own section
+# (within six lines, before the next heading of its level) stays «not configured».
+no_cjm = re.sub(r"\n## CJM Configuration\n.*?(?=\n---\n)", "\n", example, count=1, flags=re.S)
+check("4700.0 the example without its CJM section", "CJM Configuration" not in no_cjm, "")
+
+def cjm_variant(block):
+    return no_cjm.replace("## Knowledge Library", block + "\n## Knowledge Library", 1)
+
+PRODUCT_CJM = ("### Product: Zorg App\n\n#### CJM Configuration\n\n> Zorg's funnel config, fictional.\n\n"
+               "##### Funnel Template\n- Template: marketplace\n\n##### Funnel Stages\n| Stage | Name |\n|---|---|\n| 1 | Visit |\n")
+cases4700 = [
+    ("4700.1 level 2 with its stages", cjm_variant("## CJM Configuration\n\n- **Funnel template:** e-commerce\n- stages: 5\n"), "cjm: configured"),
+    ("4700.2 level 4 under a product (sub-headings inside)", cjm_variant(PRODUCT_CJM), "cjm: configured"),
+    ("4700.3 level 3, the configurator skeleton", cjm_variant("### CJM Configuration\n\n#### Funnel Template\n- Template: e-commerce\n"), "cjm: configured"),
+    ("4700.4 the first line after the heading names the stages", cjm_variant("## CJM Configuration\n- stages: Visit, Cart, Order\n"), "cjm: configured"),
+    ("4700.5 no CJM section", no_cjm, "cjm: not configured"),
+    ("4700.6 a heading without stages — the next section's words do not count",
+     cjm_variant("#### CJM Configuration\n\n_not set yet_\n\n#### Price notes\n- funnel template ideas for later\n"), "cjm: not configured"),
+    ("4700.7 a heading whose stages come after six lines", cjm_variant("## CJM Configuration\n\na\nb\nc\nd\ne\nf\n- stages: 5\n"), "cjm: not configured"),
+]
+for name, txt, want in cases4700:
+    out = run(txt)
+    check(name, want in out, next((l.strip() for l in out.splitlines() if "cjm:" in l), "(no flags line)"))
+
+no_term = re.sub(r"\n### Terminology & Style\n", "\n", example, count=1)
+for name, txt, want in [
+        ("4700.8 Terminology & Style at level 2 (as the configurator writes it)", no_term + "\n## Terminology & Style (team language)\n\n#### Settings\n- lint_mode: suggest\n", "team language: configured"),
+        ("4700.9 Terminology & Style at level 3", example, "team language: configured"),
+        ("4700.10 no Terminology & Style", no_term, "team language: not configured")]:
+    out = run(txt)
+    check(name, want in out, next((l.strip() for l in out.splitlines() if "team language" in l), "(no flags line)"))
+
+no_vault = re.sub(r"\n## Obsidian Vaults \(Optional\)\n.*?(?=\n---\n)", "\n", example, count=1, flags=re.S)
+v3 = no_vault.replace("## Knowledge Library", "### Obsidian Vaults (Optional)\n\n```yaml\nvaults:\n  - path: /tmp/zorg-vault\n    plugin_folder: Notes\n```\n\n## Knowledge Library", 1)
+out = run(v3)
+check("4700.11 Obsidian Vaults at level 3 (the configurator skeleton) with a path", "vault: configured" in out,
+      next((l.strip() for l in out.splitlines() if "vault:" in l), "(no flags line)"))
+
+# the mutation: the heading level back to `##` only — the level-4 and level-3 cases must turn red
+src = open(os.path.join(ROOT, "scripts", "session_start.py"), encoding="utf-8").read()
+if "SECTION_LEVELS = (2, 5)" not in src:
+    check("4700.12 M the heading-level mutation applies", False, "SECTION_LEVELS = (2, 5) not in session_start.py")
+else:
+    mut = importlib.util.module_from_spec(importlib.util.spec_from_loader("session_start_mut", loader=None))
+    mut.__file__ = os.path.join(ROOT, "scripts", "session_start.py")
+    exec(compile(src.replace("SECTION_LEVELS = (2, 5)", "SECTION_LEVELS = (2, 2)"), mut.__file__, "exec"), mut.__dict__)
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
+        f.write(cjm_variant(PRODUCT_CJM)); mpath = f.name
+    try:
+        mout = mut.digest(mpath, mut.parse(mpath, extra_dirs=[]), [], "test")
+    finally:
+        os.unlink(mpath)
+    check("4700.12 M a detector back at `##` only is caught (level 4 → not configured)", "cjm: not configured" in mout, "")
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)
