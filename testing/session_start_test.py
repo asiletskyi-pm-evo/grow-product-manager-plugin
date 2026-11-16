@@ -724,6 +724,12 @@ out = run(v3)
 check("4700.11 Obsidian Vaults at level 3 (the configurator skeleton) with a path", "vault: configured" in out,
       next((l.strip() for l in out.splitlines() if "vault:" in l), "(no flags line)"))
 
+# the journey fixture's local-context (`#### CJM Configuration` under a product, acceptance item 7)
+fx = open(os.path.join(ROOT, "testing", "fixtures", "journey", "local-context-zorg.md"), encoding="utf-8").read()
+out = run(fx)
+check("4700.13 the Zorg fixture with `#### CJM Configuration` under its product → configured",
+      "cjm: configured" in out and "team language: configured" in out, next((l.strip() for l in out.splitlines() if "cjm:" in l), "(no flags line)"))
+
 # the mutation: the heading level back to `##` only — the level-4 and level-3 cases must turn red
 src = open(os.path.join(ROOT, "scripts", "session_start.py"), encoding="utf-8").read()
 if "SECTION_LEVELS = (2, 5)" not in src:

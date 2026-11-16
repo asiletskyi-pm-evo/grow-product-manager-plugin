@@ -377,6 +377,23 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | X11 | намалюй шлях покупця від кошика до отримання посилки | cjm-research or diagram-prototyper — NOT roadmap-architect |
 | X12 | що з мапи історій беремо в план на Q1 з урахуванням місткості команди | quarterly-planning — NOT roadmap-architect |
 
+### Group Y — Journey map vs neighbours (added 2026-11-16, v4.7.0)
+
+`cjm-research` mode `journey` builds, refreshes and trees a journey map (stages × evidence lanes); a funnel dashboard alone is `product-analysis`'s, a story map `roadmap-architect`'s, a drawn CJM picture without evidence `diagram-prototyper`'s, hypotheses alone `brainstorm-features`'.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| Y1 | побудуй карту шляху для першого замовлення з доказами по етапах воронки | cjm-research |
+| Y2 | build a journey map of the checkout funnel with pains, metrics and opportunities per stage | cjm-research |
+| Y3 | онови карту шляху — нові болі з фідбеку і свіжий health-check | cjm-research |
+| Y4 | дерево можливостей для етапу «Кошик» на карті шляху | cjm-research |
+| Y5 | how has the health of our first-order journey changed over the last quarter | cjm-research |
+| Y6 | повний CJM-аналіз воронки з гіпотезами і беклогом | cjm-research |
+| Y7 | зроби дашборд конверсії воронки за минулий місяць, лише цифри | product-analysis — NOT cjm-research |
+| Y8 | побудуй мапу історій для епіку доставки в поштомат | roadmap-architect — NOT cjm-research |
+| Y9 | намалюй картинку CJM для слайда презентації, без аналізу | diagram-prototyper — NOT cjm-research |
+| Y10 | згенеруй гіпотези для покращення конверсії кошика з ICE | brainstorm-features — NOT cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -410,6 +427,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-11-06 | **Claude Code, live** (`testing/trigger_claude.py`, staged copy of `dc486b2`, fictional context, model claude-opus-5-5), pre-release v4.4.0 — T15–T18 in both modes | real T 4/4 · visible T 4/4 | None — T15–T17 → context-connect, T18 → context-navigator. |
 | 2026-11-10 | **Claude Code, live** (`testing/trigger_claude.py`, staged working tree of `feature/frameworks-v4.6.0` after task 5, fictional context, model claude-opus-5-5), pre-release v4.6.0 — Groups X (new) and C (the roadmap trio, roadmap-architect's description changed) in both modes; the miss re-run 3× in both | real C 9/9 · X 9/9 · visible C 9/9 · X 8/9 → X8 2/3 by majority (real 3/3) | X8 «намалюй дошку з блок-схемою процесу повернення товару» → another plugin's Figma diagram skill once in `visible` and once in the re-run — never roadmap-architect, the boundary this group guards. X1–X5 → roadmap-architect (build, slice, refresh, tree), X6 → project-planning, X7 → task-creator, X9 → cjm-research. Codex not run (Miro on Codex not measured; acceptance runs the map there by hand). |
 | 2026-11-10 (2) | **Claude Code, live** (same harness and model), after review 2 — the new rows X10–X12 without the neighbours' own keywords, 3× each in both modes | real X10 0/3 → `none` 3/3 · X11 3/3 · X12 3/3; visible the same | X10 «зроби дошку в Miro для ретро команди» → `none` 3/3 in both modes: no skill of the plugin owns a retro board, so the expected column now accepts `none`; the row guards the boundary — never roadmap-architect — and it held. X11 «намалюй шлях покупця…» → diagram-prototyper, X12 «що з мапи історій беремо в план на Q1…» → quarterly-planning. |
+| 2026-11-16 | **Claude Code, live** (`testing/trigger_claude.py`, model claude-opus-5-5), pre-release v4.7.0 — Group Y in `real` and `visible` modes, then the 11 rows that name cjm-research or a funnel (A1, A2, A5, A8, G8, G10, M8, R14, W5, X9, X11) on the branch and on `main` | Y 10/10 real · 10/10 visible; regression 11/11 on the branch, 11/11 on `main` | None. cjm-research's description changed (the journey map, «карта шляху»); the neighbours held — Y7 → product-analysis, Y8 → roadmap-architect, Y9 → diagram-prototyper, Y10 → brainstorm-features. |
 
 ## Maintenance
 
