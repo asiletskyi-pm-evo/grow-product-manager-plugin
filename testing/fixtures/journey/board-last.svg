@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2600" height="2800">
+<text data-type="text" data-miro-id="3458764200000000001" x="0" y="0">Zorg: Перше замовлення</text>
+<text data-type="text" data-miro-id="3458764200000000002" x="220" y="80">s1 · Візит</text>
+<text data-type="text" data-miro-id="3458764200000000003" x="220" y="120">visit -&gt; search &gt;= 45%</text>
+<text data-type="text" data-miro-id="3458764200000000004" x="640" y="80">s2 · Пошук</text>
+<text data-type="text" data-miro-id="3458764200000000005" x="640" y="120">search -&gt; cart &gt;= 35%</text>
+<text data-type="text" data-miro-id="3458764200000000006" x="1060" y="80">s3 · Кошик</text>
+<text data-type="text" data-miro-id="3458764200000000007" x="1060" y="120">cart -&gt; checkout &gt;= 55%</text>
+<text data-type="text" data-miro-id="3458764200000000008" x="1480" y="80">s4 · Оформлення</text>
+<text data-type="text" data-miro-id="3458764200000000009" x="1480" y="120">checkout -&gt; payment &gt;= 72%</text>
+<text data-type="text" data-miro-id="3458764200000000010" x="1900" y="80">s5 · Оплата</text>
+<text data-type="text" data-miro-id="3458764200000000011" x="1900" y="120">⚠️ TBD</text>
+<text data-type="text" data-miro-id="3458764200000000012" x="20" y="180">дії</text>
+<text data-type="text" data-miro-id="3458764200000000013" x="20" y="440">точки контакту</text>
+<text data-type="text" data-miro-id="3458764200000000014" x="20" y="700">досвід</text>
+<text data-type="text" data-miro-id="3458764200000000015" x="20" y="960">болі</text>
+<text data-type="text" data-miro-id="3458764200000000016" x="20" y="1220">метрики</text>
+<text data-type="text" data-miro-id="3458764200000000017" x="20" y="1480">аномалії</text>
+<text data-type="text" data-miro-id="3458764200000000018" x="20" y="1740">можливості</text>
+<text data-type="text" data-miro-id="3458764200000000019" x="20" y="2000">рішення</text>
+<text data-type="text" data-miro-id="3458764200000000020" x="20" y="2260">ініціативи</text>
+<text data-type="text" data-miro-id="3458764200000000021" x="20" y="2520">експерименти</text>
+<g data-frame="s1 · дії" data-miro-id="3458764200000000022" transform="translate(220,160)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · дії" />
+  <rect data-type="sticky" data-miro-id="3458764200000000023" x="10" y="10" width="185" height="105" data-content="Приходить із пошукової реклами на головну" />
+</g>
+<g data-frame="s2 · дії" data-miro-id="3458764200000000024" transform="translate(640,160)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · дії" />
+</g>
+<g data-frame="s3 · дії" data-miro-id="3458764200000000025" transform="translate(1060,160)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · дії" />
+</g>
+<g data-frame="s4 · дії" data-miro-id="3458764200000000026" transform="translate(1480,160)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · дії" />
+</g>
+<g data-frame="s5 · дії" data-miro-id="3458764200000000027" transform="translate(1900,160)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · дії" />
+</g>
+<g data-frame="s1 · точки контакту" data-miro-id="3458764200000000028" transform="translate(220,420)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · точки контакту" />
+  <rect data-type="sticky" data-miro-id="3458764200000000029" x="10" y="10" width="185" height="105" data-content="Головна сторінка, мобільний веб" />
+</g>
+<g data-frame="s2 · точки контакту" data-miro-id="3458764200000000030" transform="translate(640,420)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · точки контакту" />
+</g>
+<g data-frame="s3 · точки контакту" data-miro-id="3458764200000000031" transform="translate(1060,420)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · точки контакту" />
+</g>
+<g data-frame="s4 · точки контакту" data-miro-id="3458764200000000032" transform="translate(1480,420)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · точки контакту" />
+</g>
+<g data-frame="s5 · точки контакту" data-miro-id="3458764200000000033" transform="translate(1900,420)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · точки контакту" />
+</g>
+<g data-frame="s1 · досвід" data-miro-id="3458764200000000034" transform="translate(220,680)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · досвід" />
+</g>
+<g data-frame="s2 · досвід" data-miro-id="3458764200000000035" transform="translate(640,680)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · досвід" />
+  <rect data-type="sticky" data-miro-id="3458764200000000036" x="10" y="10" width="185" height="105" data-content="Багато зусиль, щоб звузити видачу" />
+</g>
+<g data-frame="s3 · досвід" data-miro-id="3458764200000000037" transform="translate(1060,680)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · досвід" />
+</g>
+<g data-frame="s4 · досвід" data-miro-id="3458764200000000038" transform="translate(1480,680)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · досвід" />
+  <rect data-type="sticky" data-miro-id="3458764200000000039" x="10" y="10" width="185" height="105" data-content="Тривога: чи не задорого вийде з доставкою" />
+</g>
+<g data-frame="s5 · досвід" data-miro-id="3458764200000000040" transform="translate(1900,680)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · досвід" />
+</g>
+<g data-frame="s1 · болі" data-miro-id="3458764200000000041" transform="translate(220,940)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · болі" />
+</g>
+<g data-frame="s2 · болі" data-miro-id="3458764200000000042" transform="translate(640,940)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · болі" />
+  <rect data-type="sticky" data-miro-id="3458764200000000043" x="10" y="10" width="185" height="105" data-content="Фільтри скидаються після повернення назад до видачі" />
+</g>
+<g data-frame="s3 · болі" data-miro-id="3458764200000000044" transform="translate(1060,940)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · болі" />
+  <rect data-type="sticky" data-miro-id="3458764200000000045" x="10" y="10" width="185" height="105" data-content="Не видно вартості доставки до оформлення" />
+  <rect data-type="sticky" data-miro-id="3458764200000000046" x="205" y="10" width="185" height="105" data-content="Покупці питають у підтримці про строки доставки" />
+</g>
+<g data-frame="s4 · болі" data-miro-id="3458764200000000047" transform="translate(1480,940)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · болі" />
+</g>
+<g data-frame="s5 · болі" data-miro-id="3458764200000000048" transform="translate(1900,940)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · болі" />
+</g>
+<g data-frame="s1 · метрики" data-miro-id="3458764200000000049" transform="translate(220,1200)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · метрики" />
+  <rect data-type="sticky" data-miro-id="3458764200000000050" x="10" y="10" width="185" height="105" data-content="visit -&gt; search: 44.0% (база 45.0%, -2.2%)&lt;br&gt;health-check" />
+</g>
+<g data-frame="s2 · метрики" data-miro-id="3458764200000000051" transform="translate(640,1200)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · метрики" />
+  <rect data-type="sticky" data-miro-id="3458764200000000052" x="10" y="10" width="185" height="105" data-content="search -&gt; cart: 31.0% (база 35.0%, -11.4%)&lt;br&gt;health-check" />
+</g>
+<g data-frame="s3 · метрики" data-miro-id="3458764200000000053" transform="translate(1060,1200)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · метрики" />
+  <rect data-type="sticky" data-miro-id="3458764200000000054" x="10" y="10" width="185" height="105" data-content="cart -&gt; checkout: 52.0% (база 50.0%, +4.0%)&lt;br&gt;health-check" />
+</g>
+<g data-frame="s4 · метрики" data-miro-id="3458764200000000055" transform="translate(1480,1200)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · метрики" />
+  <rect data-type="sticky" data-miro-id="3458764200000000056" x="10" y="10" width="185" height="105" data-content="checkout -&gt; payment: 70.0% (база 72.0%, -2.8%)&lt;br&gt;health-check" />
+</g>
+<g data-frame="s5 · метрики" data-miro-id="3458764200000000057" transform="translate(1900,1200)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · метрики" />
+</g>
+<g data-frame="s1 · аномалії" data-miro-id="3458764200000000058" transform="translate(220,1460)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · аномалії" />
+</g>
+<g data-frame="s2 · аномалії" data-miro-id="3458764200000000059" transform="translate(640,1460)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · аномалії" />
+  <rect data-type="sticky" data-miro-id="3458764200000000060" x="10" y="10" width="185" height="105" data-content="search -&gt; cart: -11.4% від бази — попередження&lt;br&gt;health-check" />
+</g>
+<g data-frame="s3 · аномалії" data-miro-id="3458764200000000061" transform="translate(1060,1460)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · аномалії" />
+</g>
+<g data-frame="s4 · аномалії" data-miro-id="3458764200000000062" transform="translate(1480,1460)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · аномалії" />
+</g>
+<g data-frame="s5 · аномалії" data-miro-id="3458764200000000063" transform="translate(1900,1460)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · аномалії" />
+</g>
+<g data-frame="s1 · можливості" data-miro-id="3458764200000000064" transform="translate(220,1720)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · можливості" />
+</g>
+<g data-frame="s2 · можливості" data-miro-id="3458764200000000065" transform="translate(640,1720)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · можливості" />
+  <rect data-type="sticky" data-miro-id="3458764200000000066" x="10" y="10" width="185" height="105" data-content="Не губити вибір покупця між кроками" />
+</g>
+<g data-frame="s3 · можливості" data-miro-id="3458764200000000067" transform="translate(1060,1720)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · можливості" />
+  <rect data-type="sticky" data-miro-id="3458764200000000068" x="10" y="10" width="185" height="105" data-content="Покупець знає повну ціну й строк доставки ще в кошику" />
+</g>
+<g data-frame="s4 · можливості" data-miro-id="3458764200000000069" transform="translate(1480,1720)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · можливості" />
+</g>
+<g data-frame="s5 · можливості" data-miro-id="3458764200000000070" transform="translate(1900,1720)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · можливості" />
+</g>
+<g data-frame="s1 · рішення" data-miro-id="3458764200000000071" transform="translate(220,1980)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · рішення" />
+</g>
+<g data-frame="s2 · рішення" data-miro-id="3458764200000000072" transform="translate(640,1980)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · рішення" />
+</g>
+<g data-frame="s3 · рішення" data-miro-id="3458764200000000073" transform="translate(1060,1980)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · рішення" />
+  <rect data-type="sticky" data-miro-id="3458764200000000074" x="10" y="10" width="185" height="105" data-content="Калькулятор доставки в кошику" />
+  <rect data-type="sticky" data-miro-id="3458764200000000075" x="205" y="10" width="185" height="105" data-content="Безкоштовна доставка від порогу, показана в кошику" />
+  <rect data-type="sticky" data-miro-id="3458764200000000076" x="10" y="125" width="185" height="105" data-content="Строк доставки на картці товару" />
+</g>
+<g data-frame="s4 · рішення" data-miro-id="3458764200000000077" transform="translate(1480,1980)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · рішення" />
+</g>
+<g data-frame="s5 · рішення" data-miro-id="3458764200000000078" transform="translate(1900,1980)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · рішення" />
+</g>
+<g data-frame="s1 · ініціативи" data-miro-id="3458764200000000079" transform="translate(220,2240)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · ініціативи" />
+</g>
+<g data-frame="s2 · ініціативи" data-miro-id="3458764200000000080" transform="translate(640,2240)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · ініціативи" />
+</g>
+<g data-frame="s3 · ініціативи" data-miro-id="3458764200000000081" transform="translate(1060,2240)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · ініціативи" />
+  <rect data-type="sticky" data-miro-id="3458764200000000082" x="10" y="10" width="185" height="105" data-content="Епік «Прозора доставка»&lt;br&gt;PROJ-1234" />
+</g>
+<g data-frame="s4 · ініціативи" data-miro-id="3458764200000000083" transform="translate(1480,2240)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · ініціативи" />
+</g>
+<g data-frame="s5 · ініціативи" data-miro-id="3458764200000000084" transform="translate(1900,2240)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · ініціативи" />
+</g>
+<g data-frame="s1 · експерименти" data-miro-id="3458764200000000085" transform="translate(220,2500)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s1 · експерименти" />
+</g>
+<g data-frame="s2 · експерименти" data-miro-id="3458764200000000086" transform="translate(640,2500)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s2 · експерименти" />
+</g>
+<g data-frame="s3 · експерименти" data-miro-id="3458764200000000087" transform="translate(1060,2500)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s3 · експерименти" />
+  <rect data-type="sticky" data-miro-id="3458764200000000088" x="10" y="10" width="185" height="105" data-content="A/B калькулятора доставки&lt;br&gt;exp-delivery-calc-20261020" />
+</g>
+<g data-frame="s4 · експерименти" data-miro-id="3458764200000000089" transform="translate(1480,2500)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s4 · експерименти" />
+</g>
+<g data-frame="s5 · експерименти" data-miro-id="3458764200000000090" transform="translate(1900,2500)">
+  <rect data-type="frame" x="0" y="0" width="400" height="240" data-title="s5 · експерименти" />
+</g>
+</svg>

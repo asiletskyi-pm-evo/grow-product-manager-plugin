@@ -543,6 +543,218 @@ try:
     check("9.8 M-11 the note written but the page not: exit 1, and the result still lists what changed", rc == 1 and res.get("note_written") is True
           and "m-s2-search-cart" in res.get("replaced", []), (rc, res))
 
+    # 10. the board (v4.8.0, journey-protocol.md §11–§12): board-layout, board-state, board-diff, board-take
+    jn = os.path.join(fx, "journey-first-order.md")
+    jn0 = text(jn)
+    rc, out, res = run("board-layout", "--note", jn, "--lang", "uk")
+    cells = {c["title"]: c for c in res.get("cells", [])}
+    check("10.1 board-layout: 5 stages across, 10 lanes down, a cell for every lane of every stage", rc == 0
+          and [s["id"] for s in res.get("stages", [])] == ["s1", "s2", "s3", "s4", "s5"] and len(res.get("lanes", [])) == 10
+          and len(cells) == 50 and "s3 · болі" in cells and "s5 · експерименти" in cells and len(res.get("titles", [])) == 50, out[-400:])
+    p2c = [r for r in cells.get("s3 · болі", {}).get("rows", [])]
+    check("10.2 a row sits in its cell with its board text and no second line", [r["id"] for r in p2c] == ["p2", "p3"]
+          and p2c[0]["text"] == "Не видно вартості доставки до оформлення" and p2c[0]["second"] == "" and not p2c[0]["health_check"], p2c)
+    hc = cells.get("s1 · метрики", {}).get("rows", [])
+    check("10.3 a health-check row is marked, its second line «health-check»", len(hc) == 1 and hc[0]["health_check"]
+          and hc[0]["second"] == "health-check", hc)
+    ini = cells.get("s3 · ініціативи", {}).get("rows", [])
+    exp = cells.get("s3 · експерименти", {}).get("rows", [])
+    check("10.4 an initiative's and an experiment's code on the second line", ini and ini[0]["second"] == "PROJ-1234"
+          and exp and exp[0]["second"] == "exp-delivery-calc-20261020", (ini, exp))
+    blob = json.dumps(res.get("cells", []), ensure_ascii=False)
+    check("10.5 no source, class or date on a sticky", "walkthrough" not in blob and "feedback-triage" not in blob
+          and "observed" not in blob and "2026-10-12" not in blob, blob[:300])
+    check("10.6 a stage without evidence is flagged as a gap", [s["id"] for s in res.get("stages", []) if s.get("gap")] == ["s5"], res.get("stages"))
+    hid = os.path.join(fx, "journey-hidden.md")
+    write(hid, jn0.replace("| feedback-triage 2026-10-30, тема «доставка», pain 7.5 | reported | 2026-10-30 |\n| p3",
+                           "| | reported | 2026-10-30 |\n| p3", 1)
+          .replace("| g1 | s5 | | pain | ⚠️ немає доказів | | | | | | | |",
+                   "| g1 | s5 | | pain | ⚠️ немає доказів | | | | | | | |\n| sim1 | s5 | | pain | Персона боїться оплати | | | | | persona run 2026-11-01 | simulated | 2026-11-01 |"))
+    rc, out, res = run("board-layout", "--note", hid)
+    on = [r["id"] for c in res.get("cells", []) for r in c["rows"]]
+    check("10.7 what the page may not show is not on the board — named in `hidden`", "p2" not in on and "sim1" not in on
+          and sorted(res.get("hidden", [])) == ["p2", "sim1"] and len(on) == 18, (res.get("hidden"), len(on)))
+    rc, out, res = run("board-layout", "--note", jn, "--lang", "en")
+    check("10.8 English cell titles", any(c["title"] == "s3 · pains" for c in res.get("cells", [])), [c["title"] for c in res.get("cells", [])][:3])
+
+    def eid(surface, n):
+        return ("34587642%011d" % n) if surface == "miro" else ("mwkzorg-%04d" % n if n in (91, 92, 93) else "e%d" % n)
+    boards = {"miro": (os.path.join(fx, "board-last.svg"), os.path.join(fx, "board-now.svg")),
+              "whiteboard": (os.path.join(fx, "wb-last.json"), os.path.join(fx, "wb-now.json"))}
+    states = {}
+    for sf, (blast, bnow) in boards.items():
+        st = os.path.join(fx, "journey-first-order.%s.board.json" % sf)
+        states[sf] = st
+        rc, out, res = run("board-state", "--read", blast, "--note", jn, "--surface", sf, "--out", st)
+        check("10.9 [%s] board-state maps every row's sticky, the 50 cells, headers and lane names" % sf, rc == 0
+              and len(res.get("rows", {})) == 19 and res.get("rows", {}).get("p2") == eid(sf, 45)
+              and res.get("roles", {}).get("cell") == 50 and res.get("roles", {}).get("lane_name") == 10
+              and res.get("roles", {}).get("header") == 10 and res.get("unmapped_rows") == [] and res.get("missing_cells") == [], out[-600:])
+        sj = json.loads(text(st)) if os.path.exists(st) else {}
+        check("10.10 [%s] the state names its kind and surface and keeps no author" % sf, sj.get("kind") == "journey-board"
+              and sj.get("surface") == sf and "Zorg QA" not in text(st) and "authorId" not in text(st), {k: sj.get(k) for k in ("kind", "surface")})
+        rc, out, res = run("board-diff", "--last", st, "--now", bnow, "--note", jn)
+        ch, mo, ad, rm, hce = (res.get(k, []) for k in ("changed", "moved", "added", "removed", "hc_edits"))
+        check("10.11 [%s] board-diff: the pain's text changed, named with its row and cell" % sf, rc == 0 and res.get("state") == "diff"
+              and [(c["row"], c["id"]) for c in ch] == [("p2", eid(sf, 45))] and ch[0]["now"] == "Не видно вартості й строку доставки до оформлення"
+              and ch[0].get("cell") == "s3 · болі", ch)
+        check("10.12 [%s] a row moved to another stage: from s4 · досвід to s3 · досвід" % sf,
+              [(m["row"], m["from"], m["to"], m["stage_to"], m["lane_to"]) for m in mo] == [("e2", "s4 · досвід", "s3 · досвід", "s3", "experience")], mo)
+        check("10.13 [%s] three team stickies added, each with its cell" % sf,
+              sorted((a["stage"], a["lane"]) for a in ad) == [("s2", "pain"), ("s3", "initiative"), ("s3", "opportunity")]
+              and sorted(a["id"] for a in ad) == sorted(eid(sf, n) for n in (91, 92, 93)), ad)
+        check("10.14 [%s] a removed row" % sf, [(r["row"], r["id"]) for r in rm] == [("h3", eid(sf, 76))], rm)
+        check("10.15 [%s] the health-check metric edit is named apart (hc_edits), never a change" % sf,
+              [(h["row"], h["change"]) for h in hce] == [("m-s1-visit-search", "text")], hce)
+        check("10.16 [%s] the loose text is `other`; counts" % sf, any(o.get("change") == "added" for o in res.get("other", []))
+              and res.get("counts") == {"changed": 1, "moved": 1, "added": 3, "removed": 1, "orphaned": 0, "hc_edits": 1}, res.get("counts"))
+        check("10.17 [%s] the state's row → sticky map and the area to read back" % sf, res.get("rows", {}).get("h3") == eid(sf, 76)
+              and res.get("scope") and eid(sf, 45) in res.get("ids", []), (res.get("scope"), len(res.get("ids", []))))
+    rc, out, res = run("board-diff", "--note", jn, "--now", boards["miro"][1])
+    check("10.18 no state → unknown", rc == 0 and res.get("state") == "unknown", out)
+    rc, out, res = run("board-diff", "--last", states["miro"], "--note", jn)
+    check("10.19 --last alone gives the ids, the rows and the area to read back", res.get("state") == "scope" and res.get("scope")
+          and len(res.get("rows", {})) == 19, res)
+    dfile = os.path.join(fx, "diff.json")
+    rc, out, res = run("board-diff", "--last", states["miro"], "--now", boards["miro"][1], "--note", jn, "--out", dfile)
+    check("10.20 board-diff --out keeps the diff for board-take", os.path.exists(dfile) and json.loads(text(dfile)).get("state") == "diff", out[-300:])
+
+    # board-take — the preview first, then the write
+    E = lambda n: eid("miro", n)  # noqa: E731
+    tk = os.path.join(fx, "take.md")
+    write(tk, jn0)
+    rc, out, res = run("board-take", "--note", tk, "--diff", dfile, "--take", E(45), E(39), E(91), E(92), E(93), E(76), E(50),
+                       "--date", "2026-11-17", "--dry-run")
+    refused = {r["id"]: r["why"] for r in res.get("refused", [])}
+    check("10.21 --dry-run writes nothing", rc == 0 and res.get("dry_run") is True and text(tk) == jn0 and res.get("note_written") is False, out[-500:])
+    check("10.22 a health-check edit is refused, a removed row needs --drop", refused.get(E(50)) == "health_check"
+          and refused.get(E(76)) == "needs_drop", refused)
+    ask = res.get("ask_class", [])
+    check("10.23 the preview asks the class of the added pain among its lane's classes + «без класу», never simulated",
+          len(ask) == 1 and ask[0]["element"] == E(91) and ask[0]["lane"] == "pain"
+          and ask[0]["classes"] == ["measured", "observed", "reported", "external", ""], ask)
+    rc, out, res = run("board-take", "--note", tk, "--diff", dfile, "--take", E(45), E(39), E(91), E(92), E(93),
+                       "--class", "%s=reported" % E(91), "--drop", "h3", "--date", "2026-11-17")
+    t2 = text(tk)
+    check("10.24 board-take writes the note", rc == 0 and res.get("note_written") is True, out[-500:])
+    check("10.25 the changed text into its row", "| p2 | s3 | | pain | Не видно вартості й строку доставки до оформлення |" in t2, "")
+    check("10.26 the moved row on its new stage, every other cell kept",
+          "| e2 | s3 | | experience | Тривога: чи не задорого вийде з доставкою | | | | | feedback-triage 2026-10-30, тема «доставка», pain 7.5 | reported | 2026-10-30 |" in t2, "")
+    check("10.27 the added pain a new row b1 with the team's source, the PM's class and the date",
+          "| b1 | s2 | | pain | Немає фільтра за ціною доставки | | | | | дошка команди 2026-11-17 | reported | 2026-11-17 |" in t2, "")
+    check("10.28 the added opportunity b2 without a class; the initiative b3 takes its code from the second line",
+          "| b2 | s3 | | opportunity | Показати доставку на картці товару | | | | | дошка команди 2026-11-17 | | 2026-11-17 |" in t2
+          and "| b3 | s3 | | initiative | Епік «Доставка в кошику» | | | | PROJ-1300 | дошка команди 2026-11-17 | | 2026-11-17 |" in t2, "")
+    check("10.29 the removed row dropped on --drop", "| h3 |" not in t2 and "| h3 |" in jn0, "")
+    keep = [l for l in jn0.split("\n") if not re.match(r"^\| (p2|e2|h3) \|", l)]
+    check("10.30 every other line byte for byte; the health-check rows untouched", all(l in t2.split("\n") for l in keep)
+          and "visit -> search: 44.0% (база 45.0%, -2.2%)" in t2 and len(t2.split("\n")) == len(jn0.split("\n")) + 3 - 1, "")
+    at = {k: t2.find("| %s |" % k) for k in ("b1", "a-s2-search-cart", "p2", "b3", "m-s3-cart-checkout", "e2", "m-s4-checkout-payment")}
+    check("10.31 the new rows sit after their stage's last row", all(v >= 0 for v in at.values())
+          and at["a-s2-search-cart"] < at["b1"] < at["p2"] and at["e2"] < at["b3"] < at["m-s4-checkout-payment"], at)
+    rc, out, res = run("check", "--note", tk, "--today", TODAY)
+    check("10.32 the taken map checks: no finding names b1 as unclassed", not any(f.get("row") == "b1" and f["finding"] == "no_class" for f in res.get("findings", [])), "")
+
+    nc = os.path.join(fx, "take-noclass.md")
+    write(nc, jn0)
+    rc, out, res = run("board-take", "--note", nc, "--diff", dfile, "--take", E(91), "--date", "2026-11-17")
+    t3 = text(nc)
+    check("10.33 no class from the PM → an empty class, named no_class; the page does not show it",
+          "| b1 | s2 | | pain | Немає фільтра за ціною доставки | | | | | дошка команди 2026-11-17 | | 2026-11-17 |" in t3
+          and any(n["why"] == "no_class" and n.get("row") == "b1" for n in res.get("named", [])), (res.get("named"), out[-300:]))
+    page_nc = os.path.join(fx, "noclass.html")
+    run("render-html", "--note", nc, "--out", page_nc)
+    check("10.34 the unclassed team row never reaches the page", os.path.exists(page_nc) and "Немає фільтра за ціною доставки" not in text(page_nc), "")
+    rc, out, res = run("board-take", "--note", nc, "--diff", dfile, "--take", E(45), "--drop", "p1", "--dry-run")
+    check("10.35 --drop of a row the board still has is refused", any(r["id"] == "p1" for r in res.get("refused", [])), res.get("refused"))
+
+    def crafted(name, **cats):
+        base = {"ok": True, "state": "diff"}
+        base.update({k: [] for k in ("changed", "moved", "added", "removed", "orphaned", "hc_edits", "other", "unrecorded")})
+        base.update(cats)
+        p = os.path.join(fx, name)
+        write(p, "JOURNEY_RESULT " + json.dumps(base, ensure_ascii=False) + "\n")
+        return p
+    mv = crafted("d-move.json", moved=[{"id": "x-p1", "row": "p1", "text": "Фільтри скидаються", "from": "s2 · болі", "to": "s2 · метрики",
+                                        "stage_from": "s2", "lane_from": "pain", "stage_to": "s2", "lane_to": "metric", "team": False}])
+    rc, out, res = run("board-take", "--note", nc, "--diff", mv, "--take", "x-p1", "--dry-run")
+    check("10.36 a move into the metric lane is refused and named (a JOURNEY_RESULT line reads as a diff)",
+          [(r["id"], r["why"]) for r in res.get("refused", [])] == [("x-p1", "metric_move")], (res.get("refused"), out[-300:]))
+    sec = crafted("d-secret.json", added=[
+        {"id": "x-c", "kind": "sticky", "text": "Пишіть на ivan@zorg.example про доставку", "cell": "s2 · болі", "stage": "s2", "lane": "pain"},
+        {"id": "x-s", "kind": "sticky", "text": "ключ sk-ant-api03-ZorgFakeKey0123456789abcdefABCDEF", "cell": "s2 · болі", "stage": "s2", "lane": "pain"},
+        {"id": "x-o", "kind": "sticky", "text": "Ще один калькулятор", "cell": "s3 · рішення", "stage": "s3", "lane": "solution"},
+        {"id": "x-i", "kind": "sticky", "text": "Епік без коду", "cell": "s3 · ініціативи", "stage": "s3", "lane": "initiative"},
+        {"id": "x-n", "kind": "sticky", "text": "Поза клітинками", "cell": "", "stage": None, "lane": None}])
+    sp = os.path.join(fx, "take-secret.md")
+    write(sp, jn0)
+    rc, out, res = run("board-take", "--note", sp, "--diff", sec, "--take", "x-c", "x-s", "x-o", "x-i", "x-n", "--class", "x-c=reported",
+                       "--date", "2026-11-17")
+    t4 = text(sp)
+    named = {(n.get("element"), n["why"]) for n in res.get("named", [])}
+    refused = {r["id"]: r["why"] for r in res.get("refused", [])}
+    check("10.37 an e-mail removed before the write, and named", "ivan@zorg.example" not in t4 and "Пишіть на про доставку" in t4
+          and ("x-c", "contact_removed") in named, (named, out[-300:]))
+    check("10.38 a text holding a secret is never written, the element named", refused.get("x-s") == "secret" and "sk-ant" not in t4, refused)
+    check("10.39 a solution without its parent: named orphan, the stage's opportunities proposed", ("x-o", "orphan") in named
+          and any(p.get("element") == "x-o" and p.get("candidates") == ["o2"] for p in res.get("parents", [])), res.get("parents"))
+    check("10.40 an initiative without a code on its second line: bad_code", ("x-i", "bad_code") in named, named)
+    check("10.41 a sticky outside every cell is refused (no_cell)", refused.get("x-n") == "no_cell", refused)
+    pr = os.path.join(fx, "take-parent.md")
+    write(pr, jn0)
+    rc, out, res = run("board-take", "--note", pr, "--diff", sec, "--take", "x-o", "--parent", "x-o=o2", "--date", "2026-11-17")
+    check("10.42 --parent sets a valid parent", "| b1 | s3 | | solution | Ще один калькулятор | | | o2 | | дошка команди 2026-11-17 | | 2026-11-17 |" in text(pr), out[-300:])
+    rc, out, res = run("board-take", "--note", pr, "--diff", sec, "--take", "x-o", "--parent", "x-o=p1", "--dry-run")
+    check("10.43 a parent of another stage or lane is refused (bad_parent) and not set",
+          any(n["why"] == "bad_parent" for n in res.get("named", [])), res.get("named"))
+    rc, out, res = run("board-take", "--note", pr, "--diff", sec, "--take", "x-c", "--class", "x-c=simulated", "--dry-run")
+    check("10.44 a class the lane does not take (simulated) is refused (bad_class) and left empty",
+          any(n["why"] == "bad_class" for n in res.get("named", [])), res.get("named"))
+
+    # the state over time: a dropped row's sticky stays the plugin's own; a refreshed metric keeps its sticky
+    dropped = os.path.join(fx, "journey-dropped.md")
+    write(dropped, "\n".join(l for l in jn0.split("\n") if not l.startswith("| p3 |")))
+    rc, out, res = run("board-diff", "--last", states["miro"], "--now", boards["miro"][0], "--note", dropped)
+    check("10.45 a row dropped from the note names its sticky as orphaned", [o.get("row") for o in res.get("orphaned", [])] == ["p3"]
+          and res.get("counts", {}).get("orphaned") == 1, res.get("orphaned"))
+    ost = os.path.join(fx, "orphan.board.json")
+    rc, out, res = run("board-state", "--read", boards["miro"][0], "--note", dropped, "--surface", "miro", "--last", states["miro"], "--out", ost)
+    check("10.46 the next state keeps it as the plugin's own (orphan), never a team sticky", list(res.get("orphans", {})) == ["p3"]
+          and res.get("roles", {}).get("team", 0) == 0, res)
+    refreshed = os.path.join(fx, "journey-refreshed.md")
+    write(refreshed, jn0.replace("visit -> search: 44.0% (база 45.0%, -2.2%)", "visit -> search: 47.0% (база 45.0%, +4.4%)"))
+    rc, out, res = run("board-state", "--read", boards["miro"][0], "--note", refreshed, "--surface", "miro", "--last", states["miro"],
+                       "--out", os.path.join(fx, "refreshed.board.json"))
+    check("10.47 a health-check row the refresh changed keeps its sticky by id (no team sticky)", res.get("rows", {}).get("m-s1-visit-search") == E(50)
+          and res.get("roles", {}).get("team", 0) == 0, res.get("roles"))
+
+    # mutations
+    for tag, old, new, target, name in (
+            ("hc", 'if _is_hc(r):\n                refuse(i, "health_check"', 'if False:\n                refuse(i, "health_check"', "journey_map.py",
+             "10.48 M5 a take that rewrites a health-check row"),
+            ("cls", 'cls = picked.get(key, "")', 'cls = picked.get(key, "reported")', "journey_map.py", "10.49 M6 a take that writes a class the PM did not pick"),
+            ("drop", "for rid in drop:", "for rid in list(drop) + [e.get('row') for e in diff.get('removed', [])]:", "journey_map.py",
+             "10.50 M7 a take that deletes a row without --drop")):
+        ms = mutant(d, "board-" + tag, old, new, target)
+        if ms is None:
+            check(name + " — mutation site present", False, "pattern not found")
+            continue
+        mt = os.path.join(fx, "mut-%s.md" % tag)
+        write(mt, jn0)
+        args = {"hc": ["--take", E(50), E(45)], "cls": ["--take", E(91)], "drop": ["--take", E(45)]}[tag]
+        run("board-take", "--note", mt, "--diff", dfile, *args, "--date", "2026-11-17", script=ms)
+        tm = text(mt)
+        caught = {"hc": "visit -> search: 46%" in tm, "cls": "| b1 | s2 | | pain | Немає фільтра за ціною доставки | | | | | дошка команди 2026-11-17 | reported |" in tm,
+                  "drop": "| h3 |" not in tm}[tag]
+        check(name + " is caught", caught, tm[-300:])
+    ms = mutant(d, "board-page", "if page_worthy(r, declared)]", "if not r[\"gap\"]]")
+    if ms is None:
+        check("10.51 M8 mutation site present (the board's rows are the page's)", False, "pattern not found")
+    else:
+        rc, out, res = run("board-layout", "--note", hid, script=ms)
+        on = [r["id"] for c in res.get("cells", []) for r in c["rows"]]
+        check("10.51 M8 a layout with a row the page hides is caught by 10.7", "sim1" in on, on)
+
     # 7. schema — check 28
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
     try:
