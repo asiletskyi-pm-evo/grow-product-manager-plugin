@@ -730,19 +730,22 @@ def mermaid(t):
 # ------------------------------------------------------------------ the board (§11–§12, since v4.8.0)
 BOARD_ROLES = ("cell", "row", "header", "lane_name", "team", "orphan", "frame", "other")
 DIFF_CATEGORIES = ("changed", "moved", "added", "removed", "orphaned", "hc_edits", "other", "unrecorded")
-TAKE_REFUSED = ("health_check", "metric_move", "no_cell", "needs_drop", "not_removed", "secret", "empty", "not_takeable",
-                "unknown")
-TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code")
+TAKE_REFUSED = ("health_check", "metric_lane", "no_cell", "needs_drop", "not_removed", "taken", "secret", "empty",
+                "not_takeable", "unknown")
+TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code", "unused")
 COUNTED = ("changed", "moved", "added", "removed", "orphaned", "hc_edits")
 TEAM_SOURCE = {"uk": "дошка команди", "en": "team board"}
 STATE_KIND = "journey-board"
 HC_LANES = ("metric", "anomaly")
-TEAM_ROW = re.compile(r"^b(\d+)$")
 MARKERS = re.compile(r"\[(?:link removed|contact hidden)\]")
 
 
 def _norm(s):
     return re.sub(r"\s+", " ", str(s or "")).strip()
+
+
+def _lines(s):
+    return [l for l in (_norm(x) for x in str(s or "").split("\n")) if l]
 
 
 def lane_names(lang):
@@ -775,24 +778,31 @@ def parse_cell(title, declared):
 
 
 def second_line(r):
+    """A sticky's second line: «health-check» on a health-check row; an initiative's or an experiment's code, page-safe."""
     if _is_hc(r):
         return HC_SOURCE
     if r["lane"] in ("initiative", "experiment") and r["code"].strip():
-        return r["code"].strip()
+        return nt.safe(r["code"].strip())
     return ""
+
+
+def note_rows(note):
+    """Every row of the note with an id, as the board knows it: its board text, second line, whether it is the
+    health-check's and whether the board shows it (`shown` — exactly the page's rows)."""
+    declared = [s["id"] for s in note["stages"]]
+    return [dict(r, board_text=nt.safe(r["text"]), second=second_line(r), hc=_is_hc(r), shown=page_worthy(r, declared))
+            for r in note["rows"] if not r["gap"] and r["id"]]
 
 
 def board_rows(note):
     """The rows the board shows — exactly the page's (page_worthy), each with its board text and second line."""
     declared = [s["id"] for s in note["stages"]]
-    out = []
-    for r in [r for r in note["rows"] if page_worthy(r, declared)]:
-        out.append(dict(r, board_text=nt.safe(r["text"]), second=second_line(r), hc=_is_hc(r)))
-    return out
+    return [dict(r, board_text=nt.safe(r["text"]), second=second_line(r), hc=_is_hc(r), shown=True)
+            for r in note["rows"] if page_worthy(r, declared)]
 
 
 def _rendered(r):
-    """The texts a row's sticky reads back as: its board text, with its second line after a space."""
+    """The texts a row's sticky reads back as: its board text, with its second line after it."""
     texts = []
     for base in (r["board_text"], (r["board_text"] + " " + r["second"]) if r["second"] else ""):
         if base:
@@ -805,7 +815,7 @@ def _heads(note):
     for s in note["stages"]:
         for t in ("%s · %s" % (s["id"], s["name"]), s["name"], s["outcome"], "%s · %s %s" % (s["id"], s["name"], s["outcome"])):
             if _norm(t):
-                out.add(_norm(t))
+                out.add(_norm(nt.safe(t)))
     return out
 
 
@@ -813,23 +823,48 @@ def _lane_texts():
     return {w.lower() for l in LANE_IDS for w in (l, dict(LANES)[l], LABELS["en"]["lane"][l])}
 
 
-def _cell(it, declared):
-    return parse_cell(it.get("frame_text"), declared) if it.get("frame") else None
+def _cell(it, declared, items):
+    """((stage, lane), its title) of the cell an element sits in — up through the frames it is nested in (a team's own
+    section inside a cell keeps its stickies in that cell) — or (None, "")."""
+    seen, f, title = set(), it.get("frame"), it.get("frame_text")
+    while f and f not in seen:
+        seen.add(f)
+        c = parse_cell(title, declared)
+        if c:
+            return c, title
+        fr = items.get(f)
+        if fr is None:
+            break
+        f, title = fr.get("frame"), fr.get("frame_text")
+    return None, ""
 
 
-def assign_roles(items, note, exclude=()):
+def safe_items(items):
+    """Every text of a read page-safe before it is compared, kept or printed: a link removed, a contact hidden, a text
+    holding a secret hidden whole — a state or a diff never keeps what the page would not show."""
+    for it in items.values():
+        it["text"] = nt.safe(it.get("text", ""))
+        it["frame_text"] = nt.safe(it.get("frame_text", ""))
+    return items
+
+
+def assign_roles(items, note, exclude=(), lookup=None):
     """Give each item its role — cell (with its stage and lane), row (with its id), header, lane_name, team, frame or
-    other — by what the note says now. A sticky takes a row of its text in its own cell first, then any row of its text
-    (it was moved); two stickies of one text take that text's rows in turn (`ambiguous`)."""
+    other — by what the note says now, and an `origin`: the plugin's sticky of a row the board shows, or the team's (a
+    team sticky, or one whose row the board does not show — a row an earlier take made of it). A sticky takes a row of
+    its text in its own cell first, then any row of its text (it was moved); two stickies of one text take that text's
+    rows in turn (`ambiguous`)."""
     declared = [s["id"] for s in note["stages"]]
-    rows = [r for r in board_rows(note) if r["id"] not in exclude]
+    lookup = items if lookup is None else lookup
     by_text = {}
-    for r in rows:
+    for r in note_rows(note):
+        if r["id"] in exclude:
+            continue
         for t in _rendered(r):
             by_text.setdefault(t, []).append(r)
     heads, lanes = _heads(note), _lane_texts()
     for it in items.values():
-        for k in ("role", "row", "stage", "lane", "hc"):
+        for k in ("role", "row", "stage", "lane", "hc", "origin"):
             it.pop(k, None)
         if it["kind"] == "frame":
             own = parse_cell(it["text"], declared)
@@ -838,7 +873,7 @@ def assign_roles(items, note, exclude=()):
             else:
                 it["role"] = "header" if _norm(it["text"]) in heads else "frame"
             continue
-        c = _cell(it, declared)
+        c, _ = _cell(it, declared, lookup)
         if c:
             it["stage"], it["lane"] = c
     taken, ambiguous = set(), []
@@ -853,7 +888,7 @@ def assign_roles(items, note, exclude=()):
             if not cands:
                 continue
             r = cands[0]
-            it["role"], it["row"] = "row", r["id"]
+            it["role"], it["row"], it["origin"] = "row", r["id"], "plugin" if r["shown"] else "team"
             if r["hc"]:
                 it["hc"] = True
             taken.add(r["id"])
@@ -865,7 +900,20 @@ def assign_roles(items, note, exclude=()):
         t = _norm(it["text"])
         it["role"] = ("header" if t in heads else "lane_name" if t.lower() in lanes
                       else "team" if it["kind"] == "sticky" else "other")
+        if it["role"] == "team":
+            it["origin"] = "team"
     return ambiguous
+
+
+def _valid_state(items):
+    for mid, it in items.items():
+        if not (isinstance(it, dict) and isinstance(it.get("kind"), str) and isinstance(it.get("text"), str)
+                and isinstance(it.get("x"), (int, float)) and isinstance(it.get("y"), (int, float))):
+            raise Bad("the board's state has an element without its kind, text or place (%s) — keep the state again" % mid)
+        it.setdefault("id", mid)
+        it.setdefault("frame", None)
+        it.setdefault("frame_text", "")
+    return items
 
 
 def load_board_state(path, note, surface=None):
@@ -880,15 +928,23 @@ def load_board_state(path, note, surface=None):
             items = data.get("elements")
             if not isinstance(items, dict):
                 raise Bad("the board's state has no elements")
-            return items, data.get("surface")
-    items = bs.read_board(path, surface)
+            return _valid_state(items), data.get("surface")
+    items = safe_items(bs.read_board(path, surface, lines=True))
     assign_roles(items, note)
     return items, surface or ("miro" if path.lower().endswith(".svg") else "whiteboard")
 
 
-def _cell_fields(prefix, c, it):
-    return {prefix: it.get("frame_text", "") if c else "", "stage" + ("_" + prefix if prefix != "cell" else ""): c[0] if c else None,
+def _cell_fields(prefix, c, title):
+    return {prefix: title if c else "", "stage" + ("_" + prefix if prefix != "cell" else ""): c[0] if c else None,
             "lane" + ("_" + prefix if prefix != "cell" else ""): c[1] if c else None}
+
+
+def table_sig(note):
+    """The note's identity for a diff: the journey, the product and a digest of its rows — a diff taken into another
+    note, or into this one after it changed, is refused."""
+    import hashlib
+    rows = json.dumps([r["cells"] for r in note["rows"]], ensure_ascii=False)
+    return {"journey": note["journey"], "product": note["product"], "table": hashlib.sha256(rows.encode("utf-8")).hexdigest()[:16]}
 
 
 def board_diff(last, now, note):
@@ -896,20 +952,30 @@ def board_diff(last, now, note):
     health-check rows (hc_edits — named, never taken), the plugin's stickies of rows the board no longer shows
     (orphaned), other items and the map's own items the state lacks (unrecorded)."""
     declared = [s["id"] for s in note["stages"]]
-    on_board = {r["id"]: r for r in board_rows(note)}
+    rows = {r["id"]: r for r in note_rows(note)}
+    shown = {rid for rid, r in rows.items() if r["shown"]}
     out = {k: [] for k in DIFF_CATEGORIES}
-    out["orphaned"] = [{"id": mid, "row": it.get("row"), "text": it["text"], "kind": it["kind"]} for mid, it in sorted(last.items())
-                       if it.get("role") in ("row", "orphan") and it.get("row") not in on_board]
+
+    def plugin(it):
+        return it.get("origin", "plugin") != "team"
+    for mid, it in sorted(last.items()):
+        if it.get("role") in ("row", "orphan") and plugin(it) and it.get("row") not in shown:
+            e = {"id": mid, "row": it.get("row"), "text": it["text"], "kind": it["kind"]}
+            if mid in now:
+                c, title = _cell(now[mid], declared, now)
+                co, _ = _cell(it, declared, last)
+                e.update(now=now[mid]["text"], cell=title, changed=_norm(now[mid]["text"]) != _norm(it["text"]) or c != co)
+            out["orphaned"].append(e)
     gone = {o["id"] for o in out["orphaned"]}
     mapped = {it.get("row") for it in last.values() if it.get("role") == "row"}
     fresh = {mid: dict(it) for mid, it in now.items() if mid not in last}
-    assign_roles(fresh, note, exclude=mapped)
+    assign_roles(fresh, note, exclude=mapped, lookup=now)
     for mid, it in now.items():
         old = last.get(mid)
-        cn_ = _cell(it, declared)
+        cn_, tn = _cell(it, declared, now)
         if old is None:
             f = fresh[mid]
-            entry = dict({"id": mid, "kind": it["kind"], "text": it["text"]}, **_cell_fields("cell", cn_, it))
+            entry = dict({"id": mid, "kind": it["kind"], "text": it["text"]}, **_cell_fields("cell", cn_, tn))
             if f.get("role") in ("row", "cell", "header", "lane_name"):
                 out["unrecorded"].append(dict(entry, role=f["role"], row=f.get("row")))
             elif f.get("role") == "team":
@@ -920,11 +986,13 @@ def board_diff(last, now, note):
         if mid in gone:
             continue
         role = old.get("role") or ("team" if old["kind"] == "sticky" else "other")
+        if role == "row" and old.get("row") not in rows:      # a team sticky whose row the PM deleted is the team's again
+            role = "team"
         row = old.get("row") if role == "row" else None
-        hc = role == "row" and row in on_board and on_board[row]["hc"]
-        co = _cell(old, declared)
+        hc = role == "row" and rows[row]["hc"]
+        co, to = _cell(old, declared, last)
         if _norm(old["text"]) != _norm(it["text"]):
-            e = dict({"id": mid, "row": row, "last": old["text"], "now": it["text"]}, **_cell_fields("cell", cn_, it))
+            e = dict({"id": mid, "row": row, "last": old["text"], "now": it["text"]}, **_cell_fields("cell", cn_, tn))
             if hc:
                 out["hc_edits"].append(dict(e, change="text"))
             elif role in ("row", "team"):
@@ -932,18 +1000,18 @@ def board_diff(last, now, note):
             else:
                 out["other"].append(dict(e, role=role, change="text"))
         if role in ("row", "team") and co != cn_:
-            e = dict({"id": mid, "row": row, "text": it["text"]}, **_cell_fields("from", co, old))
-            e.update(_cell_fields("to", cn_, it))
+            e = dict({"id": mid, "row": row, "text": it["text"]}, **_cell_fields("from", co, to))
+            e.update(_cell_fields("to", cn_, tn))
             out["hc_edits" if hc else "moved"].append(dict(e, change="moved") if hc else dict(e, team=role == "team"))
     for mid, old in last.items():
         if mid in now or mid in gone:
             continue
         role = old.get("role") or "other"
-        row = old.get("row") if role == "row" else None
+        row = old.get("row") if role == "row" and old.get("row") in rows else None
         e = {"id": mid, "row": row, "text": old["text"], "cell": old.get("frame_text", "")}
-        if role == "row" and row in on_board and on_board[row]["hc"]:
+        if row and rows[row]["hc"]:
             out["hc_edits"].append(dict(e, change="removed"))
-        elif role == "row":
+        elif row:
             out["removed"].append(e)
         else:
             out["other"].append(dict(e, role=role, change="removed"))
@@ -973,6 +1041,15 @@ def read_diff(path):
     return data
 
 
+def _locked(r):
+    """Why a row never changes from the board (R25) — the health-check's, or any metric or anomaly row — else None."""
+    if _is_hc(r):
+        return "health_check"
+    if r["lane"] in HC_LANES:
+        return "metric_lane"
+    return None
+
+
 def _pairs(values, flag):
     out = {}
     for v in values or []:
@@ -993,8 +1070,10 @@ def take_note(note, diff, take, picked, parents, drop, when):
     by_id = {}
     for r in live:
         by_id.setdefault(r["id"], r)
-    uk_lanes = any(r["cells"][pos["lane"]].strip().lower() in LANE_ALIAS for r in live)
+    uk_lanes = any(r["cells"][pos["lane"]].strip().lower() in LANE_ALIAS for r in live if pos["lane"] < len(r["cells"]))
+    team_source = "%s %s" % (TEAM_SOURCE.get(lang, TEAM_SOURCE["en"]), when)
     applied, refused, named, ask, prop = [], [], [], [], []
+    used_keys = set()
     ents = {}
     for cat in ("changed", "moved", "added", "removed", "hc_edits", "orphaned", "other", "unrecorded"):
         for e in diff.get(cat, []) or []:
@@ -1013,8 +1092,19 @@ def take_note(note, diff, take, picked, parents, drop, when):
     def lane_cell(lane):
         return dict(LANES)[lane] if uk_lanes else lane
 
+    def pick(table, *keys):
+        for k in keys:
+            if k and k in table:
+                used_keys.add((id(table), k))
+                return table[k]
+        return ""
+
     def clean(text, i, row=None):
-        t = _norm(MARKERS.sub("", str(text or "")))
+        raw = str(text or "")
+        for marker, why, what in (("[link removed]", "link_removed", "a link"), ("[contact hidden]", "contact_removed", "an e-mail or a phone")):
+            if marker in raw:
+                named.append({"element": i, "row": row, "why": why, "detail": "%s the board had hidden is not written back" % what})
+        t = _norm(MARKERS.sub("", raw))
         if t.startswith("[hidden:") or cn.scan(t):
             refuse(i, "secret", "the sticky holds %s — never written" % (", ".join(cn.scan(t)) or "a hidden secret"))
             return None
@@ -1024,14 +1114,31 @@ def take_note(note, diff, take, picked, parents, drop, when):
         t3 = _norm(nt.LINK.sub("", t2)).strip(" ,;")
         if t3 != t2.strip(" ,;"):
             named.append({"element": i, "row": row, "why": "link_removed", "detail": "a link removed before the write"})
+        t3 = t3.strip(" ,;")
         if not t3:
             refuse(i, "empty", "nothing left to write")
             return None
         return t3
 
+    def klass(i, rid, lane, text):
+        """The class the PM picked for a row the team wrote, checked against its lane (§2) — never one of ours."""
+        if lane not in LANE_CLASSES:
+            if pick(picked, i, rid):
+                named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes no class (§2)" % lane})
+            return ""
+        cls = picked.get(i, picked.get(rid, ""))
+        pick(picked, i, rid)
+        if cls and cls not in LANE_CLASSES[lane]:
+            named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes %s" % (lane, ", ".join(LANE_CLASSES[lane]))})
+            cls = ""
+        if not cls:
+            named.append({"element": i, "row": rid, "why": "no_class", "detail": "no class from the PM — a finding, never on the page"})
+            ask.append({"element": i, "row": rid, "lane": lane, "text": text, "classes": list(LANE_CLASSES[lane]) + [""]})
+        return cls
+
     edits, moves, news, drops = {}, {}, [], set()
     used = {r["id"] for r in note["rows"]}
-    for i in take:
+    for i in list(dict.fromkeys(take)):
         es = ents.get(i)
         if es is None and i in by_row:
             i, es = by_row[i]
@@ -1046,35 +1153,39 @@ def take_note(note, diff, take, picked, parents, drop, when):
             refuse(i, "unknown", "row %s is not in the note" % rid)
             continue
         if r is not None:
-            if _is_hc(r):
-                refuse(i, "health_check", "row %s is the health-check's — named, never taken (R25)" % rid)
+            why = _locked(r)
+            if why:
+                refuse(i, why, "row %s (%s) — its edits on the board are named, never taken (R25)" % (rid, r["lane"]))
                 continue
             if "removed" in cats:
                 refuse(i, "needs_drop", "row %s is gone from the board — dropped only with --drop %s" % (rid, rid))
                 continue
             for cat, e in es:
                 if cat == "changed":
-                    t = e.get("now", "")
-                    sec = second_line(r)
-                    if sec and _norm(t).endswith(" " + sec):
-                        t = _norm(t)[:-len(sec) - 1]
+                    ls = _lines(e.get("now", ""))
+                    sec = _norm(second_line(r))
+                    if len(ls) > 1 and sec and ls[-1] == sec:
+                        ls = ls[:-1]
                     code = None
-                    if r["lane"] == "initiative":
-                        parts = _norm(t).rsplit(" ", 1)
-                        if len(parts) == 2 and CODE.match(parts[1]):
-                            t, code = parts[0], parts[1]
-                    t = clean(t, i, rid)
+                    if r["lane"] == "initiative" and len(ls) > 1 and CODE.match(ls[-1]):
+                        code = ls.pop()
+                    t = clean(" ".join(ls), i, rid)
                     if t is None:
                         break
-                    edits[rid] = dict(edits.get(rid, {}), text=t, **({"code": code} if code else {}))
-                    applied.append({"element": i, "row": rid, "action": "text", "before": r["text"], "after": t})
+                    cls = klass(i, rid, r["lane"], t)
+                    ed = {"text": t, "source": team_source, "date": when, "class": cls}
+                    if code:
+                        ed["code"] = code
+                    edits[rid] = dict(edits.get(rid, {}), **ed)
+                    applied.append({"element": i, "row": rid, "action": "text", "before": r["text"], "after": t,
+                                    "source": team_source, "class": cls})
                 elif cat == "moved":
                     st, ln = e.get("stage_to"), e.get("lane_to")
                     if not st or st not in declared or ln not in LANE_IDS:
                         refuse(i, "no_cell", "row %s was moved out of every cell" % rid)
                         break
-                    if (ln in HC_LANES or r["lane"] in HC_LANES) and ln != r["lane"]:
-                        refuse(i, "metric_move", "row %s: a move into or out of the metric and anomaly lanes is never taken" % rid)
+                    if ln in HC_LANES:
+                        refuse(i, "metric_lane", "row %s: a move into the metric and anomaly lanes is never taken" % rid)
                         break
                     moves[rid] = (st, ln)
                     applied.append({"element": i, "row": rid, "action": "move", "from": "%s · %s" % (r["stage"], r["lane"]),
@@ -1095,30 +1206,22 @@ def take_note(note, diff, take, picked, parents, drop, when):
         if not st or st not in declared or ln not in LANE_IDS:
             refuse(i, "no_cell", "the sticky sits in no cell of the map")
             continue
-        code = ""
-        t0 = _norm(text)
-        if ln == "initiative":
-            parts = t0.rsplit(" ", 1)
-            if len(parts) == 2 and CODE.match(parts[1]):
-                t0, code = parts[0], parts[1]
-        t = clean(t0, i)
+        ls, code = _lines(text), ""
+        if ln == "initiative" and len(ls) > 1 and CODE.match(ls[-1]):
+            code = ls.pop()
+        t = clean(" ".join(ls), i)
         if t is None:
+            continue
+        if any(r["stage"] == st and r["lane"] == ln and _norm(r["text"]) == t for r in live):
+            refuse(i, "taken", "the note already holds this row on %s — an earlier take" % cell_title(st, ln, lang))
             continue
         n = 1
         while "b%d" % n in used:
             n += 1
         nid = "b%d" % n
         used.add(nid)
-        key = i
-        cls = picked.get(key, "")
-        if cls and (ln not in LANE_CLASSES or cls not in LANE_CLASSES[ln]):
-            named.append({"element": i, "row": nid, "why": "bad_class",
-                          "detail": "%s takes %s" % (ln, ", ".join(LANE_CLASSES.get(ln, ())) or "no class")})
-            cls = ""
-        if ln in LANE_CLASSES and not cls:
-            named.append({"element": i, "row": nid, "why": "no_class", "detail": "no class from the PM — a finding, never on the page"})
-            ask.append({"element": i, "row": nid, "lane": ln, "text": t, "classes": list(LANE_CLASSES[ln]) + [""]})
-        par = parents.get(key, "")
+        cls = klass(i, nid, ln, t)
+        par = pick(parents, i, nid)
         if par:
             pr = by_id.get(par)
             if pr is None or ln not in PARENTS or pr["lane"] not in PARENTS[ln] or pr["stage"] != st:
@@ -1129,32 +1232,43 @@ def take_note(note, diff, take, picked, parents, drop, when):
             named.append({"element": i, "row": nid, "why": "orphan", "detail": "%s needs its parent" % _a(ln)})
             prop.append({"element": i, "row": nid, "lane": ln, "candidates": cands})
         if ln == "initiative" and not code:
-            named.append({"element": i, "row": nid, "why": "bad_code", "detail": "no epic or feature code on the sticky's second line"})
-        source = "%s %s" % (TEAM_SOURCE.get(lang, TEAM_SOURCE["en"]), when)
-        news.append((st, {"id": nid, "stage": st, "lane": lane_cell(ln), "text": t, "parent": par, "code": code, "source": source,
+            named.append({"element": i, "row": nid, "why": "bad_code", "detail": "no epic or feature code on the sticky's own second line"})
+        news.append((st, {"id": nid, "stage": st, "lane": lane_cell(ln), "text": t, "parent": par, "code": code, "source": team_source,
                           "class": cls, "date": when}))
         applied.append({"element": i, "row": nid, "action": "add", "cell": cell_title(st, ln, lang), "text": t, "class": cls,
-                        "source": source, "parent": par, "code": code})
+                        "source": team_source, "parent": par, "code": code})
     removed = {str(e.get("row")) for e in diff.get("removed", []) or [] if isinstance(e, dict) and e.get("row")}
     for rid in drop:
         r = by_id.get(rid)
+        why = _locked(r) if r is not None else None
+        if why:
+            refuse(rid, why, "row %s (%s) — never dropped from the board" % (rid, r["lane"]))
+            continue
         if r is None or rid not in removed:
             refuse(rid, "not_removed", "row %s is not gone from the board — a row leaves the note only when the board lost it" % rid)
             continue
-        if _is_hc(r):
-            refuse(rid, "health_check", "row %s is the health-check's — never dropped from the board" % rid)
-            continue
         drops.add(r["line"])
         applied.append({"row": rid, "action": "drop", "text": r["text"]})
+    for table in (picked, parents):
+        for k in table:
+            if (id(table), k) not in used_keys:
+                named.append({"element": k, "row": None, "why": "unused", "detail": "%s=%s matches no taken element or new row" % (k, table[k])})
     new_line = {}
     for rid in set(edits) | set(moves):
         r = by_id[rid]
         cells = (list(r["cells"]) + [""] * len(cols))[:len(cols)]
         for k, v in edits.get(rid, {}).items():
-            cells[pos[k]] = v
+            if k in pos:
+                cells[pos[k]] = v
+            elif v:
+                named.append({"element": None, "row": rid, "why": "bad_code" if k == "code" else "unused",
+                              "detail": "the table has no %s column — %s not written" % (k, v)})
         if rid in moves:
             cells[pos["stage"]], cells[pos["lane"]] = moves[rid][0], lane_cell(moves[rid][1])
         new_line[r["line"]] = nt.row_line(cells) + eol
+    for _, values in news:
+        if values.get("code") and "code" not in pos:
+            named.append({"element": None, "row": values["id"], "why": "bad_code", "detail": "the table has no code column — %s not written" % values["code"]})
     last_of = {}
     for r in note["rows"]:
         if r["line"] in drops:
@@ -1481,7 +1595,8 @@ def cmd_board_layout(args):
     rows = board_rows(note)
     names = lane_names(lang)
     live = [r for r in note["rows"] if not r["gap"]]
-    stages = [{"id": s["id"], "name": s["name"], "outcome": s["outcome"] or "⚠️ TBD", "title": "%s · %s" % (s["id"], s["name"]),
+    stages = [{"id": s["id"], "name": nt.safe(s["name"]), "outcome": nt.safe(s["outcome"] or "⚠️ TBD"),
+               "title": nt.safe("%s · %s" % (s["id"], s["name"])),
                "gap": not any(r["stage"] == s["id"] and evidence(r) for r in rows)} for s in note["stages"]]
     cells = []
     for li, lane in enumerate(LANE_IDS):
@@ -1489,7 +1604,7 @@ def cmd_board_layout(args):
             cells.append({"title": cell_title(s["id"], lane, lang), "stage": s["id"], "lane": lane, "column": si, "line": li,
                           "rows": [{"id": r["id"], "text": r["board_text"], "second": r["second"], "health_check": r["hc"]}
                                    for r in rows if r["stage"] == s["id"] and r["lane"] == lane]})
-    result(ok=True, title=note["journey"] or note["title"], lang=lang, columns=declared,
+    result(ok=True, title=nt.safe(note["journey"] or note["title"]), lang=lang, columns=declared,
            lanes=[{"id": l, "name": names[l]} for l in LANE_IDS], stages=stages, cells=cells,
            titles=[c["title"] for c in cells], hidden=[r["id"] for r in live if r["id"] and not page_worthy(r, declared)],
            rows=len(rows), sticky={"row": "yellow", "health_check": "blue"}, errors=note["errors"])
@@ -1506,27 +1621,39 @@ def _write_json(path, data):
     return out
 
 
+def _read_now(paths, surface):
+    items = safe_items(bs.read_boards(paths, surface, lines=True))
+    if not items:
+        raise Bad("the read-back holds no element — read the board again before anything is compared or kept")
+    return items
+
+
 def cmd_board_state(args):
     note = load(args.note)
-    items = bs.read_boards(args.read, args.surface)
+    items = _read_now(args.read, args.surface)
     ambiguous = assign_roles(items, note)
-    shown_rows = board_rows(note)
-    on_board, hc_rows = {r["id"] for r in shown_rows}, {r["id"] for r in shown_rows if r["hc"]}
+    rows = {r["id"]: r for r in note_rows(note)}
+    shown = {rid for rid, r in rows.items() if r["shown"]}
     if args.last and os.path.exists(args.last):
         last, _ = load_board_state(args.last, note, args.surface)
         mapped = {it["row"] for it in items.values() if it.get("role") == "row"}
         for mid, old in last.items():
             it = items.get(mid)
-            if it is None or it.get("role") == "row" or old.get("role") not in ("row", "orphan"):
+            if it is None:
                 continue
-            if old.get("row") not in on_board:      # a row the board no longer shows: its sticky stays the plugin's own
-                it["role"], it["row"] = "orphan", old.get("row")
-            elif old.get("row") not in mapped:      # its row is still there (a refreshed metric): the sticky keeps it by id
-                it["role"], it["row"] = "row", old.get("row")
-                mapped.add(old["row"])
+            if old.get("origin") == "team" and it.get("role") in ("row", "team"):
+                it["origin"] = "team"                  # a team sticky stays the team's, whatever row a take made of it
+            if it.get("role") == "row" or old.get("role") not in ("row", "orphan"):
+                continue
+            rid = old.get("row")
+            if old.get("origin", "plugin") != "team" and rid not in shown:
+                it["role"], it["row"], it["origin"] = "orphan", rid, "plugin"   # the plugin's sticky of a row the board no longer shows
+            elif rid in rows and rid not in mapped:    # its row is still there (a refreshed metric): the sticky keeps it by id
+                it["role"], it["row"], it["origin"] = "row", rid, old.get("origin", "plugin")
+                mapped.add(rid)
     for it in items.values():
         it.pop("hc", None)
-        if it.get("role") == "row" and it.get("row") in hc_rows:
+        if it.get("role") == "row" and it.get("row") in rows and rows[it["row"]]["hc"]:
             it["hc"] = True
     state = {"version": 1, "kind": STATE_KIND, "surface": args.surface, "note": os.path.basename(args.note),
              "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items}
@@ -1535,14 +1662,14 @@ def cmd_board_state(args):
     except OSError as e:
         result(ok=False, error="the state cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
-    rows = _rows_map(items)
+    rmap = _rows_map(items)
     roles = {}
     for it in items.values():
         roles[it["role"]] = roles.get(it["role"], 0) + 1
     lang = note["lang"]
     have = {it["text"] for it in items.values() if it.get("role") == "cell"}
-    result(ok=True, out=out, surface=args.surface, rows=rows, cells={it["text"]: mid for mid, it in items.items() if it.get("role") == "cell"},
-           roles=roles, unmapped_rows=[r["id"] for r in shown_rows if r["id"] not in rows],
+    result(ok=True, out=out, surface=args.surface, rows=rmap, cells={it["text"]: mid for mid, it in items.items() if it.get("role") == "cell"},
+           roles=roles, unmapped_rows=[rid for rid in rows if rid in shown and rid not in rmap],
            missing_cells=[cell_title(s["id"], l, lang) for l in LANE_IDS for s in note["stages"]
                           if cell_title(s["id"], l, lang) not in have and cell_title(s["id"], l, "en" if lang == "uk" else "uk") not in have],
            ambiguous=ambiguous, orphans={it["row"]: mid for mid, it in items.items() if it.get("role") == "orphan"})
@@ -1558,9 +1685,9 @@ def cmd_board_diff(args):
     if not args.now:
         result(ok=True, state="scope", surface=surface, scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last))
         return 0
-    now = bs.read_boards(args.now, args.surface or surface)
+    now = _read_now(args.now, args.surface or surface)
     payload = dict(ok=True, state="diff", surface=surface, **board_diff(last, now, note))
-    payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last))
+    payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), note=table_sig(note))
     if args.out:
         try:
             payload["out"] = _write_json(args.out, payload)
@@ -1574,6 +1701,13 @@ def cmd_board_diff(args):
 def cmd_board_take(args):
     note = load(args.note)
     diff = read_diff(args.diff)
+    sig = diff.get("note")
+    if isinstance(sig, dict):
+        now = table_sig(note)
+        if sig.get("journey") != now["journey"] or sig.get("product") != now["product"]:
+            raise Bad("the diff is of another journey (%s / %s) — run board-diff on this note" % (sig.get("product"), sig.get("journey")))
+        if sig.get("table") != now["table"]:
+            raise Bad("the note changed since the diff — run board-diff again before taking anything")
     missing_cols = [c for c in ("source", "class", "date") if c not in note["cols"]]
     if missing_cols:
         raise Bad("the table has no %s column — a row from the board needs its source, class and date (§7)" % ", ".join(missing_cols))

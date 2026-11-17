@@ -17,7 +17,7 @@ Which frame an element of the host's board sits in is geometry alone — a secti
 the SMALLEST section whose box holds the element's centre (a point for an element with no size). Miro's SVG nests an
 element inside its frame, and the nesting says it.
 """
-import html, json, os, re, sys
+import html, json, math, os, re, sys
 import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,9 +34,10 @@ KINDS = {"container": "frame", "note": "sticky", "arrow": "connector"}
 
 def _num(v):
     try:
-        return float(v)
+        f = float(v)
     except (TypeError, ValueError):
         return None
+    return f if math.isfinite(f) else None      # NaN or an infinity is no place
 
 
 # ------------------------------------------------------------------ Miro (moved from story_map.py, v4.6.0, unchanged)
@@ -52,11 +53,18 @@ def _translate(tr):
     return 0.0, 0.0
 
 
-def plain(s):
-    """A sticky's words without markup: a line break or a paragraph a space, tags dropped, entities read."""
-    s = re.sub(r"<br\s*/?>|</p>\s*<p[^>]*>", " ", s or "", flags=re.I)
+def plain(s, lines=False):
+    """A sticky's words without markup: tags dropped, entities read; a line break or a paragraph a space — or, with
+    `lines`, a line break kept (a sticky's second line stays apart: a code is never read from the end of its text)."""
+    s = re.sub(r"<br\s*/?>|</p>\s*<p[^>]*>", "\n" if lines else " ", s or "", flags=re.I)
     s = re.sub(r"<[^>]+>", "", s)
-    return re.sub(r"\s+", " ", html.unescape(s)).strip()
+    return _flat(html.unescape(s), lines)
+
+
+def _flat(s, lines=False):
+    if not lines:
+        return re.sub(r"\s+", " ", s).strip()
+    return "\n".join(l for l in (re.sub(r"\s+", " ", x).strip() for x in s.split("\n")) if l)
 
 
 def _own_text(el):
@@ -68,7 +76,7 @@ def _own_text(el):
     return "".join(parts)
 
 
-def read_miro_svg(path):
+def read_miro_svg(path, lines=False):
     """{id: item} of the elements of a board SVG that carry a data-miro-id — raises Bad. An item's `x`, `y` are absolute;
     `rx`, `ry` are relative to the frame it sits in (a frame's own translate is relative to its parent frame), so a
     dragged frame moves the frame, not every card in it."""
@@ -102,7 +110,7 @@ def read_miro_svg(path):
             body = el.get("data-content")
             if body is None:
                 body = el.get("data-title") or _own_text(el)
-            items[mid] = {"id": mid, "kind": el.get("data-type") or tag, "text": plain(body),
+            items[mid] = {"id": mid, "kind": el.get("data-type") or tag, "text": plain(body, lines),
                           "x": (x or 0.0) + nox, "y": (y or 0.0) + noy, "rx": (x or 0.0) + nox - ox, "ry": (y or 0.0) + noy - oy,
                           "w": _num(el.get("width")), "h": _num(el.get("height")), "frame": frame, "frame_text": frame_text}
         for c in el:
@@ -133,22 +141,30 @@ def _rows(path):
             data = json.load(fh)
     except (OSError, ValueError) as e:
         raise Bad("the board does not read: %s" % (getattr(e, "strerror", None) or type(e).__name__))
-    if isinstance(data, dict) and isinstance(data.get("elements"), (dict, list)):
+    if isinstance(data, dict) and "elements" in data:
         data = data["elements"]
+        if not isinstance(data, (dict, list)):
+            raise Bad("the board's `elements` is neither a list nor a mapping")
     if isinstance(data, dict):
-        return [(str(k), v) for k, v in data.items()]
-    if isinstance(data, list):
+        if not all(isinstance(v, dict) for v in data.values()):       # an error payload, one {id, data} record …
+            raise Bad("the read is not a list of the board's elements: %s" % ", ".join(sorted(map(str, data))[:4]))
+        out = [(str(k), v) for k, v in data.items()]
+    elif isinstance(data, list):
         out = []
         for r in data:
             if isinstance(r, dict) and r.get("id") not in (None, ""):
                 out.append((str(r["id"]), r["data"] if "data" in r else {k: v for k, v in r.items() if k != "id"}))
-        return out
-    raise Bad("the board's element list is neither a list nor a mapping")
+    else:
+        raise Bad("the board's element list is neither a list nor a mapping")
+    if data and not any(isinstance(v, dict) and v.get("type") for _, v in out):
+        raise Bad("the read holds no element of the board (none has a `type`) — read the board again")
+    return out
 
 
-def read_whiteboard(path):
+def read_whiteboard(path, lines=False):
     """{id: item} of a saved `list elements` of the host's board type — raises Bad. A section is a frame; an element sits
-    in the smallest section that holds its centre; only the item's fields are kept (never an author)."""
+    in the smallest section that holds its centre; only the item's fields are kept (never an author). `lines` keeps a
+    text's line breaks."""
     items, placed = {}, set()
     for eid, data in _rows(path):
         if not isinstance(data, dict):
@@ -162,7 +178,7 @@ def read_whiteboard(path):
         if x is not None and y is not None and typ != "arrow":
             placed.add(eid)
         x, y = x or 0.0, y or 0.0
-        out = {"id": eid, "kind": kind, "text": re.sub(r"\s+", " ", text).strip() if isinstance(text, str) else "",
+        out = {"id": eid, "kind": kind, "text": _flat(text, lines) if isinstance(text, str) else "",
                "x": x, "y": y, "rx": x, "ry": y, "w": _num(data.get("w")), "h": _num(data.get("h")),
                "frame": None, "frame_text": "", "type": typ}
         items[eid] = out
@@ -182,19 +198,20 @@ def read_whiteboard(path):
 
 
 # ------------------------------------------------------------------ either
-def read_board(path, surface=None):
-    """{id: item} of one read — the surface named, else by the file: an .svg is Miro's, a .json or a folder the host's."""
+def read_board(path, surface=None, lines=False):
+    """{id: item} of one read — the surface named, else by the file: an .svg is Miro's, a .json or a folder the host's.
+    `lines` keeps a sticky's line breaks (the journey map reads a code from a second line only)."""
     if surface is None:
         surface = "miro" if str(path).lower().endswith(".svg") else "whiteboard"
     if surface not in SURFACES:
         raise Bad("an unknown board surface %r (%s)" % (surface, ", ".join(SURFACES)))
-    return read_miro_svg(path) if surface == "miro" else read_whiteboard(path)
+    return read_miro_svg(path, lines) if surface == "miro" else read_whiteboard(path, lines)
 
 
-def read_boards(paths, surface=None):
+def read_boards(paths, surface=None, lines=False):
     items = {}
     for path in paths:
-        for mid, it in read_board(path, surface).items():
+        for mid, it in read_board(path, surface, lines).items():
             items.setdefault(mid, it)               # the first read of an element wins (the read by ids comes first)
     return items
 

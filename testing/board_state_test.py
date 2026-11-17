@@ -173,6 +173,42 @@ try:
     except bs.Bad:
         check("5.4 an SVG that does not parse is Bad", True)
 
+    # 7. review 1 (frozen 5e67bdf): each finding reproduced first
+    def bad(name, payload):
+        f = os.path.join(d, name + ".json")
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write(payload if isinstance(payload, str) else json.dumps(payload))
+        try:
+            got = bs.read_whiteboard(f)
+            return "no error: %d items" % len(got)
+        except bs.Bad:
+            return True
+    check("7.1 I-5 an error payload is Bad, never an empty board", bad("err", {"error": "rate limited"}) is True, bad("err", {"error": "rate limited"}))
+    check("7.2 I-5 a single {id, data} record is Bad, not an element named «data»",
+          bad("one", {"id": "e1", "data": {"type": "note", "x": 0, "y": 0, "text": "t"}}) is True, "")
+    check("7.3 I-5 rows none of which is an element is Bad", bad("none", [{"id": "e1", "data": {"oops": 1}}]) is True, "")
+    check("7.4 I-5 `elements` that is not a collection is Bad", bad("elnum", {"elements": 5}) is True, "")
+    emp = os.path.join(d, "empty.json")
+    with open(emp, "w", encoding="utf-8") as fh:
+        fh.write("[]")
+    check("7.5 an empty list is an empty board (the command decides)", bs.read_whiteboard(emp) == {}, "")
+    lw = bs.read_whiteboard(os.path.join(B, "wb-basic.json"), lines=True)
+    check("7.6 I-1 lines=True keeps a sticky's line break (the second line stays apart)",
+          lw.get("e7", {}).get("text") == "visit → search: 41% (база 45%)\nhealth-check" and wb.get("e7", {}).get("text") == "visit → search: 41% (база 45%) health-check",
+          lw.get("e7"))
+    lm = bs.read_miro_svg(last, lines=True)
+    check("7.7 I-1 lines=True on a Miro SVG: <br> is a line break; the default keeps the story map's one line",
+          lm.get("3458764000000003001", {}).get("text") == "Поштомат як спосіб доставки в кошику\nPROJ-1234.1"
+          and it.get("3458764000000003001", {}).get("text") == "Поштомат як спосіб доставки в кошику PROJ-1234.1", lm.get("3458764000000003001"))
+    nan = os.path.join(d, "nan.json")
+    with open(nan, "w", encoding="utf-8") as fh:
+        fh.write('[{"id": "e1", "data": {"type": "note", "x": NaN, "y": Infinity, "w": 10, "h": 10, "text": "t"}}]')
+    try:
+        nn = bs.read_whiteboard(nan)
+        check("7.8 M-4 a non-finite place reads as 0 and scope does not crash", nn["e1"]["x"] == 0.0 and bs.scope(nn) is not None, nn)
+    except (bs.Bad, ValueError) as e:
+        check("7.8 M-4 a non-finite place reads as 0 and scope does not crash", False, e)
+
     # 6. mutations
     m1 = mutant(d, "first", "key=lambda c: c[\"w\"] * c[\"h\"]", "key=lambda c: 0")
     if m1 is None:
