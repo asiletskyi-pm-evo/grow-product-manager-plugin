@@ -260,3 +260,4 @@ tools:
     contours: [knowledge]
     access: paid
     connect: "in the browser at baymard.com — the user signs in"
+    needs: [screens, web-search]
