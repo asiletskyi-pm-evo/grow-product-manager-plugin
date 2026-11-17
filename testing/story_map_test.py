@@ -577,6 +577,44 @@ try:
     drift("references/story-map-protocol.md", "| `board-diff --last", "| `board-compare --last", "board-diff", "7.10 a command the protocol stops naming is named")
     os.remove(os.path.join(r2, "references", "story-map-protocol.md"))
     check("7.11 a missing protocol is an error, not silence", sm.check_protocol(r2) != [], sm.check_protocol(r2))
+
+    # 11. v4.8.0: the board code moved to scripts/board_state.py — the map's board-state / board-diff give the same bytes
+    #     as story_map.py at b5cd7ff (v4.7.0), every case of testing/fixtures/board/story-map-golden.json replayed
+    def replay(script, tag):
+        with open(os.path.join(ROOT, "testing", "fixtures", "board", "story-map-golden.json"), encoding="utf-8") as fh:
+            gold = json.load(fh)["cases"]
+        gd = os.path.join(d, "golden-" + tag)
+        os.makedirs(gd)
+        env = {k: v for k, v in os.environ.items() if not k.startswith("GROW_PM_")}
+        env["HOME"] = SAFE_HOME
+        bad = []
+        for c in gold:
+            args = [a.replace("<F>", os.path.join(ROOT, "testing", "fixtures")).replace("<D>", gd) for a in c["args"]]
+            p = subprocess.run([sys.executable, script] + args, capture_output=True, text=True, env=env)
+            got = re.sub(r'"at": "[^"]*"', '"at": "<AT>"', p.stdout.replace(gd, "<D>"))
+            if p.returncode != c["rc"] or got != c["stdout"]:
+                bad.append(" ".join(c["args"][:3]))
+                continue
+            if c.get("file"):
+                with open(c["file"].replace("<D>", gd), encoding="utf-8") as fh:
+                    content = re.sub(r'"at": "[^"]*"', '"at": "<AT>"', fh.read().replace(gd, "<D>"))
+                if content != c["content"]:
+                    bad.append("state " + c["file"])
+        return len(gold), bad
+    n, bad = replay(SCRIPT, "now")
+    check("11.1 the map's board-state and board-diff print and keep the same bytes as at v4.7.0 (%d cases)" % n,
+          n >= 14 and not bad, bad)
+    src = open(SCRIPT, encoding="utf-8").read()
+    check("11.2 story_map.py imports board_state and defines no reader of its own",
+          re.search(r"^import board_state", src, re.M) is not None and not re.search(r"^def (?:read_board|read_miro_svg)\(", src, re.M), "")
+    mb = mutant(d, "relframe", '"rx": (x or 0.0) + nox - ox, "ry": (y or 0.0) + noy - oy', '"rx": (x or 0.0) + nox, "ry": (y or 0.0) + noy',
+                target="board_state.py") \
+        if os.path.exists(os.path.join(os.path.dirname(SCRIPT), "board_state.py")) else None
+    if mb is None:
+        check("11.3 M4 mutation site present (a sticky's place relative to its frame)", False, "pattern not in board_state.py")
+    else:
+        n, bad = replay(mb, "relframe")
+        check("11.3 M4 a reader whose stickies lose their frame-relative place is caught by the replay", bool(bad), bad)
 finally:
     shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(SAFE_HOME, ignore_errors=True)
