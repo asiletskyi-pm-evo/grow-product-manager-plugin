@@ -1586,6 +1586,7 @@ SURFACE_BRANDS = [   # (pattern, flags, what it names)
     (r"(?<![\w.])Sites\b", 0, "a host's hosted pages"),
     (r"\b(?:Slides|Dashboard|Design System) (?:type|artifact)s?\b|\bclaude\.ai/(?:code/)?artifact", re.I,
      "a host's artifact kind or link"),
+    (r"(?<![\w.])Whiteboard\b", 0, "a host's artifact kind (v4.8.0: «the host's board type»)"),
     (r"\bcodex sites?\b|\bchatgpt\b[^.\n]{0,40}\bcanvas\b", re.I, "a host's hosted pages or canvas"),
 ]
 SURFACE_BRAND_ALLOWED = {os.path.join("references", "host-profiles.md"), os.path.join("references", "native-surfaces.md")}

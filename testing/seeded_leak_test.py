@@ -157,6 +157,12 @@ SEEDS = [
      "references/vault-protocol.md", "append",
      "- Backlinks for a provider note: vault_get_backlinks(path).",
      "provider-contract"),
+    # v4.8.0: the journey map's board may be the host's own board type; lint 30 keeps its brand
+    # name in the brand map alone (native-surfaces.md §6) — a protocol says «the host's board type».
+    ("surface: the host's board type named by its brand in a shared protocol",
+     "references/journey-protocol.md", "append",
+     "- A board may also be the host's Whiteboard, written element by element.",
+     "surface-brand"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare

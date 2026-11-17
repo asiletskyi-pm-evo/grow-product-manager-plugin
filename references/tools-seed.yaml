@@ -54,7 +54,7 @@ tools:
     name: "Miro"
     kind: mcp
     job: "whiteboards, tables and visual maps the team edits together"
-    skills: [diagram-prototyper, brainstorm-features, roadmap-architect]
+    skills: [diagram-prototyper, brainstorm-features, roadmap-architect, cjm-research]
     contours: [design]
     access: paid
     connect: "the host's connector directory → Miro"
