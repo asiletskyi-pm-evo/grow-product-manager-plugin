@@ -733,6 +733,7 @@ DIFF_CATEGORIES = ("changed", "moved", "added", "removed", "orphaned", "hc_edits
 TAKE_REFUSED = ("health_check", "metric_move", "no_cell", "needs_drop", "not_removed", "secret", "empty", "not_takeable",
                 "unknown")
 TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code")
+COUNTED = ("changed", "moved", "added", "removed", "orphaned", "hc_edits")
 TEAM_SOURCE = {"uk": "дошка команди", "en": "team board"}
 STATE_KIND = "journey-board"
 HC_LANES = ("metric", "anomaly")
@@ -946,7 +947,7 @@ def board_diff(last, now, note):
             out["removed"].append(e)
         else:
             out["other"].append(dict(e, role=role, change="removed"))
-    out["counts"] = {k: len(out[k]) for k in ("changed", "moved", "added", "removed", "orphaned", "hc_edits")}
+    out["counts"] = {k: len(out[k]) for k in COUNTED}
     return out
 
 
@@ -1273,6 +1274,65 @@ def check_protocol(root):
     if texts.get("references/artifact-publishing.md") and not re.search(
             r"^\|\s*`cjm-research`\s*\|.*`cjm-research/<product>/journey-", ap, re.M):
         errs.append("artifact-publishing.md §5: the `cjm-research` key row has no `journey-` key")
+    return errs
+
+
+# ------------------------------------------------------------------ check 29
+def check_board_protocol(root):
+    """Errors for validate-consistency.sh check 29 (v4.8.0) — the board's roles, diff categories and board-take rules
+    are journey-protocol.md §11–§12's; artifact-publishing.md names the journey map as a board consumer and the host's
+    typed board as a candidate; the seed's board record serves cjm-research; both maps read boards through board_state."""
+    errs, texts = [], {}
+    for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/tools-seed.yaml",
+                "scripts/story_map.py", "scripts/journey_map.py"):
+        try:
+            with open(os.path.join(root, rel), encoding="utf-8") as fh:
+                texts[rel] = fh.read()
+        except OSError:
+            errs.append("%s is missing" % rel)
+    proto = texts.get("references/journey-protocol.md")
+    if proto is not None:
+        s11, s12 = nt.section(proto, "11. The board"), nt.section(proto, "12. What the team changed")
+        if not s11 or "board-layout" not in s11:
+            errs.append("journey-protocol.md has no §11 «The board» that builds the board from board-layout")
+        roles = [nt.tick(r[0]) or "?" for r in nt.table_after(s12, r"\| Role \| What it is \|")]
+        if roles != list(BOARD_ROLES):
+            errs.append("journey-protocol.md §12: the board roles %s ≠ journey_map.py BOARD_ROLES %s" % ("|".join(roles), "|".join(BOARD_ROLES)))
+        rows = nt.table_after(s12, r"\| Category \| Counted \| What \|")
+        cats = [nt.tick(r[0]) or "?" for r in rows]
+        counted = sorted(nt.tick(r[0]) or "?" for r in rows if len(r) > 1 and r[1].strip() == "yes")
+        if cats != list(DIFF_CATEGORIES):
+            errs.append("journey-protocol.md §12: the diff categories %s ≠ journey_map.py DIFF_CATEGORIES %s" % ("|".join(cats), "|".join(DIFF_CATEGORIES)))
+        if counted != sorted(COUNTED):
+            errs.append("journey-protocol.md §12: the categories counted %s ≠ journey_map.py COUNTED %s" % ("|".join(counted), "|".join(sorted(COUNTED))))
+        take = nt.table_after(s12, r"\| Code \| board-take \| What \|")
+        for word, const in (("refused", TAKE_REFUSED), ("named", TAKE_NAMED)):
+            got = sorted(nt.tick(r[0]) or "?" for r in take if len(r) > 1 and r[1].strip() == word)
+            if got != sorted(const):
+                errs.append("journey-protocol.md §12: board-take %s %s ≠ journey_map.py TAKE_%s %s" % (
+                    word, "|".join(got), word.upper(), "|".join(sorted(const))))
+        for word in TEAM_SOURCE.values():
+            if word not in s12:
+                errs.append("journey-protocol.md §12 does not name the team's source «%s <date>» (journey_map.py TEAM_SOURCE)" % word)
+    ap = texts.get("references/artifact-publishing.md")
+    if ap is not None:
+        if not re.search(r"^\|\s*`board`\s*\|.*`cjm-research`", nt.section(ap, "1. The kind"), re.M):
+            errs.append("artifact-publishing.md §1: the `board` row does not name its consumer `cjm-research` (the journey map)")
+        if not re.search(r"ARTIFACT `typed` when it has this kind \([^)]*\bboard\b", nt.section(ap, "2. The candidates")):
+            errs.append("artifact-publishing.md §2: ARTIFACT `typed` does not list the board kind (the host's own board)")
+    seed = texts.get("references/tools-seed.yaml")
+    if seed is not None:
+        m = re.search(r"^  - id: miro\n(?:    .*\n)*?    skills: \[([^\]]*)\]", seed, re.M)
+        if not (m and "cjm-research" in m.group(1)):
+            errs.append("tools-seed.yaml: the miro record's skills do not include cjm-research (the journey map's board)")
+    for rel in ("scripts/story_map.py", "scripts/journey_map.py"):
+        src = texts.get(rel)
+        if src is None:
+            continue
+        if re.search(r"^def (?:read_board|read_miro_svg|read_whiteboard)\(", src, re.M):
+            errs.append("%s defines a board reader of its own — read a board through scripts/board_state.py" % rel)
+        if not re.search(r"^import board_state\b", src, re.M):
+            errs.append("%s does not import scripts/board_state.py" % rel)
     return errs
 
 

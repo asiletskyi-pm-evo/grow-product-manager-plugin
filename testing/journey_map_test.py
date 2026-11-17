@@ -810,6 +810,46 @@ try:
         drift("skills/cjm-research/SKILL.md", "### Step J — Journey map", "### Step K — Journey map", "Step J", "7.19 the skill without its Step J is named")
         os.remove(os.path.join(r2, "references", "journey-protocol.md"))
         check("7.13 a missing protocol is an error, not silence", jm.check_protocol(r2) != [], jm.check_protocol(r2))
+
+        # 11. schema — check 29 (v4.8.0): the board's roles, diff categories and board-take rules are the protocol's;
+        #     artifact-publishing names the consumer and the host's typed board; both maps read boards through board_state
+        cbp = getattr(jm, "check_board_protocol", None)
+        check("11.0 journey_map.check_board_protocol exists", cbp is not None, "missing")
+        if cbp is not None:
+            r3 = os.path.join(d, "root29")
+            for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/tools-seed.yaml",
+                        "scripts/story_map.py", "scripts/journey_map.py"):
+                os.makedirs(os.path.dirname(os.path.join(r3, rel)), exist_ok=True)
+                shutil.copy(os.path.join(ROOT, rel), os.path.join(r3, rel))
+            e29 = cbp(r3)
+            check("11.1 check_board_protocol is clean on a sound tree", e29 == [], e29)
+            rc, out, res = run("schema")
+            check("11.2 schema prints the board's roles, diff categories and board-take rules",
+                  res.get("board_roles") == list(jm.BOARD_ROLES) and res.get("diff_categories") == list(jm.DIFF_CATEGORIES)
+                  and res.get("take_refused") == list(jm.TAKE_REFUSED) and res.get("take_named") == list(jm.TAKE_NAMED), out[-300:])
+
+            def drift29(rel, old, new, expect, name, count=1):
+                p = os.path.join(r3, rel)
+                t0 = text(p)
+                if old not in t0:
+                    check(name, False, "pattern not in %s" % rel)
+                    return
+                write(p, t0.replace(old, new, count))
+                e = cbp(r3)
+                write(p, t0)
+                check(name, any(expect in x for x in e), e)
+            drift29("references/journey-protocol.md", "| `lane_name` | a lane's name", "| `lane_label` | a lane's name", "roles", "11.3 a board role the protocol renames is named")
+            drift29("references/journey-protocol.md", "| `other` | no | any other element", "| `other` | yes | any other element", "counted", "11.4 a diff category counted by the protocol alone is named")
+            drift29("references/journey-protocol.md", "| `unrecorded` | no |", "| `untracked` | no |", "categories", "11.5 a diff category that drifts is named")
+            drift29("references/journey-protocol.md", "| `metric_move` | refused |", "| `metric_move` | named |", "metric_move", "11.6 a refusal the protocol only names is named")
+            drift29("references/journey-protocol.md", "| `bad_code` | named |", "| `no_code` | named |", "bad_code", "11.7 a named code that drifts is named")
+            drift29("references/journey-protocol.md", "`дошка команди <date>`", "`дошка <date>`", "дошка команди", "11.8 the team's source the protocol stops naming is named")
+            drift29("references/journey-protocol.md", "## 11. The board", "## 11. The canvas", "§11", "11.9 a protocol without its §11 «The board» is named")
+            drift29("references/artifact-publishing.md", "`cjm-research` (the journey map, `journey-protocol.md` §11, since v4.8.0)", "", "consumer", "11.10 artifact-publishing §1 without the journey map's board is named")
+            drift29("references/artifact-publishing.md", "(deck, dashboard, document, design, board)", "(deck, dashboard, document, design)", "typed", "11.11 artifact-publishing §2 without ARTIFACT typed board is named")
+            drift29("references/tools-seed.yaml", "roadmap-architect, cjm-research]", "roadmap-architect]", "miro", "11.12 the seed's board record without cjm-research is named")
+            drift29("scripts/story_map.py", "def read_boards(paths):", "def read_board(path):\n    return bs.read_board(path)\n\n\ndef read_boards(paths):", "story_map.py", "11.13 a map script with a board reader of its own is named")
+            drift29("scripts/journey_map.py", "import board_state as bs", "import note_table as bs", "journey_map.py", "11.14 a map script that does not import board_state is named")
 finally:
     shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(SAFE_HOME, ignore_errors=True)
