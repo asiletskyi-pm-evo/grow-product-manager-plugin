@@ -818,7 +818,7 @@ try:
         if cbp is not None:
             r3 = os.path.join(d, "root29")
             for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/tools-seed.yaml",
-                        "scripts/story_map.py", "scripts/journey_map.py"):
+                        "scripts/story_map.py", "scripts/journey_map.py", "skills/cjm-research/SKILL.md"):
                 os.makedirs(os.path.dirname(os.path.join(r3, rel)), exist_ok=True)
                 shutil.copy(os.path.join(ROOT, rel), os.path.join(r3, rel))
             e29 = cbp(r3)
@@ -850,6 +850,7 @@ try:
             drift29("references/tools-seed.yaml", "roadmap-architect, cjm-research]", "roadmap-architect]", "miro", "11.12 the seed's board record without cjm-research is named")
             drift29("scripts/story_map.py", "def read_boards(paths):", "def read_board(path):\n    return bs.read_board(path)\n\n\ndef read_boards(paths):", "story_map.py", "11.13 a map script with a board reader of its own is named")
             drift29("scripts/journey_map.py", "import board_state as bs", "import note_table as bs", "journey_map.py", "11.14 a map script that does not import board_state is named")
+            drift29("skills/cjm-research/SKILL.md", "- **J6", "- **J7", "J6", "11.15 the skill without its step J6 is named")
 finally:
     shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(SAFE_HOME, ignore_errors=True)

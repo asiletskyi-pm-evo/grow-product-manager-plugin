@@ -1,6 +1,6 @@
 ---
 name: cjm-research
-version: 0.16.0
+version: 0.17.0
 description: CJM funnel research — anomalies → enrichment → hypothesis backlog — and the journey map (stages × evidence lanes). Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «карта шляху», «health-check воронки з гіпотезами».
 ---
 
@@ -253,15 +253,16 @@ Anomaly detection (Step 4), WORLD enrichment (5), INTERNAL enrichment (6), hypot
 
 > **Debate hook.** If the user asks for a debate / role discussion / red-team, or top hypotheses are contested and touch ≥ 2 interest groups — after hypothesis building (Step 7) run `references/debate-protocol.md` for the top-3 hypotheses: evidence pack = anomalies + enrichment already gathered (post-Step 3.5 gate, each item with its 3.5.g class), roles chosen with the user (Skeptic mandatory), rounds → facilitator synthesis. The verdict corrects ICE Confidence per the protocol's Step D4 (consensus +1…+2 only when the support cites an E#, never on `simulated` or `assumed` input alone; unresolved skeptic objection −1…−2), new risks feed the Step 11 risk assessment, and the «Debates» section embeds in the Step 12 report.
 
-### Step J — Journey map (mode `journey`, since v0.16.0)
+### Step J — Journey map (mode `journey`, since v0.16.0; its board since v0.17.0)
 
-Follow `references/journey-protocol.md` — this step only points into it. Entries: «побудуй карту шляху» (J1 → J2 → J4, J3 on request), «онови карту шляху» (J5 → J2 → J4), «дерево можливостей для етапу X» (J3). Steps 1 and 1.5 run as usual; Steps 2–12 do not, except 12.5, which saves the note. `<note>` is the journey's note (`CJM/journeys/<product>/journey-<slug>.md`; several → ask which journey); `--lang` is `uk` when `user.language` is `uk`, else `en`.
+Follow `references/journey-protocol.md` — this step only points into it. Entries: «побудуй карту шляху» (J1 → J2 → J4, J3 on request), «онови карту шляху» (J5 → J2 → J4), «дерево можливостей для етапу X» (J3), «опублікуй карту шляху на дошку» (J4), «забери правки з дошки карти шляху» (J6, then J4 on its answer 1); J6 runs before every new version of a recorded board. Steps 1 and 1.5 run as usual; Steps 2–12 do not, except 12.5, which saves the note. `<note>` is the journey's note (`CJM/journeys/<product>/journey-<slug>.md`; several → ask which journey); `--lang` is `uk` when `user.language` is `uk`, else `en`.
 - **J1 Build** — a draft in the session's working folder, never in the vault (its page there too, `--out`), deleted with its page once 12.5 has saved the note: the stages from 1b (ids `s<n>`), `owner` a role or a team, never a person; the newest snapshot's rows by `python3 scripts/journey_map.py refresh --note <draft> --snapshot <newest> --lang <lang>` (their ids are the health-check's); then the other inputs of §3 in order — every row with its source marker, every evidence-lane row with its 3.5.g class (Gate Check 6), the other lanes none; `simulated` never a pain; no person's name, e-mail or phone; a stage without evidence stays a gap `⚠️`.
 - **J2 Check** — `python3 scripts/journey_map.py check --note <draft or note> --snapshots ~/.grow-pm/knowledge-library/health-checks/` and the semantic pass of §6. Then the preview — stages, lanes, gaps and every finding as a proposal, never a block — and 12.5 saves the note.
 - **J3 Tree** — the stage named by its name or id in `stages`; `python3 scripts/journey_map.py tree --stage <id> --note <note>` → Mermaid for `diagram-prototyper`; a target opportunity with fewer than three solutions → `brainstorm-features`; no target → its opportunities only, the PM picks one. No Opportunity Score.
-- **J4 Page and publication** — `python3 scripts/journey_map.py health --note <note> --snapshots <dir>`, then `render-html --note <note> --out <the note's name>.html --lang <lang>` beside it. `python3 scripts/publications.py find --key cjm-research/<product>/journey-<slug> --note <note>`, then one question by `references/artifact-publishing.md` §3–§4 (a place found first, as «нова версія N»; «лише файл» always; «ні» final for the run); after each place `publications.py record --key … --note <note> --kind dashboard …`.
+- **J4 Page and publication** — `python3 scripts/journey_map.py health --note <note> --snapshots <dir>`, then `render-html --note <note> --out <the note's name>.html --lang <lang>` beside it. `python3 scripts/publications.py find --key cjm-research/<product>/journey-<slug> --note <note>`, then one question by `references/artifact-publishing.md` §3–§4 — the dashboard's places, then the boards of `references/journey-protocol.md` §11, a registry record's before the host's own, their grid from `journey_map.py board-layout --note <note> --lang <lang>` (a place found first, as «нова версія N», a board's after J6; «лише файл» always; «ні» final for the run); after each place `publications.py record --key … --note <note> --kind dashboard …` or `--kind board …` (§11), and after a board its state: `journey_map.py board-state … --out ~/.grow-pm/journey-maps/<product>/journey-<slug>.<surface>.board.json`.
 - **J5 Update** — read the note as it is; keep its stages, outcomes, owner and rows (the PM's edits and the refresh's rows included); add only evidence whose source no row cites yet, as a draft like J1's; J2's preview shows what changed, then 12.5 saves; then `journey_map.py refresh --note <note> --snapshot <newest> --lang <lang>` (§10) and read the note again; `reviewed` set only when the PM confirms the review.
-- Without SHELL — the note only, plus one line that the page, the trend, the tree and the refresh need a shell (§9).
+- **J6 What the team changed** — `references/journey-protocol.md` §12: the board read back into scratch files, `journey_map.py board-diff --last <state> --now <reads> --note <note> --out <diff>`, one question that is also the version question; on «забрати» the preview `board-take … --dry-run` (the class of each added evidence row asked from the PM, never guessed; a parent proposed; what is refused named), then `board-take` with the PM's picks and the state kept again. Health-check rows never come back from the board; no state → read the board by its cell titles first. A scheduled run never reads a board.
+- Without SHELL — the note only, plus one line that the page, the trend, the tree, the refresh and the board need a shell (§9).
 
 ### Step 12 — Report assembly and publishing
 
@@ -296,7 +297,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: determined_type,
      product: active_product,
      skill: "cjm-research",
-     skill_version: "0.16.0",
+     skill_version: "0.17.0",
      tags: [detected funnel stages, anomaly types, platforms analyzed],
      content: full_report_markdown,
      related: [previous health checks used, related hypotheses, source data references],
@@ -382,3 +383,5 @@ The `description` above is short on purpose: a host with many skills shows only 
 > CJM funnel research — analyze the CJM funnel end to end — anomalies → enrichment → hypothesis backlog. Not data-only dashboards (product-analysis), not ideation alone (brainstorm-features). UA — «CJM-дослідження», «знайди аномалії у воронці», «health-check воронки з гіпотезами», «порівняй платформи». EN — "analyze CJM", "find funnel anomalies", "CJM research", "funnel health check", "compare platforms", "CJM hypotheses". Also UA — «проаналізуй CJM», «CJM гіпотези».
 >
 > Since v0.16.0, the journey map (mode `journey`): UA — «побудуй карту шляху», «онови карту шляху», «карта шляху клієнта з доказами», «дерево можливостей для етапу …», «здоров'я шляху в часі». EN — "build a journey map", "update the journey map", "journey map with evidence", "opportunity solution tree for the checkout stage", "journey health over time". Not a funnel dashboard alone (product-analysis), not a story map (roadmap-architect), not a drawn CJM picture without evidence (diagram-prototyper).
+>
+> Since v0.17.0, the journey map's board: UA — «дошка карти шляху», «опублікуй карту шляху на дошку», «забери правки з дошки карти». EN — "publish the journey map to a board", "take the team's board edits into the journey map". Not the story map's board (roadmap-architect).

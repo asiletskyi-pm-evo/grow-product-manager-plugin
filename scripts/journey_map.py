@@ -1281,15 +1281,19 @@ def check_protocol(root):
 def check_board_protocol(root):
     """Errors for validate-consistency.sh check 29 (v4.8.0) — the board's roles, diff categories and board-take rules
     are journey-protocol.md §11–§12's; artifact-publishing.md names the journey map as a board consumer and the host's
-    typed board as a candidate; the seed's board record serves cjm-research; both maps read boards through board_state."""
+    typed board as a candidate; the seed's board record serves cjm-research; both maps read boards through board_state;
+    cjm-research has its step J6, pointing to §12."""
     errs, texts = [], {}
     for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/tools-seed.yaml",
-                "scripts/story_map.py", "scripts/journey_map.py"):
+                "scripts/story_map.py", "scripts/journey_map.py", "skills/cjm-research/SKILL.md"):
         try:
             with open(os.path.join(root, rel), encoding="utf-8") as fh:
                 texts[rel] = fh.read()
         except OSError:
             errs.append("%s is missing" % rel)
+    skill = texts.get("skills/cjm-research/SKILL.md")
+    if skill is not None and not re.search(r"^- \*\*J6\b.*§12", skill, re.M):
+        errs.append("skills/cjm-research/SKILL.md has no step J6 that points to journey-protocol.md §12 (what the team changed on the board)")
     proto = texts.get("references/journey-protocol.md")
     if proto is not None:
         s11, s12 = nt.section(proto, "11. The board"), nt.section(proto, "12. What the team changed")
