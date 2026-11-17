@@ -379,7 +379,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 
 ### Group Y — Journey map vs neighbours (added 2026-11-16, v4.7.0)
 
-`cjm-research` mode `journey` builds, refreshes and trees a journey map (stages × evidence lanes); a funnel dashboard alone is `product-analysis`'s, a story map `roadmap-architect`'s, a drawn CJM picture without evidence `diagram-prototyper`'s, hypotheses alone `brainstorm-features`'.
+`cjm-research` mode `journey` builds, refreshes and trees a journey map (stages × evidence lanes) and, since v4.8.0, publishes it to a board and takes the team's board edits back (Y15–Y17); a funnel dashboard alone is `product-analysis`'s, a story map `roadmap-architect`'s, a drawn CJM picture without evidence `diagram-prototyper`'s, hypotheses alone `brainstorm-features`'.
 
 | # | Prompt | Expected skill |
 |---|---|---|
@@ -397,6 +397,10 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | Y12 | розбери скарги покупців і згрупуй їх за етапами воронки | feedback-triage — NOT cjm-research |
 | Y13 | як інші компанії ведуть карти шляху клієнта — огляд практик | product-research — NOT cjm-research; accepted alternative: *deep-research* |
 | Y14 | покажи, де покупцям найболючіше на шляху від пошуку до оплати і що ми з цим уже робимо | cjm-research |
+| Y15 | забери правки з дошки карти шляху — команда додала болі | cjm-research |
+| Y16 | опублікуй карту шляху першого замовлення на дошку для команди | cjm-research |
+| Y17 | take the team's board edits back into the checkout journey map | cjm-research |
+| Y18 | онови дошку мапи історій — команда переставила картки | roadmap-architect — NOT cjm-research |
 
 ## Results log
 
@@ -449,3 +453,4 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 > ("describe a feature" / "описати фічу"), product-research vs knowledge-library (library lookup).
 
 > **Update (2026-07-16, v2.2.0).** Addressed: Group I (Debate mode vs meeting-processor / decision-log / standard brainstorm) and Group J (People contour + the v2.1.1 guards) added; the descriptions-only simulation run over all groups is recorded in the Results log.
+| 2026-11-17 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Y`, mode `real`, model claude-opus-5-5), pre-release v4.8.0 — Group Y once (18 phrases) | Y 18/18 | None. The new Y15–Y17 («забери правки з дошки карти шляху», «опублікуй карту шляху … на дошку», the English take-back) route to cjm-research with its description unchanged — the phrases live in `## Routing`; Y18 «онови дошку мапи історій» stays roadmap-architect; Y1–Y14 unchanged (Y13 → the accepted deep-research alternative). |
