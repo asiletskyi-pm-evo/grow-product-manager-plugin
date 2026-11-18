@@ -586,10 +586,10 @@ try:
         st = os.path.join(fx, "journey-first-order.%s.board.json" % sf)
         states[sf] = st
         rc, out, res = run("board-state", "--read", blast, "--note", jn, "--surface", sf, "--out", st)
-        check("10.9 [%s] board-state maps every row's sticky, the 50 cells, headers and lane names" % sf, rc == 0
+        check("10.9 [%s] board-state maps every row's sticky, the 50 cells, the 11 headers (title included) and lane names" % sf, rc == 0
               and len(res.get("rows", {})) == 19 and res.get("rows", {}).get("p2") == eid(sf, 45)
               and res.get("roles", {}).get("cell") == 50 and res.get("roles", {}).get("lane_name") == 10
-              and res.get("roles", {}).get("header") == 10 and res.get("unmapped_rows") == [] and res.get("missing_cells") == [], out[-600:])
+              and res.get("roles", {}).get("header") == 11 and res.get("unmapped_rows") == [] and res.get("missing_cells") == [], out[-600:])
         sj = json.loads(text(st)) if os.path.exists(st) else {}
         check("10.10 [%s] the state names its kind and surface and keeps no author" % sf, sj.get("kind") == "journey-board"
               and sj.get("surface") == sf and "Zorg QA" not in text(st) and "authorId" not in text(st), {k: sj.get(k) for k in ("kind", "surface")})
@@ -736,7 +736,7 @@ try:
     for tag, old, new, target, name in (
             ("hc", '    if _is_hc(r):\n        return "health_check"\n    if r["lane"] in HC_LANES:\n        return "metric_lane"\n', "", "journey_map.py",
              "10.48 M5 a take that rewrites a health-check row"),
-            ("cls", 'cls = picked.get(i, picked.get(rid, ""))', 'cls = picked.get(i, picked.get(rid, "reported"))', "journey_map.py", "10.49 M6 a take that writes a class the PM did not pick"),
+            ("cls", 'picked.get(rid, "")))', 'picked.get(rid, "reported")))', "journey_map.py", "10.49 M6 a take that writes a class the PM did not pick"),
             ("drop", "for rid in drop:", "for rid in list(drop) + [e.get('row') for e in diff.get('removed', [])]:", "journey_map.py",
              "10.50 M7 a take that deletes a row without --drop")):
         ms = mutant(d, "board-" + tag, old, new, target)
@@ -884,6 +884,71 @@ try:
           "| b1 | s3 | | pain | Довго вантажиться кошик | | | | | дошка команди 2026-11-17 | reported | 2026-11-17 |" in t
           and any(n["why"] == "unused" for n in res.get("named", [])), out[-400:])
 
+    # 13. review 2 (frozen ac1ccf9): each finding reproduced first
+    wl = json.loads(text(boards["whiteboard"][0]))
+    part = os.path.join(fx, "r2-partial.json")
+    write(part, json.dumps(wl[:40], ensure_ascii=False))          # a page that ends before the last cells (a paged list)
+    rc, out, res = run("board-diff", "--last", states["whiteboard"], "--now", part, "--note", jn)
+    check("13.1 I-1 a read missing cells the state holds (one page of a paged list) is no diff: state partial, the cells named, nothing counted",
+          rc == 0 and res.get("state") == "partial" and len(res.get("missing_cells", [])) > 0 and not res.get("removed"), (res.get("state"), res.get("counts")))
+    rc, out, res = run("board-state", "--read", part, "--note", jn, "--surface", "whiteboard", "--last", states["whiteboard"],
+                       "--out", os.path.join(fx, "r2-partial.board.json"))
+    check("13.2 I-1 board-state over a read missing the last state's cells is refused (exit 2)", rc == 2 and res.get("ok") is False, out[-200:])
+
+    tw = os.path.join(fx, "r2-team.md")
+    write(tw, jn0)
+    run("board-take", "--note", tw, "--diff", dfile, "--take", E(91), "--class", "%s=observed" % E(91), "--date", "2026-11-17")
+    st3 = os.path.join(fx, "r2-team.board.json")
+    rc, out, res = run("board-state", "--read", boards["miro"][1], "--note", tw, "--surface", "miro", "--out", st3)
+    el = json.loads(text(st3)).get("elements", {}) if os.path.exists(st3) else {}
+    check("13.3 I-2 a team sticky taken with a class stays the team's (its row's source is the team board), even without --last",
+          el.get(E(91), {}).get("row") == "b1" and el.get(E(91), {}).get("origin") == "team", el.get(E(91)))
+    gone = os.path.join(fx, "r2-team-gone.md")
+    write(gone, "\n".join(l for l in text(tw).split("\n") if not l.startswith("| b1 |")))
+    rc, out, res = run("board-diff", "--last", st3, "--now", boards["miro"][1], "--note", gone)
+    check("13.4 I-2 …so when its row leaves the note it is never offered for deletion as the plugin's orphan",
+          not any(o.get("id") == E(91) for o in res.get("orphaned", [])), res.get("orphaned"))
+    wbs = os.path.join(fx, "r2-wb.board.json")
+    rc, out, res = run("board-state", "--read", boards["whiteboard"][1], "--note", jn, "--surface", "whiteboard", "--out", wbs)
+    wel = json.loads(text(wbs)).get("elements", {}) if os.path.exists(wbs) else {}
+    check("13.5 I-2 a person's note on the host's board is the team's whatever row its text matches",
+          all(v.get("origin") == "team" for v in wel.values() if v.get("type") == "note"), [v.get("origin") for v in wel.values() if v.get("type") == "note"])
+    proto = text(os.path.join(ROOT, "references", "journey-protocol.md"))
+    skl = text(os.path.join(ROOT, "skills", "cjm-research", "SKILL.md"))
+    check("13.6 I-3 the protocol keeps the state again with --last, and never says «while the note and the board agree»",
+          re.search(r"board-state --read [^`]*--last", proto) is not None and "while the note and the board agree" not in proto, "")
+    check("13.7 I-3 the skill's J4 / J6 keep the state with --last", skl.count("--last") >= 2, skl.count("--last"))
+
+    ex = crafted("r2-exp.json", changed=[{"id": "x-x1", "row": "x1", "last": "A/B калькулятора доставки\nexp-delivery-calc-20261020",
+                                          "now": "A/B калькулятора доставки\nexp-delivery-calc-20261124", "cell": "s3 · експерименти",
+                                          "stage": "s3", "lane": "experiment", "team": False}])
+    rc, out, res, t = take(jn0, ex, "--take", "x-x1")
+    check("13.8 M-1 an experiment's new code on its second line goes into `код`, never into the text",
+          "| x1 | s3 | | experiment | A/B калькулятора доставки | | | h1 | exp-delivery-calc-20261124 |" in t, out[-300:])
+    mv2 = crafted("r2-move.json", moved=[{"id": "x-o1", "row": "o1", "text": "Не губити вибір покупця між кроками", "from": "s2 · можливості",
+                                          "to": "s2 · болі", "stage_from": "s2", "lane_from": "opportunity", "stage_to": "s2", "lane_to": "pain", "team": False}])
+    rc, out, res = run("board-take", "--note", nc2 if False else jn, "--diff", mv2, "--take", "x-o1", "--dry-run")
+    check("13.9 M-2 a row moved into an evidence lane is asked its class; its children are named",
+          any(a.get("row") == "o1" for a in res.get("ask_class", [])) and any(f.get("row") == "p1" for f in res.get("findings", [])),
+          (res.get("ask_class"), [f.get("row") for f in res.get("findings", [])]))
+    col = crafted("r2-collide.json", changed=[{"id": "e1", "row": None, "last": "s1 · Візит", "now": "s1 · Візит!", "cell": "", "stage": None, "lane": None, "team": True},
+                                              {"id": "x-e1", "row": "e1", "last": "Багато зусиль, щоб звузити видачу", "now": "Забагато зусиль, щоб звузити видачу",
+                                               "cell": "s2 · досвід", "stage": "s2", "lane": "experience", "team": False}])
+    rc, out, res, t = take(jn0, col, "--take", "row:e1", "--class", "row:e1=reported")
+    check("13.10 M-3 a row id is taken with its `row:` prefix and never confused with an element of the same id",
+          "| e1 | s2 | | experience | Забагато зусиль, щоб звузити видачу | | | | | дошка команди 2026-11-17 | reported | 2026-11-17 |" in t, out[-400:])
+    rc, out, res, t = take(jn0, dfile, "--take", E(45), "row:p2", "--class", E(45) + "=observed")
+    check("13.11 M-3 an element and its own row taken together are one change", len([a for a in res.get("applied", []) if a.get("row") == "p2"]) == 1, res.get("applied"))
+    rc, out, res, t = take(jn0, dfile, "--take", E(45), E(91), "--class", E(45) + "=observed", E(91) + "=reported")
+    check("13.12 M-4 --class takes several picks after one flag", rc == 0 and "| b1 | s2 | | pain | Немає фільтра за ціною доставки | | | | | дошка команди 2026-11-17 | reported |" in t, out[-300:])
+    rc, out, res = run("board-take", "--note", jn, "--diff", dfile, "--drop", "zz9", "--dry-run")
+    check("13.13 M-5 --drop of a row the note does not have is unknown", [(r["id"], r["why"]) for r in res.get("refused", [])] == [("zz9", "unknown")], res.get("refused"))
+    hw = os.path.join(fx, "r2-header.svg")
+    write(hw, text(boards["miro"][0]).replace(">s5 · Оплата<", ">s5 · Оплата ⚠️<").replace(">Zorg: Перше замовлення<", ">Zorg: перше замовлення<"))
+    rc, out, res = run("board-state", "--read", hw, "--note", jn, "--surface", "miro", "--out", os.path.join(fx, "r2-header.board.json"))
+    check("13.14 a stage header with its gap mark and the map's title are headers, not other items",
+          res.get("roles", {}).get("header") == 11 and res.get("roles", {}).get("other", 0) == 0, res.get("roles"))
+
     # 7. schema — check 28
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
     try:
@@ -980,6 +1045,13 @@ try:
             drift29("scripts/story_map.py", "def read_boards(paths):", "def read_board(path):\n    return bs.read_board(path)\n\n\ndef read_boards(paths):", "story_map.py", "11.13 a map script with a board reader of its own is named")
             drift29("scripts/journey_map.py", "import board_state as bs", "import note_table as bs", "journey_map.py", "11.14 a map script that does not import board_state is named")
             drift29("skills/cjm-research/SKILL.md", "- **J6", "- **J7", "J6", "11.15 the skill without its step J6 is named")
+            jp3 = os.path.join(r3, "scripts", "journey_map.py")
+            j0 = text(jp3)
+            write(jp3, j0.replace("import board_state as bs  #", "from board_state import read_boards  #", 1))
+            e16 = cbp(r3)
+            write(jp3, j0)
+            check("11.16 M-7 `from board_state import …` is an import too — not named", not any("import" in x for x in e16), e16)
+            drift29("scripts/story_map.py", "import argparse, datetime, json, os, re, sys\n", "import argparse, datetime, json, os, re, sys\nimport xml.etree.ElementTree as ET\n", "story_map.py", "11.17 M-7 a map script that parses a board's XML itself is named")
 finally:
     shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(SAFE_HOME, ignore_errors=True)

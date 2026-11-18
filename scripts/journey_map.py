@@ -811,12 +811,23 @@ def _rendered(r):
 
 
 def _heads(note):
+    """The texts the board's headers read back as — a stage's «<id> · <name>» (with its gap mark), its name, its
+    outcome, the map's title and journey name — lower case."""
     out = set()
     for s in note["stages"]:
-        for t in ("%s · %s" % (s["id"], s["name"]), s["name"], s["outcome"], "%s · %s %s" % (s["id"], s["name"], s["outcome"])):
+        for t in ("%s · %s" % (s["id"], s["name"]), "%s · %s ⚠️" % (s["id"], s["name"]), s["name"], s["outcome"],
+                  "%s · %s %s" % (s["id"], s["name"], s["outcome"])):
             if _norm(t):
-                out.add(_norm(nt.safe(t)))
+                out.add(_norm(nt.safe(t)).lower())
+    for t in (note.get("title"), note.get("journey")):
+        if _norm(t):
+            out.add(_norm(nt.safe(t)).lower())
     return out
+
+
+def team_row(r):
+    """A row the team wrote on the board — its source the team board's (an earlier take)."""
+    return r["source"].strip().lower().startswith(tuple(w.lower() for w in TEAM_SOURCE.values()))
 
 
 def _lane_texts():
@@ -871,7 +882,7 @@ def assign_roles(items, note, exclude=(), lookup=None):
             if own:
                 it["role"], it["stage"], it["lane"] = "cell", own[0], own[1]
             else:
-                it["role"] = "header" if _norm(it["text"]) in heads else "frame"
+                it["role"] = "header" if _norm(it["text"]).lower() in heads else "frame"
             continue
         c, _ = _cell(it, declared, lookup)
         if c:
@@ -888,7 +899,8 @@ def assign_roles(items, note, exclude=(), lookup=None):
             if not cands:
                 continue
             r = cands[0]
-            it["role"], it["row"], it["origin"] = "row", r["id"], "plugin" if r["shown"] else "team"
+            team = not r["shown"] or team_row(r) or it.get("type") == "note"    # a team sticky stays the team's
+            it["role"], it["row"], it["origin"] = "row", r["id"], "team" if team else "plugin"
             if r["hc"]:
                 it["hc"] = True
             taken.add(r["id"])
@@ -898,7 +910,7 @@ def assign_roles(items, note, exclude=(), lookup=None):
         if it.get("role"):
             continue
         t = _norm(it["text"])
-        it["role"] = ("header" if t in heads else "lane_name" if t.lower() in lanes
+        it["role"] = ("header" if t.lower() in heads else "lane_name" if t.lower() in lanes
                       else "team" if it["kind"] == "sticky" else "other")
         if it["role"] == "team":
             it["origin"] = "team"
@@ -945,6 +957,11 @@ def table_sig(note):
     import hashlib
     rows = json.dumps([r["cells"] for r in note["rows"]], ensure_ascii=False)
     return {"journey": note["journey"], "product": note["product"], "table": hashlib.sha256(rows.encode("utf-8")).hexdigest()[:16]}
+
+
+def missing_cells(last, now):
+    """The cell titles the last state holds that a read lacks — a read of one page, or a stale folder: never a diff."""
+    return sorted(it["text"] for mid, it in last.items() if it.get("role") == "cell" and mid not in now)
 
 
 def board_diff(last, now, note):
@@ -1041,6 +1058,21 @@ def read_diff(path):
     return data
 
 
+def code_line(lane, ls, i, row, named, own=""):
+    """(the lines without a code line, the code) — an initiative's or an experiment's sticky has its code on its own
+    last line: the row's own code is no change; an initiative takes only an epic or feature code (else bad_code, named);
+    a code is never part of the text."""
+    if lane not in ("initiative", "experiment") or len(ls) < 2:
+        return ls, None
+    last = ls[-1]
+    if own and last == own:
+        return ls[:-1], None
+    if lane == "initiative" and not CODE.match(last):
+        named.append({"element": i, "row": row, "why": "bad_code", "detail": "%r on the second line is not an epic or feature code" % last})
+        return ls[:-1], None
+    return ls[:-1], nt.safe(last)
+
+
 def _locked(r):
     """Why a row never changes from the board (R25) — the health-check's, or any metric or anomaly row — else None."""
     if _is_hc(r):
@@ -1123,11 +1155,11 @@ def take_note(note, diff, take, picked, parents, drop, when):
     def klass(i, rid, lane, text):
         """The class the PM picked for a row the team wrote, checked against its lane (§2) — never one of ours."""
         if lane not in LANE_CLASSES:
-            if pick(picked, i, rid):
+            if pick(picked, i, "row:%s" % rid, rid):
                 named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes no class (§2)" % lane})
             return ""
-        cls = picked.get(i, picked.get(rid, ""))
-        pick(picked, i, rid)
+        cls = picked.get(i, picked.get("row:%s" % rid, picked.get(rid, "")))
+        pick(picked, i, "row:%s" % rid, rid)
         if cls and cls not in LANE_CLASSES[lane]:
             named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes %s" % (lane, ", ".join(LANE_CLASSES[lane]))})
             cls = ""
@@ -1138,13 +1170,17 @@ def take_note(note, diff, take, picked, parents, drop, when):
 
     edits, moves, news, drops = {}, {}, [], set()
     used = {r["id"] for r in note["rows"]}
+    done = set()
     for i in list(dict.fromkeys(take)):
         es = ents.get(i)
-        if es is None and i in by_row:
-            i, es = by_row[i]
+        if i.startswith("row:") and i[4:] in by_row:   # a row by its id — never confused with an element of that id
+            i, es = by_row[i[4:]]
         if not es:
-            refuse(i, "unknown", "no such element or row in the diff")
+            refuse(i, "unknown", "no such element in the diff (a row: «row:<id>»)")
             continue
+        if i in done:                                # an element and its own row taken together are one change
+            continue
+        done.add(i)
         cats = {c for c, _ in es}
         e0 = es[0][1]
         rid = e0.get("row") if cats & {"changed", "moved", "removed"} else None
@@ -1162,13 +1198,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
                 continue
             for cat, e in es:
                 if cat == "changed":
-                    ls = _lines(e.get("now", ""))
-                    sec = _norm(second_line(r))
-                    if len(ls) > 1 and sec and ls[-1] == sec:
-                        ls = ls[:-1]
-                    code = None
-                    if r["lane"] == "initiative" and len(ls) > 1 and CODE.match(ls[-1]):
-                        code = ls.pop()
+                    ls, code = code_line(r["lane"], _lines(e.get("now", "")), i, rid, named, _norm(second_line(r)))
                     t = clean(" ".join(ls), i, rid)
                     if t is None:
                         break
@@ -1190,6 +1220,12 @@ def take_note(note, diff, take, picked, parents, drop, when):
                     moves[rid] = (st, ln)
                     applied.append({"element": i, "row": rid, "action": "move", "from": "%s · %s" % (r["stage"], r["lane"]),
                                     "to": "%s · %s" % (st, ln)})
+                    cls_now = r["class"].strip().lower()
+                    if ln in LANE_CLASSES and cls_now not in LANE_CLASSES[ln]:      # its class does not fit the new lane
+                        edits[rid] = dict(edits.get(rid, {}), **{"class": klass(i, rid, ln, edits.get(rid, {}).get("text", r["text"]))})
+                    elif ln not in LANE_CLASSES and cls_now:
+                        named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes no class (§2) — %s cleared" % (ln, cls_now)})
+                        edits[rid] = dict(edits.get(rid, {}), **{"class": ""})
             continue
         if not cats & {"added", "changed", "moved"}:
             refuse(i, "not_takeable", "%s is not a team's sticky (%s)" % (i, ", ".join(sorted(cats))))
@@ -1206,9 +1242,8 @@ def take_note(note, diff, take, picked, parents, drop, when):
         if not st or st not in declared or ln not in LANE_IDS:
             refuse(i, "no_cell", "the sticky sits in no cell of the map")
             continue
-        ls, code = _lines(text), ""
-        if ln == "initiative" and len(ls) > 1 and CODE.match(ls[-1]):
-            code = ls.pop()
+        ls, code = code_line(ln, _lines(text), i, None, named)
+        code = code or ""
         t = clean(" ".join(ls), i)
         if t is None:
             continue
@@ -1240,7 +1275,10 @@ def take_note(note, diff, take, picked, parents, drop, when):
     removed = {str(e.get("row")) for e in diff.get("removed", []) or [] if isinstance(e, dict) and e.get("row")}
     for rid in drop:
         r = by_id.get(rid)
-        why = _locked(r) if r is not None else None
+        if r is None:
+            refuse(rid, "unknown", "row %s is not in the note" % rid)
+            continue
+        why = _locked(r)
         if why:
             refuse(rid, why, "row %s (%s) — never dropped from the board" % (rid, r["lane"]))
             continue
@@ -1447,9 +1485,9 @@ def check_board_protocol(root):
         src = texts.get(rel)
         if src is None:
             continue
-        if re.search(r"^def (?:read_board|read_miro_svg|read_whiteboard)\(", src, re.M):
+        if re.search(r"^def (?:read_board|read_miro_svg|read_whiteboard)\(", src, re.M) or re.search(r"^\s*(?:import|from) xml\.etree", src, re.M):
             errs.append("%s defines a board reader of its own — read a board through scripts/board_state.py" % rel)
-        if not re.search(r"^import board_state\b", src, re.M):
+        if not re.search(r"^(?:import board_state\b|from board_state import )", src, re.M):
             errs.append("%s does not import scripts/board_state.py" % rel)
     return errs
 
@@ -1636,6 +1674,10 @@ def cmd_board_state(args):
     shown = {rid for rid, r in rows.items() if r["shown"]}
     if args.last and os.path.exists(args.last):
         last, _ = load_board_state(args.last, note, args.surface)
+        lost = missing_cells(last, items)
+        if lost:
+            raise Bad("the read lacks %d cell(s) the last state holds (%s) — read the board again, every page, into a fresh "
+                      "folder; a state is never kept from a partial read" % (len(lost), ", ".join(lost[:3])))
         mapped = {it["row"] for it in items.values() if it.get("role") == "row"}
         for mid, old in last.items():
             it = items.get(mid)
@@ -1686,6 +1728,11 @@ def cmd_board_diff(args):
         result(ok=True, state="scope", surface=surface, scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last))
         return 0
     now = _read_now(args.now, args.surface or surface)
+    lost = missing_cells(last, now)
+    if lost:                                       # the plugin never deletes a cell: a partial read, never «removed»
+        result(ok=True, state="partial", surface=surface, missing_cells=lost, ids=sorted(last), scope=bs.scope(last),
+               why="the read lacks %d cell(s) the state holds — read the board again, every page, into a fresh folder" % len(lost))
+        return 0
     payload = dict(ok=True, state="diff", surface=surface, **board_diff(last, now, note))
     payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), note=table_sig(note))
     if args.out:
@@ -1726,6 +1773,8 @@ def cmd_board_take(args):
             result(ok=False, error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
             return 1
     touched = {a.get("row") for a in plan["applied"]}
+    moved = {a.get("row") for a in plan["applied"] if a.get("action") == "move"}
+    touched |= {r["id"] for r in note["rows"] if r.get("parent") in moved}      # a moved row's children may hang wrong now
     fd, tmp = tempfile.mkstemp(prefix=".journey-take-", suffix=".md")
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="") as fh:
@@ -1789,8 +1838,8 @@ def main(argv=None):
     p.add_argument("--note", required=True)
     p.add_argument("--diff", required=True, help="the board-diff result (--out, or its JOURNEY_RESULT line)")
     p.add_argument("--take", nargs="*", default=[], help="element ids (or row ids) the PM takes")
-    p.add_argument("--class", dest="klass", action="append", help="<element id>=<class> the PM picked in the preview")
-    p.add_argument("--parent", action="append", help="<element id>=<row id>")
+    p.add_argument("--class", dest="klass", action="extend", nargs="+", help="<element id>=<class> the PM picked in the preview")
+    p.add_argument("--parent", action="extend", nargs="+", help="<element id>=<row id>")
     p.add_argument("--drop", nargs="*", default=[], help="row ids gone from the board that leave the note")
     p.add_argument("--date", help="YYYY-MM-DD of the team's board (default: today, UTC)")
     p.add_argument("--dry-run", action="store_true", help="the preview: nothing written")

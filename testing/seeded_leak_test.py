@@ -161,7 +161,7 @@ SEEDS = [
     # name in the brand map alone (native-surfaces.md §6) — a protocol says «the host's board type».
     ("surface: the host's board type named by its brand in a shared protocol",
      "references/journey-protocol.md", "append",
-     "- A board may also be the host's Whiteboard, written element by element.",
+     "- Boards may also be the host's Whiteboards, written element by element.",
      "surface-brand"),
 ]
 
