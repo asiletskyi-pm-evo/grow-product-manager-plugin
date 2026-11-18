@@ -957,10 +957,10 @@ def load_board_state(path, note, surface=None):
             items = data.get("elements")
             if not isinstance(items, dict):
                 raise Bad("the board's state has no elements")
-            return _valid_state(items), data.get("surface")
+            return _valid_state(items), data.get("surface"), {"rebuilt": bool(data.get("rebuilt"))}
     items = safe_items(bs.read_board(path, surface, lines=True))
     assign_roles(items, note)
-    return items, surface or ("miro" if path.lower().endswith(".svg") else "whiteboard")
+    return items, surface or ("miro" if path.lower().endswith(".svg") else "whiteboard"), {"rebuilt": True}
 
 
 def _cell_fields(prefix, c, title):
@@ -1002,10 +1002,12 @@ def board_diff(last, now, note):
             out["orphaned"].append(e)
     gone = {o["id"] for o in out["orphaned"]}
     mapped = {it.get("row") for it in last.values() if it.get("role") == "row"}
-    fresh = {mid: dict(it) for mid, it in now.items() if mid not in last}
+    # a team sticky the note does not hold is offered as added every time until it is taken — one the PM left, or one a
+    # state rebuilt with no history (§12 «No state») recorded, is never absorbed by a state
+    fresh = {mid: dict(it) for mid, it in now.items() if mid not in last or last[mid].get("role") == "team"}
     assign_roles(fresh, note, exclude=mapped, lookup=now)
     for mid, it in now.items():
-        old = last.get(mid)
+        old = None if mid in fresh else last.get(mid)
         cn_, tn = _cell(it, declared, now)
         if old is None:
             f = fresh[mid]
@@ -1055,7 +1057,7 @@ def board_diff(last, now, note):
 
 def _rows_map(items):
     """{row id: element id} of the stickies a state maps to rows — what the next version updates by id."""
-    return {it["row"]: mid for mid, it in items.items() if it.get("role") == "row" and it.get("row")}
+    return {it["row"]: mid for mid, it in items.items() if it.get("role") == "row" and it.get("row") and not it.get("gone")}
 
 
 def read_diff(path):
@@ -1075,19 +1077,21 @@ def read_diff(path):
     return data
 
 
+EXP_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{1,79}$")      # an experiment's registry id: one word, no marker
+
+
 def code_line(lane, ls, i, row, named, own=""):
     """(the lines without a code line, the code) — an initiative's or an experiment's sticky has its code on its own
-    last line: the row's own code is no change; an initiative takes only an epic or feature code (else bad_code, named);
-    a code is never part of the text."""
+    last line: the row's own code is no change; an initiative takes an epic or feature code, an experiment a registry
+    id; a last line that is no code (words, a marker) stays in the text — a code is never read from the text."""
     if lane not in ("initiative", "experiment") or len(ls) < 2:
         return ls, None
     last = ls[-1]
     if own and last == own:
         return ls[:-1], None
-    if lane == "initiative" and not CODE.match(last):
-        named.append({"element": i, "row": row, "why": "bad_code", "detail": "%r on the second line is not an epic or feature code" % last})
-        return ls[:-1], None
-    return ls[:-1], nt.safe(last)
+    if (CODE if lane == "initiative" else EXP_ID).match(last):
+        return ls[:-1], last
+    return ls, None
 
 
 def _locked(r):
@@ -1187,6 +1191,15 @@ def take_note(note, diff, take, picked, parents, drop, when):
 
     edits, moves, news, drops = {}, {}, [], set()
     used = {r["id"] for r in note["rows"]}
+    new_ids = {}                                     # a new row's id by the diff's order — the preview's and the take's agree
+    for cat in ("added", "changed", "moved"):
+        for e in diff.get(cat, []) or []:
+            if isinstance(e, dict) and e.get("id") is not None and not e.get("row") and str(e["id"]) not in new_ids:
+                n = 1
+                while "b%d" % n in used:
+                    n += 1
+                new_ids[str(e["id"])] = "b%d" % n
+                used.add("b%d" % n)
     done = set()
     for i in list(dict.fromkeys(take)):
         es = ents.get(i)
@@ -1267,11 +1280,10 @@ def take_note(note, diff, take, picked, parents, drop, when):
         if any(r["stage"] == st and r["lane"] == ln and _norm(r["text"]) == t for r in live):
             refuse(i, "taken", "the note already holds this row on %s — an earlier take" % cell_title(st, ln, lang))
             continue
-        n = 1
-        while "b%d" % n in used:
-            n += 1
-        nid = "b%d" % n
-        used.add(nid)
+        nid = new_ids.get(i)
+        if nid is None:
+            refuse(i, "unknown", "no new row for %s in the diff" % i)
+            continue
         cls = klass(i, nid, ln, t)
         par = pick(parents, i, nid)
         if par:
@@ -1341,7 +1353,14 @@ def take_note(note, diff, take, picked, parents, drop, when):
             if out and not out[-1].endswith("\n"):
                 out[-1] += eol
             out.extend(inserts[n])
-    return {"text": "".join(out), "applied": applied, "refused": refused, "named": named, "ask_class": ask, "parents": prop}
+    taken = {a.get("element") for a in applied} | {a.get("row") for a in applied}
+    left = []
+    for cat in ("changed", "moved", "removed", "hc_edits", "added"):
+        for e in diff.get(cat, []) or []:
+            if isinstance(e, dict) and e.get("id") is not None and str(e["id"]) not in taken and (e.get("row") or None) not in taken:
+                left.append({"id": e["id"], "row": e.get("row"), "category": cat, "change": e.get("change")})
+    return {"text": "".join(out), "applied": applied, "refused": refused, "named": named, "ask_class": ask, "parents": prop,
+            "left": left}
 
 
 # ------------------------------------------------------------------ check 28
@@ -1686,35 +1705,29 @@ def _read_now(paths, surface):
 def cmd_board_state(args):
     note = load(args.note)
     items = _read_now(args.read, args.surface)
+    declared = [s["id"] for s in note["stages"]]
+    if not any(it["kind"] == "frame" and parse_cell(it["text"], declared) for it in items.values()):
+        raise Bad("the read holds no cell of the map — read the board again (an error the tool returned, or another board?)")
     ambiguous = assign_roles(items, note)
     rows = {r["id"]: r for r in note_rows(note)}
     shown = {rid for rid, r in rows.items() if r["shown"]}
+    rebuilt, last_ignored = True, False
     if args.last and os.path.exists(args.last):
-        last, _ = load_board_state(args.last, note, args.surface)
-        lost = missing_cells(last, items)
-        if lost:
-            raise Bad("the read lacks %d cell(s) the last state holds (%s) — read the board again, every page, into a fresh "
-                      "folder; a state is never kept from a partial read" % (len(lost), ", ".join(lost[:3])))
-        mapped = {it["row"] for it in items.values() if it.get("role") == "row"}
-        for mid, old in last.items():
-            it = items.get(mid)
-            if it is None:
-                continue
-            if old.get("origin") == "team" and it.get("role") in ("row", "team"):
-                it["origin"] = "team"                  # a team sticky stays the team's, whatever row a take made of it
-            if it.get("role") == "row" or old.get("role") not in ("row", "orphan"):
-                continue
-            rid = old.get("row")
-            if old.get("origin", "plugin") != "team" and rid not in shown:
-                it["role"], it["row"], it["origin"] = "orphan", rid, "plugin"   # the plugin's sticky of a row the board no longer shows
-            elif rid in rows and rid not in mapped:    # its row is still there (a refreshed metric): the sticky keeps it by id
-                it["role"], it["row"], it["origin"] = "row", rid, old.get("origin", "plugin")
-                mapped.add(rid)
+        last, _, _ = load_board_state(args.last, note, args.surface)
+        if not set(last) & set(items):              # a new board (answer 3): its first state, the old one set aside
+            last_ignored = True
+        else:
+            rebuilt = False
+            lost = missing_cells(last, items)
+            if lost:
+                raise Bad("the read lacks %d cell(s) the last state holds (%s) — read the board again, every page, into a "
+                          "fresh folder; a state is never kept from a partial read" % (len(lost), ", ".join(lost[:3])))
+            keep_last(items, last, note, rows, shown, declared)
     for it in items.values():
         it.pop("hc", None)
         if it.get("role") == "row" and it.get("row") in rows and rows[it["row"]]["hc"]:
             it["hc"] = True
-    state = {"version": 1, "kind": STATE_KIND, "surface": args.surface, "note": os.path.basename(args.note),
+    state = {"version": 1, "kind": STATE_KIND, "surface": args.surface, "note": os.path.basename(args.note), "rebuilt": rebuilt,
              "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items}
     try:
         out = _write_json(args.out, state)
@@ -1731,8 +1744,43 @@ def cmd_board_state(args):
            roles=roles, unmapped_rows=[rid for rid in rows if rid in shown and rid not in rmap],
            missing_cells=[cell_title(s["id"], l, lang) for l in LANE_IDS for s in note["stages"]
                           if cell_title(s["id"], l, lang) not in have and cell_title(s["id"], l, "en" if lang == "uk" else "uk") not in have],
-           ambiguous=ambiguous, orphans={it["row"]: mid for mid, it in items.items() if it.get("role") == "orphan"})
+           ambiguous=ambiguous, orphans={it["row"]: mid for mid, it in items.items() if it.get("role") == "orphan"},
+           rebuilt=rebuilt, last_ignored=last_ignored, gone=sorted(it["row"] for it in items.values() if it.get("gone")))
     return 0
+
+
+def keep_last(items, last, note, rows, shown, declared):
+    """The state kept again over the last one: a sticky keeps its row by its element id (a refreshed metric), the plugin's
+    sticky of a row the board no longer shows stays the plugin's (orphan), a team sticky stays the team's — and every
+    edit the note has not taken stays a difference: its last text and cell are kept, a row's sticky gone from the board
+    is kept as gone, so the next diff names them again (nothing of the team's work is absorbed by a re-keep)."""
+    mapped = {it["row"] for it in items.values() if it.get("role") == "row"}
+    for mid, old in last.items():
+        it = items.get(mid)
+        rid = old.get("row")
+        if it is None:
+            if old.get("role") == "row" and rid in rows and rows[rid]["shown"] and rid not in mapped:
+                items[mid] = dict(old, gone=True)          # removed on the board, still in the note: removed again next time
+                mapped.add(rid)
+            continue
+        if old.get("origin") == "team" and it.get("role") in ("row", "team"):
+            it["origin"] = "team"                          # a team sticky stays the team's, whatever row a take made of it
+        if it.get("role") != "row" and old.get("role") in ("row", "orphan"):
+            if old.get("origin", "plugin") != "team" and rid not in shown:
+                it["role"], it["row"], it["origin"] = "orphan", rid, "plugin"   # the plugin's sticky of a row the board no longer shows
+            elif rid in rows and rid not in mapped:        # its row is still there: the sticky keeps it by its id
+                it["role"], it["row"], it["origin"] = "row", rid, old.get("origin", "plugin")
+                mapped.add(rid)
+        if it.get("role") == "row" and it.get("row") == rid and rid in rows and old.get("role") == "row":
+            r = rows[rid]
+            if _norm(it["text"]) not in _rendered(r) and _norm(old["text"]) != _norm(it["text"]):
+                it["text"] = old["text"]                   # a text edit the note has not taken stays one
+            cn_, _ = _cell(it, declared, items)
+            co, _ = _cell(old, declared, last)
+            if cn_ != (r["stage"], r["lane"]) and co != cn_:
+                for k in ("x", "y", "rx", "ry", "frame", "frame_text"):
+                    it[k] = old.get(k)                     # a move the note has not taken stays one
+    return items
 
 
 def cmd_board_diff(args):
@@ -1740,7 +1788,7 @@ def cmd_board_diff(args):
         result(ok=True, state="unknown", why="no last state of the board on this machine")
         return 0
     note = load(args.note)
-    last, surface = load_board_state(args.last, note, args.surface)
+    last, surface, meta = load_board_state(args.last, note, args.surface)
     if not args.now:
         result(ok=True, state="scope", surface=surface, scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last))
         return 0
@@ -1790,7 +1838,7 @@ def cmd_board_take(args):
             result(ok=False, error="the note cannot be written: %s" % (e.strerror or type(e).__name__))
             return 1
     touched = {a.get("row") for a in plan["applied"]}
-    moved = {a.get("row") for a in plan["applied"] if a.get("action") == "move"}
+    moved = {a.get("row") for a in plan["applied"] if a.get("action") in ("move", "drop")}
     touched |= {r["id"] for r in note["rows"] if r.get("parent") in moved}      # a moved row's children may hang wrong now
     fd, tmp = tempfile.mkstemp(prefix=".journey-take-", suffix=".md")
     try:

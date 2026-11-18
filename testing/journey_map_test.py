@@ -707,7 +707,8 @@ try:
     pr = os.path.join(fx, "take-parent.md")
     write(pr, jn0)
     rc, out, res = run("board-take", "--note", pr, "--diff", sec, "--take", "x-o", "--parent", "x-o=o2", "--date", "2026-11-17")
-    check("10.42 --parent sets a valid parent", "| b1 | s3 | | solution | Ще один калькулятор | | | o2 | | дошка команди 2026-11-17 | | 2026-11-17 |" in text(pr), out[-300:])
+    check("10.42 --parent sets a valid parent (the new row's id is the one the preview gives it: b3, third in the diff)",
+          "| b3 | s3 | | solution | Ще один калькулятор | | | o2 | | дошка команди 2026-11-17 | | 2026-11-17 |" in text(pr), out[-300:])
     write(pr, jn0)
     rc, out, res = run("board-take", "--note", pr, "--diff", sec, "--take", "x-o", "--parent", "x-o=p1", "--dry-run")
     check("10.43 a parent of another stage or lane is refused (bad_parent) and not set",
@@ -970,6 +971,107 @@ try:
           and "Zorg" not in scripts[0] and "s3" not in scripts[0], (len(scripts), scripts == scripts2))
     check("14.4 panning shows itself (grab / grabbing) and never selects text mid-drag", "cursor:grab" in css and ".wrap.panning{" in css
           and "user-select:none" in css, "")
+
+    # 15. review 3 (whole branch, frozen 44e3d2b): each finding reproduced first
+    three = crafted("r3-three.json", added=[
+        {"id": "x-A", "kind": "sticky", "text": "Довго вантажиться оплата", "cell": "s3 · болі", "stage": "s3", "lane": "pain"},
+        {"id": "x-B", "kind": "sticky", "text": "Бояться передплати", "cell": "s3 · болі", "stage": "s3", "lane": "pain"},
+        {"id": "x-C", "kind": "sticky", "text": "Бояться прихованих комісій", "cell": "s3 · болі", "stage": "s3", "lane": "pain"}])
+    rc, out, res = run("board-take", "--note", jn, "--diff", three, "--take", "x-A", "x-B", "x-C", "--dry-run")
+    ids = {a["element"]: a["row"] for a in res.get("applied", [])}
+    rc, out, res, t = take(jn0, three, "--take", "x-C", "x-B", "--class", "%s=observed" % ids.get("x-B", "?"), "%s=reported" % ids.get("x-C", "?"))
+    check("15.1 I-1 a new row keeps the id the preview showed whatever the take's set or order — the PM's class lands on its own row",
+          ids == {"x-A": "b1", "x-B": "b2", "x-C": "b3"} and "| b2 | s3 | | pain | Бояться передплати | | | | | дошка команди 2026-11-17 | observed |" in t
+          and "| b3 | s3 | | pain | Бояться прихованих комісій | | | | | дошка команди 2026-11-17 | reported |" in t and "| b1 |" not in t, (ids, out[-300:]))
+
+    pt = os.path.join(fx, "r3-partial.md")
+    write(pt, jn0)
+    stA = os.path.join(fx, "r3-a.board.json")
+    run("board-state", "--read", boards["miro"][0], "--note", pt, "--surface", "miro", "--out", stA)
+    dA = os.path.join(fx, "r3-a.diff.json")
+    run("board-diff", "--last", stA, "--now", boards["miro"][1], "--note", pt, "--out", dA)
+    run("board-take", "--note", pt, "--diff", dA, "--take", E(91), "--date", "2026-11-17")
+    stB = os.path.join(fx, "r3-b.board.json")
+    rc, out, res = run("board-state", "--read", boards["miro"][1], "--note", pt, "--surface", "miro", "--last", stA, "--out", stB)
+    rc, out, res = run("board-diff", "--last", stB, "--now", boards["miro"][1], "--note", pt)
+    c = res.get("counts", {})
+    check("15.2 I-2 a state kept again after a partial take keeps every edit the PM did not take — the next diff names them again",
+          c.get("changed") == 1 and c.get("moved") == 1 and c.get("removed") == 1 and c.get("hc_edits") == 1 and c.get("added") == 2,
+          (c, [e.get("row") for e in res.get("changed", []) + res.get("moved", []) + res.get("removed", [])]))
+    pf = os.path.join(fx, "r3-fresh.md")
+    write(pf, jn0)
+    rc, out, res = run("board-take", "--note", pf, "--diff", dA, "--take", E(92), "--dry-run")
+    check("15.3 I-2 the preview names what the take leaves on the board (answer 1 would undo it)",
+          rc == 0 and {e.get("row") for e in res.get("left", [])} >= {"p2", "e2", "h3", "m-s1-visit-search"}, (res.get("left"), out[-200:]))
+    ex2 = crafted("r3-exp.json", added=[{"id": "x-X", "kind": "sticky", "text": "Тест порогу доставки\nна 50% трафіку", "cell": "s3 · експерименти", "stage": "s3", "lane": "experiment"},
+                                        {"id": "x-Y", "kind": "sticky", "text": "Тест калькулятора\n[link removed]", "cell": "s3 · експерименти", "stage": "s3", "lane": "experiment"}])
+    rc, out, res, t = take(jn0, ex2, "--take", "x-X", "x-Y", "--parent", "x-X=h1", "x-Y=h1")
+    check("15.4 M-1 an experiment's second line that is no code stays in the text; a marker is never a code (named)",
+          "| b1 | s3 | | experiment | Тест порогу доставки на 50% трафіку | | | h1 | |" in t and "| b2 | s3 | | experiment | Тест калькулятора | | | h1 | |" in t
+          and any(n["why"] == "link_removed" and n.get("element") == "x-Y" for n in res.get("named", [])), out[-400:])
+    rb = os.path.join(fx, "r3-rebuilt.board.json")
+    run("board-state", "--read", boards["miro"][1], "--note", jn, "--surface", "miro", "--out", rb)
+    rc, out, res = run("board-diff", "--last", rb, "--now", boards["miro"][1], "--note", jn)
+    check("15.5 M-2 after a no-state rebuild the team's stickies are offered once as added (never lost to the take)",
+          E(91) in [a["id"] for a in res.get("added", [])], res.get("counts"))
+    nb3 = os.path.join(fx, "r3-newboard.board.json")
+    rc, out, res = run("board-state", "--read", boards["whiteboard"][0], "--note", jn, "--surface", "whiteboard", "--last", states["miro"], "--out", nb3)
+    check("15.6 M-3 a last state sharing no element with the read (a new board) is set aside, named — never a re-read loop",
+          rc == 0 and res.get("last_ignored") is True, out[-200:])
+    rc, out, res = run("board-state", "--read", errf if False else os.path.join(fx, "r3-err.json") if write(os.path.join(fx, "r3-err.json"), '{"elements": {"x": {"type": "text", "x": 0, "y": 0, "text": "Not found"}}}') is None else "", "--note", jn, "--surface", "whiteboard", "--out", os.path.join(fx, "r3-err.board.json"))
+    check("15.7 M-4 a read that holds no cell of the map is refused, --last or not", rc == 2, out[-200:])
+    dd = crafted("r3-drop.json", removed=[{"id": "x-h1", "row": "h1", "text": "Калькулятор доставки в кошику", "cell": "s3 · рішення"}])
+    rc, out, res = run("board-take", "--note", jn, "--diff", dd, "--drop", "h1", "--dry-run")
+    check("15.8 M-5 dropping a parent row names its children's findings", any(f.get("row") == "x1" for f in res.get("findings", [])), res.get("findings"))
+    # M-7 the mutants that survived
+    lk2 = os.path.join(fx, "r3-layout.md")
+    write(lk2, jn0.replace("Фільтри скидаються після повернення назад до видачі", "Фільтри скидаються, пишіть ivan@zorg.example або zorg.example/help", 1)
+          .replace('outcome: "search -> cart >= 35%"', 'outcome: "search -> cart >= 35%, ivan@zorg.example"', 1))
+    rc, out, res = run("board-layout", "--note", lk2)
+    blob = json.dumps(res, ensure_ascii=False)
+    check("15.9 M-7 board-layout: a row's text and a stage outcome reach the board page-safe (no contact, no link)",
+          "ivan@" not in blob and "zorg.example" not in blob, blob[blob.find("ivan"):blob.find("ivan") + 60] if "ivan" in blob else "")
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import journey_map as jm3  # noqa: E402
+    check("15.10 M-7 the page's script is exactly the fixed PAN — no data of the note in it", scripts == ["%s" % jm3.PAN] and scripts2 == ["%s" % jm3.PAN], "")
+    fr = json.loads(text(boards["whiteboard"][1]))
+    fr += [{"id": "e700", "data": {"type": "container", "x": 3000, "y": 3000, "w": 300, "h": 300, "text": "Пишіть ivan@zorg.example"}},
+           {"id": "mwkzorg-0700", "data": {"type": "note", "x": 3020, "y": 3020, "w": 60, "h": 60, "text": "[hidden: token]"}}]
+    frp = os.path.join(fx, "r3-frame.json")
+    write(frp, json.dumps(fr, ensure_ascii=False))
+    stF = os.path.join(fx, "r3-frame.board.json")
+    run("board-state", "--read", frp, "--note", jn, "--surface", "whiteboard", "--out", stF)
+    check("15.11 M-7 a frame's title is kept page-safe in the state", os.path.exists(stF) and "ivan@" not in text(stF), "")
+    hs = crafted("r3-hidden.json", added=[{"id": "x-H", "kind": "sticky", "text": "[hidden: token]", "cell": "s2 · болі", "stage": "s2", "lane": "pain"}])
+    rc, out, res = run("board-take", "--note", jn, "--diff", hs, "--take", "x-H", "--dry-run")
+    check("15.12 M-7 a sticky whose text the board already hid as a secret is refused (secret)", [(r["id"], r["why"]) for r in res.get("refused", [])] == [("x-H", "secret")], res.get("refused"))
+    two = os.path.join(fx, "r3-twins.md")
+    write(two, jn0.replace("| a1 | s1 | | action | Приходить із пошукової реклами на головну |", "| a1 | s1 | | action | Головна сторінка, мобільний веб |", 1))
+    tw2 = os.path.join(fx, "r3-twins.svg")
+    write(tw2, text(boards["miro"][0]).replace('data-content="Приходить із пошукової реклами на головну"', 'data-content="Головна сторінка, мобільний веб"', 1))
+    rc, out, res = run("board-state", "--read", tw2, "--note", two, "--surface", "miro", "--out", os.path.join(fx, "r3-twins.board.json"))
+    rws = res.get("rows", {})
+    check("15.13 M-7 two rows of one text: each sticky takes the row of its own cell first", rws.get("a1") == "3458764200000000%03d" % 0 or (rws.get("a1") and rws.get("t1") and rws["a1"] != rws["t1"]
+          and json.loads(text(os.path.join(fx, "r3-twins.board.json")))["elements"][rws["a1"]].get("lane") == "action"), rws)
+    nt3 = crafted("r3-nt.json", added=[{"id": "x-N", "kind": "sticky", "text": "Ініціатива доставки\nдругий рядок", "cell": "s3 · ініціативи", "stage": "s3", "lane": "initiative"}])
+    rc, out, res, t = take(jn0, nt3, "--take", "x-N")
+    check("15.14 M-7 an initiative's second line that is no code stays in its text, bad_code named",
+          "| b1 | s3 | | initiative | Ініціатива доставки другий рядок |" in t and any(n["why"] == "bad_code" for n in res.get("named", [])), out[-300:])
+    nd = os.path.join(fx, "r3-notdiff.json")
+    write(nd, json.dumps({"ok": True, "state": "scope", "rows": {}}))
+    rc, out, res = run("board-take", "--note", jn, "--diff", nd, "--take", "x", "--dry-run")
+    check("15.15 M-7 board-take refuses a result that is not a diff", rc == 2, out[-200:])
+    wb_last = json.loads(text(boards["whiteboard"][0]))
+    wbn2 = [dict(r) for r in wb_last] + [{"id": "mwkzorg-0800", "data": {"type": "note", "x": 304, "y": 1100, "w": 60, "h": 60, "text": "Багато зусиль, щоб звузити видачу"}}]
+    for r in wbn2:
+        if r["id"] == "e39":     # the plugin's own e1 block taken away, the person's note with the same text in its place
+            r["data"] = dict(r["data"], text="інше")
+    nn = os.path.join(fx, "r3-note.json")
+    write(nn, json.dumps(wbn2, ensure_ascii=False))
+    stN = os.path.join(fx, "r3-note.board.json")
+    run("board-state", "--read", nn, "--note", jn, "--surface", "whiteboard", "--out", stN)
+    eln = json.loads(text(stN)).get("elements", {}) if os.path.exists(stN) else {}
+    check("15.16 M-7 a person's note that matches a row is the team's (origin), never the plugin's", eln.get("mwkzorg-0800", {}).get("origin") == "team", eln.get("mwkzorg-0800"))
 
     # 7. schema — check 28
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
