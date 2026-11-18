@@ -602,15 +602,30 @@ LABELS = {
 CSS = """:root{color-scheme:light}
 *{box-sizing:border-box}body{margin:0;padding:24px;background:#f7f7f5;color:#1f2328;font:14px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
 h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:18px 0 6px}.meta{color:#57606a;margin:2px 0}
-.wrap{overflow-x:auto;margin-top:12px}table.grid{border-collapse:separate;border-spacing:6px}
-th,td{vertical-align:top}th.stage{background:#d0ebff;border-radius:6px;padding:6px 8px;text-align:left;min-width:190px}
-th.stage .o{color:#57606a;font-size:12px;font-weight:400}th.lane{background:#fff;border-left:4px solid #868e96;border-radius:4px;padding:6px 8px;text-align:left;width:140px;font-weight:600}
+.wrap{overflow:auto;margin-top:12px;max-height:max(320px,80vh);border:1px solid #dee2e6;border-radius:8px;background:#f7f7f5;cursor:grab;touch-action:pan-x pan-y}
+.wrap.panning{cursor:grabbing;user-select:none}.wrap:focus-visible{outline:2px solid #1c7ed6;outline-offset:2px}
+table.grid{border-collapse:separate;border-spacing:6px}
+th,td{vertical-align:top}th.stage{position:sticky;top:0;z-index:2;background:#d0ebff;border-radius:6px;padding:6px 8px;text-align:left;min-width:190px;box-shadow:0 -6px 0 #f7f7f5}
+th.stage .o{color:#57606a;font-size:12px;font-weight:400}th.lane{position:sticky;left:0;z-index:1;background:#fff;border-left:4px solid #868e96;border-radius:4px;padding:6px 8px;text-align:left;width:140px;font-weight:600;box-shadow:-6px 0 0 #f7f7f5}
+th.corner{position:sticky;top:0;left:0;z-index:3;background:#f7f7f5}
 .item{background:#fff;border-radius:6px;padding:6px 8px;margin-bottom:6px;border-left:4px solid #adb5bd;max-width:240px}
 .item .m{color:#57606a;font-size:11px;margin-top:2px}.item.gap{border:1px dashed #e8590c;color:#e8590c}
 .l-pain{border-left-color:#e03131}.l-metric,.l-anomaly{border-left-color:#1c7ed6}.l-opportunity{border-left-color:#f08c00}
 .l-solution{border-left-color:#2f9e44}.l-experiment{border-left-color:#7048e8}.l-initiative{border-left-color:#495057}
 .target{font-weight:700}svg.spark{background:#fff;border:1px solid #dee2e6;border-radius:4px}
 table.pts{border-collapse:collapse;margin-top:6px;background:#fff}table.pts td{border:1px solid #dee2e6;padding:2px 8px}"""
+
+
+# The page's one script (since v4.8.0, R29): the grid pans with the mouse held down. Fixed bytes — no data of the note
+# ever goes into it — and no request.
+PAN = ('(function(){var w=document.querySelector(".wrap");if(!w)return;var p=null;'
+       'w.addEventListener("pointerdown",function(e){if(e.button!==0)return;'
+       'p={x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,i:e.pointerId,m:false};});'
+       'w.addEventListener("pointermove",function(e){if(!p)return;var dx=e.clientX-p.x,dy=e.clientY-p.y;'
+       'if(!p.m&&Math.abs(dx)+Math.abs(dy)<4)return;if(!p.m){p.m=true;try{w.setPointerCapture(p.i)}catch(_){}'
+       'w.classList.add("panning");}w.scrollLeft=p.l-dx;w.scrollTop=p.t-dy;});'
+       'function end(){if(!p)return;if(p.m){try{w.releasePointerCapture(p.i)}catch(_){}}p=null;w.classList.remove("panning");}'
+       'w.addEventListener("pointerup",end);w.addEventListener("pointercancel",end);})();')
 
 
 def sparkline(points):
@@ -651,7 +666,7 @@ def render_html(note, note_name, lang):
     hidden = sum(1 for r in live if not page_worthy(r, declared))
     if hidden:
         out.append('<p class="meta">%s</p>' % esc(L["not_shown"] % hidden))
-    out.append('<div class="wrap"><table class="grid"><thead><tr><th></th>')
+    out.append('<div class="wrap" tabindex="0"><table class="grid"><thead><tr><th class="corner"></th>')
     for s in stages:
         out.append('<th class="stage">%s · %s<div class="o">%s</div></th>' % (
             shown(s["id"]), shown(s["name"]), shown(s["outcome"] or L["no_outcome"])))
@@ -673,7 +688,9 @@ def render_html(note, note_name, lang):
                     esc(lane), " target" if tg else "", "🎯 " if tg else "", shown(r["text"]), shown(meta)))
             out.append("</td>")
         out.append("</tr>")
-    out.append("</tbody></table></div></body></html>")
+    out.append("</tbody></table></div>")
+    out.append("<script>%s</script>" % PAN)
+    out.append("</body></html>")
     return "\n".join(out) + "\n"
 
 

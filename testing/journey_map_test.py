@@ -212,8 +212,9 @@ try:
     rc, out, res = run("render-html", "--note", note, "--out", page, "--lang", "uk")
     h = text(page) if os.path.exists(page) else ""
     check("3.1 render-html writes one page", rc == 0 and res.get("ok") is True and h.startswith("<!doctype html>"), out)
-    check("3.2 self-contained: no request, no link", "http" not in h and "<script" not in h and "<link" not in h
-          and "src=" not in h and "@import" not in h, re.findall(r"http\S{0,40}|<script|<link|src=", h)[:5])
+    check("3.2 self-contained: no request, no link; one inline script at most (the pan, v4.8.0)", "http" not in h and h.count("<script") <= 1
+          and "<link" not in h and "src=" not in h and "@import" not in h and "fetch(" not in h and "XMLHttpRequest" not in h,
+          re.findall(r"http\S{0,40}|<link|src=|fetch\(", h)[:5])
     check("3.3 the stages and their outcomes", all(s in h for s in ("Візит", "Пошук", "Кошик", "Оформлення", "Оплата", "search -&gt; cart &gt;= 35%")), "")
     check("3.4 the lanes in Ukrainian", all(s in h for s in ("дії", "болі", "метрики", "можливості", "рішення", "експерименти")), "")
     check("3.5 each row's source and class", "walkthrough 2026-10-12, крок 4" in h and "observed" in h and "measured" in h, "")
@@ -948,6 +949,27 @@ try:
     rc, out, res = run("board-state", "--read", hw, "--note", jn, "--surface", "miro", "--out", os.path.join(fx, "r2-header.board.json"))
     check("13.14 a stage header with its gap mark and the map's title are headers, not other items",
           res.get("roles", {}).get("header") == 11 and res.get("roles", {}).get("other", 0) == 0, res.get("roles"))
+
+    # 14. v4.8.0, the user's R29 (2026-11-18): the page reads like a board — stage headers and lane names stay in view
+    #     while the grid scrolls, the grid pans with the mouse held down; editing stays on the boards (§11–§12)
+    pg = os.path.join(fx, "r29.html")
+    run("render-html", "--note", jn, "--out", pg, "--lang", "uk")
+    hp = text(pg) if os.path.exists(pg) else ""
+    css = re.search(r"<style>(.*?)</style>", hp, re.S).group(1) if "<style>" in hp else ""
+    check("14.1 the stage headers stick to the top of the grid, the lane names to its left, the corner to both",
+          re.search(r"th\.stage\{[^}]*position:sticky;top:0", css) is not None and re.search(r"th\.lane\{[^}]*position:sticky;left:0", css) is not None
+          and re.search(r"th\.corner\{[^}]*position:sticky;top:0;left:0", css) is not None and 'class="corner"' in hp, css[:300])
+    check("14.2 the grid scrolls inside its own frame (so the headers can stay)", re.search(r"\.wrap\{[^}]*overflow:auto[^}]*max-height:", css) is not None
+          and 'class="wrap" tabindex="0"' in hp, re.findall(r"\.wrap\{[^}]*\}", css))
+    scripts = re.findall(r"<script>(.*?)</script>", hp, re.S)
+    other = os.path.join(fx, "r29-other.html")
+    run("render-html", "--note", hid, "--out", other, "--lang", "en")
+    scripts2 = re.findall(r"<script>(.*?)</script>", text(other), re.S) if os.path.exists(other) else []
+    check("14.3 one inline pan script — pointer events, pointer capture — the same bytes whatever the note (no data in it)",
+          len(scripts) == 1 and "pointerdown" in scripts[0] and "setPointerCapture" in scripts[0] and scripts == scripts2
+          and "Zorg" not in scripts[0] and "s3" not in scripts[0], (len(scripts), scripts == scripts2))
+    check("14.4 panning shows itself (grab / grabbing) and never selects text mid-drag", "cursor:grab" in css and ".wrap.panning{" in css
+          and "user-select:none" in css, "")
 
     # 7. schema — check 28
     sys.path.insert(0, os.path.join(ROOT, "scripts"))
