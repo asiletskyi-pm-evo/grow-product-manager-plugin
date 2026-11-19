@@ -95,6 +95,39 @@ def _():
     assert ("/tmp/vault-one", "Notes") in v, v
     assert (os.path.expanduser("~/vault-two"), "Core") in v, v
 
+VAULT_TABLE = ("| # | Vault Path | Folder Name | Products | Sync Mode | Last Artifact |\n"
+               "|---|------------|------------|----------|-----------|--------------|\n"
+               "| 1 | /v/zorg-notes | ZorgPM | all | auto | never |\n")
+
+@case("vault entries: the configurator's ### section under ## Organization, up to the next ###")
+def _():
+    t = ("## Organization: Zorg\n- name: Zorg\n\n### Obsidian Vaults (Optional)\n\n#### Status\n- Connected: yes\n\n"
+         "#### Vaults\n" + VAULT_TABLE + "\n#### Vault Initialization\n- Status: initialized\n\n"
+         "- path: /v/zorg-work\n  plugin_folder: \"Work\"\n\n"
+         "### Templates\n| 1 | /v/not-a-vault | Tpl | x |\n")
+    assert cc.vault_entries(t) == [("/v/zorg-notes", "ZorgPM"), ("/v/zorg-work", "Work")], cc.vault_entries(t)
+
+@case("vault entries: a section at #### and ##### is read too, # and ###### are not")
+def _():
+    for level in (4, 5):
+        t = "## Product: Zorg Mail\n" + "#" * level + " Obsidian Vaults\n" + VAULT_TABLE + "#" * level + " Next\n| 2 | /v/no | X | y |\n"
+        assert cc.vault_entries(t) == [("/v/zorg-notes", "ZorgPM")], (level, cc.vault_entries(t))
+    for level in (1, 6):
+        t = "#" * level + " Obsidian Vaults\n" + VAULT_TABLE
+        assert cc.vault_entries(t) == [], (level, cc.vault_entries(t))
+
+@case("vault entries: a heading inside fenced code neither opens nor ends the section")
+def _():
+    t = ("## Custom Sections\n```markdown\n## Obsidian Vaults\n| 1 | /v/example | Ex | all |\n```\n\n"
+         "## Obsidian Vaults (Optional)\n```\n## not a heading\n```\n" + VAULT_TABLE + "## Templates\n")
+    assert cc.vault_entries(t) == [("/v/zorg-notes", "ZorgPM")], cc.vault_entries(t)
+
+@case("vault entries: every Obsidian Vaults section counts, a repeated vault once")
+def _():
+    t = ("## Obsidian Vaults (Optional)\n" + VAULT_TABLE + "## Product: Zorg Mail\n#### Obsidian Vaults\n" + VAULT_TABLE
+         + "- path: /v/zorg-mail\n  plugin_folder: Mail\n")
+    assert cc.vault_entries(t) == [("/v/zorg-notes", "ZorgPM"), ("/v/zorg-mail", "Mail")], cc.vault_entries(t)
+
 @case("vault search bullets with commas and flags")
 def _():
     b = {x["id"]: x for x in cc.vault_search_bullets(CONTEXT)}

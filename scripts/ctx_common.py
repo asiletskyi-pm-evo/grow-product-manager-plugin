@@ -412,10 +412,40 @@ def _section(text, heading_re, level):
     return rest[:stop.start()] if stop else rest
 
 
+SECTION_LEVELS = (2, 5)   # a config section's heading level: `##` in the example, `###` in the configurator's skeleton
+                          # (under `## Organization`), `####` under a product — as the SessionStart digest reads it
+
+
+def _sections(text, title):
+    """The body of every section titled `title` (a heading of SECTION_LEVELS outside fenced code), joined in
+    document order, each up to the next heading of its own level or higher — a sub-heading stays inside it,
+    a `#` line inside a fence is no heading. "" when there is none."""
+    lo, hi = SECTION_LEVELS
+    head = re.compile(r"^(#{%d,%d})[ \t]+%s(?![\w])" % (lo, hi, re.escape(title)))
+    fence_re = re.compile(r"^\s*(```|~~~)")
+    lines, out, fence = text.split("\n"), [], False
+    for i, line in enumerate(lines):
+        if fence_re.match(line):
+            fence = not fence
+            continue
+        m = None if fence else head.match(line)
+        if not m:
+            continue
+        level, inner = len(m.group(1)), False
+        for nxt in lines[i + 1:]:
+            if fence_re.match(nxt):
+                inner = not inner
+            h = None if inner else re.match(r"^(#{1,6})[ \t]", nxt)
+            if h and len(h.group(1)) <= level:
+                break
+            out.append(nxt)
+    return "\n".join(out)
+
+
 def vault_entries(context_text):
-    """[(vault_path, plugin_folder)] from `## Obsidian Vaults` — table rows and/or
-    `- path:` / `plugin_folder:` YAML items. Paths are expanded and normalised."""
-    sec = _section(context_text or "", r"^## Obsidian Vaults.*$", 2)
+    """[(vault_path, plugin_folder)] from every `Obsidian Vaults` section at heading level 2–5 — table rows
+    and/or `- path:` / `plugin_folder:` YAML items. Paths are expanded and normalised."""
+    sec = _sections(context_text or "", "Obsidian Vaults")
     out = []
     for row in re.findall(r"^\|\s*\d+\s*\|([^\n]*)$", sec, re.M):
         cells = [c.strip() for c in row.split("|")]
