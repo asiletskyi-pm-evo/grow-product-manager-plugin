@@ -631,6 +631,22 @@ else
   ok "journey map: journey-protocol.md, journey_map.py, vault-schema and vault-protocol (cjm-journey, snapshot fields), artifact-publishing §5, cjm-reports and cjm-research agree"
 fi
 
+# --- 29. The journey map's board is one schema (v4.8.0) ---------------------------
+# The board's roles, diff categories and board-take rules (refused / named) in journey-protocol.md §12 are
+# journey_map.py's, §11 builds the board from board-layout, and §12 names the team's source. artifact-publishing.md §1
+# names cjm-research as a `board` consumer and §2 lists the host's typed board; the seed's miro record serves
+# cjm-research; story_map.py and journey_map.py both read boards through scripts/board_state.py and define no reader of
+# their own. A role or a rule added to one side alone would have the skill take into the note what the script refuses,
+# or a board reader drift between the two maps.
+BOARD_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import journey_map; print('\n'.join(journey_map.check_board_protocol('.')))" 2>&1)
+if [ -n "$BOARD_ERRS" ]; then
+  while IFS= read -r line; do err "journey board: $line"; done <<EOF
+$BOARD_ERRS
+EOF
+else
+  ok "journey board: journey-protocol.md §11–§12, journey_map.py, artifact-publishing §1–§2, the miro seed record and board_state.py agree"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

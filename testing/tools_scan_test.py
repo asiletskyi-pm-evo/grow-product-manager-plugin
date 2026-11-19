@@ -568,6 +568,25 @@ try:
     w(os.path.join(s9c, "registry.json"), json.dumps(data))
     rc, out, res, rows = run("suggest", "--store", s9c, "--skill", "roadmap-architect", "--need", "board")
     check("9.7 skills the user set and needs the user cleared stay theirs in the seed view", res.get("suggest") == "atlassian", res)
+    # 10. v4.8.0 — cjm-research asks for a board for the journey map (journey-protocol §11); acceptance found that a
+    #     record naming no need (baymard) served the board need first
+    s10 = os.path.join(d, "store10")
+    run("merge", "--store", s10, "--home", h9, "--no-apps")
+    rc, out, res, rows = run("suggest", "--store", s10, "--skill", "cjm-research", "--need", "board")
+    check("10.1 a fresh registry offers Miro to cjm-research for a board, never a research portal", res.get("suggest") == "miro", res)
+    data = json.load(open(os.path.join(s10, "registry.json")))
+    for tr10 in data["tools"]:
+        if tr10["id"] == "miro":
+            tr10["skills"] = ["diagram-prototyper", "brainstorm-features", "roadmap-architect"]     # a v4.6.0–v4.7.0 record
+        if tr10["id"] == "baymard":
+            tr10.pop("needs", None)
+    w(os.path.join(s10, "registry.json"), json.dumps(data))
+    rc, out, res, rows = run("suggest", "--store", s10, "--skill", "cjm-research", "--need", "board")
+    check("10.2 an old registry with no re-merge offers Miro to cjm-research too (the seed view)", res.get("suggest") == "miro", res)
+    run("decline", "--store", s10, "--skill", "cjm-research", "--id", "miro")
+    rc, out, res, rows = run("suggest", "--store", s10, "--skill", "cjm-research", "--need", "board")
+    check("10.3 with Miro declined, no tool that cannot hold a board is offered for one", res.get("suggest") in (None, "figjam"), res)
+
 finally:
     shutil.rmtree(d, ignore_errors=True)
 

@@ -1,0 +1,1208 @@
+[
+ {
+  "id": "e22",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 160,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · дії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e24",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 160,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · дії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e25",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 160,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · дії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e26",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 160,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · дії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e27",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 160,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · дії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e28",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 420,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · точки контакту"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e30",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 420,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · точки контакту"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e31",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 420,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · точки контакту"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e32",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 420,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · точки контакту"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e33",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 420,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · точки контакту"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e34",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 680,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · досвід"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e35",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 680,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · досвід"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e37",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 680,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · досвід"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e38",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 680,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · досвід"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e40",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 680,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · досвід"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e41",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 940,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e42",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 940,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e44",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 940,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e47",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 940,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e48",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 940,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e49",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 1200,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · метрики"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e51",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 1200,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · метрики"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e53",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 1200,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · метрики"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e55",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 1200,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · метрики"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e57",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 1200,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · метрики"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e58",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 1460,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · аномалії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e59",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 1460,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · аномалії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e61",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 1460,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · аномалії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e62",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 1460,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · аномалії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e63",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 1460,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · аномалії"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e64",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 1720,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · можливості"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e65",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 1720,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · можливості"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e67",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 1720,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · можливості"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e69",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 1720,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · можливості"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e70",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 1720,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · можливості"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e71",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 1980,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · рішення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e72",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 1980,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · рішення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e73",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 1980,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · рішення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e77",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 1980,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · рішення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e78",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 1980,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · рішення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e79",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 2240,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · ініціативи"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e80",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 2240,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · ініціативи"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e81",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 2240,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · ініціативи"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e83",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 2240,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · ініціативи"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e84",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 2240,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · ініціативи"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e85",
+  "data": {
+   "type": "container",
+   "x": 220,
+   "y": 2500,
+   "w": 400,
+   "h": 240,
+   "text": "s1 · експерименти"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e86",
+  "data": {
+   "type": "container",
+   "x": 640,
+   "y": 2500,
+   "w": 400,
+   "h": 240,
+   "text": "s2 · експерименти"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e87",
+  "data": {
+   "type": "container",
+   "x": 1060,
+   "y": 2500,
+   "w": 400,
+   "h": 240,
+   "text": "s3 · експерименти"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e89",
+  "data": {
+   "type": "container",
+   "x": 1480,
+   "y": 2500,
+   "w": 400,
+   "h": 240,
+   "text": "s4 · експерименти"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e90",
+  "data": {
+   "type": "container",
+   "x": 1900,
+   "y": 2500,
+   "w": 400,
+   "h": 240,
+   "text": "s5 · експерименти"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e1",
+  "data": {
+   "type": "text",
+   "x": 0,
+   "y": 0,
+   "text": "Zorg: Перше замовлення",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e2",
+  "data": {
+   "type": "text",
+   "x": 220,
+   "y": 80,
+   "text": "s1 · Візит",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e3",
+  "data": {
+   "type": "text",
+   "x": 220,
+   "y": 120,
+   "text": "visit -> search >= 45%",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e4",
+  "data": {
+   "type": "text",
+   "x": 640,
+   "y": 80,
+   "text": "s2 · Пошук",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e5",
+  "data": {
+   "type": "text",
+   "x": 640,
+   "y": 120,
+   "text": "search -> cart >= 35%",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e6",
+  "data": {
+   "type": "text",
+   "x": 1060,
+   "y": 80,
+   "text": "s3 · Кошик",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e7",
+  "data": {
+   "type": "text",
+   "x": 1060,
+   "y": 120,
+   "text": "cart -> checkout >= 55%",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e8",
+  "data": {
+   "type": "text",
+   "x": 1480,
+   "y": 80,
+   "text": "s4 · Оформлення",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e9",
+  "data": {
+   "type": "text",
+   "x": 1480,
+   "y": 120,
+   "text": "checkout -> payment >= 72%",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e10",
+  "data": {
+   "type": "text",
+   "x": 1900,
+   "y": 80,
+   "text": "s5 · Оплата",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e11",
+  "data": {
+   "type": "text",
+   "x": 1900,
+   "y": 120,
+   "text": "⚠️ TBD",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e12",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 180,
+   "text": "дії",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e13",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 440,
+   "text": "точки контакту",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e14",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 700,
+   "text": "досвід",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e15",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 960,
+   "text": "болі",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e16",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 1220,
+   "text": "метрики",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e17",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 1480,
+   "text": "аномалії",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e18",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 1740,
+   "text": "можливості",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e19",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 2000,
+   "text": "рішення",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e20",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 2260,
+   "text": "ініціативи",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e21",
+  "data": {
+   "type": "text",
+   "x": 20,
+   "y": 2520,
+   "text": "експерименти",
+   "size": "body"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e23",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 230,
+   "y": 170,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Приходить із пошукової реклами на головну"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e29",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 230,
+   "y": 430,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Головна сторінка, мобільний веб"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e36",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 650,
+   "y": 690,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Багато зусиль, щоб звузити видачу"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e39",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1490,
+   "y": 690,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Тривога: чи не задорого вийде з доставкою"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e43",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 650,
+   "y": 950,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Фільтри скидаються після повернення назад до видачі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e45",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 950,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Не видно вартості доставки до оформлення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e46",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1265,
+   "y": 950,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Покупці питають у підтримці про строки доставки"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e50",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 230,
+   "y": 1210,
+   "w": 185,
+   "h": 105,
+   "color": "blue",
+   "size": "body",
+   "text": "visit -> search: 44.0% (база 45.0%, -2.2%)\nhealth-check"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e52",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 650,
+   "y": 1210,
+   "w": 185,
+   "h": 105,
+   "color": "blue",
+   "size": "body",
+   "text": "search -> cart: 31.0% (база 35.0%, -11.4%)\nhealth-check"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e54",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 1210,
+   "w": 185,
+   "h": 105,
+   "color": "blue",
+   "size": "body",
+   "text": "cart -> checkout: 52.0% (база 50.0%, +4.0%)\nhealth-check"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e56",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1490,
+   "y": 1210,
+   "w": 185,
+   "h": 105,
+   "color": "blue",
+   "size": "body",
+   "text": "checkout -> payment: 70.0% (база 72.0%, -2.8%)\nhealth-check"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e60",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 650,
+   "y": 1470,
+   "w": 185,
+   "h": 105,
+   "color": "blue",
+   "size": "body",
+   "text": "search -> cart: -11.4% від бази — попередження\nhealth-check"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e66",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 650,
+   "y": 1730,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Не губити вибір покупця між кроками"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e68",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 1730,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Покупець знає повну ціну й строк доставки ще в кошику"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e74",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 1990,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Калькулятор доставки в кошику"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e75",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1265,
+   "y": 1990,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Безкоштовна доставка від порогу, показана в кошику"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e76",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 2105,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Строк доставки на картці товару"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e82",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 2250,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "Епік «Прозора доставка»\nPROJ-1234"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e88",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 1070,
+   "y": 2510,
+   "w": 185,
+   "h": 105,
+   "color": "yellow",
+   "size": "body",
+   "text": "A/B калькулятора доставки\nexp-delivery-calc-20261020"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ }
+]

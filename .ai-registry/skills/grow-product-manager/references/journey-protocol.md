@@ -1,8 +1,8 @@
 # journey-protocol.md
 
-> Shared reference (since v4.7.0). The journey map: one journey of a product, its stages from the CJM config, and on each stage the lanes of what the customer does and feels, where it hurts with evidence, what the numbers say, and what the team does about it — each row with its source and its evidence class. The procedure of `cjm-research` mode `journey` (Step J); the scheduled health-check refreshes the map's numbers locally (§10).
+> Shared reference (since v4.7.0). The journey map: one journey of a product, its stages from the CJM config, and on each stage the lanes of what the customer does and feels, where it hurts with evidence, what the numbers say, and what the team does about it — each row with its source and its evidence class. The procedure of `cjm-research` mode `journey` (Step J); the scheduled health-check refreshes the map's numbers locally (§10); since v4.8.0 the team edits the map on a board (§11–§12).
 >
-> **Rule of the file:** the note in the vault is the source of truth (`native-surfaces.md` §2). The dashboard is a render of it, published only through `artifact-publishing.md` after its question; a scheduled run never publishes. Nothing on the map is invented: a row without a source or a class is a finding, a stage without evidence stays a gap `⚠️`, `simulated` input never becomes a pain, and the health score is read only from a snapshot's frontmatter. The map writes nothing to Jira and never names a person.
+> **Rule of the file:** the note in the vault is the source of truth (`native-surfaces.md` §2). The dashboard and the board are renders of it, published only through `artifact-publishing.md` after its question; a scheduled run never publishes; what the team changes on the board comes back only through §12, never the health-check rows. Nothing on the map is invented: a row without a source or a class is a finding, a stage without evidence stays a gap `⚠️`, `simulated` input never becomes a pain, and the health score is read only from a snapshot's frontmatter. The map writes nothing to Jira and never names a person.
 
 ## 1. The model
 
@@ -183,13 +183,17 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 | `health --note P --snapshots D` | the `health` field from the snapshots' frontmatter (§8) |
 | `refresh --note P --snapshot S [--out F] [--lang uk\|en]` | the scheduled refresh of §10 — the language of the note's headers when `--lang` is not given |
 | `tree --stage S --note P [--out F]` | the stage's opportunity tree as Mermaid text (also into `F`), and `few_solutions` when its target has fewer than three solutions |
+| `board-layout --note P [--lang uk\|en]` | the board's grid (§11): the stages with their outcome, the lanes, a cell per lane of every stage with its rows' board text and second line, the cell titles to read back, the rows the board leaves out |
+| `board-state --read R… --note P --surface miro\|whiteboard [--last S] --out F` | the board read back, kept as its state (§12): every element and its role |
+| `board-diff --last L [--now N…] --note P [--surface miro\|whiteboard] [--out F]` | what the team did on the board since the state (§12), by element id; without `--now` the ids, the rows and the area to read back; without `--last` (or its file) the state is `unknown` |
+| `board-take --note P --diff D --take <id…> [--class <id>=<class> …] [--parent <id>=<id> …] [--drop <row id> …] [--date D] [--dry-run]` | what the PM took into the note (§12) — every other byte kept; `--dry-run` is the preview |
 | `schema` | the fields, columns, lanes, levels, findings and commands this file must agree with (`validate-consistency.sh` check 28) |
 
-**The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note.
+**The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; since v4.8.0 the stage headers and the lane names stay in view while the grid scrolls in its own frame, and the grid pans with the mouse held down (one fixed inline script — no data of the note in it, no request); editing stays on the boards (§11–§12); each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note.
 
-**Publication** — through `artifact-publishing.md`, never around it. The kind is `dashboard`; the key `cjm-research/<product>/journey-<slug>` — one dashboard per journey, apart from the funnel's `cjm-research/<product>/funnel`. `publications.py find --key <key> --note <note>` runs first; a place found is offered as «нова версія N». The question names each candidate, what goes (internal data: the map's rows, metrics, pains) and who can open it; «лише файл» is always one answer, and «ні» or «лише файл» is final for the run. After each place: `publications.py record --key <key> --note <note> --surface <surface> --kind dashboard …`. Sharing — to named people only, a separate question after the publication (`artifact-publishing.md` §7). The page is a snapshot with its date on every surface.
+**Publication** — through `artifact-publishing.md`, never around it. The kind is `dashboard`, and since v4.8.0 a board is the second place of the same question (§11); the key `cjm-research/<product>/journey-<slug>` — one dashboard and its boards per journey, apart from the funnel's `cjm-research/<product>/funnel`. `publications.py find --key <key> --note <note>` runs first; a place found is offered as «нова версія N». The question names each candidate, what goes (internal data: the map's rows, metrics, pains) and who can open it; «лише файл» is always one answer, and «ні» or «лише файл» is final for the run. After each place: `publications.py record --key <key> --note <note> --surface <surface> --kind dashboard …` (a board: §11). Sharing — to named people only, a separate question after the publication (`artifact-publishing.md` §7). The page is a snapshot with its date on every surface.
 
-**Without SHELL** — the note only: the model builds the table, checks it by §6 itself and says in one line that the page, the health trend, the tree and `refresh` need a shell. **Without FS** — the session's note, exported at the end (`host-profiles.md`); no record.
+**Without SHELL** — the note only: the model builds the table, checks it by §6 itself and says in one line that the page, the health trend, the tree, `refresh` and the board need a shell. **Without FS** — the session's note, exported at the end (`host-profiles.md`); no record.
 
 ## 10. The scheduled health-check
 
@@ -201,13 +205,99 @@ When the product has a journey note in the vault, the automated health-check (`c
 - **Never backwards** — a snapshot older than the map's health-check rows is refused, the note untouched.
 - The `health` field gets the snapshot's point (§8), and the page is rendered again next to the note.
 
-It never publishes and asks nothing. The health-check's one end line names the map too: «Новий health-check від <дата>, карту шляху оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
+It never publishes, asks nothing and never reads or updates a board (§11). The health-check's one end line names the map too: «Новий health-check від <дата>, карту шляху оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
 
-## 11. What never happens
+## 11. The board
 
-- A Miro board of the map or a portfolio of journeys in this release (v4.8.0).
-- A publication or a new version without the question; a publication from a scheduled run.
-- A person's name on the map; an Opportunity Score.
+The board is one more render of the note (since v4.8.0): the team reads and edits the map there; what it changes comes back into the note only through §12.
+
+- **Candidates** — kind `board` (`artifact-publishing.md` §2): a registry record with `board` in its `publishes` whose tools in this session create frames and stickies, update an element by its id and read the board back (Miro: measured in the story map's acceptance, 2026-11-10), and the host's own board type — ARTIFACT `typed` with a board kind whose elements are written and updated by id and listed back (measured 2026-11-17: a board created from the type, a grid of sections with stickies in one write, a sticky updated by its id with only its changed field, the elements listed back, a person's sticky read back as their own element). An observed capability, never a brand: a tool that draws diagrams only, or cannot update an element by its id, is no candidate; FigJam is not one in this release (`story-map-protocol.md` §6).
+- **The grid** — `journey_map.py board-layout --note <note> --lang <lang>`: the stages across in the order of `stages`, the lanes down in the order of §2; above each column the stage's `<id> · <name>` and its outcome (`⚠️ TBD` when it has none; a stage without evidence says its gap `⚠️`); the lane names at the left. **Every cell** is a frame (Miro) or a section (the host's board) titled `<stage id> · <lane>` — «s3 · болі», in English «s3 · pains» — and there is a cell for every lane of every stage, empty ones too, so the team has somewhere to add (5 stages make 50 cells).
+- **A sticky** carries its row's `board_text` — the text with any link and any person's e-mail or phone removed, hidden whole when it holds a secret (`note_table.safe`) — and a second line: an initiative's or an experiment's code (page-safe too), or «health-check» on a health-check row (`m-…`, `a-…`), which takes another colour. The stage names, outcomes and the title are page-safe as well. Never a row id, a source, a class, a date or a name. **Only what the page shows** is on the board — the rows `render-html` would show (§9); `board-layout` names the rest (`hidden`). **No `parent` connectors**: the opportunity tree stays Mermaid (Step J3).
+- **Built by the model** from `board-layout`, following the tool's own instructions — Miro's composer skill, the host board type's own instructions, read before the first board. On the host's board a cell is a section written before what it holds, the plugin's sticky is a rounded block (a person's sticky is their own element, never the plugin's), and a board is never rebuilt: a new version updates each element by its id with only its changed fields.
+- **Publication** — the key does not change: `cjm-research/<product>/journey-<slug>`, the dashboard and the boards in the one question of Step J4 (§9). The map's primary kind is `dashboard`; a board is the second place, «за бажанням». The order: the dashboard's candidates by audience, then a Miro board, then the host's board, then «лише файл».
+- **Who sees it.** A Miro board in the team's root folder — «бачиш ти, а можливо — й учасники команди за її налаштуваннями», the record `unknown`. The host's board is private until it is shared — «бачиш лише ти, поки не поділишся», the record `private`; sharing is a separate question to named people only, and on the host's surface the user shares it in the host's interface (`artifact-publishing.md` §7).
+- **The record** after each board: `publications.py record --key <key> --note <note> --kind board --surface miro --id <board id> --url <link> --audience unknown`, or `--kind board --surface artifact --level typed … --audience private`; the audience on the first record only — a new version keeps it.
+- **The state** — after each board publication the skill reads the board back (§12) and keeps it: `journey_map.py board-state --read <reads> --note <note> --surface miro|whiteboard [--last <the previous state>] --out ~/.grow-pm/journey-maps/<product>/journey-<slug>.<surface>.board.json`, `<surface>` the record's (`miro`, `artifact`); `--last` every time there is a previous state — a new version, a take, a rebuilt state — so a sticky keeps its row by its element id. The board's texts are internal data: the state stays on this machine, like the vault.
+- **A new version** of a board is an update of the same board by element ids — each row's sticky by the id its state names, a row without one as a new sticky — after §12; never a new board unless the PM chooses one there.
+- **No board tool in the session** → the dashboard and the file, and once per run the registry's one line (`tool-registry.md` §4: `tools_scan.py suggest --skill cjm-research --need board`). **Without SHELL** — the note only, and the one line of §9.
+
+## 12. What the team changed on the board — only through a question
+
+- **The state.** `board-state` keeps every element of the read and its role, and every text page-safe — a link removed, a contact hidden, a secret hidden whole: a state or a diff never keeps what the page would not show. A sticky's `origin` says whose it is: the plugin's (a row the board shows) or the team's — a team sticky, a person's own note on the host's board, and one an earlier take made a row of (its row's source is the team board; the row may not be on the page yet: no class) — which stays the team's. With `--last <the previous state>` the plugin's sticky of a row the board no longer shows stays the plugin's own (`orphan`), a row's sticky whose text the note has since changed (a refreshed metric) keeps its row by its element id, and **a re-keep never absorbs what the PM did not take**: a text edit or a move the note has not taken keeps its last text and cell, and a row's sticky gone from the board stays recorded as gone, so the next diff names each again. A last state that shares no element with the read (a new board, answer 3) is set aside (`last_ignored`) — the new board's first state. A read that holds no cell of the map is refused:
+
+| Role | What it is |
+|---|---|
+| `cell` | a frame or section titled `<stage id> · <lane>` of a declared stage and a known lane |
+| `row` | the plugin's sticky of a row — found by its text in its own cell first, then anywhere (it was moved) |
+| `header` | a stage's `<id> · <name>`, its name or its outcome above a column |
+| `lane_name` | a lane's name at the left |
+| `team` | a sticky the note does not hold — the team's |
+| `orphan` | the plugin's own sticky of a row the board no longer shows (with `--last`) |
+| `frame` | any other frame or section |
+| `other` | any other element: a text, a connector, a shape |
+
+- **Reading back** is not a publication: the user's own connected tool, no question. A Miro board is read twice into scratch files — by the state's element ids (`board-diff --last <state>` prints them as `ids`) and over the map's area (`scope`); the host's board is listed back whole — every page (a limit of 1000, then each next cursor) into a fresh folder, never one reused from an earlier read. A person's edit reaches the board's store only when the page has saved it: a read made while someone is still typing may miss it (measured 2026-11-17). A read that holds no element, or no element of the board (an error the tool returned), is refused — read again; it never reads as «everything removed». A read that lacks a cell the state holds (one page of a paged list) is no diff either: `board-diff` says `partial` and names the cells, `board-state` refuses it — the plugin never deletes a cell; read again, and if the cells are truly gone, only «нова дошка», «показати, що на дошці» or «ні» are offered. A sticky keeps its line breaks, so a code is read only from its own second line.
+- **Before a new version** — `journey_map.py board-diff --last <state> --now <reads> --note <note> --out <scratch diff>`; a sticky in a section the team drew inside a cell belongs to that cell. The diff carries the note's journey, product and a digest of its rows: `board-take` refuses it on another note, or on this one once it has changed — diff again:
+
+| Category | Counted | What |
+|---|---|---|
+| `changed` | yes | a row's sticky whose text the team changed (with its row), or a team sticky edited again |
+| `moved` | yes | a sticky moved to another cell — another stage, another lane, or both |
+| `added` | yes | a team sticky the note does not hold, with its cell — every time until it is taken, so one the PM left, or one a state rebuilt with no history recorded, is offered again |
+| `removed` | yes | a row's sticky gone from the board |
+| `orphaned` | yes | the plugin's own sticky of a row the board no longer shows — with its text now when the team changed it; its removal is asked one item at a time |
+| `hc_edits` | yes | an edit of a health-check row's sticky — its text, its cell or its removal: named, never taken |
+| `other` | no | any other element added, retitled or removed (a header, a cell's title, a loose text) — named |
+| `unrecorded` | no | the map's own elements the state lacks — the next `board-state` maps them; never a team addition |
+
+- **Every count zero** → the version question of §11.
+- **Anything counted** → one question that is also the version question: everything the team did, what goes where, who sees it and the version number (`artifact-publishing.md` §4, §6); the dashboard's version line when the key holds it. Five answers:
+
+> «На дошці Miro «Zorg: перше замовлення» команда змінила 1 рядок, перенесла 1 в інший етап, додала 3 стікери й прибрала 1; правку метрики health-check «visit -> search» названо — її не забирають, наступна версія дошки поверне текст із нотатки. Що зробити? 1) забрати в карту й оновити дошку до версії 2 і дашборд до версії 3; 2) оновити дошку до версії 2 моїми рядками — правку p2 і перенесення e2 буде скасовано, прибраний h3 повернеться, додане командою лишиться; 3) нова дошка, версія 1; 4) лише забрати в карту, дошку й дашборд не чіпати; 5) ні. Дошку бачиш ти, а можливо — й учасники команди за її налаштуваннями; дашборд — лише ти (внутрішні дані: рядки карти, метрики, болі).»
+
+  - **«Забрати»** (answers 1 and 4) — first the preview, `journey_map.py board-take --note <note> --diff <diff> --take <ids> --dry-run`: each change with its row and cell; the **evidence class** asked once, in one list, for every added row of an evidence lane — only the classes §2 lets its lane take (`measured` for metrics and anomalies; `measured`, `observed`, `reported`, `external` for the rest), plus «без класу», `simulated` never; a parent proposed for a solution or an experiment without one, among the stage's opportunities or solutions; what the take refuses and names; and what it leaves on the board (`left` — every counted edit the PM does not take). The model's `person_name` pass (§6) runs on the taken texts. Then `board-take` with the PM's picks (`--take` the element ids the preview shows, or `row:<id>` for a row; `--class <id>=<class> …` and `--parent <id>=<row> …`, several after one flag; `--drop <row> …` for each row the PM lets go), and the state is kept again — `board-state … --last <the previous state>`. Answer 1 then renders the board's new version from the note — the team's items keep their ids, and every edit left untaken (`left`) is undone on the board, which the preview says before the take — and the dashboard's.
+  - **A row the team changed** takes the team's text, the source `дошка команди <date>` and the take's date, and in an evidence lane the class the PM picks — the preview asks it as for an added row; a moved row keeps its source and class — asked again when its class does not fit the new lane, cleared (and named) in a lane that takes none, and the findings name its children. **A metric or an anomaly row never changes from the board** — its edits are named (`metric_lane`), like the health-check's.
+  - **A row without a class** stays in the note with its class empty: the finding `no_class` (§6), never on the page or the board; its sticky is not touched — the team's items are never deleted.
+  - **Answer 2** gives the plugin's stickies the note's text and cells — the question names each team edit it undoes; what the team added stays on the board untouched.
+  - **Answer 3** creates a new board (version 1, the old id to `replaced`); the old board stays as it is.
+  - **«Ні»** is final for the run: the board is not touched, and the question is not repeated.
+- **What `board-take` does** — the rows the PM took into the note, every other byte of it as it was:
+
+| Code | board-take | What |
+|---|---|---|
+| `health_check` | refused | a health-check row — its text, its cell, its removal — never changes from the board |
+| `metric_lane` | refused | an existing metric or anomaly row's text, cell or removal — named, never taken (R25) — and a move of an existing row into those lanes (a team sticky added there is a new row like any other, its class the PM's) |
+| `no_cell` | refused | a sticky in no cell of the map |
+| `needs_drop` | refused | a row gone from the board taken without `--drop` — a row leaves the note only on the PM's word for it |
+| `not_removed` | refused | `--drop` of a row the board still has |
+| `taken` | refused | an added sticky whose row the note already holds on its cell — an earlier take |
+| `secret` | refused | a sticky's text that holds a key, a token or a hidden secret — never written, the element named |
+| `empty` | refused | nothing left to write once a contact and a link are removed |
+| `not_takeable` | refused | an element that is no team sticky and no row's change (`orphaned`, `other`, `unrecorded`) |
+| `unknown` | refused | an id the diff does not name, a row the note no longer has, or a `--drop` of a row the note does not have |
+| `contact_removed` | named | a person's e-mail or phone removed before the write |
+| `link_removed` | named | a link removed before the write |
+| `no_class` | named | an added row of an evidence lane with no class from the PM — the class stays empty |
+| `bad_class` | named | a class its lane does not take (§2) — left empty |
+| `orphan` | named | an added solution or experiment without its parent — the stage's candidates proposed |
+| `bad_parent` | named | a `--parent` that is not a row of its stage the lane may hang under (§5) — not set |
+| `bad_code` | named | an added initiative whose own second line is not an epic or feature code (a code is never read from the end of the text), or a code with no `код` column to go to |
+| `unused` | named | a `--class` or `--parent` key that matches no taken element or new row |
+
+  A changed text goes into its row (a second line that is the row's own code or «health-check» is not part of it; an initiative's epic or feature code, or an experiment's registry id, on its own second line goes into `код` — a second line that is no code stays in the text, never read as one); a moved row takes its new stage and lane, every other cell kept; an added sticky becomes a new row `b<n>` — numbered in the diff's order, so the preview and the take give an element the same id — after its stage's last row, its source `дошка команди <date>` (`team board <date>` in an English note), its date the board's, its class the PM's (`--class` keyed by the element's id or by the new row's id the preview shows). One element taken twice is one row.
+- **Health-check rows** never come back from the board: their edits are named in the question, and the board's next version gives them back the note's text — the question says so.
+- **Never a deletion of what the team added.** Any deletion from the board — an orphaned sticky included — is one item at a time, after its own «так».
+- **No state** (another machine, a lost folder, a read-back that failed) → the skill first reads the board back — the record's board, its cells found by their titles (the board tool's own search, or the host's board listed whole) — and rebuilds the state with `board-state`; then «Не можу сказати, що змінилось на дошці»: the question names the rows it could not find (`unmapped_rows` — they would become new stickies) and has one more answer, «показати, що на дошці». Without a read-back no new version is offered — only «нова дошка», «показати, що на дошці» or «ні».
+
+## 13. What never happens
+
+- A portfolio of journeys or a nested journey in this release (v4.9.0).
+- A publication or a new version without the question; a publication from a scheduled run; a board read, updated or asked about by the scheduled health-check.
+- An automatic two-way sync with a board: the team's changes come back only through §12, the health-check rows never.
+- A class the PM did not pick; a deletion of what the team added; a deletion from a board without its own «так» per item.
+- `parent` connectors on a board; a story map on the host's board type.
+- A person's name on the map or a board (the model's `person_name` pass on taken text; a board state keeps the team's texts page-safe, names not filtered, and never leaves this machine); an Opportunity Score.
 - A health score read from a snapshot's text.
 - A write to Jira: an initiative links an existing code; creating one is `roadmap-architect`'s.
 - A change to a CJM tracker the team keeps by hand.

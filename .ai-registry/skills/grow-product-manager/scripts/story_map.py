@@ -17,13 +17,13 @@ writes `published` — so a field is replaced and nothing else moves. Every comm
 `MAP_RESULT {json}` line. Stdlib only (Python 3.9). Exit 0; 2 for a wrong argument or a note, a status file or a board
 that does not read; 1 when a file cannot be written.
 """
-import argparse, datetime, html, json, os, re, sys
-import xml.etree.ElementTree as ET
+import argparse, datetime, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 import ctx_never as cn  # noqa: E402
+import board_state as bs  # noqa: E402  — a board read back and its area (shared, v4.8.0)
 import note_table as nt  # noqa: E402  — reading the note, table cells, page-safe text, protocol tables (shared, v4.7.0)
 import publications as pub  # noqa: E402
 
@@ -46,7 +46,6 @@ EPIC_KEY = re.compile(r"^[A-Z][A-Z0-9]*-\d+$")
 SLICE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 DAY = nt.DAY
 MOVE_EPS = 5.0
-SCOPE_MARGIN = 200
 
 
 def result(**kw):
@@ -414,101 +413,13 @@ def render_baseline(entries, eol):
 
 
 # ------------------------------------------------------------------ board
-def _num(v):
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
-
-
-def _translate(tr):
-    m = re.search(r"translate\(\s*([-\d.eE]+)(?:[\s,]+([-\d.eE]+))?\s*\)", tr or "")
-    if m:
-        return float(m.group(1)), float(m.group(2) or 0)
-    m = re.search(r"matrix\(([^)]*)\)", tr or "")
-    if m:
-        parts = [float(x) for x in re.split(r"[\s,]+", m.group(1).strip()) if x]
-        if len(parts) == 6:
-            return parts[4], parts[5]
-    return 0.0, 0.0
-
-
-def _plain(s):
-    s = re.sub(r"<br\s*/?>|</p>\s*<p[^>]*>", " ", s or "", flags=re.I)
-    s = re.sub(r"<[^>]+>", "", s)
-    return re.sub(r"\s+", " ", html.unescape(s)).strip()
-
-
-def _own_text(el):
-    parts = [el.text or ""]
-    for ch in el:
-        if ch.get("data-miro-id") is None:
-            parts.append(_own_text(ch))
-        parts.append(ch.tail or "")
-    return "".join(parts)
-
-
-def read_board(path):
-    """{id: item} of the elements of a board SVG that carry a data-miro-id — raises Bad. An item's `x`, `y` are absolute;
-    `rx`, `ry` are relative to the frame it sits in (a frame's own translate is relative to its parent frame), so a
-    dragged frame moves the frame, not every card in it."""
-    try:
-        root = ET.parse(path).getroot()
-    except (ET.ParseError, OSError) as e:
-        raise Bad("the board does not read: %s" % (getattr(e, "strerror", None) or str(e)[:120]))
-    items = {}
-
-    def walk(el, ox, oy, frame, frame_text):
-        tag = el.tag.split("}")[-1]
-        dx, dy = _translate(el.get("transform")) if tag == "g" else (0.0, 0.0)
-        nox, noy = ox + dx, oy + dy
-        mid = el.get("data-miro-id")
-        if tag == "g" and el.get("data-frame") is not None:
-            rect = next((c for c in el if c.get("data-type") == "frame"), None)
-            title = el.get("data-frame") or (rect.get("data-title") if rect is not None else "") or ""
-            mid = mid or (rect.get("data-miro-id") if rect is not None else None)
-            w = _num(rect.get("width")) if rect is not None else None
-            h = _num(rect.get("height")) if rect is not None else None
-            if mid:
-                items[mid] = {"id": mid, "kind": "frame", "text": _plain(title), "x": nox, "y": noy, "rx": dx, "ry": dy,
-                              "w": w, "h": h, "frame": frame, "frame_text": frame_text}
-            for c in el:
-                if c is not rect:
-                    walk(c, nox, noy, mid or frame, _plain(title) if mid else frame_text)
-            return
-        if mid and el.get("data-type") != "frame":
-            x = _num(el.get("x")) if el.get("x") is not None else _num(el.get("cx"))
-            y = _num(el.get("y")) if el.get("y") is not None else _num(el.get("cy"))
-            body = el.get("data-content")
-            if body is None:
-                body = el.get("data-title") or _own_text(el)
-            items[mid] = {"id": mid, "kind": el.get("data-type") or tag, "text": _plain(body),
-                          "x": (x or 0.0) + nox, "y": (y or 0.0) + noy, "rx": (x or 0.0) + nox - ox, "ry": (y or 0.0) + noy - oy,
-                          "w": _num(el.get("width")), "h": _num(el.get("height")), "frame": frame, "frame_text": frame_text}
-        for c in el:
-            walk(c, nox, noy, frame, frame_text)
-
-    walk(root, 0.0, 0.0, None, "")
-    return items
+# Reading a board back is scripts/board_state.py's since v4.8.0 (shared with journey_map.py); the roles of the map's
+# stickies and the diff stay here. A story map's board is a Miro board: every read is its SVG.
+_plain, _scope = bs.plain, bs.scope
 
 
 def read_boards(paths):
-    items = {}
-    for path in paths:
-        for mid, it in read_board(path).items():
-            items.setdefault(mid, it)               # the first read of an element wins (the read by ids comes first)
-    return items
-
-
-def _scope(items):
-    xs, ys, xe, ye = [], [], [], []
-    for it in items.values():
-        xs.append(it["x"]); ys.append(it["y"])
-        xe.append(it["x"] + (it["w"] or 0)); ye.append(it["y"] + (it["h"] or 0))
-    if not xs:
-        return None
-    x0, y0 = int(min(xs)) - SCOPE_MARGIN, int(min(ys)) - SCOPE_MARGIN
-    return {"x": x0, "y": y0, "width": int(max(xe)) + SCOPE_MARGIN - x0, "height": int(max(ye)) + SCOPE_MARGIN - y0}
+    return bs.read_boards(paths, "miro")
 
 
 def _rendered(c):
@@ -576,7 +487,7 @@ def load_state(path, p):
         except (OSError, ValueError, KeyError, TypeError):
             raise Bad("the board's state does not read")
         return items
-    items = read_board(path)
+    items = bs.read_miro_svg(path)
     assign_roles(items, p)
     return items
 

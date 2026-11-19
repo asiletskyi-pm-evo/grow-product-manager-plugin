@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.7.0
+**Version:** 4.8.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.8.0** — **«Дошка карти шляху»: the team edits the journey map on a board, and its edits come back into the note only after a question** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `cjm-research` 0.17.0 publishes the journey map to a board as well as its dashboard, in the same question under the same key: a Miro board, or the host's own board type where the host has one whose elements are written, updated by id and read back. The board is a grid — the stages across, the ten lanes down, a cell «<stage> · <lane>» for every lane of every stage — and a sticky carries a row's text and a second line (an initiative's or an experiment's code, «health-check» in another colour), never its id, source, class or a name; only the rows the page shows are on it. «Забери правки з дошки карти шляху» reads the board back, names everything the team changed, moved, added and removed, and asks one question that is also the version question; «забрати» shows a preview where the PM picks the evidence class of every row the team wrote — never guessed, `simulated` never — and only then writes: new rows with the source «дошка команди <date>», a row without a class kept as a finding off the page, a row the board lost dropped only on the PM's word, an edit of the health-check rows or of any existing metric row never taken from the board. Nothing the team added is ever deleted. The journey map's page now reads like a board: the stage headers and the lane names stay in view while it scrolls, and it pans with the mouse held down — editing stays on the boards. `scripts/board_state.py` now reads boards for both maps — a Miro SVG or the host board's element list — and the story map's board output is byte for byte what it was; `journey_map.py` gets `board-layout`, `board-state`, `board-diff` and `board-take`; validator check 29 keeps the protocol's board roles, diff categories and take rules the script's. The third release of the programme «Фреймворки»; the journey portfolio and nested journeys come in v4.9.0.
 
 **New in v4.7.0** — **«Карта шляху»: a living journey map assembled from evidence, its health seen over time, and an opportunity tree growing on its stages** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `cjm-research` gets a `journey` mode (`references/journey-protocol.md`): the CJM config's funnel stages across, ten lanes down — actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments — and on every row its source and evidence class: metrics and anomalies from the newest health-check snapshot (`measured`), pains from `feedback-triage` (`reported`) and `flow-walkthrough` (`observed`), solutions from hypotheses, tests from `experiment-tracker`, initiatives as existing epic codes. Nothing is invented: a stage without evidence stays a gap, a persona's answer is never a pain. The map has an owner (a role or a team) and a review date; stale shows as findings — a pain with no action for two quarters, a review older than a quarter. The health trend comes from the snapshots' frontmatter only, which the health-check now writes. A stage's opportunity tree (Teresa Torres) is a view of its lanes: the stage's outcome metric, opportunities with pains as evidence, at least three solutions for the target, experiments as tests — Mermaid through `diagram-prototyper`, no Opportunity Score. The vault note is the source of truth; its dashboard is published only after the question, a new version instead of a copy, and the scheduled health-check refreshes the map's numbers locally, never publishing. `scripts/journey_map.py` does the parsing, the checks, the self-contained page, the trend, the refresh and the tree; validator check 28 keeps the protocol and the script one schema. Also: the session digest reads the CJM, Terminology and Obsidian Vaults sections at any heading level from 2 to 5, so a configured funnel no longer shows «cjm: not configured». The second release of the programme «Фреймворки»; the journey map's Miro board and the journey portfolio come in v4.8.0.
 
@@ -217,7 +219,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.16.0)
+### 1. CJM Research (v0.17.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -662,7 +664,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.16.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes |
+| CJM Research | v0.17.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes and its board |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
@@ -1113,5 +1115,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.7.0  
+**Version:** 4.8.0  
 **Last Updated:** November 2026

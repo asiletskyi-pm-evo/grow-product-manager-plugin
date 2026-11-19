@@ -12,6 +12,71 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.8.0 (2026-11-19)
+
+**«Дошка карти шляху»: the team edits the journey map on a board, and its edits come back into the note only after a question.** v4.7.0 gave the journey map a note, a page and a trend, but the team had nowhere to work on it together. Now `cjm-research` publishes the map to a board — Miro, or the host's own board type where the host has one — as a grid of stages and lanes; what the team changes there is read back, named and taken into the note only through one question and a preview where the PM picks every evidence class. The third release of the programme «Фреймворки» (B-4, second half, part 1); the journey portfolio and nested journeys come in v4.9.0.
+
+### Added
+
+- **The journey map's board** (`references/journey-protocol.md` §11, `cjm-research` Step J4) — kind `board` in the same publication question as the dashboard, under the same key `cjm-research/<product>/journey-<slug>`: the dashboard's places by audience first, then a Miro board, then the host's own board, «лише файл» always. Candidates by observed capability: a registry record whose tools create frames and stickies, update an element by its id and read the board back, or the host's ARTIFACT `typed` board kind whose elements are written, updated by id and listed back (measured in a spike, 2026-11-17). `journey_map.py board-layout` gives the grid — stages across, the ten lanes down, a cell «<stage> · <lane>» for every lane of every stage (five stages, fifty cells); a sticky carries a row's page-safe text and a second line — an initiative's or experiment's code, or «health-check» in another colour — never a row id, a source, a class, a date or a name; only the rows the page shows. Who sees it: a Miro board in the team's root folder «ти, а можливо — й учасники команди», the host's board private until shared.
+- **What the team changed on the board** (§12, Step J6 «забери правки з дошки карти шляху») — the board read back (a Miro board by the state's ids and over its area, the host's board listed whole, every page, into a fresh folder); `journey_map.py board-diff` counts `changed`, `moved` (another cell), `added`, `removed`, `orphaned` and `hc_edits` (a health-check row's edit — named, never taken), and names `other` and `unrecorded`; one question that is also the version question, five answers (take and update the board to version N; update the board with the note's rows, each team edit undone named; a new board; take only; no). «Забрати» shows the preview first — `board-take --dry-run`: the evidence class asked for every evidence row the team wrote or changed, only the classes its lane takes plus «без класу», `simulated` never; a parent proposed for a solution or experiment without one; what is refused and what the take leaves on the board — then `board-take` with the PM's picks: new rows `b<n>` (numbered in the diff's order, so the preview and the take agree) with the source «дошка команди <date>», a changed row with the team's source and the PM's class, a row without a class kept as the finding `no_class` and off the page, a row the board lost dropped only on the PM's `--drop`, every other byte of the note kept. Health-check rows and every existing metric or anomaly row never change from the board; a link, a contact or a secret never reaches the note; nothing the team added is ever deleted, and a plugin sticky left behind (`orphan`) is removed only on its own «так».
+- **The board's state** — `journey_map.py board-state` keeps every element and its role (`cell`, `row`, `header`, `lane_name`, `team`, `orphan`, `frame`, `other`) and its `origin` (the plugin's or the team's), every text page-safe, at `~/.grow-pm/journey-maps/<product>/journey-<slug>.<surface>.board.json` on this machine. Kept again with `--last` after each take or new version, it never absorbs what the PM did not take: an untaken edit keeps its last text and cell, a row's sticky gone from the board stays gone, a team sticky the note does not hold is offered again. A partial read (a page that lacks cells the state holds) is `partial`, never «removed»; a read with no cell of the map, an error payload or an empty read is refused; no state → the board read by its cell titles, the state rebuilt, «Не можу сказати, що змінилось».
+- **`scripts/board_state.py`** — a board read back in one item format: `read_miro_svg` (the story map's reader, moved unchanged), `read_whiteboard` (the host board's element list, inline rows or one file per element; a section is a frame, membership by the smallest section that holds the centre; a person's author fields never kept), `read_board`, `read_boards`, `scope`. Shared by `story_map.py` and `journey_map.py`.
+- **The journey map's page reads like a board** (the user's decision during acceptance) — the stage headers and the lane names stay in view while the grid scrolls in its own frame, and the grid pans with the mouse held down; one fixed inline script, no data of the note in it, no request. Editing on the page stays for a later release; the team edits on the boards.
+- **Validator check 29** — the board's roles, diff categories and `board-take` codes (refused / named) in `journey-protocol.md` §12 are `journey_map.py`'s; §11 builds from `board-layout`; §12 names the team's source; `artifact-publishing.md` names `cjm-research` as a board consumer and the host's typed board; the seed's `miro` record serves `cjm-research`; both map scripts read boards through `board_state.py`; `cjm-research` has its J6.
+- **Tests** — `testing/board_state_test.py` (41 checks), `testing/journey_map_test.py` §10–§15 (281 checks in all), `testing/story_map_test.py` §11 (the story map's 14 board cases recorded at v4.7.0, replayed byte for byte), `testing/tools_scan_test.py` §10; every check red first, mutations caught (a take that rewrites a health-check row, a class the PM did not pick, a delete without `--drop`, a page-hidden row on the board, the first section instead of the smallest, an author kept, a frame-relative place lost). Zorg fixtures in `testing/fixtures/board/` and `testing/fixtures/journey/`; trigger-evals Y15–Y18 (18/18 live on Claude Code); test-cases, output-evals rubric, host-matrix row.
+
+### Changed
+
+- **`cjm-research` 0.17.0** — Step J4 publishes the boards with the dashboard; Step J6 «what the team changed»; the entries «опублікуй карту шляху на дошку» and «забери правки з дошки карти шляху»; `## Routing` phrases. The description is unchanged.
+- **`references/artifact-publishing.md`** — `cjm-research` a `board` consumer (§1); the host's own board a candidate by its observed capability (§2); the journey map's order (§3); the host's board starts private (§4); the boards under the journey key (§5); a board's new version after `journey-protocol.md` §12 too (§6).
+- **`references/native-surfaces.md`** — ARTIFACT `typed` kinds as measured on 2026-11-16 (a board, a sheet), a routing row for the journey map, the host's board type in the brand map with what the spike measured.
+- **`references/story-map-protocol.md`** — §10 points to `board_state.py`; the story map stays on Miro.
+- **`references/tools-seed.yaml`** — `miro` serves `cjm-research`; `baymard` names its needs.
+- **`testing/skill_lint.py` check 30** — the host's board type is a brand name, allowed only in the brand map; a `seeded_leak_test.py` seed proves it (28/28).
+- **`AGENTS.md`, `README.md`** — «Where things live» rows; «New in v4.8.0».
+
+### Fixed
+
+- **The board suggestion for `cjm-research`** — `tools_scan.py suggest --skill cjm-research --need board` offered Baymard (its seed record named no `needs`, so it served any need, and it lists `cjm-research` before Miro does); it now offers Miro. Found in acceptance.
+- **`ctx` reads Obsidian Vaults at heading levels 2–5** (PR #98, merged into this release) — `vault_entries()` in `scripts/ctx_common.py` finds the vault list under a level-2 to level-5 heading and skips fenced code.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/board_state.py` | new — one item format for a Miro SVG and the host board's element list |
+| `scripts/journey_map.py` | `board-layout`, `board-state`, `board-diff`, `board-take`; `check_board_protocol()` for check 29; the page's sticky headers and panning |
+| `scripts/story_map.py` | imports `board_state.py`; its board output byte-identical |
+| `scripts/ctx_common.py` | `vault_entries()` at heading levels 2–5, fence-aware (PR #98) |
+| `references/journey-protocol.md` | §9 boards in the question, §10 never a board, §11 «The board», §12 «What the team changed on the board», §13 |
+| `references/artifact-publishing.md`, `references/native-surfaces.md`, `references/story-map-protocol.md`, `references/tools-seed.yaml` | as above |
+| `skills/cjm-research/SKILL.md` | 0.17.0 — J4, J6, Routing |
+| `testing/validate-consistency.sh` | check 29 |
+| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 30 knows the host's board type; a seed |
+| `testing/board_state_test.py`, `testing/journey_map_test.py`, `testing/story_map_test.py`, `testing/tools_scan_test.py`, `testing/ctx_common_test.py` | new and extended tests |
+| `testing/fixtures/board/`, `testing/fixtures/journey/` | Zorg boards (Miro SVG, the host board's lists), the story map's golden output |
+| `testing/trigger-evals.md`, `testing/test-cases.md`, `testing/output-evals.md`, `testing/host-matrix.md` | Y15–Y18; v4.8.0 cases; the board rubric; the board row |
+| `AGENTS.md`, `README.md` | «Where things live»; «New in v4.8.0», skill entries |
+| `.ai-registry/skills/grow-product-manager/` | rebuilt for v4.8.0 |
+| `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, `.codex-plugin/plugin.json`, `README.md`, `CHANGELOG.md` | v4.8.0 |
+
+### Backwards compatibility
+
+Nothing changes for a user who never publishes a journey map to a board: the journey map's note, its dashboard, its trend and the scheduled refresh work as in v4.7.0, and the note's format is the same. The story map behaves exactly as before (its board output replayed byte for byte). The journey page gains sticky headers and mouse panning; it is still one self-contained file with no request.
+
+### Known limits
+
+- No journey portfolio and no nested journeys in this release — they come in v4.9.0.
+- No editing on the journey page itself (adding, dragging between cells, editing) — a later plan; the team edits on the boards.
+- The board shows a row's text and code. The source, the class and the `parent` links stay in the note and on the page; the opportunity tree stays Mermaid.
+- A cell for every lane of every stage makes the board big (five stages, fifty cells).
+- The host's board type: who on the team can open or edit it follows the host's sharing settings; the plugin shares only with named people, in a separate question, and on the host's surface the user shares it in the host's interface.
+- The story map stays on Miro only.
+- No automatic sync with a board: the team's edits come back only through the question, the health-check and metric rows never; a team sticky the PM keeps declining is named on every diff.
+- Without the board's state (another machine), the plugin cannot say what changed: it rebuilds the state from a read-back and offers only «нова дошка», «показати, що на дошці» or «ні» before a new version.
+- A board state keeps the team's texts page-safe on this machine; names in them are not filtered (the model's `person_name` pass runs on what is taken into the note).
+
 ## v4.7.0 (2026-11-16)
 
 **«Карта шляху»: a living journey map assembled from evidence, its health seen over time, and an opportunity tree growing on its stages.** The plugin found funnel anomalies, triaged feedback, walked flows and tracked experiments, but nothing put them on one map with an owner and a date. Now `cjm-research` builds and keeps a journey map: the CJM config's stages across, ten lanes down, every row with its source and its evidence class — and a stage without evidence stays a visible gap. The second release of the programme «Фреймворки» (B-4, first half); the map's Miro board and the journey portfolio come in v4.8.0.

@@ -1,0 +1,167 @@
+[
+ {
+  "id": "e1",
+  "data": {
+   "type": "text",
+   "x": 0,
+   "y": 0,
+   "text": "Zorg: перше замовлення",
+   "size": "large"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e2",
+  "data": {
+   "type": "container",
+   "x": -40,
+   "y": 80,
+   "w": 1600,
+   "h": 900,
+   "text": "Zorg: карта шляху"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e3",
+  "data": {
+   "type": "container",
+   "x": 0,
+   "y": 120,
+   "w": 360,
+   "h": 220,
+   "text": "s1 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e4",
+  "data": {
+   "type": "container",
+   "x": 400,
+   "y": 120,
+   "w": 360,
+   "h": 220,
+   "text": "s2 · болі"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e5",
+  "data": {
+   "type": "container",
+   "x": 0,
+   "y": 380,
+   "w": 360,
+   "h": 220,
+   "text": "s1 · метрики"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e6",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 24,
+   "y": 144,
+   "w": 240,
+   "h": 96,
+   "color": "yellow",
+   "text": "Не видно вартості доставки до оформлення"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e7",
+  "data": {
+   "type": "shape",
+   "kind": "rounded",
+   "x": 24,
+   "y": 404,
+   "w": 240,
+   "h": 96,
+   "color": "blue",
+   "text": "visit → search: 41% (база 45%)\nhealth-check"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e8",
+  "data": {
+   "type": "shape",
+   "kind": "rect",
+   "x": 800,
+   "y": 140,
+   "w": 200,
+   "h": 80,
+   "color": "white",
+   "text": "Легенда"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e9",
+  "data": {
+   "type": "arrow",
+   "from": "e6",
+   "to": "e7",
+   "label": "веде до"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "mwkxzorg-1a2b3",
+  "data": {
+   "type": "note",
+   "x": 433.5,
+   "y": 150.25,
+   "w": 180,
+   "h": 180,
+   "color": "peach",
+   "tilt": -0.4,
+   "text": "Немає оплати  частинами",
+   "author": "Zorg QA",
+   "authorId": "u_ZorgQaFictional000000x"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "mwkxzorg-9z8y7",
+  "data": {
+   "type": "note",
+   "x": 1200,
+   "y": 700,
+   "w": 180,
+   "h": 180,
+   "color": "yellow",
+   "text": "поза сітки",
+   "author": "Zorg QA",
+   "authorId": "u_ZorgQaFictional000000x"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ },
+ {
+  "id": "e10",
+  "data": {
+   "type": "sticker",
+   "on": "e6",
+   "x": 250,
+   "y": 140,
+   "kind": "thumbs-up"
+  },
+  "version": 1,
+  "updatedAt": "2026-11-17T10:00:00Z"
+ }
+]
