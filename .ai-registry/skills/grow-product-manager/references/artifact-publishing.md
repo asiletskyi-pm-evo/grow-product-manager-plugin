@@ -2,7 +2,7 @@
 
 > Shared reference (since v4.3.0). How a skill turns a finished result into a link the user opens, updates and shares: which places it can go to, in which order, the one question before it leaves, the record of where it went, and a **new version of the same place** on the next run instead of a copy. The other skills that publish keep their own question of `native-surfaces.md` §3 and do not record versions yet.
 >
-> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard, and the journey map's dashboard since v4.7.0), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0).
+> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard, the journey map's dashboard since v4.7.0 and its board since v4.8.0), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0).
 >
 > **Rule of the file:** the same as `native-surfaces.md` — a host surface is named by its capability (ARTIFACT, DOCS), never by its brand (§6 there); Atlassian and Confluence are connectors and are named. Nothing leaves without the question of `native-surfaces.md` §3, a new version included, and a scheduled run never publishes (§4 there).
 
@@ -14,7 +14,7 @@
 | `dashboard` | numbers and charts on one page, each with its source and date (§9) | `product-reporter`, `cjm-research` (the funnel, and the journey map — `journey-protocol.md`), `focus-advisor` (the board), `roadmap-architect` (the story map's progress) |
 | `document` | text the reader reads and may edit | `product-reporter`, `cjm-research` |
 | `page` | a wiki page in a space | the skills that already write to Confluence |
-| `board` | a whiteboard the team edits together | `roadmap-architect` (the story map, `story-map-protocol.md`) |
+| `board` | a whiteboard the team edits together | `roadmap-architect` (the story map, `story-map-protocol.md`), `cjm-research` (the journey map, `journey-protocol.md` §11, since v4.8.0) |
 | `design` | a design file | — (the registry's design tools) |
 
 The same six words are the `publishes` values of the tools registry (`tool-registry.md` §1) and the `kind` of a publication record (§5). The skill names its kind at its own step; it never asks for it.
@@ -23,7 +23,7 @@ The same six words are the `publishes` values of the tools registry (`tool-regis
 
 Four sources, read in this order, each only when present — a missing one is not mentioned (`native-surfaces.md` §5, «No line for an addition»). One place is one candidate, whichever sources name it:
 
-1. **The host's surfaces**, marked in Step 0-host: ARTIFACT `typed` when it has this kind (deck, dashboard, document, design); ARTIFACT `page` for a deck or a dashboard rendered as one self-contained HTML page; DOCS for a document.
+1. **The host's surfaces**, marked in Step 0-host: ARTIFACT `typed` when it has this kind (deck, dashboard, document, design, board); ARTIFACT `page` for a deck or a dashboard rendered as one self-contained HTML page; DOCS for a document.
 2. **The tools registry**: `python3 scripts/tools_scan.py targets --kind <kind> --any-state` lists every record whose `publishes` carries the kind and that is not `deprecated` — the seed's records when the user has no registry yet — with its stored state and `access` (`tool-registry.md` §7). The skill keeps those whose tools are in its own tool list this session: the session decides, never a stored state, so a record last seen `needs-auth` and reconnected since is a candidate, and one `installed` elsewhere but not reachable here is not. Without SHELL this source is empty.
 3. **Confluence**, where the skill's own step already writes there (a report, a handoff page).
 4. **The file and the vault** — always where the host keeps files. They are written whatever the answer and stay the source of truth (`native-surfaces.md` §2): a hosted place is one more place to read the result, never the only one.
@@ -31,6 +31,7 @@ Four sources, read in this order, each only when present — a missing one is no
 - **Atlassian Artifacts** arrive through source 2 (the `atlassian` record publishes `deck` and `dashboard`) and only when their operations are reachable (§8). The same record's `page` is Confluence — source 3, `surface: confluence` — never a second candidate.
 - **A service reached both as a host surface and as a registry record** (a document service the host offers as DOCS `connector`) is one candidate, recorded under the host capability (`docs`).
 - **A board** is a candidate only when its record carries `board` in `publishes` and its tools in this session create frames and stickies and update them by element id (`story-map-protocol.md` §6) — an observed capability, never the record's word. A whiteboard tool that draws diagrams only is not one.
+- **The host's own board** (since v4.8.0) — ARTIFACT `typed` with a board kind is a board candidate too when its elements are written, updated by their id and listed back (`journey-protocol.md` §11, measured 2026-11-17) — the same observed capability, never a name. In this release only the journey map offers it; the story map's board stays a registry record's.
 
 ## 3. The order — by audience
 
@@ -42,7 +43,7 @@ The audience comes from the skill's own step — `design-bridge` Step 2, a repor
 | the user alone, or the audience is unknown | the host's surfaces in the user's account — the narrowest circle | corporate records |
 | people outside the company (`customer`) | «лише файл», marked as recommended | every other candidate, in the order above |
 
-**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table.
+**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — a registry record's, then the host's own — then «лише файл» (`journey-protocol.md` §11).
 
 **Already published** — the result's record (§5–§6) names a place → «нова версія» of that place comes first, before any new place.
 
@@ -59,7 +60,7 @@ One question in the user's language — a multi-choice one where the host can as
 - **A new version names its number** — the record's `version` plus one — and who will see it (§6).
 - **«Ні» or «лише файл» is final for the run**: the result stays as the file and the vault copy, and the question is not repeated in the same run.
 - **A person's profile is never a candidate**, whatever the answer (`people-context-protocol.md`).
-- **A board in the team's root folder** of the board tool may be visible to the team's members by that team's settings — not measured yet, so the question says both («бачиш ти, а можливо — й учасники команди за її налаштуваннями») and the record keeps `unknown`; a board in a space the PM names is seen by that space's members (`shared`).
+- **A board in the team's root folder** of the board tool may be visible to the team's members by that team's settings — not measured yet, so the question says both («бачиш ти, а можливо — й учасники команди за її налаштуваннями») and the record keeps `unknown`; a board in a space the PM names is seen by that space's members (`shared`). The host's own board starts private — «бачиш лише ти, поки не поділишся», `private`.
 
 ## 5. Publish and record
 
@@ -75,7 +76,7 @@ python3 scripts/publications.py record --key <the result's key> [--note <the not
 |---|---|
 | `design-bridge` | `design-bridge/<product>/<deck slug>-<subtype>` — the deck's file name without its date |
 | `product-reporter` | `product-reporter/<product>/<mode>-<subject>-<period>` — the board, or the epic of `initiative-status`; `member-review` and `goal-report` keep no record (they name a person) |
-| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot; `cjm-research/<product>/journey-<slug>` for a journey map's dashboard — one per journey, apart from the funnel's, the slug the note's (`journey-protocol.md` §7) |
+| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot; `cjm-research/<product>/journey-<slug>` for a journey map's dashboard and its boards (since v4.8.0), all in one question — one per journey, apart from the funnel's, the slug the note's (`journey-protocol.md` §7, §11) |
 | `focus-advisor` | none: the board keeps its record in its own state file, `~/.grow-pm/focus/board.yaml` (`--note`) |
 | `roadmap-architect` | `roadmap-architect/<product>/story-map-<slug>` — one key for the map's board and its progress dashboard, both in one question; the slug is the note's (`story-map-protocol.md` §4) |
 
@@ -120,13 +121,13 @@ Before the question the skill looks the result up by its key — `publications.p
 | ARTIFACT `typed` | a publication to the same link |
 | Confluence | an update of the page by its id (`integration-strategy.md` 1c: a fresh `snapshotToken` on v2) |
 | DOCS, another registry record's page or document | an update of the same document or page by its id |
-| A board | an update of the same board by its element ids — never a new board unless the user chooses one in the question of `story-map-protocol.md` §8, which runs first because people edit the board |
+| A board | an update of the same board by its element ids, only what changed — never a new board unless the user chooses one in the question of `story-map-protocol.md` §8 or `journey-protocol.md` §12, which runs first because people edit the board |
 
 > «Оновити деку «Zorg: нова доставка» в Atlassian Artifacts до версії 2 (внутрішні дані: метрики воронки й задачі з Jira)? Бачиш ти і ті, з ким ти поділився. Так / ні.»
 
 The question names the result as the key does (the deck's title, the report's period) and says who will see the new version from the record's `audience`: `private` — «бачиш лише ти»; `shared` — «бачиш ти і ті, з ким ти поділився»; `space:<KEY>` — «усі, хто читає простір <KEY>»; `unknown` — both of the first two. A new version keeps the place's audience; `record` without `--audience` leaves it as it was.
 
-- **A place people edit** (DOCS, Confluence, another registry record's page) is checked before it is overwritten — a board by reading it back and comparing it with its last state (`story-map-protocol.md` §8), the rest as follows: when its own version is not the record's `remote_version`, or — where it has none — it changed after the record's `published` time (both UTC), or it cannot say, the skill asks one question: «замінити / додати новим розділом / новий документ». A place whose versions are immutable (Atlassian Artifacts, ARTIFACT) loses nothing and needs no such question.
+- **A place people edit** (DOCS, Confluence, another registry record's page) is checked before it is overwritten — a board by reading it back and comparing it with its last state (`story-map-protocol.md` §8, `journey-protocol.md` §12), the rest as follows: when its own version is not the record's `remote_version`, or — where it has none — it changed after the record's `published` time (both UTC), or it cannot say, the skill asks one question: «замінити / додати новим розділом / новий документ». A place whose versions are immutable (Atlassian Artifacts, ARTIFACT) loses nothing and needs no such question.
 - **A place that is gone** — deleted, or the user has no access any more — is never recreated silently: «Деки в Atlassian Artifacts більше немає — створити нову?». The new place starts at version 1 and the old id goes to `replaced`.
 - A surface whose new version the plugin has not measured (DOCS `connector`) keeps its record; the next run offers a new version only when the tool takes that id, otherwise it offers a new place and says why, once. ARTIFACT `page` is measured (2026-11-10, Claude Code desktop): publishing the same file again gives the same link its next version.
 

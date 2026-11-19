@@ -170,6 +170,8 @@ Through `artifact-publishing.md`, never around it:
 | `board-diff --last L [--now N…] [--note P]` | the cards by `data-miro-id` — changed, moved, added, removed, orphaned — apart from the backbone and other items; the ids, the card → sticky map and the area to read back (`ids`, `cards`, `scope`); without `--last` (or its file) the state is `unknown` |
 | `schema` | the fields, columns, findings and statuses this file and `planning-core.md` §3 must agree with (`validate-consistency.sh` check 26) |
 
+Reading a board back — the SVG, its frames, the area to read — is `scripts/board_state.py`'s since v4.8.0, shared with `journey_map.py`; the map's roles and its diff stay in `story_map.py`, and their output did not change (`story_map_test.py` replays the v4.7.0 output byte for byte).
+
 **Without SHELL** — the note only: the model builds the table, checks it by §3 itself and says in one line that the HTML page, the baseline, the progress and the board's diff need a shell. **Without FS** — the session's note, exported at the end (`host-profiles.md`); no board state and no record.
 
 ## 11. What never happens
@@ -179,4 +181,4 @@ Through `artifact-publishing.md`, never around it:
 - An automatic two-way sync with the board: the team's changes come back only through §8.
 - A deletion from the board without its own «так» per item; a deletion of what the team added.
 - Sharing beyond named people or groups.
-- A map on FigJam.
+- A map on FigJam, or on the host's own board type (the journey map's board since v4.8.0 — not the story map's in this release).
