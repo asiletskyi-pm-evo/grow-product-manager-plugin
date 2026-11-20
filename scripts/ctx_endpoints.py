@@ -323,3 +323,80 @@ def revoke(home, rid):
         _write(home, data)
     return gone
 
+
+# ------------------------------------------------------------------ validate check 31
+PROTOCOL = "references/context-provider-protocol.md"
+ALLOWED_CLIENT_FILES = ("ctx_mcp.py", "ctx_endpoints.py")       # where the client class and the header reader may be named
+WORDS = ("Довірено наявну реєстрацію", "адресу не схвалено", NOTHING_SENT, "ctx provider trust <id>",
+         "ctx provider trust --list", "ctx provider untrust <id>", "~/.grow-pm/trust/providers.json", SCHEMA)
+
+
+def _read(root, rel):
+    try:
+        with open(os.path.join(root, rel), encoding="utf-8") as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _code(text):
+    """Python source without comments and string literals that span lines (docstrings): what names a class in code."""
+    text = re.sub(r'(?s)("""|\'\'\').*?\1', '""', text)
+    return "\n".join(line.split("#", 1)[0] for line in text.splitlines())
+
+
+def check_protocol(root):
+    """Validate check 31 (since v4.9.1): [problems], each naming its file. (1) No script outside ALLOWED_CLIENT_FILES
+    names the MCP client class or calls `headers_from_env` — `client_for` stays the one way to a client and a header.
+    (2) The trust file's path is under `.grow-pm/`, not in the registrations' folder, and not built from a vault or the
+    storage root. (3) §13 of the provider protocol names what the code has: the reasons' words, the commands (and the
+    parser defines them), the loopback hosts, the first-run, refusal and shadow lines, the file and its schema."""
+    errs = []
+    sdir = os.path.join(root, "scripts")
+    for name in sorted(os.listdir(sdir)) if os.path.isdir(sdir) else ():
+        if not name.endswith(".py") or name in ALLOWED_CLIENT_FILES:
+            continue
+        code = _code(_read(root, os.path.join("scripts", name)) or "")
+        if re.search(r"\bMcpClient\b", code):
+            errs.append("scripts/%s names the MCP client class — build a client only through ctx_endpoints.client_for" % name)
+        if re.search(r"\bheaders_from_env\s*\(", code):
+            errs.append("scripts/%s reads a header with headers_from_env — only ctx_endpoints.client_for may" % name)
+    me = _code(_read(root, "scripts/ctx_endpoints.py") or "")
+    rel = re.search(r"TRUST_REL\s*=\s*\(([^)]*)\)", me)
+    parts = re.findall(r'"([^"]*)"', rel.group(1)) if rel else []
+    if not parts or parts[0] != ".grow-pm" or "providers" in parts[:-1] or not parts[-1].endswith(".json"):
+        errs.append("scripts/ctx_endpoints.py: TRUST_REL must be under .grow-pm/, outside providers/ (read as registrations): %s"
+                    % (parts or "not found"))
+    body = re.search(r"def trust_file\(home\):\n(.*?)\n(?=\S|\Z)", me, re.S)
+    if not body or re.search(r"storage_root|vault_entries|plugin_folder|vault", body.group(1)) or "home" not in body.group(1):
+        errs.append("scripts/ctx_endpoints.py: trust_file must be the home's .grow-pm path, never a vault or the storage root")
+    proto = _read(root, PROTOCOL) or ""
+    m = re.search(r"^## 13\. Trusted endpoints.*?(?=^## |\Z)", proto, re.S | re.M)
+    sec = m.group(0) if m else ""
+    if not sec:
+        errs.append("%s: no «## 13. Trusted endpoints» section" % os.path.basename(PROTOCOL))
+    for key, words in sorted(REASONS.items()):
+        if not re.search(r"\| `%s` \| `%s[`:]" % (re.escape(key), re.escape(words)), sec):
+            errs.append("%s §13: the reason `%s` with its words «%s» is not in the table" % (os.path.basename(PROTOCOL), key, words))
+    for w in WORDS:
+        if sec and w not in sec:
+            errs.append("%s §13 does not name «%s»" % (os.path.basename(PROTOCOL), w))
+    mcp = _code(_read(root, "scripts/ctx_mcp.py") or "")
+    hosts = re.search(r"LOOPBACK\s*=\s*\(([^)]*)\)", mcp)
+    hosts = re.findall(r'"([^"]*)"', hosts.group(1)) if hosts else []
+    named = set(re.findall(r"`(127\.0\.0\.1|::1|localhost|[0-9.:]+)`", re.search(r"\*\*The transport\.\*\*.*", sec).group(0))) \
+        if "**The transport.**" in sec else set()
+    if not hosts or set(hosts) != named:
+        errs.append("ctx_mcp.py LOOPBACK %s ≠ the hosts §13 «The transport» names %s" % (sorted(hosts), sorted(named)))
+    common = _read(root, "scripts/ctx_common.py") or ""
+    shadow = re.search(r'SHADOWED = "реєстрація %s: ([^"]+)"', common)
+    if not shadow or "реєстрація <id>: %s" % shadow.group(1) not in sec:
+        errs.append("ctx_common.py SHADOWED and the line §13 «A private registration wins» names differ")
+    first = re.search(r'lines\.append\("(Довірено[^%"]*)%s', me)
+    if not first or first.group(1).strip() != "Довірено наявну реєстрацію":
+        errs.append("scripts/ctx_endpoints.py: the first-run line is not «Довірено наявну реєстрацію …» as §13 names it")
+    parser = _read(root, "scripts/ctx.py") or ""
+    for cmd in ("trust", "untrust"):
+        if 'pp.add_parser("%s"' % cmd not in parser:
+            errs.append("scripts/ctx.py: no `provider %s` in the parser, while §13 names it" % cmd)
+    return errs

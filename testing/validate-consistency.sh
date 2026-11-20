@@ -663,6 +663,22 @@ else
   ok "journey portfolio: journey-protocol.md §13, journey_portfolio.py, artifact-publishing §5, native-surfaces §2, cjm-reports, context-protocol and the import of journey_map agree"
 fi
 
+# --- 31. Trusted endpoints: one way to a client (v4.9.1) ------------------------
+# The audit of 2026-11-20: a provider registration decided where the engine sent its header and the user's queries.
+# Since v4.9.1 scripts/ctx_endpoints.py's client_for is the one way to an MCP client — no other script names the client
+# class or reads a header with headers_from_env —, the trust file lives under ~/.grow-pm and outside the registrations'
+# folder and every vault, and context-provider-protocol.md §13 names the code's reasons, commands, loopback hosts and lines
+# (and the parser has the commands). A second way to a client, or a protocol that promises another word than the engine
+# prints, would bring the finding back without a sound.
+TRUST_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import ctx_endpoints; print('\n'.join(ctx_endpoints.check_protocol('.')))" 2>&1)
+if [ -n "$TRUST_ERRS" ]; then
+  while IFS= read -r line; do err "trusted endpoints: $line"; done <<EOF
+$TRUST_ERRS
+EOF
+else
+  ok "trusted endpoints: client_for is the one way to a client, the trust file outside every vault, §13 of context-provider-protocol.md is ctx_endpoints.py's"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

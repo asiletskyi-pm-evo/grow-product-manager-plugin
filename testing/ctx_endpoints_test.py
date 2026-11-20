@@ -467,5 +467,54 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE, require_headers={"X-
     rc, out, res = env.run("repo", "status")
     check("10.2 the second run: no line", rc == 0 and "Довірено" not in out, out)
 
+# 11. validate check 31 — the one way to a client, the trust file's place, and the protocol's words are the code's ----------
+import re, shutil  # noqa: E402,E401
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+cp31 = getattr(ce, "check_protocol", None)
+check("11.0 ctx_endpoints.check_protocol exists (validate check 31)", callable(cp31))
+if callable(cp31):
+    errs0 = cp31(ROOT)
+    check("11.1 check 31 is clean on the tree", errs0 == [], errs0)
+    FILES31 = ["references/context-provider-protocol.md", "scripts/ctx.py", "scripts/ctx_mcp.py", "scripts/ctx_endpoints.py",
+               "scripts/ctx_common.py"] + ["scripts/" + n for n in os.listdir(os.path.join(ROOT, "scripts")) if n.endswith(".py")]
+    DRIFTS = [
+        ("a client built past client_for", "scripts/ctx_search.py", "def _mcp(sctx, src, plans, until, box):\n",
+         "def _mcp(sctx, src, plans, until, box):\n    cm.McpClient(src['repo']['endpoint']['url'])\n"),
+        ("a header read past client_for", "scripts/ctx_copy.py", "    def _client(self):\n",
+         "    def _client(self):\n        cm.headers_from_env('ZORG')\n"),
+        ("the client class taken by its name", "scripts/ctx_repos.py", "def fetch(repo, client_factory=None,",
+         "def fetch(repo, client_factory=cm.McpClient,"),
+        ("the trust file among the registrations", "scripts/ctx_endpoints.py", 'TRUST_REL = (".grow-pm", "trust", "providers.json")',
+         'TRUST_REL = (".grow-pm", "providers", "trust.json")'),
+        ("the trust file in a vault", "scripts/ctx_endpoints.py", "def trust_file(home):\n    return os.path.join(home, *TRUST_REL)",
+         "def trust_file(home):\n    return os.path.join(cc.storage_root('', home), *TRUST_REL)"),
+        ("a reason the protocol does not name", "references/context-provider-protocol.md", "| `new` | `нова` — no pair",
+         "| `new` | `нова адреса` — no pair"),
+        ("the trust command renamed in the protocol", "references/context-provider-protocol.md",
+         "| `ctx provider untrust <id>` |", "| `ctx provider forget <id>` |"),
+        ("the command gone from the parser", "scripts/ctx.py", 'sp = pp.add_parser("untrust", parents=[common])',
+         'sp = pp.add_parser("revoke", parents=[common])'),
+        ("another loopback host in the code", "scripts/ctx_mcp.py", 'LOOPBACK = ("127.0.0.1", "::1", "localhost")',
+         'LOOPBACK = ("127.0.0.1", "::1", "localhost", "0.0.0.0")'),
+        ("the shadow line reworded", "scripts/ctx_common.py", 'SHADOWED = "реєстрація %s: два файли не збігаються, взято приватний"',
+         'SHADOWED = "реєстрація %s: два файли, взято приватний"'),
+        ("the first-run line reworded", "scripts/ctx_endpoints.py", 'lines.append("Довірено наявну реєстрацію %s: %s (%s)"',
+         'lines.append("Довірено реєстрацію %s: %s (%s)"'),
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        for name, rel, old, new in DRIFTS:
+            r2 = os.path.join(d, re.sub(r"\W+", "-", name))
+            for f_ in set(FILES31):
+                os.makedirs(os.path.dirname(os.path.join(r2, f_)), exist_ok=True)
+                shutil.copy(os.path.join(ROOT, f_), os.path.join(r2, f_))
+            src = open(os.path.join(r2, rel), encoding="utf-8").read()
+            if old not in src:
+                check("11.x drift site present — %s" % name, False, old)
+                continue
+            open(os.path.join(r2, rel), "w", encoding="utf-8").write(src.replace(old, new, 1))
+            errs = cp31(r2)
+            check("11.x check 31 names %s" % name, errs and any(os.path.basename(rel) in e for e in errs), errs)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
