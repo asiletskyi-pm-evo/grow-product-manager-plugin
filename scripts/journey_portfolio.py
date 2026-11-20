@@ -15,7 +15,8 @@ The notes are the truth and are only read — never written. A journey map is re
 health-check's status labels, the page's pan script — imported, never copied); a hand CJM gives its frontmatter
 `title` (else `name`), `funnel`, `stages`, `snapshot`, its stage headings `## <ID> — <name>` and the row count of the
 first metric table under each — never a link, a dashboard, a module, an owner, a team, a mission, a meeting or its text.
-A product is compared as `ctx search --type` compares it (ctx_search._product_names). Every command ends with one
+A product is compared as `ctx search --type` compares it (ctx_search.same_product); a note the search marks
+sensitive (ctx_index.note_meta) is never read into the portfolio. Every command ends with one
 `PORTFOLIO_RESULT {json}` line. Stdlib only (Python 3.9). Exit 0; 2 for a wrong argument; 1 when the page cannot be
 written.
 """
@@ -42,14 +43,17 @@ EN_ATTENTION = {"health_drop": "health dropped", "stale_review": "review stale",
                 "critical_anomaly": "critical anomaly", "empty_stage": "stage without evidence"}
 DROP = 10            # health points: a drop of MORE than this between the last two points raises a map — the health-check's
                      # own escalation (cjm-reports.md: «dropped by >10 points»), so the two never disagree
-CJM_FIELDS = ("title", "funnel", "stages", "stage_headings", "metrics", "snapshot")
+CJM_FIELDS = ("title", "funnel", "stages_declared", "stages", "snapshot")     # the result's keys of a hand CJM
 CJM_FINDINGS = ("stage_count", "no_snapshot")
 SKIPS = (("not_cjm_map", "не CJM-карта — немає воронки чи стадій"), ("other_product", "нотатка іншого продукту"),
-         ("wrong_type", "не карта шляху й не CJM-нотатка"), ("unreadable", "нотатка не читається"))
+         ("wrong_type", "не карта шляху й не CJM-нотатка"), ("sensitive", "чутлива нотатка — лише для People-контуру"),
+         ("unreadable", "нотатка не читається"))
 EN_SKIPS = {"not_cjm_map": "no CJM map — no funnel or stages", "other_product": "another product's note",
-            "wrong_type": "neither a journey map nor a CJM note", "unreadable": "the note does not read"}
+            "wrong_type": "neither a journey map nor a CJM note", "sensitive": "a sensitive note — the People contour's only",
+            "unreadable": "the note does not read"}
 JOURNEY_TYPE, CJM_TYPE = "cjm-journey", "cjm"
-STAGE_HEAD = re.compile(r"^##[ \t]+([^\s—–#|]{1,24})[ \t]+[—–][ \t]+(.+?)[ \t#]*$")     # `## <ID> — <name>` (R32)
+STAGE_HEAD = re.compile(r"^##[ \t]+([A-Za-zА-ЯІЇЄҐа-яіїєґ]{0,4}\d+[A-Za-z]?)[ \t]+[—–][ \t]+(.+?)[ \t#]*$")
+                                            # `## <ID> — <name>` (R32), the ID a short code with a digit: B1, S2, s3a
 METRIC_HEAD = ("метрика", "metric")         # the first header cell of a stage's metrics table
 FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
 COMMENT = re.compile(r"<!--.*?-->|%%.*?%%", re.S)    # an HTML or Obsidian comment: nothing in it is read
@@ -61,7 +65,7 @@ LABELS = {
            "skipped": "Пропущено", "other": "Іншого продукту — не показано: %d", "empty": "без доказів",
            "icloud": "файл не завантажено з iCloud — відкрий його в Obsidian",
            "no_outcome": "без метрики результату", "no_point": "—", "head": "Портфель шляхів: %s · %s · карт %d · "
-           "потребують уваги %d · ручних CJM %d · пропущено %d · іншого продукту %d", "cjm_cols": ("CJM", "воронка",
+           "потребують уваги %d · ручних CJM %d · пропущено %d", "head_other": " · іншого продукту %d", "cjm_cols": ("CJM", "воронка",
            "етапи", "метрик на етап", "знімок", "знахідки"), "missing": "теки ще немає: %s"},
     "en": {"title": "Journey portfolio", "generated": "Generated", "maps": "Journey maps", "attention": "Needs attention",
            "none": "No journey maps", "stale": "stale", "critical": "critical %d", "cjm": "Hand CJM notes",
@@ -70,7 +74,7 @@ LABELS = {
            "skipped": "Skipped", "other": "Another product — not shown: %d", "empty": "no evidence",
            "icloud": "the file is not downloaded from iCloud — open it in Obsidian",
            "no_outcome": "no outcome metric", "no_point": "—", "head": "Journey portfolio: %s · %s · maps %d · "
-           "needing attention %d · hand CJMs %d · skipped %d · another product %d", "cjm_cols": ("CJM", "funnel",
+           "needing attention %d · hand CJMs %d · skipped %d", "head_other": " · another product %d", "cjm_cols": ("CJM", "funnel",
            "stages", "metrics per stage", "snapshot", "findings"), "missing": "no folder yet: %s"},
 }
 esc, shown = nt.esc, nt.shown
@@ -173,8 +177,8 @@ def map_row(note, today, newest):
             an["total"] += 1
             st = status_of(r["text"]) if jm._is_hc(r) else None
             an[st or "unrated"] += 1
-    gaps = {"empty_stage": [plain(f["stage"]) for f in found if f["finding"] == "empty_stage"],
-            "no_outcome": [plain(f["stage"]) for f in found if f["finding"] == "no_outcome"]}
+    gaps = {"empty_stage": [plain(f["stage"]) or "?" for f in found if f["finding"] == "empty_stage"],
+            "no_outcome": [plain(f["stage"]) or "?" for f in found if f["finding"] == "no_outcome"]}
     reviewed = note["reviewed"] if jm.day(note["reviewed"]) else ""
     by = {}
     for c in codes:
@@ -261,9 +265,18 @@ def read_cjm(path, fm, body, lang):
 
 
 # ------------------------------------------------------------------ the portfolio
-def collect(paths, dirs, product, today, newest, lang):
+def collect(paths, dirs, product, today, snapshots, lang):
     """The portfolio of the notes named and the `.md` notes directly inside each folder: {maps, cjm, skipped,
-    other_products, ignored, missing_dirs}. A note is read once; its `type` decides what it is."""
+    other_products, ignored, missing_dirs}. A note is read once; its `type` decides what it is. `snapshots` — the
+    health-check folder: each map's newest snapshot is its own product's, as `journey_map.py check` reads it."""
+    newest_of = {}
+
+    def newest(prod):
+        if not snapshots:
+            return None
+        if prod not in newest_of:
+            newest_of[prod] = jm.snapshots(snapshots, prod)[2]
+        return newest_of[prod]
     items, missing = [(p, True) for p in paths or []], []
     for d in dirs or []:
         if not os.path.isdir(d):
@@ -291,7 +304,7 @@ def collect(paths, dirs, product, today, newest, lang):
             skipped.append({"note": name, "reason": "unreadable", "detail": _labels(lang)["icloud"]})
             continue                                  # never opened: opening it would start a download
         try:
-            _, fm, body = nt.read_note(path)
+            text, fm, body = nt.read_note(path)
         except Bad as e:
             if not named and str(e) == "the note has no frontmatter":
                 ignored += 1                          # a folder's plain markdown is no note of the portfolio
@@ -310,9 +323,13 @@ def collect(paths, dirs, product, today, newest, lang):
         if not _same_product(nt.fm_scalar(fm, "product"), product):
             other += 1
             continue
+        if ci.note_meta(path.replace(os.sep, "/"), text)["sensitive"]:     # the search's own mark (data-policy.md)
+            skipped.append({"note": name, "reason": "sensitive", "detail": _skip_label("sensitive", lang)})
+            continue
         if kind == JOURNEY_TYPE:
             try:
-                maps.append(map_row(jm.load(path), today, newest))
+                note = jm.load(path)
+                maps.append(map_row(note, today, newest(note["product"] or product)))
             except Bad as e:
                 skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
             continue
@@ -329,6 +346,12 @@ def collect(paths, dirs, product, today, newest, lang):
     cjms.sort(key=lambda c: (c["title"].casefold(), c["note"]))
     return {"maps": maps, "cjm": cjms, "skipped": skipped, "other_products": other, "ignored": ignored,
             "missing_dirs": missing}
+
+
+def head(p, product, today, L):
+    c = counts(p)
+    return L["head"] % (product, today, c["maps"], c["attention"], c["cjm"], c["skipped"]) + \
+        (L["head_other"] % c["other_products"] if c["other_products"] else "")
 
 
 def counts(p):
@@ -390,8 +413,7 @@ def _cjm_count(c, L):
 def chat_table(p, product, today, lang):
     """The portfolio as markdown for the chat: the head line, the maps' table, the hand CJMs' block, what was skipped."""
     L = _labels(lang)
-    c = counts(p)
-    out = [L["head"] % (product, today, c["maps"], c["attention"], c["cjm"], c["skipped"], c["other_products"]), ""]
+    out = [head(p, product, today, L), ""]
     heads = [uk if lang == "uk" else EN_COLUMNS[k] for k, uk in COLUMNS]
     if p["maps"]:
         out += [nt.row_line(heads), nt.row_line(["---"] * len(heads))]
@@ -449,8 +471,7 @@ def render_html(p, product, today, lang):
            "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(product), CSS),
            "<h1>%s: %s</h1>" % (esc(L["title"]), shown(product)),
            '<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(today)),
-           '<p class="meta">%s</p>' % esc(L["head"] % (product, today, c["maps"], c["attention"], c["cjm"], c["skipped"],
-                                                      c["other_products"])),
+           '<p class="meta">%s</p>' % esc(head(p, product, today, L)),
            "<h2>%s</h2>" % esc(L["maps"])]
     if p["maps"]:
         out.append('<div class="wrap" tabindex="0"><table class="pf"><thead><tr>%s</tr></thead><tbody>' % "".join(
@@ -523,9 +544,21 @@ def check_protocol(root):
         s13 = nt.section(proto, "13. The portfolio")
         if not s13:
             errs.append("journey-protocol.md has no §13 «The portfolio»")
-        cmds = [nt.cmd_name(r[0]) for r in nt.table_after(s13, r"\| Command \| What \|")]
+        crow = nt.table_after(s13, r"\| Command \| What \|")
+        cmds = [nt.cmd_name(r[0]) for r in crow]
         if cmds != list(COMMANDS):
             errs.append("journey-protocol.md §13: the commands %s ≠ journey_portfolio.py COMMANDS %s" % ("|".join(cmds), "|".join(COMMANDS)))
+        have = flags_of()
+        for r in crow:
+            name = nt.cmd_name(r[0])
+            got = sorted(set(re.findall(r"--[a-z][a-z-]*", r[0])))
+            if name in have and got != have[name]:
+                errs.append("journey-protocol.md §13: `%s` takes %s ≠ journey_portfolio.py %s" % (name, " ".join(got) or "—", " ".join(have[name]) or "—"))
+        words = " or ".join("«%s»" % w.capitalize() for w in METRIC_HEAD)
+        if "first header cell is %s" % words not in s13:
+            errs.append("journey-protocol.md §13 does not say the metric table's first header cell is %s (journey_portfolio.py METRIC_HEAD)" % words)
+        if "under its own key `cjm-research/<product>/portfolio`" not in s13 or "**without `--note`**" not in s13:
+            errs.append("journey-protocol.md §13: the dashboard is not under its own key `cjm-research/<product>/portfolio`, recorded **without `--note`**")
         for what, header, want in (("the columns", r"\| Column \| Ukrainian header \| What \|", list(COLUMNS)),
                                    ("the attention reasons", r"\| Reason \| Ukrainian label \| When \|", list(ATTENTION)),
                                    ("the skips", r"\| Skip \| Ukrainian line \| When \|", list(SKIPS))):
@@ -583,10 +616,9 @@ def _today(args):
 
 def _portfolio(args):
     today = _today(args)
-    newest = None
-    if args.snapshots:
-        newest = jm.snapshots(args.snapshots, args.product)[2]
-    return collect(args.note, args.dir, args.product, today, newest, args.lang), today
+    if any(not n.strip() for n in args.note) or any(not d.strip() for d in args.dir):
+        raise Bad("an empty --note or --dir — a note ctx search lists without a file on disk is named, never passed")
+    return collect(args.note, args.dir, args.product, today, args.snapshots, args.lang), today
 
 
 def cmd_list(args):
@@ -597,10 +629,8 @@ def cmd_list(args):
 
 
 def cmd_render(args):
-    out = os.path.realpath(args.out)
-    inputs = {os.path.realpath(n) for n in args.note} | {os.path.realpath(os.path.join(d, f)) for d in args.dir
-                                                          if os.path.isdir(d) for f in os.listdir(d)}
-    if out.lower().endswith(".md") or out in inputs:
+    out = os.path.realpath(args.out)                 # a folder's notes are .md — the first test covers them
+    if out.lower().endswith(".md") or out in {os.path.realpath(n) for n in args.note}:
         result(ok=False, error="--out would overwrite a note — the page is an .html file beside the notes, never a note")
         return 2
     p, today = _portfolio(args)
@@ -623,7 +653,7 @@ def cmd_schema(args):
     return 0
 
 
-def main(argv=None):
+def build_parser():
     ap = argparse.ArgumentParser(prog="journey_portfolio.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
     for name in ("list", "render-html"):
@@ -637,6 +667,18 @@ def main(argv=None):
         if name == "render-html":
             p.add_argument("--out", required=True, help="CJM/journeys/<product>/portfolio.html")
     sub.add_parser("schema")
+    return ap, sub
+
+
+def flags_of():
+    """{command: [its long options]} — what check 30 compares with §13's command table."""
+    _, sub = build_parser()
+    return {name: sorted(o for a in p._actions for o in a.option_strings if o.startswith("--") and o != "--help")
+            for name, p in sub.choices.items()}
+
+
+def main(argv=None):
+    ap, _ = build_parser()
     try:
         args = ap.parse_args(argv)
     except SystemExit as e:                          # a wrong argument still ends with the result line

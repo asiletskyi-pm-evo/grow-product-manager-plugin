@@ -309,9 +309,9 @@ with tempfile.TemporaryDirectory() as d:
           and [c[0] for c in sc.get("columns", [])] == ["journey", "owner", "stages", "health", "delta", "health_date", "reviewed",
                                                        "pains", "anomalies", "gaps", "findings", "published", "attention"]
           and [a[0] for a in sc.get("attention", [])] == ["health_drop", "stale_review", "no_owner", "critical_anomaly", "empty_stage"]
-          and sc.get("cjm_fields") == ["title", "funnel", "stages", "stage_headings", "metrics", "snapshot"]
+          and sc.get("cjm_fields") == ["title", "funnel", "stages_declared", "stages", "snapshot"]
           and sc.get("cjm_findings") == ["stage_count", "no_snapshot"]
-          and [s[0] for s in sc.get("skips", [])] == ["not_cjm_map", "other_product", "wrong_type", "unreadable"]
+          and [s[0] for s in sc.get("skips", [])] == ["not_cjm_map", "other_product", "wrong_type", "sensitive", "unreadable"]
           and sc.get("drop") == 10, outs5[-800:])
 
     # 6. mutations (ledger): each caught by the assertions above
@@ -433,6 +433,67 @@ with tempfile.TemporaryDirectory() as d:
           jp8._same_product("Zorg: App", "Quux: App") is False and jp8._same_product("日本", "中国") is False
           and jp8._same_product("Zorg App", "zorg app") is True and jp8._same_product("", "zorg") is True, "")
 
+# 9. review 2 (frozen ae901dd): each finding reproduced first
+with tempfile.TemporaryDirectory() as d:
+    first = os.path.join(FIX, "journeys", "zorg", "journey-first-order.md")
+    buyer0 = os.path.join(FIX, "hand", "cjm-zorg-buyer.md")
+    mdir = os.path.join(d, "journeys", "zorg")
+    os.makedirs(mdir)
+    shutil.copy(first, mdir)
+    pg = os.path.join(mdir, "portfolio.html")
+    r1 = run("render-html", "--product", "zorg", "--dir", mdir, "--out", pg)
+    r2 = run("render-html", "--product", "zorg", "--dir", mdir, "--out", pg)
+    check("9.1 I-1 the page is rendered again into the maps' folder it reads (`--dir` + `--out` beside the maps)",
+          r1[0] == 0 and r2[0] == 0 and r2[2].get("ok") is True, r2[1][-300:])
+    locked = os.path.join(d, "locked")
+    os.makedirs(locked)
+    os.chmod(locked, 0)
+    try:
+        rc, outl, rl = run("render-html", "--product", "zorg", "--dir", locked, "--out", os.path.join(d, "l.html"))
+    finally:
+        os.chmod(locked, 0o755)
+    check("9.2 I-1 a folder that does not read: exit 2 and the result line, no traceback", rc == 2 and rl.get("ok") is False
+          and "Traceback" not in outl, outl[-300:])
+    sens = os.path.join(d, "journey-sensitive.md")
+    write(sens, text(first).replace("type: cjm-journey\n", "type: cjm-journey\nsensitive: true\n")
+          .replace('journey: "Перше замовлення"', 'journey: "Таємний шлях"'))
+    one = os.path.join(d, "1-1 Bea Two.md")
+    write(one, text(buyer0).replace('title: "CJM покупця Zorg"', 'title: "1-1 Bea Two"'))
+    rc, outs, rs = run("list", "--product", "zorg", "--today", TODAY, "--note", sens, "--note", one, "--note", first)
+    check("9.3 I-2 a note the search marks sensitive (`sensitive: true`, a 1-1 by its name) is never read into the portfolio: "
+          "skipped as «sensitive», named by its file name only", rc == 0 and [x["journey"] for x in rs.get("maps", [])] == ["Перше замовлення"]
+          and rs.get("cjm") == [] and sorted((x["note"], x["reason"]) for x in rs.get("skipped", []))
+          == [("1-1 Bea Two.md", "sensitive"), ("journey-sensitive.md", "sensitive")] and "Таємний шлях" not in outs, rs.get("skipped"))
+    nm = os.path.join(d, "cjm-names.md")
+    write(nm, text(buyer0).replace("## Нотатки", "## Відповідальні — Bea Two, Cee Three\n\n## Висновки — що далі\n\n## Нотатки"))
+    rc, outn, rn = run("list", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", nm)
+    st = [x["id"] for x in (rn.get("cjm") or [{}])[0].get("stages", [])]
+    check("9.4 I-3 a stage heading's id is a short code with a digit: «## Відповідальні — …» and «## Висновки — …» are no stages, "
+          "their words never leave the script", st == ["B1", "B2", "B3"] and "Cee Three" not in outn and "Висновки" not in outn, st)
+    snapd = os.path.join(d, "snaps")
+    os.makedirs(snapd)
+    write(os.path.join(snapd, "s.md"), text(os.path.join(ROOT, "testing", "fixtures", "journey", "snapshot-2026-11-16.md"))
+          .replace("product: zorg", "product: Zorg App"))
+    za = os.path.join(d, "journey-zorg-app.md")
+    write(za, text(first).replace("product: zorg\n", "product: Zorg App\n"))
+    rc, _, ra = run("list", "--product", "zorg-app", "--today", TODAY, "--snapshots", snapd, "--note", za)
+    rc2, outc, _ = run("check", "--note", za, "--snapshots", snapd, "--today", TODAY, script=os.path.join(ROOT, "scripts", "journey_map.py"))
+    jc = json.loads([l for l in outc.splitlines() if l.startswith("JOURNEY_RESULT ")][-1][len("JOURNEY_RESULT "):])
+    check("9.5 M-1 the findings are journey_map.py check's — the snapshots of the note's own product, whatever --product spells",
+          (ra.get("maps") or [{}])[0].get("findings", {}).get("total") == len(jc.get("findings", [])) == 2, (ra.get("maps"), jc.get("findings")))
+    rc, oute, re_ = run("list", "--product", "zorg", "--note", "")
+    check("9.6 M-2 an empty --note (a ctx note not on disk) is a wrong argument: exit 2", rc == 2 and re_.get("ok") is False, oute[-300:])
+    rc, outz, rz = run("list", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", first)
+    check("9.7 M-2 «іншого продукту» is said only when there is one (ctx already left the others out and says so)",
+          "іншого продукту 0" not in outz and rc == 0, outz[:300])
+    ur = os.path.join(d, "journey-url-stage.md")
+    write(ur, text(os.path.join(FIX, "journeys", "zorg", "journey-returns.md")).replace("  - id: s2\n", '  - id: "https://evil.example/s2"\n'))
+    rc, outu, ru = run("list", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", ur)
+    check("9.8 M-3 a stage id that is nothing once page-safe shows as «?»", (ru.get("maps") or [{}])[0].get("gaps", {}).get("empty_stage") == ["?"]
+          and "evil.example" not in outu, (ru.get("maps") or [{}])[0].get("gaps"))
+    cj9 = run("list", "--product", "zorg", "--note", buyer0)[2].get("cjm") or [{}]
+    check("9.9 M-4 the hand CJM's result keys are §13's fields", set(jp8.CJM_FIELDS) <= set(cj9[0]), sorted(cj9[0]))
+
 # 7. validate-consistency.sh check 30 — §13 of the protocol and the script agree, and so do the places that name the
 # portfolio (the publication key, the surfaces row, the scheduled re-render, `ctx search --type`)
 import journey_portfolio as jp  # noqa: E402
@@ -449,7 +510,11 @@ if callable(cp_):
         ("columns", "references/journey-protocol.md", "| `delta` | `зміна` |", "| `delta` | `різниця` |"),
         ("attention reasons", "references/journey-protocol.md", "| `health_drop` | `здоров'я впало` |", "| `health_fall` | `здоров'я впало` |"),
         ("the drop threshold", "references/journey-protocol.md", "more than 10 points below", "10 points or more below"),
-        ("hand-CJM fields", "references/journey-protocol.md", "| `stage_headings` |", "| `headings` |"),
+        ("hand-CJM fields", "references/journey-protocol.md", "| `stages_declared` |", "| `declared` |"),
+        ("the metric table's header words", "references/journey-protocol.md", "first header cell is «Метрика» or «Metric»", "first header cell is «Показник»"),
+        ("the command's flags", "references/journey-protocol.md", "| `list --product P [--note N …] [--dir D …]", "| `list --product P [--note N …]"),
+        ("§13's own key", "references/journey-protocol.md", "under its own key `cjm-research/<product>/portfolio`", "under its own key `cjm-research/<product>/journeys`"),
+        ("the record without a note", "references/journey-protocol.md", "**without `--note`**", "**with `--note`**"),
         ("hand-CJM findings", "references/journey-protocol.md", "| `no_snapshot` |", "| `no_snap` |"),
         ("skips", "references/journey-protocol.md", "| `wrong_type` | `не карта шляху й не CJM-нотатка` |", "| `wrong_type` | `інший тип` |"),
         ("commands", "references/journey-protocol.md", "| `schema` | the commands", "| `dump` | the commands"),

@@ -294,7 +294,7 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 
 Every journey map of a product and its hand CJM notes in one list (since v4.9.0, R26, R32): who keeps each map, how healthy it is and where it is going, when it was last reviewed, its pains and anomalies, its gaps and where it is published — the maps that need attention first. It is computed from the notes every time; **there is no portfolio note and no portfolio board**, and the portfolio writes nothing to a note.
 
-**Finding the notes.** `ctx.py search --type cjm-journey --type cjm --product <product> --json` (`context-protocol.md` §3) lists the notes of both types from the context index — the index refreshed first, as a search refreshes it; another product's note is left out — one product is one key, the slug of its whole name (a name with no letters to slug, by its own letters) — and a note with no product stays, marked «продукт не вказано» on its row. Each note's file (`found[].file`) goes to the script as `--note`; a note whose file is not on disk or not downloaded (an empty `file`) is named, never read. **No context store or no index** (exit 3 or 5) → the maps' folder `CJM/journeys/<product>/` as `--dir`, and one question for the folder of the hand CJM notes — its answer as a second `--dir`, never saved; «немає» is an answer. The note's `type` decides what it is, whichever way it came.
+**Finding the notes.** `ctx.py search --type cjm-journey --type cjm --product <product> --json` (`context-protocol.md` §3) lists the notes of both types from the context index — the index refreshed first, as a search refreshes it; another product's note is left out — one product is one key, the slug of its whole name (a name with no letters to slug, by its own letters) — and a note with no product stays, marked «продукт не вказано» on its row. Each note's file (`found[].file`) goes to the script as `--note`, except a note marked `sensitive` (named by its title only — `data-policy.md` → Search, rule 1) and one whose file is not on disk or not downloaded (an empty `file`, named by its path) — never read; ctx's line `іншого продукту — не показано: <k>` is said with the table. The script checks a note's sensitivity again itself, so a folder read never takes one either. **Nothing to search or the index not read** (exit 3 or 5) → the maps' folder `CJM/journeys/<product>/` as `--dir`, and one question for the folder of the hand CJM notes — its answer as a second `--dir`, never saved; «немає» is an answer. The note's `type` decides what it is, whichever way it came.
 
 **The script** — `scripts/journey_portfolio.py`, stdlib (Python 3.9); `journey_map.py` is imported (the note, its findings, the health-check's labels, the sparkline and the page's pan script), never copied. Every command ends with one `PORTFOLIO_RESULT {json}` line; exit 0, 2 for a wrong argument, 1 when the page cannot be written:
 
@@ -304,7 +304,7 @@ Every journey map of a product and its hand CJM notes in one list (since v4.9.0,
 | `render-html --product P [--note N …] [--dir D …] [--snapshots D] [--today D] --out F [--lang uk\|en]` | the same portfolio as one self-contained page |
 | `schema` | the commands, columns, attention reasons, hand-CJM fields and findings and skip reasons this section must agree with (`validate-consistency.sh` check 30) |
 
-**A journey map's row** — read from its note by `journey_map.py`; never a row's text, a source or a name, and every value page-safe — a field, a stage id or a publication value that is not what it should be shows as `?`, never its words:
+**A journey map's row** — read from its note by `journey_map.py`; never a row's text, a source or a name, and every value page-safe — a link removed, a contact or a secret hidden; a pain's class or a publication value that is not one of its own words, and a stage id left empty by that, shows as `?`:
 
 | Column | Ukrainian header | What |
 |---|---|---|
@@ -318,7 +318,7 @@ Every journey map of a product and its hand CJM notes in one list (since v4.9.0,
 | `pains` | `болі` | the pain rows by their class — a word that is no class counted as `?` (a gap row is no pain) |
 | `anomalies` | `аномалії` | the anomaly rows, the critical ones apart: a health-check row's status is read from its last words by the labels `refresh` writes (§10, «— критично» / «— critical»); a row the PM wrote is counted without a level |
 | `gaps` | `розриви` | the stages of `empty_stage` and of `no_outcome` (§6) |
-| `findings` | `знахідки` | how many findings `journey_map.py check` gives (§6) |
+| `findings` | `знахідки` | how many findings `journey_map.py check` gives (§6) — against the snapshots of the note's own product |
 | `published` | `опубліковано` | the places and versions of its `published` mirror — never a link or an id |
 | `attention` | `увага` | the reasons below |
 
@@ -332,15 +332,14 @@ Every journey map of a product and its hand CJM notes in one list (since v4.9.0,
 | `critical_anomaly` | `критична аномалія` | an anomaly row the health-check marked critical |
 | `empty_stage` | `етап без доказів` | the finding `empty_stage` (§6) |
 
-**A hand CJM note** (R32) — a CJM the team keeps by hand: `type: cjm` with a `funnel` field and at least one stage heading `## <ID> — <назва>`. A `type: cjm` without them (a `cjm-research` report is `type: cjm` too) is skipped and named. It is read **partly**, and the portfolio says so on its row: «ручна CJM — частково: без джерел, класів і здоров'я». Only these are read:
+**A hand CJM note** (R32) — a CJM the team keeps by hand: `type: cjm` with a `funnel` field and at least one stage heading `## <ID> — <назва>`, the ID a short code with a digit (`B1`, `S2`, `s3a`) — a heading such as «## Висновки — …» is no stage. A `type: cjm` without them (a `cjm-research` report is `type: cjm` too) is skipped and named. It is read **partly**, and the portfolio says so on its row: «ручна CJM — частково: без джерел, класів і здоров'я». Only these are read:
 
 | Field | What |
 |---|---|
 | `title` | the frontmatter's `title`, else `name`, else the file's name |
 | `funnel` | the frontmatter's `funnel` |
-| `stages` | the frontmatter's `stages` — the number of stages it declares |
-| `stage_headings` | the id and the name of each stage heading `## <ID> — <назва>`, in order (a link in the name dropped) |
-| `metrics` | under each stage, the row count of the first table whose first header cell is «Метрика» or «Metric» — no cell of it read |
+| `stages_declared` | the frontmatter's `stages` — the number of stages it declares |
+| `stages` | each stage heading `## <ID> — <назва>` in order — its id, its name (a link in it dropped) and `metrics`: the row count of the first table under it whose first header cell is «Метрика» or «Metric» — no cell of it read |
 | `snapshot` | the frontmatter's `snapshot`, YYYY-MM-DD |
 
 Never read: links, dashboards, modules, owners, teams, missions, meetings or any text of the note. The note gets no health, no pains and no gaps — it has no sources or classes to give them — and two findings of its own:
@@ -359,6 +358,7 @@ Never read: links, dashboards, modules, owners, teams, missions, meetings or any
 | `not_cjm_map` | `не CJM-карта — немає воронки чи стадій` | a `type: cjm` note without `funnel` or without a stage heading — named |
 | `other_product` | `нотатка іншого продукту` | a note of another product — counted, never named or shown |
 | `wrong_type` | `не карта шляху й не CJM-нотатка` | a note given by its path whose type is neither — named; one in a folder is counted (`ignored`), never named |
+| `sensitive` | `чутлива нотатка — лише для People-контуру` | a note the search marks sensitive (`sensitive: true`, a people type, a 1-1 — `data-policy.md` → Search, rule 1) — named by its file's name, nothing of it read into the portfolio |
 | `unreadable` | `нотатка не читається` | a note that does not read or parse, or a file iCloud has not downloaded (never opened — opening it would start a download) — named with why; a file in a folder with no frontmatter at all is no note of the portfolio (`ignored`) |
 
 **Where it is shown.**
