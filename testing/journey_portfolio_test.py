@@ -357,6 +357,7 @@ if callable(cp_):
         ("the surfaces row", "references/native-surfaces.md", "| The journey portfolio (`cjm-research` Step J7", "| The journey list (`cjm-research` Step J9"),
         ("the scheduled re-render", "skills/cjm-research/references/cjm-reports.md", "journey_portfolio.py render-html", "journey_portfolio.py list"),
         ("the ctx row", "references/context-protocol.md", "| `search --type TYPE", "| `search --kind TYPE"),
+        ("the skill's step J7", "skills/cjm-research/SKILL.md", "- **J7 ", "- **J9 "),
         ("journey_map imported", "scripts/journey_portfolio.py", "import journey_map as jm", "import note_table as jm"),
         ("no copy of journey_map", "scripts/journey_portfolio.py", "# ------------------------------------------------------------------ a journey map's row",
          "def findings(note, today, newest=None):\n    return []\n\n\n# ------------------------------------------------------------------ a journey map's row"),

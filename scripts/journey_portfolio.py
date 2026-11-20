@@ -471,12 +471,12 @@ def check_protocol(root):
     """Errors for validate-consistency.sh check 30 (v4.9.0) — journey-protocol.md §13 is this script's: its commands,
     the map's columns, the attention reasons and the drop threshold, the hand CJM's fields, findings and mark, the
     skips, and how the notes are found; artifact-publishing.md §5 has the portfolio's key, native-surfaces.md §2 its
-    row, cjm-reports.md re-renders the page on schedule, context-protocol.md documents `search --type`; this script
-    imports journey_map.py and copies none of it."""
+    row, cjm-reports.md re-renders the page on schedule, context-protocol.md documents `search --type`, cjm-research
+    has its step J7; this script imports journey_map.py and copies none of it."""
     errs, texts = [], {}
     for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/native-surfaces.md",
                 "references/context-protocol.md", "skills/cjm-research/references/cjm-reports.md",
-                "scripts/journey_portfolio.py"):
+                "skills/cjm-research/SKILL.md", "scripts/journey_portfolio.py"):
         try:
             with open(os.path.join(root, rel), encoding="utf-8") as fh:
                 texts[rel] = fh.read()
@@ -509,6 +509,9 @@ def check_protocol(root):
             errs.append("journey-protocol.md §13 does not name the hand CJM's mark «%s»" % LABELS["uk"]["mark"])
         if "ctx.py search --type %s --type %s" % (JOURNEY_TYPE, CJM_TYPE) not in s13:
             errs.append("journey-protocol.md §13 does not find the notes with `ctx.py search --type %s --type %s`" % (JOURNEY_TYPE, CJM_TYPE))
+    skill = texts.get("skills/cjm-research/SKILL.md")
+    if skill is not None and not re.search(r"^- \*\*J7\b(?=.*journey_portfolio\.py)(?=.*§13)", skill, re.M):
+        errs.append("skills/cjm-research/SKILL.md has no step J7 that runs journey_portfolio.py and points to journey-protocol.md §13")
     ap = texts.get("references/artifact-publishing.md")
     if ap is not None and not re.search(r"^\|\s*`cjm-research`\s*\|.*`cjm-research/<product>/portfolio`", nt.section(ap, "5. Publish and record"), re.M):
         errs.append("artifact-publishing.md §5: the `cjm-research` key row has no `cjm-research/<product>/portfolio`")
