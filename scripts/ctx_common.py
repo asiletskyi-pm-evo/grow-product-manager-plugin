@@ -644,11 +644,12 @@ def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None, dea
                 if skipped is not None:
                     skipped.append((p, why))
                 continue
-            rid = r.get("id")
+            rid = str(r.get("id") or "").strip()            # since v4.9.1: «zorg » is zorg (review 1 #6)
             if not rid:
                 if skipped is not None:
                     skipped.append((p, "no id"))
                 continue
+            r["id"] = rid
             if rid in seen:
                 if shadowed is not None and rid not in named and _endpoint_of(r) != _endpoint_of(seen[rid]):
                     named.add(rid)

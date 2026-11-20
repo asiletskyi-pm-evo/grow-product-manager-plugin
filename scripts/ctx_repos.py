@@ -525,12 +525,10 @@ def namespace_warning(repo, namespace=None):
 
 
 def public_url(url):
-    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
-    try:
-        u = urllib.parse.urlsplit(url)
-        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
-    except ValueError:
-        return ""
+    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment. Since v4.9.1
+    the address as the engine parses it (`ctx_endpoints.shown`: the host connected to, the path percent-encoded), and ""
+    for one it does not read — never the netloc as written, which another parser may read as another host."""
+    return ce.shown(url)
 
 
 def reach(repo, deadline=None):

@@ -134,16 +134,17 @@
                                 held_behind, rejected, reason, report, snapshot}] — the same as the block state's sync_result
                                 Since v4.9.1 a due repository whose address you did not approve gets nothing: its line
                                 «<id>: адресу не схвалено (…) — нічого не надіслано. Схвалити: ctx provider trust <id>»
-  provider trust ID | provider trust --list | provider untrust ID
+  provider trust ID [--code C] | provider trust --list | provider untrust ID
                                 the trusted endpoints (since v4.9.1, context-provider-protocol.md §13): the engine sends a
                                 request — and the header endpoint.headers_env names — only to the pair «address +
                                 variable name» approved for a registration's id, kept in ~/.grow-pm/trust/providers.json
-                                (0600; never a value). trust approves what the registration says now, after printing its
-                                address (no credentials, no query), the variable's name and the file; it takes no address
-                                of its own. http only to this computer; an id that is not kebab-case, a variable name
-                                that is not plain → exit 4. --list: the approved pairs and the registrations not approved
-                                (reads only). untrust removes the id's pair. The first run after the update — the first
-                                repo status | repo copy | repo add | provider adopt|plan|apply|sync|trust|untrust | search
+                                (0600; never a value). trust ID reads only: the address as parsed (no credentials, no
+                                query), the variable's name, the file and a code; trust ID --code C approves that pair —
+                                a registration switched since is refused; it takes no address of its own. http only to
+                                this computer; an id that is not kebab-case, a variable name that is not plain → exit 4.
+                                --list: the approved pairs and the registrations not approved (reads only). untrust
+                                removes the id's pair. The first run after the update — the first repo status | repo copy
+                                | repo add | provider adopt|plan|apply|sync | trust --code | untrust | search
                                 — trusts the registrations already there, once, one line each («Довірено наявну
                                 реєстрацію <id>: <scheme://host> (змінна <VAR> | без змінної)»)
   slot bind REPO BLOCK[#Subsection] SLOT [--team ID]
@@ -422,7 +423,7 @@ def _free_text(a):
 
 def writes(a):
     """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync`, (since
-    v4.9.1) `provider trust <id>` and `untrust <id>` — they write the trust file, ~/.grow-pm/trust/providers.json — and
+    v4.9.1) `provider trust <id> --code C` and `untrust <id>` — they write the trust file, ~/.grow-pm/trust/providers.json — and
     (since v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
     v3.20.0) `entity apply` only with --apply. A plain search, `--get` and `search
     eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
@@ -430,8 +431,8 @@ def writes(a):
         return getattr(a, "apply", False)
     if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync", "untrust")):
         return True
-    if a.cmd == "provider" and getattr(a, "action", None) == "trust":     # since v4.9.1: --list reads only
-        return not getattr(a, "list", False)
+    if a.cmd == "provider" and getattr(a, "action", None) == "trust":     # since v4.9.1: only with --code (the yes)
+        return bool(getattr(a, "code", None))
     if a.cmd == "search" and getattr(a, "action", None) in ("remember", "forget"):
         return True
     if a.cmd == "propose" or (a.cmd == "inbox" and getattr(a, "action", None) in ("accept", "reject")):
@@ -1519,7 +1520,8 @@ def cmd_repo_list(a, c):
     rows, bad = [], []
     for r in repos:
         blocks, version, checked, error = _list_state(c, r["id"])
-        rows.append(dict(r, blocks=blocks, base_version=version, checked=checked, search_only=crp.search_only(r)))
+        rows.append(dict({k: v for k, v in r.items() if k != "_trust_home"},      # the engine's own key (v4.9.1), not shown
+                         blocks=blocks, base_version=version, checked=checked, search_only=crp.search_only(r)))
         if error is not None:
             rows[-1]["state_error"] = error
             bad.append((r["id"], error))
@@ -3578,43 +3580,61 @@ def _var_shown(var):
 
 
 def cmd_provider_trust(a, c):
-    """`provider trust <id>` · `provider trust --list` (since v4.9.1, context-provider-protocol.md §13). trust approves what
-    the registration says now — its id, its address (no credentials, no query) and its variable's NAME — after printing
-    them and the registration's file; it takes no address of its own. Exit 0 approved (or approved already), 3 a bad
-    call or an unknown id, 4 refused: an address that may never be approved (http to another computer, not plainly an
-    address), an id that is not kebab-case, a variable name that is not plain, no address, no trust file yet or one that
-    cannot be read. --list reads only: the approved pairs, each against the registration of its id, and the
-    registrations whose address is not approved."""
+    """`provider trust <id> [--code C]` · `provider trust --list` (since v4.9.1, context-provider-protocol.md §13). Without
+    --code it reads only: the id, its address as the engine parses it (no credentials, no query — «з параметрами запиту»
+    when there is one), its variable's NAME, the registration's file and the pair's code. With --code (the code shown, on
+    the user's yes) it approves that pair — a registration that says anything else by then is refused (review 1: an
+    approval is bound to what the user saw); it takes no address of its own. Exit 0 shown, approved or approved already;
+    3 a bad call or an unknown id; 4 refused: a pair that may never be approved (http to another computer, not plainly
+    an address, an id that is not kebab-case, a variable name that is not plain, no address), another code, no trust file
+    yet, one that cannot be read, the lock busy. --list reads only: the approved pairs, each against the registration of
+    its id, and the registrations whose address is not approved. Only --code writes, and only it runs the first run."""
     skipped, notes = [], []
     repos = crp.load_repos(c.text, c.home, skipped=skipped, notes=notes)
-    _trust_prelude(c, repos, skipped, notes)
     out = {"command": "provider", "action": "trust", "file": cep.trust_file(c.home)}
     if a.list:
-        if a.repo:
-            raise Usage("trust --list takes no id")
+        if a.repo or a.code:
+            raise Usage("trust --list takes no id and no --code")
+        for line in notes:
+            print(line)
         return _trust_list(c, repos, out)
     if not a.repo:
-        raise Usage("provider trust <id> — or provider trust --list")
+        raise Usage("provider trust <id> [--code C] — or provider trust --list")
+    if a.code:
+        _trust_prelude(c, repos, skipped, notes)
+    else:
+        for line in notes:
+            print(line)
     mine = [r for r in repos if r["id"] == a.repo]
     if not mine:
         raise Usage(_not_registered(a.repo, skipped))
     repo, ep = mine[0], mine[0]["endpoint"]
+    address = cep.parse(ep["url"])
     print("схвалення адреси реєстрації %s" % cep._shown(repo["id"]))
-    print("  адреса: %s" % (crp.public_url(ep["url"]) or "—"))
+    print("  адреса: %s%s" % (cep.shown(ep["url"]) or "—", " (з параметрами запиту)" if address and address.query_sha else ""))
     print("  %s" % _var_shown(ep["headers_env"]))
     print("  файл реєстрації: %s" % repo.get("_file", ""))
     out["id"] = repo["id"]
+    code = cep.code_of(repo)
     if cep.verdict(repo) is None:
         print("вже схвалено — нічого не змінено")
-        return 0, dict(out, changed=False)
+        return 0, dict(out, changed=False, code=code)
+    problem = cep._problem(repo["id"], ep["url"], ep["headers_env"]) if ep["url"] else "немає адреси"
+    if problem:
+        print("ctx: refused — %s: %s" % (cep._shown(repo["id"]), problem))
+        return 4, dict(out, changed=False, error=problem)
+    if not a.code:
+        print("код: %s" % code)
+        print("Схвалити (лише на «так» користувача): ctx provider trust %s --code %s" % (repo["id"], code))
+        return 0, dict(out, changed=False, code=code, url=address.normal, headers_env=ep["headers_env"] or None)
     try:
-        entry = cep.approve(c.home, repo, now=now())
+        entry = cep.approve(c.home, repo, now=now(), code=a.code)
     except (cep.TrustError, OSError, cs.PathRefused) as e:
         print("ctx: refused — %s" % e)
         return 4, dict(out, changed=False, error=str(e))
-    print("схвалено: %s → %s (%s) — записано в %s" % (repo["id"], cep.parse(ep["url"]).origin, _var_shown(ep["headers_env"]),
+    print("схвалено: %s → %s (%s) — записано в %s" % (repo["id"], address.origin, _var_shown(ep["headers_env"]),
                                                     cep.trust_file(c.home)))
-    return 0, dict(out, changed=True, url=entry["url"], headers_env=entry["headers_env"])
+    return 0, dict(out, changed=True, code=code, url=entry["url"], headers_env=entry["headers_env"])
 
 
 def _trust_list(c, repos, out):
@@ -3623,7 +3643,9 @@ def _trust_list(c, repos, out):
     except cep.TrustError as e:
         print("ctx: файл довіри не читається — %s" % e)
         return 3, dict(out, error=str(e))
-    by_id = {r["id"]: r for r in repos}
+    by_id = {}
+    for r in repos:                                     # the first of an id, as the engine takes it (review 1 #6)
+        by_id.setdefault(r["id"], r)
     entries = []
     if data is None:
         print("файлу довіри ще немає: %s" % cep.trust_file(c.home))
@@ -3633,7 +3655,7 @@ def _trust_list(c, repos, out):
             reg = by_id.get(e["id"])
             state = ("реєстрації немає" if reg is None else "діє" if cep.verdict(reg) is None else "реєстрація змінилась")
             entries.append(dict(e, state=state))
-            print("  %s  %s  %s  %s %s · %s" % (cep._shown(e["id"]), crp.public_url(e["url"]) or "?",
+            print("  %s  %s  %s  %s %s · %s" % (cep._shown(e["id"]), cep.shown(e["url"]) or "?",
                                               _var_shown(e.get("headers_env") or ""), e.get("how") or "?",
                                               e.get("at") or "?", state))
         if not data["entries"]:
@@ -4186,7 +4208,7 @@ def build_parser():
     sp = pp.add_parser("sync", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--if-due", action="store_true")
     sp.add_argument("--now"); sp.add_argument("--json", action="store_true")
     sp = pp.add_parser("trust", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--list", action="store_true")
-    sp.add_argument("--json", action="store_true")
+    sp.add_argument("--code"); sp.add_argument("--json", action="store_true")
     sp = pp.add_parser("untrust", parents=[common]); sp.add_argument("repo"); sp.add_argument("--json", action="store_true")
     return p
 

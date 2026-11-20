@@ -60,9 +60,13 @@ def repo(rid, url, var="", home=None, **kw):
     return r
 
 
-def new_home(d, name="home"):
+def new_home(d, name="home", installed=True):
+    """A temp home; `installed` (the default) gives it a local-context.md — the mark of an install from before v4.9.1,
+    the only kind of home the first run trusts registrations in (review 1 #4)."""
     h = os.path.join(d, name)
     os.makedirs(os.path.join(h, ".grow-pm"))
+    if installed:
+        open(os.path.join(h, ".grow-pm", "local-context.md"), "w").write("# Zorg context\n")
     return h
 
 
@@ -183,8 +187,9 @@ with tempfile.TemporaryDirectory() as d:
     # 5. the verdict -------------------------------------------------------------------------------------------
     core = repo("zorg-core", "https://context.zorg.example/mcp", "ZORG_MCP_HEADERS", home)
     check("5.1 the approved pair passes", ce.verdict(core) is None, ce.verdict(core))
-    check("5.2 the same address written otherwise passes (case, default port, credentials, query)",
-          ce.verdict(repo("zorg-core", "HTTPS://u:p@CONTEXT.zorg.example:443/mcp?x=1", "ZORG_MCP_HEADERS", home)) is None)
+    check("5.2 the same address written otherwise passes (case, default port, credentials, a fragment) — a query does not "
+          "(review 1 #3, 12.6)",
+          ce.verdict(repo("zorg-core", "HTTPS://u:p@CONTEXT.zorg.example:443/mcp#top", "ZORG_MCP_HEADERS", home)) is None)
     moved = ce.verdict(repo("zorg-core", "https://evil.example/mcp", "ZORG_MCP_HEADERS", home))
     check("5.3 another address gets nothing — the line names the old and the new host (mutation: a changed url passes)",
           moved is not None and moved.why == "changed" and moved.line == "zorg-core: адресу не схвалено (змінилась: "
@@ -200,7 +205,7 @@ with tempfile.TemporaryDirectory() as d:
     check("5.6 dropping the variable is a change as well", novar is not None and "без змінної" in novar.line, novar and novar.line)
     new = ce.verdict(repo("zorg-new", "https://new.zorg.example/mcp", "", home))
     check("5.7 a new id with no variable needs approval as well (R36: the address gets the queries)",
-          new is not None and new.why == "new" and new.line == "zorg-new: адресу не схвалено (нова) — нічого не надіслано. "
+          new is not None and new.why == "new" and new.line == "zorg-new: адресу не схвалено (нова: https://new.zorg.example) — нічого не надіслано. "
           "Схвалити: ctx provider trust zorg-new", new and new.line)
     remote = ce.verdict(repo("zorg-brain", "http://brain.zorg.example/mcp", "", home))
     check("5.8 remote http is refused whatever the file says — and no trust hint is given (trust would refuse it)",
@@ -277,8 +282,8 @@ with tempfile.TemporaryDirectory() as d:
     entry = ce.approve(h3, repo("zorg-core", "https://u:pw@context.zorg.example/mcp?k=1", "ZORG_MCP_HEADERS"), now=NOW)
     data = json.loads(raw(h3))
     check("7.1 approve writes the pair as «approved», the address normalised", data["entries"] == [
-        {"id": "zorg-core", "url": "https://context.zorg.example/mcp", "headers_env": "ZORG_MCP_HEADERS", "at": "2026-11-20",
-         "how": "approved"}] and entry["how"] == "approved", data)
+        {"id": "zorg-core", "url": "https://context.zorg.example/mcp", "query_sha256": ce.parse("https://x.example/?k=1").query_sha,
+         "headers_env": "ZORG_MCP_HEADERS", "at": "2026-11-20", "how": "approved"}] and entry["how"] == "approved", data)
     check("7.2 …never a value or a password", SECRET not in raw(h3) and "pw" not in raw(h3).replace("approved", ""), raw(h3))
     ce.approve(h3, repo("zorg-core", "https://context2.zorg.example/mcp", ""), now=NOW)
     check("7.3 approving again replaces the id's entry", [e["url"] for e in json.loads(raw(h3))["entries"]]
@@ -367,7 +372,8 @@ with tempfile.TemporaryDirectory() as d:
     reg = os.path.join(prov, "zorg-growth.yaml")
     with FakeMcp(tree=TREE, require_headers={"X-Token": SECRET}) as fake:
         open(reg, "w", encoding="utf-8").write(reg_text("zorg-growth", fake.url, "ZORG_MCP_HEADERS"))
-        line = ("zorg-growth: адресу не схвалено (нова) — нічого не надіслано. Схвалити: ctx provider trust zorg-growth")
+        line = ("zorg-growth: адресу не схвалено (нова: %s) — нічого не надіслано. Схвалити: ctx provider trust zorg-growth"
+                % fake.url.rsplit("/", 1)[0])
         rc, out, res = env.run("repo", "status")
         row = (res or {}).get("repos", [{}])[0]
         check("9.1 repo status: not probed, «не схвалено» with the line, trusted false in CTX_RESULT",
@@ -403,13 +409,16 @@ with tempfile.TemporaryDirectory() as d:
               f_["error"] == line and not ok_ and why_ == line and passed == line and reqs(fake) == 0, (f_["error"], why_, passed))
         check("9.9 nothing of the header reached any output", SECRET not in out, out)
 
-        rc, out, res = env.run("provider", "trust", "zorg-growth")
+        rc0, out0, res0 = env.run("provider", "trust", "zorg-growth")
+        before0 = raw(env.home)
+        rc, out, res = env.run("provider", "trust", "zorg-growth", "--code", (res0 or {}).get("code") or "?")
         shown = out.splitlines()
-        check("9.10 provider trust: the id, the address, the variable and the file first, then «схвалено»",
-              rc == 0 and shown[:4] == ["схвалення адреси реєстрації zorg-growth", "  адреса: %s" % fake.url,
-                                        "  змінна ZORG_MCP_HEADERS", "  файл реєстрації: %s" % reg]
-              and shown[4].startswith("схвалено: zorg-growth → http://127.0.0.1:") and res["changed"] is True
-              and reqs(fake) == 0, out)
+        dry_ok = (rc0 == 0 and out0.splitlines()[:4] == ["схвалення адреси реєстрації zorg-growth", "  адреса: %s" % fake.url,
+                                                          "  змінна ZORG_MCP_HEADERS", "  файл реєстрації: %s" % reg]
+                  and res0["changed"] is False and len(res0.get("code") or "") == 12)
+        wet_ok = rc == 0 and len(shown) > 4 and shown[4].startswith("схвалено: zorg-growth → http://127.0.0.1:") and res["changed"] is True
+        check("9.10 provider trust: shown first (the id, the address, the variable, the file, the code — nothing written), "
+              "then --code with that code approves it", dry_ok and wet_ok and reqs(fake) == 0, (out0, out))
         check("9.11 …the entry is «approved», no value in the file", [(e["id"], e["how"]) for e in json.loads(raw(env.home))["entries"]]
               == [("zorg-growth", "approved")] and SECRET not in raw(env.home), raw(env.home))
         rc, out, res = env.run("provider", "trust", "zorg-growth")
@@ -430,7 +439,7 @@ with tempfile.TemporaryDirectory() as d:
         check("9.17 trust of an unknown id is exit 3", rc == 3, out)
 
         open(reg, "w", encoding="utf-8").write(reg_text("zorg-growth", "http://brain.zorg.example/mcp", ""))
-        rc, out, res = env.run("provider", "trust", "zorg-growth")
+        rc, out, res = env.run("provider", "trust", "zorg-growth", "--code", "000000000000")
         check("9.18 trust refuses remote http (exit 4), writes nothing", rc == 4 and "refused" in out
               and json.loads(raw(env.home))["entries"] == [], out)
 
@@ -439,7 +448,7 @@ with tempfile.TemporaryDirectory() as d:
     os.makedirs(vprov, exist_ok=True)
     with FakeMcp(tree=TREE) as good, FakeMcp(tree=TREE) as evil:
         open(reg, "w", encoding="utf-8").write(reg_text("zorg-growth", good.url, ""))
-        env.run("provider", "trust", "zorg-growth")
+        env.trust("zorg-growth")
         open(os.path.join(vprov, "zorg-growth.yaml"), "w", encoding="utf-8").write(
             reg_text("zorg-growth", evil.url, "ZORG_MCP_HEADERS"))
         rc, out, res = env.run("repo", "status")
@@ -447,7 +456,11 @@ with tempfile.TemporaryDirectory() as d:
               "gets nothing", rc == 0 and "реєстрація zorg-growth: два файли не збігаються, взято приватний" in out
               and reqs(evil) == 0 and reqs(good) > 0, (out, reqs(evil), reqs(good)))
 
-    for args, writing in ((["provider", "trust", "zorg-growth"], True), (["provider", "untrust", "zorg-growth"], True),
+    rc, out, res = env.run("repo", "list")
+    check("9.21 repo list does not show the engine's trust home", rc == 0 and "_trust_home" not in out, out[-300:])
+
+    for args, writing in ((["provider", "trust", "zorg-growth", "--code", "0123456789ab"], True),
+                          (["provider", "untrust", "zorg-growth"], True), (["provider", "trust", "zorg-growth"], False),
                           (["provider", "trust", "--list"], False)):
         check("9.20 writes(%s) is %s" % (" ".join(args), writing), ctxmain.writes(ctxmain.build_parser().parse_args(args)) is writing)
 
@@ -489,8 +502,8 @@ if callable(cp31):
          'TRUST_REL = (".grow-pm", "providers", "trust.json")'),
         ("the trust file in a vault", "scripts/ctx_endpoints.py", "def trust_file(home):\n    return os.path.join(home, *TRUST_REL)",
          "def trust_file(home):\n    return os.path.join(cc.storage_root('', home), *TRUST_REL)"),
-        ("a reason the protocol does not name", "references/context-provider-protocol.md", "| `new` | `нова` — no pair",
-         "| `new` | `нова адреса` — no pair"),
+        ("a reason the protocol does not name", "references/context-provider-protocol.md", "| `new` | `нова: <scheme://host>` — no pair",
+         "| `new` | `нова адреса: <scheme://host>` — no pair"),
         ("the trust command renamed in the protocol", "references/context-provider-protocol.md",
          "| `ctx provider untrust <id>` |", "| `ctx provider forget <id>` |"),
         ("the command gone from the parser", "scripts/ctx.py", 'sp = pp.add_parser("untrust", parents=[common])',
@@ -499,8 +512,8 @@ if callable(cp31):
          'LOOPBACK = ("127.0.0.1", "::1", "localhost", "0.0.0.0")'),
         ("the shadow line reworded", "scripts/ctx_common.py", 'SHADOWED = "реєстрація %s: два файли не збігаються, взято приватний"',
          'SHADOWED = "реєстрація %s: два файли, взято приватний"'),
-        ("the first-run line reworded", "scripts/ctx_endpoints.py", 'lines.append("Довірено наявну реєстрацію %s: %s (%s)"',
-         'lines.append("Довірено реєстрацію %s: %s (%s)"'),
+        ("the first-run line reworded", "scripts/ctx_endpoints.py", 'lines.append("Довірено наявну реєстрацію %s: %s (%s%s)"',
+         'lines.append("Довірено реєстрацію %s: %s (%s%s)"'),
     ]
     with tempfile.TemporaryDirectory() as d:
         for name, rel, old, new in DRIFTS:
@@ -515,6 +528,141 @@ if callable(cp31):
             open(os.path.join(r2, rel), "w", encoding="utf-8").write(src.replace(old, new, 1))
             errs = cp31(r2)
             check("11.x check 31 names %s" % name, errs and any(os.path.basename(rel) in e for e in errs), errs)
+
+# 12. review 1 of v4.9.1 — every finding closed with a check that failed first ----------------------------------------
+import threading, time  # noqa: E402,E401
+
+# #1 / #7 — a host the display and the connection would read differently is no address
+TRICKS = ["http://intranet.corp.example[localhost]:9/mcp", "https://intranet.corp.example[attacker.example]/mcp",
+          "https://[v1.attacker.example]/mcp", "https://[::1%2540evil.example]/", "https://[::1]x/", "https://zorg.example]/",
+          "https://[zorg.example]/", "https://zorg.example:0/mcp"]
+check("12.1 #1/#7 a bracket around a name, text before or after brackets, IPvFuture, a zone id, port 0: no address",
+      all(ce.parse(u) is None and cm.transport_problem(u) for u in TRICKS), [u for u in TRICKS if ce.parse(u) is not None])
+check("12.2 #1 the address shown is the one parsed, never the netloc as written",
+      crp.public_url("https://intranet.corp.example[attacker.example]/mcp") == ""
+      and crp.public_url("https://u:p@Context.Zorg.example:443/mcp?k=1") == "https://context.zorg.example/mcp",
+      (crp.public_url("https://intranet.corp.example[attacker.example]/mcp"), crp.public_url("https://u:p@Context.Zorg.example:443/mcp?k=1")))
+
+with tempfile.TemporaryDirectory() as d:
+    h = new_home(d)
+    ce.seed(h, [], now=NOW)
+    # #2 — the line names the address; an approval is bound to the pair shown (a code)
+    nv = ce.verdict(repo("zorg-new", "https://new.zorg.example/mcp", "", h))
+    check("12.3 #2 the «нова» line names the address it is about", nv is not None and nv.line == "zorg-new: адресу не схвалено "
+          "(нова: https://new.zorg.example) — нічого не надіслано. Схвалити: ctx provider trust zorg-new", nv and nv.line)
+    shown = repo("zorg-new", "https://new.zorg.example/mcp", "", h)
+    code = getattr(ce, "code_of", lambda r: None)(shown)
+    swapped = repo("zorg-new", "https://evil.example/mcp", "", h)
+    try:
+        ce.approve(h, swapped, now=NOW, code=code)
+        took = "approved"
+    except (ce.TrustError, TypeError) as e:
+        took = type(e).__name__
+    check("12.4 #2 a code shown for one pair does not approve another (the registration switched after the question)",
+          code and took == "TrustError" and json.loads(raw(h))["entries"] == [], (code, took))
+    try:
+        ce.approve(h, shown, now=NOW, code=code)
+        ok_code = ce.verdict(shown) is None
+    except (ce.TrustError, TypeError) as e:
+        ok_code = repr(e)
+    check("12.5 #2 …the code of the pair shown approves it", ok_code is True, ok_code)
+
+    # #3 — the query is part of the pair, stored as a hash
+    q = repo("zorg-new", "https://new.zorg.example/mcp?upstream=attacker", "", h)
+    qv = ce.verdict(q)
+    check("12.6 #3 a query added to an approved address is a change — nothing sent", qv is not None and qv.why == "changed"
+          and "параметри запиту" in qv.line and "attacker" not in qv.line, qv and qv.line)
+    ce.approve(h, q, now=NOW)
+    e_ = [e for e in json.loads(raw(h))["entries"] if e["id"] == "zorg-new"][0]
+    check("12.7 #3 …approved with it: the entry keeps a hash of the query, never its text", e_.get("query_sha256")
+          and len(e_["query_sha256"]) == 64 and "attacker" not in raw(h) and ce.verdict(q) is None, e_)
+    check("12.8 #3 …and another query is a change again",
+          ce.verdict(repo("zorg-new", "https://new.zorg.example/mcp?upstream=other", "", h)) is not None)
+
+    # #4 — a home with no install from before v4.9.1 trusts nothing at its first run
+    bare = new_home(d, "bare", installed=False)
+    said = ce.seed(bare, [repo("zorg-core", "https://context.zorg.example/mcp", "", bare)], now=NOW)
+    check("12.9 #4 a home with no earlier install (another --home, a sandbox HOME): the file, empty, one line — nothing "
+          "trusted", json.loads(raw(bare))["entries"] == [] and len(said) == 1 and "Довірено" not in said[0], said)
+
+    # #5 — approve and revoke under a lock: nothing lost between a read and a write
+    h5 = new_home(d, "lock")
+    ce.seed(h5, [repo("zorg-core", "https://context.zorg.example/mcp", "", h5)], now=NOW)
+    lockf = getattr(ce, "lock_file", lambda home: os.path.join(os.path.dirname(ce.trust_file(home)), ".lock"))(h5)
+    import fcntl  # noqa: E402
+    fd = os.open(lockf, os.O_RDWR | os.O_CREAT, 0o600)
+    fcntl.flock(fd, fcntl.LOCK_EX)
+    t = threading.Thread(target=lambda: ce.approve(h5, repo("zorg-other", "https://other.zorg.example/", ""), now=NOW))
+    t.start()
+    time.sleep(0.4)
+    waited = t.is_alive()
+    data = json.loads(raw(h5))                                  # an untrust that held the lock meanwhile
+    data["entries"] = [e for e in data["entries"] if e["id"] != "zorg-core"]
+    open(ce.trust_file(h5), "w").write(json.dumps(data))
+    fcntl.flock(fd, fcntl.LOCK_UN)
+    os.close(fd)
+    t.join(10)
+    ids5 = [e["id"] for e in json.loads(raw(h5))["entries"]]
+    check("12.10 #5 approve waits for the lock and reads after it: an untrust in between is not undone",
+          waited and ids5 == ["zorg-other"], (waited, ids5))
+
+    # #6 — an id with spaces is the same id
+    vault = os.path.join(d, "v6")
+    vdir, pdir = os.path.join(vault, "Notes", "_System", "providers"), os.path.join(d, "p6")
+    os.makedirs(vdir)
+    os.makedirs(pdir)
+    open(os.path.join(pdir, "zorg.yaml"), "w").write("id: zorg\nkind: mcp\nendpoint:\n  url: https://context.zorg.example/mcp\n")
+    open(os.path.join(vdir, "zorg.yaml"), "w").write('id: "zorg "\nkind: mcp\nendpoint:\n  url: https://evil.example/mcp\n')
+    sh6 = []
+    got6 = cc.find_registrations([(vault, "Notes")], extra_dirs=[pdir], shadowed=sh6)
+    check("12.11 #6 a vault id with a trailing space is the same id: one registration, the private one, and the line",
+          [r["endpoint"]["url"] for r in got6] == ["https://context.zorg.example/mcp"] and len(sh6) == 1, (got6, sh6))
+    h6 = new_home(d, "dup")
+    lines6 = ce.seed(h6, [repo("zorg", "https://context.zorg.example/mcp", "", h6), repo("zorg", "https://evil.example/mcp", "", h6)],
+                     now=NOW)
+    check("12.12 #6 the first run never seeds an id twice", [e["url"] for e in json.loads(raw(h6))["entries"]]
+          == ["https://context.zorg.example/mcp"] and len([l for l in lines6 if l.startswith("Довірено")]) == 1, lines6)
+
+    # #8 — a path a registration writes reaches a line only encoded
+    h8 = new_home(d, "path")
+    ce.seed(h8, [repo("zorg-core", "https://context.zorg.example/mcp", "", h8)], now=NOW)
+    pv = ce.verdict(repo("zorg-core", "https://context.zorg.example/x$(touch)`id`;", "", h8))
+    check("12.13 #8 a changed path is shown percent-encoded: no `, $( or ; reaches the line",
+          pv is not None and not any(c in pv.line for c in ("`", "$(", ";")) and "%24%28" in pv.line, pv and pv.line)
+
+# #9 — trust --list and the dry run of trust write nothing, not even at the first run
+with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE) as fake:
+    env = Env(d)
+    os.makedirs(os.path.join(env.home, ".grow-pm", "providers"))
+    open(os.path.join(env.home, ".grow-pm", "providers", "zorg-growth.yaml"), "w").write(reg_text("zorg-growth", fake.url))
+    rc, out, res = env.run("provider", "trust", "--list")
+    rc2, out2, res2 = env.run("provider", "trust", "zorg-growth")
+    check("12.14 #9 trust --list and trust <id> without --code read only: no trust file made, no request",
+          rc == 0 and rc2 == 0 and not os.path.lexists(ce.trust_file(env.home)) and reqs(fake) == 0, (out, out2))
+    check("12.15 #2 trust <id> without --code shows the pair and its code, and how to approve on a yes",
+          (res2 or {}).get("code") and "код: %s" % (res2 or {}).get("code") in out2
+          and "ctx provider trust zorg-growth --code %s" % (res2 or {}).get("code") in out2, out2)
+    env.run("repo", "status")                           # the first run: zorg-growth was there, it is seeded
+    open(os.path.join(env.home, ".grow-pm", "providers", "zorg-other.yaml"), "w").write(reg_text("zorg-other", fake.url))
+    rc3, out3, res3 = env.run("provider", "trust", "zorg-other", "--code", "000000000000")
+    check("12.16 #2 a wrong code is refused (exit 4), nothing approved", rc3 == 4 and "не збігається" in out3 and not any(
+        e["id"] == "zorg-other" for e in json.loads(raw(env.home))["entries"]), out3)
+
+# #10 — check 31 knows the other ways to the header's value
+if callable(cp31):
+    with tempfile.TemporaryDirectory() as d:
+        for name, rel, old, new in (("the raw parser of the variable", "scripts/ctx_search.py", "def _mcp(sctx, src, plans, until, box):\n",
+                                     "def _mcp(sctx, src, plans, until, box):\n    cm._parse_env('ZORG')\n"),
+                                    ("the variable read from the environment", "scripts/ctx_copy.py", "    def _client(self):\n",
+                                     "    def _client(self):\n        os.environ.get(self.repo['endpoint']['headers_env'])\n")):
+            r2 = os.path.join(d, re.sub(r"\W+", "-", name))
+            for f_ in set(FILES31):
+                os.makedirs(os.path.dirname(os.path.join(r2, f_)), exist_ok=True)
+                shutil.copy(os.path.join(ROOT, f_), os.path.join(r2, f_))
+            src = open(os.path.join(r2, rel), encoding="utf-8").read()
+            open(os.path.join(r2, rel), "w", encoding="utf-8").write(src.replace(old, new, 1))
+            errs = cp31(r2)
+            check("12.17 #10 check 31 names %s" % name, errs and any(os.path.basename(rel) in e for e in errs), errs)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

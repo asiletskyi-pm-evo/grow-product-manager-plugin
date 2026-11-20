@@ -759,8 +759,13 @@ class Env:
         if trust and "url:" in body:
             saved = os.environ.pop("GROW_PM_CONTEXT_PATH", None)
             try:
-                with contextlib.redirect_stdout(io.StringIO()):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
                     ctxmain.main(["provider", "trust", name, "--home", self.home, "--context", self.ctx])
+                last = [l for l in buf.getvalue().splitlines() if l.startswith("CTX_RESULT ")]
+                code = json.loads(last[-1][len("CTX_RESULT "):]).get("code") if last else ""
+                with contextlib.redirect_stdout(io.StringIO()):
+                    ctxmain.main(["provider", "trust", name, "--code", code or "-", "--home", self.home, "--context", self.ctx])
             finally:
                 if saved is not None:
                     os.environ["GROW_PM_CONTEXT_PATH"] = saved

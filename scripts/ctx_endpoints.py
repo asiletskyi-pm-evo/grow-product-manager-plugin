@@ -31,11 +31,20 @@ The trust home of a registration is the `Home` that `ctx_repos.load_repos` puts 
 can produce (its own `_`-keys are dropped by `ctx_repos.normalise`) — or the home a caller passes. Stdlib only.
 """
 import collections
+import contextlib
 import datetime
+import hashlib
 import json
 import os
 import re
 import sys
+import time
+import urllib.parse
+
+try:
+    import fcntl
+except ImportError:                                     # not POSIX: approve and revoke go without the lock
+    fcntl = None
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
@@ -69,7 +78,9 @@ class Untrusted(Exception):
         self.rid, self.why, self.line = rid, why, line
 
 
-Address = collections.namedtuple("Address", "normal origin request_url")
+Address = collections.namedtuple("Address", "normal origin request_url query_sha shown")
+INSTALL_MARKS = ("local-context.md", "providers", "index", ".ctx-summary.json", "cores")   # an install from before v4.9.1
+LOCK_WAIT_S = 10.0
 
 
 def trust_file(home):
@@ -78,14 +89,25 @@ def trust_file(home):
 
 def parse(url):
     """The address as the engine reads it, or None: `normal` (scheme://host[:port]/path — what is kept and matched),
-    `origin` (scheme://host[:port] — what the lines show) and `request_url` (`normal` with its query: where the request
-    goes; credentials and the fragment never travel)."""
+    `origin` (scheme://host[:port] — what the lines show), `request_url` (`normal` with its query: where the request
+    goes; credentials and the fragment never travel), `query_sha` (the sha256 of the query, matched with the rest since
+    review 1 — a gateway may route by it; None for none) and `shown` (`normal` with every character of the path outside
+    letters, digits and `/._~-` percent-encoded: a registration's text never reaches a line as it is)."""
     parts = cm.split_url(url)
     if parts is None:
         return None
     scheme, host, port, path, query = parts
     origin = "%s://%s%s" % (scheme, "[%s]" % host if ":" in host else host, ":%d" % port if port else "")
-    return Address(origin + path, origin, origin + path + ("?" + query if query else ""))
+    return Address(origin + path, origin, origin + path + ("?" + query if query else ""),
+                   hashlib.sha256(query.encode("utf-8")).hexdigest() if query else None,
+                   origin + urllib.parse.quote(path, safe="/._~-"))
+
+
+def shown(url):
+    """An endpoint as a line or a result may show it: the address parsed (`Address.shown`), else "" — never the text as
+    written (review 1 #1: the netloc as written and the host connected to may differ)."""
+    address = parse(url)
+    return address.shown if address else ""
 
 
 def _safe(text, limit=80):
@@ -131,7 +153,8 @@ def load(home):
     if not isinstance(data, dict) or data.get("schema") != SCHEMA or not isinstance(data.get("entries"), list):
         raise TrustError("%s: незнайома схема (чекаю %s)" % (path, SCHEMA))
     if not all(isinstance(e, dict) and isinstance(e.get("id"), str) and isinstance(e.get("url"), str)
-               and (e.get("headers_env") is None or isinstance(e.get("headers_env"), str)) for e in data["entries"]):
+               and (e.get("headers_env") is None or isinstance(e.get("headers_env"), str))
+               and (e.get("query_sha256") is None or isinstance(e.get("query_sha256"), str)) for e in data["entries"]):
         raise TrustError("%s: запис без id, адреси чи з дивною змінною" % path)
     return data
 
@@ -178,7 +201,54 @@ def _day(now):
 
 
 def _entry(rid, address, var, now, how):
-    return {"id": rid, "url": address.normal, "headers_env": var or None, "at": _day(now), "how": how}
+    return {"id": rid, "url": address.normal, "query_sha256": address.query_sha, "headers_env": var or None,
+            "at": _day(now), "how": how}
+
+
+def _query_word(address):
+    return ", з параметрами запиту" if address.query_sha else ""
+
+
+def code_of(repo):
+    """The code of the pair a registration says now (since review 1): `ctx provider trust <id>` shows it with the pair,
+    and only `--code <it>` approves — so a registration switched between the question and the yes is never approved.
+    "" for a pair that cannot be approved."""
+    rid = repo.get("id") or ""
+    ep = repo.get("endpoint") or {}
+    url, var = ep.get("url") or "", ep.get("headers_env") or ""
+    if not url or _problem(rid, url, var):
+        return ""
+    address = parse(url)
+    return hashlib.sha256("\n".join((rid, address.normal, address.query_sha or "", var)).encode("utf-8")).hexdigest()[:12]
+
+
+def lock_file(home):
+    return os.path.join(os.path.dirname(trust_file(home)), ".lock")
+
+
+@contextlib.contextmanager
+def _locked(home):
+    """The trust file's lock (since review 1 #5): approve and revoke read and write under it, so a change between the
+    read and the write of another is never undone. Busy for LOCK_WAIT_S → TrustError. Without fcntl (not POSIX): no lock."""
+    _check_links(home)
+    path = lock_file(home)
+    cs.check_target(path)
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        if fcntl is not None:
+            until = time.monotonic() + LOCK_WAIT_S
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() > until:
+                        raise TrustError("файл довіри зайнятий іншим процесом — спробуй ще раз")
+                    time.sleep(0.05)
+        yield
+    finally:
+        os.close(fd)                                    # closing releases the lock
 
 
 # ------------------------------------------------------------------ the first run (R37)
@@ -193,18 +263,24 @@ def seed(home, repos, late=(), now=None):
     if late:
         return ["довіру адресам ще не встановлено: реєстрація ще завантажується (%s) — до наступного запуску %s"
                 % (_safe(os.path.basename(late[0])), NOTHING_SENT)]
-    entries, lines = [], []
+    entries, lines, ids = [], [], set()
+    installed = any(os.path.lexists(os.path.join(home, ".grow-pm", m)) for m in INSTALL_MARKS)
     for repo in repos or ():
         rid, ep = repo.get("id") or "", repo.get("endpoint") or {}
-        if not ep.get("url"):
+        if not ep.get("url") or rid in ids:             # an id once (review 1 #6)
             continue
+        if not installed:                               # another --home, a sandbox HOME: nothing of it is «already there»
+            lines = ["довіра адресам: у цій домівці не було попередньої установки — жодну реєстрацію не довірено "
+                     "автоматично; схвалення — %s <id>" % COMMAND]
+            break
         address, var = parse(ep["url"]), ep.get("headers_env") or ""
         problem = _problem(rid, ep["url"], var)
         if problem:
             lines.append("Не довірено %s: %s" % (_shown(rid), problem))
             continue
+        ids.add(rid)
         entries.append(_entry(rid, address, var, now, SEEDED))
-        lines.append("Довірено наявну реєстрацію %s: %s (%s)" % (rid, address.origin, _var_word(var)))
+        lines.append("Довірено наявну реєстрацію %s: %s (%s%s)" % (rid, address.origin, _var_word(var), _query_word(address)))
     stamp = now or datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     try:
         if not _write(home, {"schema": SCHEMA, "seeded_at": stamp, "entries": entries}, exclusive=True):
@@ -256,22 +332,27 @@ def verdict(repo, home=None):
         return _refusal(rid, "transport", problem, hint=False)
     address = parse(url)
     where = _home_of(repo, home)
+    new = "%s: %s" % (REASONS["new"], address.origin)
     if not where:
-        return _refusal(rid, "new", REASONS["new"])
+        return _refusal(rid, "new", new)
     try:
         data = load(where)
     except TrustError as e:
         return _refusal(rid, "unreadable", "%s: %s" % (REASONS["unreadable"], _safe(e, 200)), hint=False)
     entry = next((e for e in (data or {}).get("entries") or () if e.get("id") == rid), None)
     if entry is None:
-        return _refusal(rid, "new", REASONS["new"])
-    if entry.get("url") == address.normal and (entry.get("headers_env") or None) == (var or None):
+        return _refusal(rid, "new", new)
+    if (entry.get("url") == address.normal and (entry.get("query_sha256") or None) == address.query_sha
+            and (entry.get("headers_env") or None) == (var or None)):
         return None
     was = parse(entry.get("url") or "")
     if was is None or was.origin != address.origin:
         change = "%s → %s" % (was.origin if was else "?", address.origin)
     elif was.normal != address.normal:
-        change = "%s → %s" % (was.normal, address.normal)
+        change = "%s → %s" % (was.shown, address.shown)
+    elif (entry.get("query_sha256") or None) != address.query_sha:
+        change = "параметри запиту %s" % ("з'явились" if not entry.get("query_sha256") else
+                                          "прибрано" if not address.query_sha else "інші")
     else:
         old = entry.get("headers_env") or ""
         change = "%s → %s" % (_var_word(old if VAR.match(old) else "?" if old else ""), _var_word(var))
@@ -290,10 +371,12 @@ def client_for(repo, home=None, factory=None, **kw):
 
 
 # ------------------------------------------------------------------ ctx provider trust | untrust
-def approve(home, repo, now=None):
-    """Approve what the registration says now: its id, its address (normalised) and its variable's name — the entry
-    that replaces the id's. TrustError: no address, a pair that may never be approved (`_problem`), no trust file yet
-    (the first run has not happened: an approval now would shut it out), or a file that cannot be read."""
+def approve(home, repo, now=None, code=None):
+    """Approve what the registration says now: its id, its address (normalised, its query as a hash) and its variable's
+    name — the entry that replaces the id's, written under the lock. `code` (the CLI always passes one): the pair's
+    `code_of` as shown to the user; another → TrustError, nothing written. TrustError also: no address, a pair that may
+    never be approved (`_problem`), no trust file yet (the first run has not happened: an approval now would shut it
+    out), a file that cannot be read, the lock busy."""
     rid = repo.get("id") or ""
     ep = repo.get("endpoint") or {}
     url, var = ep.get("url") or "", ep.get("headers_env") or ""
@@ -302,32 +385,42 @@ def approve(home, repo, now=None):
     problem = _problem(rid, url, var)
     if problem:
         raise TrustError("%s: %s" % (_shown(rid), problem))
-    data = load(home)
-    if data is None:
+    if code is not None and code != code_of(repo):
+        raise TrustError("код %s не збігається з тим, що реєстрація %s каже зараз — нічого не схвалено; покажи її ще раз: "
+                         "%s %s" % (_safe(code, 20), _shown(rid), COMMAND, _shown(rid)))
+    if not os.path.lexists(trust_file(home)):
         raise TrustError("файлу довіри ще немає (%s) — перший запуск ще не відбувся" % trust_file(home))
-    entry = _entry(rid, parse(url), var, now, APPROVED)
-    data["entries"] = [e for e in data["entries"] if e.get("id") != rid] + [entry]
-    _write(home, data)
+    with _locked(home):
+        data = load(home)
+        if data is None:
+            raise TrustError("файлу довіри ще немає (%s) — перший запуск ще не відбувся" % trust_file(home))
+        entry = _entry(rid, parse(url), var, now, APPROVED)
+        data["entries"] = [e for e in data["entries"] if e.get("id") != rid] + [entry]
+        _write(home, data)
     return entry
 
 
 def revoke(home, rid):
-    """Remove the id's entry; how many were removed (0: none was there). TrustError: no file, or one that cannot be read."""
-    data = load(home)
-    if data is None:
+    """Remove the id's entry under the lock; how many were removed (0: none was there). TrustError: no file, one that
+    cannot be read, the lock busy."""
+    if not os.path.lexists(trust_file(home)):
         raise TrustError("файлу довіри немає (%s)" % trust_file(home))
-    kept = [e for e in data["entries"] if e.get("id") != rid]
-    gone = len(data["entries"]) - len(kept)
-    if gone:
-        data["entries"] = kept
-        _write(home, data)
+    with _locked(home):
+        data = load(home)
+        if data is None:
+            raise TrustError("файлу довіри немає (%s)" % trust_file(home))
+        kept = [e for e in data["entries"] if e.get("id") != rid]
+        gone = len(data["entries"]) - len(kept)
+        if gone:
+            data["entries"] = kept
+            _write(home, data)
     return gone
 
 
 # ------------------------------------------------------------------ validate check 31
 PROTOCOL = "references/context-provider-protocol.md"
 ALLOWED_CLIENT_FILES = ("ctx_mcp.py", "ctx_endpoints.py")       # where the client class and the header reader may be named
-WORDS = ("Довірено наявну реєстрацію", "адресу не схвалено", NOTHING_SENT, "ctx provider trust <id>",
+WORDS = ("Довірено наявну реєстрацію", "адресу не схвалено", NOTHING_SENT, "ctx provider trust <id>", "--code <code>",
          "ctx provider trust --list", "ctx provider untrust <id>", "~/.grow-pm/trust/providers.json", SCHEMA)
 
 
@@ -361,6 +454,10 @@ def check_protocol(root):
             errs.append("scripts/%s names the MCP client class — build a client only through ctx_endpoints.client_for" % name)
         if re.search(r"\bheaders_from_env\s*\(", code):
             errs.append("scripts/%s reads a header with headers_from_env — only ctx_endpoints.client_for may" % name)
+        if re.search(r"\b_parse_env\b", code):
+            errs.append("scripts/%s calls ctx_mcp._parse_env, which gives the header's raw value" % name)
+        if any(re.search(r"os\.environ|getenv", line) and "headers_env" in line for line in code.splitlines()):
+            errs.append("scripts/%s reads the variable endpoint.headers_env names from the environment itself" % name)
     me = _code(_read(root, "scripts/ctx_endpoints.py") or "")
     rel = re.search(r"TRUST_REL\s*=\s*\(([^)]*)\)", me)
     parts = re.findall(r'"([^"]*)"', rel.group(1)) if rel else []

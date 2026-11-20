@@ -89,7 +89,8 @@ _OPENER = urllib.request.build_opener(_NoRedirect)
 def split_url(url):
     """(scheme, host, port, path, query) of an endpoint the engine may read, or None (since v4.9.1). Plainly an address
     or none: ASCII with no space, control character or backslash (parsers disagree about those), http or https, a host
-    of letters, digits, dots and hyphens or an IPv6 address in brackets (no percent-encoding), a port that is a port.
+    of letters, digits, dots and hyphens — the same text urlsplit takes as the host — or a whole IPv6 address in brackets
+    followed by nothing or a port (no IPvFuture, no zone, no percent-encoding anywhere in the host), a port from 1.
     The scheme and the host come lower-cased, a default port as None, an empty path as "/". Credentials and the
     fragment are not part of what comes back: they are never sent."""
     if not isinstance(url, str) or not url or not url.isascii() or any(c <= " " or c in "\x7f\\" for c in url):
@@ -101,14 +102,20 @@ def split_url(url):
     except ValueError:
         return None
     scheme = u.scheme.lower()
-    if scheme not in ("http", "https") or not host:
+    if scheme not in ("http", "https") or not host or port == 0:
         return None
-    if ":" in host:                                     # an IPv6 literal: brackets in the netloc, stripped by hostname
+    place = u.netloc.rpartition("@")[2]                 # the host and the port as written, credentials dropped
+    if "%" in place:                                    # percent-encoding or an IPv6 zone: read otherwise by the connection
+        return None
+    if "[" in place or "]" in place:                    # only a whole IPv6 literal, then nothing or a port (review 1 #1:
+        literal = re.fullmatch(r"\[([0-9A-Fa-f:.]+)\](?::[0-9]*)?", place)    # urlsplit keeps the inside of any brackets)
+        if not literal:
+            return None
         try:
-            host = ipaddress.IPv6Address(host).compressed
+            host = ipaddress.IPv6Address(literal.group(1)).compressed
         except ValueError:
             return None
-    elif not _HOST.match(host):
+    elif ":" in host or not _HOST.match(host) or place.split(":", 1)[0].lower() != host:
         return None
     if port == {"http": 80, "https": 443}[scheme]:
         port = None

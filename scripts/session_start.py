@@ -517,7 +517,7 @@ def digest(path, facts, searched, version):
         lines.append(
             'Skills: run python3 "<plugin root>/scripts/ctx.py" provider sync --if-due (repeat any line it prints that starts '
             "«Ядро оновило» or «Довірено» at the end of your answer; a line «… адресу не схвалено …» is one question at the "
-            "end, `ctx provider trust <id>` only on the user's yes), then "
+            "end — `ctx provider trust <id>` shows the address and a code, `--code` only on the user's yes), then "
             "take this path for Step 0a of references/local-context-protocol.md and skip the "
             "location search. A context store exists: where a skill says to read local-context.md (Step 0c), "
             'run python3 "<plugin root>/scripts/ctx.py" read --skill <your name> --product "<the product the '

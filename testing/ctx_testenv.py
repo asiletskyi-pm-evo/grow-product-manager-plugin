@@ -47,9 +47,11 @@ class Env:
         return p.returncode, p.stdout + p.stderr, result
 
     def trust(self, rid):
-        """Since v4.9.1: approve a registration's address as the user would — `ctx provider trust <id>` in this temp
-        home. A test about what follows the approval calls it after writing the registration."""
-        return self.run("provider", "trust", rid)
+        """Since v4.9.1: approve a registration's address as the user would — `ctx provider trust <id>` (the pair and its
+        code shown), then `--code <it>` — in this temp home. A test about what follows the approval calls it after
+        writing the registration."""
+        rc, out, res = self.run("provider", "trust", rid)
+        return self.run("provider", "trust", rid, "--code", (res or {}).get("code") or "-")
 
     def edit(self, path, old, new):
         t = read(path)
