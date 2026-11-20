@@ -46,6 +46,11 @@ class Env:
             result = None
         return p.returncode, p.stdout + p.stderr, result
 
+    def trust(self, rid):
+        """Since v4.9.1: approve a registration's address as the user would — `ctx provider trust <id>` in this temp
+        home. A test about what follows the approval calls it after writing the registration."""
+        return self.run("provider", "trust", rid)
+
     def edit(self, path, old, new):
         t = read(path)
         assert old in t, old
@@ -53,3 +58,28 @@ class Env:
 
     def record(self, rid):
         return read(self.store, "records", rid + ".md")
+
+
+def approve(home, repo):
+    """Since v4.9.1: approve a repository's address in a temp home (never the real one), as `ctx provider trust` would —
+    the first run first, when the home has no trust file. Returns the repository."""
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import ctx_endpoints as ce
+    if not os.path.lexists(ce.trust_file(home)):
+        os.makedirs(os.path.join(home, ".grow-pm"), exist_ok=True)
+        ce.seed(home, [])
+    ce.approve(home, repo)
+    return repo
+
+
+def approving(module, home_arg=0, repo_arg=1):
+    """Wrap `module.run(home, repo, …)` so that every pass a test starts is of an approved address (since v4.9.1); the
+    refusals themselves are testing/ctx_endpoints_test.py's."""
+    real = module.run
+
+    def run(*a, **k):
+        approve(a[home_arg], a[repo_arg])
+        return real(*a, **k)
+    run.real = real
+    module.run = run
+    return real

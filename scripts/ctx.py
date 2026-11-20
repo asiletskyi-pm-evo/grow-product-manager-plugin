@@ -132,6 +132,20 @@
                                 (лишено твоє)». Exit 0 whatever happened (3: bad usage). CTX_RESULT: synced (ids),
                                 results [{repo, at, outcome, updated, added, removed, kept_yours, took_rule, awaiting, held,
                                 held_behind, rejected, reason, report, snapshot}] — the same as the block state's sync_result
+                                Since v4.9.1 a due repository whose address you did not approve gets nothing: its line
+                                «<id>: адресу не схвалено (…) — нічого не надіслано. Схвалити: ctx provider trust <id>»
+  provider trust ID | provider trust --list | provider untrust ID
+                                the trusted endpoints (since v4.9.1, context-provider-protocol.md §13): the engine sends a
+                                request — and the header endpoint.headers_env names — only to the pair «address +
+                                variable name» approved for a registration's id, kept in ~/.grow-pm/trust/providers.json
+                                (0600; never a value). trust approves what the registration says now, after printing its
+                                address (no credentials, no query), the variable's name and the file; it takes no address
+                                of its own. http only to this computer; an id that is not kebab-case, a variable name
+                                that is not plain → exit 4. --list: the approved pairs and the registrations not approved
+                                (reads only). untrust removes the id's pair. The first run after the update — the first
+                                repo status | repo copy | repo add | provider adopt|plan|apply|sync|trust|untrust | search
+                                — trusts the registrations already there, once, one line each («Довірено наявну
+                                реєстрацію <id>: <scheme://host> (змінна <VAR> | без змінної)»)
   slot bind REPO BLOCK[#Subsection] SLOT [--team ID]
                                 what you decided about the slots of the catalogue (references/context-slots.yaml;
                                 since v3.15.0), kept in the store's `.state/slots.json` — no record changes. bind: the
@@ -345,6 +359,7 @@ import ctx_bridges as cbr  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_consolidate as ccn  # noqa: E402
 import ctx_copy as ccp  # noqa: E402
+import ctx_endpoints as cep  # noqa: E402
 import ctx_entity as ce  # noqa: E402
 import ctx_graph as cg  # noqa: E402
 import ctx_audit as ca  # noqa: E402
@@ -406,14 +421,17 @@ def _free_text(a):
 
 
 def writes(a):
-    """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync` and (since
-    v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
+    """Does this run write to the store? Every command of WRITING does, and `provider apply`, `provider sync`, (since
+    v4.9.1) `provider trust <id>` and `untrust <id>` — they write the trust file, ~/.grow-pm/trust/providers.json — and
+    (since v3.16.0) `search remember|forget`, (since v3.18.0) `entity same|not-same`; `migrate`, `provider adopt` and (since
     v3.20.0) `entity apply` only with --apply. A plain search, `--get` and `search
     eval` write no store. (A `provider sync` that synced nothing saves no summary: `main`.)"""
     if a.cmd == "snapshot" and getattr(a, "action", None) == "import":
         return getattr(a, "apply", False)
-    if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync")):
+    if a.cmd in WRITING or (a.cmd == "provider" and getattr(a, "action", None) in ("apply", "sync", "untrust")):
         return True
+    if a.cmd == "provider" and getattr(a, "action", None) == "trust":     # since v4.9.1: --list reads only
+        return not getattr(a, "list", False)
     if a.cmd == "search" and getattr(a, "action", None) in ("remember", "forget"):
         return True
     if a.cmd == "propose" or (a.cmd == "inbox" and getattr(a, "action", None) in ("accept", "reject")):
@@ -1534,21 +1552,44 @@ def cmd_repo_list(a, c):
                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
 
+def _trust_prelude(c, repos=None, skipped=None, notes=None):
+    """The lines a command that may reach a server prints first (since v4.9.1, context-provider-protocol.md §13): the
+    first run after the update — `ctx_endpoints.seed`: the registrations already there trusted, once, one line each —
+    and two registration files of one id whose endpoints differ (`notes`). `repos`, with the `skipped` and `notes` of
+    their read, when the command has read every registration; else they are read here, and only when the trust file is
+    not there yet. The lines are kept on `c.trust_lines` too."""
+    out = list(notes or [])
+    if not os.path.lexists(cep.trust_file(c.home)):
+        if repos is None:
+            skipped, more = [], []
+            repos = crp.load_repos(c.text, c.home, skipped=skipped, notes=more)
+            out += [n for n in more if n not in out]
+        late = [p for p, why in (skipped or []) if why == cc.NOT_LOCAL]
+        out += cep.seed(c.home, repos, late=late, now=now())
+    for line in out:
+        print(line)
+    c.trust_lines = list(getattr(c, "trust_lines", None) or []) + out
+    return out
+
+
 def cmd_repo_status(a, c):
-    skipped = []
-    repos = crp.load_repos(c.text, c.home, skipped=skipped)
+    skipped, notes = [], []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped, notes=notes)
+    _trust_prelude(c, repos, skipped, notes)
     if a.id:
         repos = [r for r in repos if r["id"] == a.id]
         if not repos:
             raise Usage(_not_registered(a.id, skipped))
     rows = []
     for r in repos:
-        ok, why = crp.reach(r)
+        refused = cep.verdict(r) if r["endpoint"]["url"] else None      # since v4.9.1: no probe of an address not approved
+        ok, why = (False, refused.line) if refused is not None else crp.reach(r)
         why = cb.clip(why, cb.NOTE_CLIP)                # reach clips already; kept, harmless (clip is idempotent)
+        trusted = None if not r["endpoint"]["url"] else refused is None
         if crp.search_only(r):                          # since v4.4.0: it publishes no blocks — no blocks file to read
             rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": crp.public_url(r["endpoint"]["url"]),
                          "reachable": ok, "reason": why, "source_version": None, "registration_version": r["source_version"],
-                         "base_version": None, "namespace_warning": None, "search_only": True})
+                         "base_version": None, "namespace_warning": None, "search_only": True, "trusted": trusted})
             continue
         # the version on the source is what its blocks carry now, and only that: when the source was not read there is
         # none (the registration's own version, a note from whoever wrote it, goes in its own key and is never shown as
@@ -1564,7 +1605,8 @@ def cmd_repo_status(a, c):
             bad_state = str(e)
         rows.append({"id": r["id"], "kind": r["kind"], "status": r["status"], "url": crp.public_url(r["endpoint"]["url"]),
                      "reachable": ok, "reason": why, "source_version": live,
-                     "registration_version": r["source_version"], "base_version": base, "namespace_warning": warning})
+                     "registration_version": r["source_version"], "base_version": base, "namespace_warning": warning,
+                     "trusted": trusted})
         if fetched and fetched.get("error"):             # the server answers, the blocks could not be read
             rows[-1]["fetch_error"] = cb.clip(fetched["error"], cb.NOTE_CLIP)
         if bad_state:
@@ -1576,7 +1618,10 @@ def cmd_repo_status(a, c):
         for row in rows:
             where = row["url"] or "—"
             print("%s  %s  %s" % (row["id"] + (" (paused)" if row["status"] == "paused" else ""), row["kind"] or "—", where))
-            print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
+            if row["trusted"] is False:                 # since v4.9.1: nothing was sent
+                print("  не схвалено — %s" % row["reason"])
+            else:
+                print("  reachable %s" % ("yes" if row["reachable"] else "no (%s)" % row["reason"]))
             if row.get("search_only"):
                 print("  лише пошук — блоків не публікує")
                 continue
@@ -1702,8 +1747,8 @@ def _copy_background(c, repo, repos, at):
 def start_copies(c, repos, at, home, context):
     """After the daily sync's block passes (C7): for each repository whose copy is due (`ctx_copy.background_choice`),
     `ctx repo copy <id> --background` as a process of its own that outlives the sync — started, never waited for
-    (GROW_PM_COPY_FOREGROUND=1: run here, for the tests). → {id: "started" | "busy" | "not-due" | "failed"}; a repository
-    with no copy is not named."""
+    (GROW_PM_COPY_FOREGROUND=1: run here, for the tests). → {id: "started" | "busy" | "not-due" | "failed" | "untrusted"}
+    — since v4.9.1 a due copy whose address you did not approve is not started; a repository with no copy is not named."""
     out = {}
     for repo in repos:
         choice = ccp.background_choice(home, repo, sy.instant(at))
@@ -1711,6 +1756,9 @@ def start_copies(c, repos, at, home, context):
             continue
         if choice != "due":
             out[repo["id"]] = choice
+            continue
+        if cep.verdict(repo, home) is not None:          # since v4.9.1: an address not approved gets no pass at all
+            out[repo["id"]] = "untrusted"
             continue
         args = [sys.executable, os.path.abspath(__file__), "repo", "copy", repo["id"], "--background", "--home", home,
                 "--context", context]
@@ -1738,6 +1786,7 @@ def cmd_repo_copy(a, c):
     progress on stderr. No store write (the copy is a cache of the server — no confirmation code, no journal line).
     Exit 0 complete | partial | held; 3 a usage error; 4 a folder that is not the plugin's, or busy; 5 no answer."""
     at = sy.instant(_sync_now(a.now))
+    _trust_prelude(c)
     repo, repos = _copy_repo(c, a.id)
     if a.restore:
         try:
@@ -2045,6 +2094,7 @@ def cmd_repo_add(a, c):
     folder for search alone (`blocks: none`, no blocks written). Without --apply it reads only and prints a code;
     another code → exit 4, nothing written. The core folder is only read."""
     c.need_store()
+    _trust_prelude(c)                                   # since v4.9.1: before a registration is written — it is new, not seeded
     facts, text = _kit_add_plan(c, a)
     out = {"command": "repo", "action": "add", "id": facts["id"], "mode": facts["mode"], "registration": facts["where"],
            "manifest": facts["manifest"], "owner_line": facts["owner_line"], "blocks": facts["adds"],
@@ -2231,11 +2281,13 @@ def cmd_search(a, c):
     if a.action in ("remember", "forget"):
         return _search_hint(a, c)
     if a.action == "eval":
+        _trust_prelude(c)
         return _search_eval(a, c)
     if a.type_ is not None:
         return _search_type(a, c)
     if a.full and a.get is None:
         raise Usage("--full goes with --get")
+    _trust_prelude(c)                                   # since v4.9.1: a server of a repository may be asked
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
     if a.get is not None:
         if a.q:
@@ -2792,6 +2844,7 @@ def _refresh_card(c):
 
 def cmd_provider_adopt(a, c):
     c.need_store()
+    _trust_prelude(c)
     repo = _repository(c, a.repo)
     fetched = crp.fetch(repo)
     if fetched["error"]:
@@ -2883,6 +2936,7 @@ def _in_scope(c, a, skipped, registered=None):
 
 def cmd_provider_plan(a, c):
     c.need_store()
+    _trust_prelude(c)
     skipped = []
     repos, paused, search = _in_scope(c, a, skipped)
     plans, down = [], 0
@@ -2947,6 +3001,7 @@ def cmd_provider_apply(a, c):
                     "ctx provider apply <repo> --choose BLOCK=… [BLOCK=…]" % a.repo)
     choose, add = _choices(a.choose), list(a.add or [])
     c.need_store()
+    _trust_prelude(c)
     skipped, registered = [], set()
     repos, paused, search = _in_scope(c, a, skipped, registered)
     if not a.repo:                                      # `--add okr zorg-core`: the repository read as one more block —
@@ -3025,7 +3080,9 @@ def cmd_provider_sync(a, c):
     lock or the guard says so in CTX_RESULT: skipped "busy" | "lock: <why>" | "guard: <why>". Exit 0 whatever the repositories did; a
     usage error (an unknown REPO, one without `sync: daily`, a paused one, a bad --now) is exit 3."""
     deadline = time.monotonic() + sy.BUDGET_S          # the whole run, the registrations' read included (as in v3.23)
-    loaded = None if a.repo else crp.load_repos(c.text, c.home, deadline=deadline)   # read once: blocks and copies
+    skipped, notes = [], []
+    loaded = None if a.repo else crp.load_repos(c.text, c.home, deadline=deadline, skipped=skipped, notes=notes)
+    _trust_prelude(c, loaded, skipped, notes)          # since v4.9.1: the first run after the update, once
     rc, out = _provider_sync_blocks(a, c, loaded, deadline)
     try:                                                # since v3.24.0: the copies, after the blocks (C7)
         rows = loaded if loaded is not None else [r for r in crp.load_repos(c.text, c.home) if r["id"] == a.repo]
@@ -3071,6 +3128,10 @@ def _provider_sync_blocks(a, c, loaded=None, deadline=None):
         print("nothing to sync — no repository has `sync: daily` in its registration (context-connect turns it on)")
     if not repos:
         return 0, quiet
+    for repo in repos:                                  # since v4.9.1: its server gets nothing — the skill asks one question
+        refused = cep.verdict(repo) if repo["endpoint"]["url"] else None
+        if refused is not None:
+            print(refused.line)
     skipped = []
     results = sy.run(c, repos, at, deadline, only_due=a.if_due, skipped=skipped)
     for r in results:
@@ -3502,7 +3563,104 @@ def cmd_provider(a, c):
         return cmd_provider_apply(a, c)
     if a.action == "sync":
         return cmd_provider_sync(a, c)
-    raise Usage("provider takes adopt, plan, apply or sync")
+    if a.action == "trust":
+        return cmd_provider_trust(a, c)
+    if a.action == "untrust":
+        return cmd_provider_untrust(a, c)
+    raise Usage("provider takes adopt, plan, apply, sync, trust or untrust")
+
+
+def _var_shown(var):
+    """A variable's name as a line shows it: `змінна NAME`, `без змінної`, or a name that is not plain — not repeated."""
+    if not var:
+        return "без змінної"
+    return "змінна %s" % var if cep.VAR.match(var) else "змінна з непростою назвою"
+
+
+def cmd_provider_trust(a, c):
+    """`provider trust <id>` · `provider trust --list` (since v4.9.1, context-provider-protocol.md §13). trust approves what
+    the registration says now — its id, its address (no credentials, no query) and its variable's NAME — after printing
+    them and the registration's file; it takes no address of its own. Exit 0 approved (or approved already), 3 a bad
+    call or an unknown id, 4 refused: an address that may never be approved (http to another computer, not plainly an
+    address), an id that is not kebab-case, a variable name that is not plain, no address, no trust file yet or one that
+    cannot be read. --list reads only: the approved pairs, each against the registration of its id, and the
+    registrations whose address is not approved."""
+    skipped, notes = [], []
+    repos = crp.load_repos(c.text, c.home, skipped=skipped, notes=notes)
+    _trust_prelude(c, repos, skipped, notes)
+    out = {"command": "provider", "action": "trust", "file": cep.trust_file(c.home)}
+    if a.list:
+        if a.repo:
+            raise Usage("trust --list takes no id")
+        return _trust_list(c, repos, out)
+    if not a.repo:
+        raise Usage("provider trust <id> — or provider trust --list")
+    mine = [r for r in repos if r["id"] == a.repo]
+    if not mine:
+        raise Usage(_not_registered(a.repo, skipped))
+    repo, ep = mine[0], mine[0]["endpoint"]
+    print("схвалення адреси реєстрації %s" % cep._shown(repo["id"]))
+    print("  адреса: %s" % (crp.public_url(ep["url"]) or "—"))
+    print("  %s" % _var_shown(ep["headers_env"]))
+    print("  файл реєстрації: %s" % repo.get("_file", ""))
+    out["id"] = repo["id"]
+    if cep.verdict(repo) is None:
+        print("вже схвалено — нічого не змінено")
+        return 0, dict(out, changed=False)
+    try:
+        entry = cep.approve(c.home, repo, now=now())
+    except (cep.TrustError, OSError, cs.PathRefused) as e:
+        print("ctx: refused — %s" % e)
+        return 4, dict(out, changed=False, error=str(e))
+    print("схвалено: %s → %s (%s) — записано в %s" % (repo["id"], cep.parse(ep["url"]).origin, _var_shown(ep["headers_env"]),
+                                                    cep.trust_file(c.home)))
+    return 0, dict(out, changed=True, url=entry["url"], headers_env=entry["headers_env"])
+
+
+def _trust_list(c, repos, out):
+    try:
+        data = cep.load(c.home)
+    except cep.TrustError as e:
+        print("ctx: файл довіри не читається — %s" % e)
+        return 3, dict(out, error=str(e))
+    by_id = {r["id"]: r for r in repos}
+    entries = []
+    if data is None:
+        print("файлу довіри ще немає: %s" % cep.trust_file(c.home))
+    else:
+        print("схвалені адреси (%s):" % cep.trust_file(c.home))
+        for e in data["entries"]:
+            reg = by_id.get(e["id"])
+            state = ("реєстрації немає" if reg is None else "діє" if cep.verdict(reg) is None else "реєстрація змінилась")
+            entries.append(dict(e, state=state))
+            print("  %s  %s  %s  %s %s · %s" % (cep._shown(e["id"]), crp.public_url(e["url"]) or "?",
+                                              _var_shown(e.get("headers_env") or ""), e.get("how") or "?",
+                                              e.get("at") or "?", state))
+        if not data["entries"]:
+            print("  —")
+    refused = [(r, cep.verdict(r)) for r in repos if r["endpoint"]["url"]]
+    refused = [(r, v) for r, v in refused if v is not None]
+    if refused:
+        print("не схвалено:")
+        for r, v in refused:
+            print("  %s" % v.line)
+    return 0, dict(out, entries=entries, untrusted=[{"id": r["id"], "why": v.why, "line": v.line} for r, v in refused])
+
+
+def cmd_provider_untrust(a, c):
+    """`provider untrust <id>` (since v4.9.1): the id's approved pair removed from the trust file — its server gets nothing
+    from then on, until `provider trust <id>`. Exit 0 (also when nothing was approved for it: said so), 4 when the trust
+    file is not there or cannot be read."""
+    _trust_prelude(c)
+    out = {"command": "provider", "action": "untrust", "id": a.repo, "file": cep.trust_file(c.home)}
+    try:
+        gone = cep.revoke(c.home, a.repo)
+    except (cep.TrustError, OSError, cs.PathRefused) as e:
+        print("ctx: refused — %s" % e)
+        return 4, dict(out, removed=0, error=str(e))
+    print(("відкликано: %s — її сервер більше нічого не отримує" if gone else "для %s нічого не схвалено — нічого не змінено")
+          % cep._shown(a.repo))
+    return 0, dict(out, removed=gone)
 
 
 # ---------------------------------------------------------------------- the inbox (since v3.21.0)
@@ -4027,6 +4185,9 @@ def build_parser():
     sp.add_argument("--json", action="store_true")
     sp = pp.add_parser("sync", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--if-due", action="store_true")
     sp.add_argument("--now"); sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("trust", parents=[common]); sp.add_argument("repo", nargs="?"); sp.add_argument("--list", action="store_true")
+    sp.add_argument("--json", action="store_true")
+    sp = pp.add_parser("untrust", parents=[common]); sp.add_argument("repo"); sp.add_argument("--json", action="store_true")
     return p
 
 

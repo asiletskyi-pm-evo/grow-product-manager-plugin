@@ -325,5 +325,147 @@ with tempfile.TemporaryDirectory() as d:
     check("8.3 load_repos marks every registration with its trust home, which no file can plant",
           loaded and all(isinstance(r.get("_trust_home"), ce.Home) for r in loaded), loaded)
 
+# 9. every place that builds a client refuses a registration you did not approve — the fake server sees nothing --------
+import ctx as ctxmain  # noqa: E402
+import ctx_copy as ccp  # noqa: E402
+from ctx_testenv import Env  # noqa: E402
+from mcp_fake import BLOCKS  # noqa: E402
+
+REG = """schema: provider-registration/2
+id: {id}
+title: Zorg Growth
+kind: mcp
+authority: team
+endpoint:
+  url: {url}
+  root: Growth/
+{var}blocks_file: _System/context-blocks.md
+blocks_source: mcp
+sync: daily
+"""
+TREE = {"Growth/_System/context-blocks.md": BLOCKS, "Growth/Notes/Zorg plan.md": "# Zorg plan\nweekly active shoppers\n"}
+AT = "2026-11-20T10:00:00+02:00"
+
+
+def reg_text(rid, url, var=""):
+    return REG.format(id=rid, url=url, var="  headers_env: %s\n" % var if var else "")
+
+
+def reqs(fake):
+    return len(fake.seen)
+
+
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rc, out, _ = env.run("migrate", "--apply")
+    check("9.0 a store", rc == 0, out)
+    prov = os.path.join(env.home, ".grow-pm", "providers")
+    os.makedirs(prov)
+    rc, out, res = env.run("repo", "status")
+    check("9.0 the first run with no registration: the trust file, empty, no line",
+          rc == 0 and json.loads(raw(env.home))["entries"] == [] and "Довірено" not in out, out)
+    reg = os.path.join(prov, "zorg-growth.yaml")
+    with FakeMcp(tree=TREE, require_headers={"X-Token": SECRET}) as fake:
+        open(reg, "w", encoding="utf-8").write(reg_text("zorg-growth", fake.url, "ZORG_MCP_HEADERS"))
+        line = ("zorg-growth: адресу не схвалено (нова) — нічого не надіслано. Схвалити: ctx provider trust zorg-growth")
+        rc, out, res = env.run("repo", "status")
+        row = (res or {}).get("repos", [{}])[0]
+        check("9.1 repo status: not probed, «не схвалено» with the line, trusted false in CTX_RESULT",
+              rc == 0 and reqs(fake) == 0 and "не схвалено — " + line in out and row.get("trusted") is False
+              and row.get("reachable") is False, (rc, out, row, fake.seen))
+        rc, out, res = env.run("provider", "plan", "zorg-growth")
+        check("9.2 provider plan (the fetch): exit 5, the line, no request", rc == 5 and line in out and reqs(fake) == 0, (rc, out))
+        rc, out, res = env.run("provider", "adopt", "zorg-growth")
+        check("9.3 provider adopt: exit 5, nothing written, no request", rc == 5 and line in out and reqs(fake) == 0, (rc, out))
+        rc, out, res = env.run("provider", "sync", "zorg-growth", "--now", AT)
+        r0 = ((res or {}).get("results") or [{}])[0]
+        check("9.4 the daily sync: the line printed, no request, «unreachable» with the line — and exit 0 (it never stops a skill)",
+              rc == 0 and line in out.splitlines() and reqs(fake) == 0 and r0.get("outcome") == "unreachable"
+              and line in (r0.get("reason") or ""), (rc, out, r0))
+        rc, out, res = env.run("search", "--q", "Zorg plan", "--sources", "mcp", "--json")
+        check("9.5 search: the line instead of «не відповів», no query sent",
+              line in (res or {}).get("notes", []) and reqs(fake) == 0, (rc, (res or {}).get("notes"), fake.seen))
+        rc, out, res = env.run("search", "--get", "@zorg-growth/Notes/Zorg plan.md")
+        check("9.6 search --get: exit 5, the line, no request", rc == 5 and line in out and reqs(fake) == 0, (rc, out))
+        rc, out, res = env.run("repo", "copy", "zorg-growth", "--now", AT)
+        check("9.7 repo copy: refused (exit 4) with the line, no request, no copy folder",
+              rc == 4 and line in out and reqs(fake) == 0 and not os.path.exists(ccp.copy_dir(env.home, "zorg-growth")),
+              (rc, out))
+        loaded = [r for r in crp.load_repos(env.text, env.home) if r["id"] == "zorg-growth"]
+        f_ = crp.fetch(loaded[0])
+        ok_, why_ = crp.reach(loaded[0])
+        try:
+            ccp.run(env.home, loaded[0], ce.datetime.datetime.now().astimezone())
+            passed = "ran"
+        except ccp.Untrusted as e:
+            passed = str(e)
+        check("9.8 in process: fetch, reach and a copy pass refuse with the line, no request",
+              f_["error"] == line and not ok_ and why_ == line and passed == line and reqs(fake) == 0, (f_["error"], why_, passed))
+        check("9.9 nothing of the header reached any output", SECRET not in out, out)
+
+        rc, out, res = env.run("provider", "trust", "zorg-growth")
+        shown = out.splitlines()
+        check("9.10 provider trust: the id, the address, the variable and the file first, then «схвалено»",
+              rc == 0 and shown[:4] == ["схвалення адреси реєстрації zorg-growth", "  адреса: %s" % fake.url,
+                                        "  змінна ZORG_MCP_HEADERS", "  файл реєстрації: %s" % reg]
+              and shown[4].startswith("схвалено: zorg-growth → http://127.0.0.1:") and res["changed"] is True
+              and reqs(fake) == 0, out)
+        check("9.11 …the entry is «approved», no value in the file", [(e["id"], e["how"]) for e in json.loads(raw(env.home))["entries"]]
+              == [("zorg-growth", "approved")] and SECRET not in raw(env.home), raw(env.home))
+        rc, out, res = env.run("provider", "trust", "zorg-growth")
+        check("9.12 approving again: «вже схвалено», nothing written", rc == 0 and "вже схвалено" in out and res["changed"] is False, out)
+        rc, out, res = env.run("repo", "status")
+        check("9.13 approved: probed with the header, reachable", rc == 0 and "reachable yes" in out and reqs(fake) > 0
+              and fake.seen[0]["headers"].get("X-Token") == SECRET and res["repos"][0]["trusted"] is True, out)
+        before = raw(env.home)
+        rc, out, res = env.run("provider", "trust", "--list")
+        check("9.14 trust --list: the pair, «діє», nothing written", rc == 0 and "zorg-growth" in out and "діє" in out
+              and raw(env.home) == before and res["entries"][0]["state"] == "діє" and res["untrusted"] == [], out)
+        n = reqs(fake)
+        rc, out, res = env.run("provider", "untrust", "zorg-growth")
+        check("9.15 untrust removes the pair", rc == 0 and res["removed"] == 1 and json.loads(raw(env.home))["entries"] == [], out)
+        rc, out, res = env.run("repo", "status")
+        check("9.16 …and its server gets nothing again", "не схвалено" in out and reqs(fake) == n, out)
+        rc, out, res = env.run("provider", "trust", "zorg-nope")
+        check("9.17 trust of an unknown id is exit 3", rc == 3, out)
+
+        open(reg, "w", encoding="utf-8").write(reg_text("zorg-growth", "http://brain.zorg.example/mcp", ""))
+        rc, out, res = env.run("provider", "trust", "zorg-growth")
+        check("9.18 trust refuses remote http (exit 4), writes nothing", rc == 4 and "refused" in out
+              and json.loads(raw(env.home))["entries"] == [], out)
+
+    # a vault registration of the same id never wins; the line names the two files
+    vprov = os.path.join(env.vault, "Notes", "_System", "providers")
+    os.makedirs(vprov, exist_ok=True)
+    with FakeMcp(tree=TREE) as good, FakeMcp(tree=TREE) as evil:
+        open(reg, "w", encoding="utf-8").write(reg_text("zorg-growth", good.url, ""))
+        env.run("provider", "trust", "zorg-growth")
+        open(os.path.join(vprov, "zorg-growth.yaml"), "w", encoding="utf-8").write(
+            reg_text("zorg-growth", evil.url, "ZORG_MCP_HEADERS"))
+        rc, out, res = env.run("repo", "status")
+        check("9.19 a vault file of the same id: the private one is used, the line names the two, the vault's address "
+              "gets nothing", rc == 0 and "реєстрація zorg-growth: два файли не збігаються, взято приватний" in out
+              and reqs(evil) == 0 and reqs(good) > 0, (out, reqs(evil), reqs(good)))
+
+    for args, writing in ((["provider", "trust", "zorg-growth"], True), (["provider", "untrust", "zorg-growth"], True),
+                          (["provider", "trust", "--list"], False)):
+        check("9.20 writes(%s) is %s" % (" ".join(args), writing), ctxmain.writes(ctxmain.build_parser().parse_args(args)) is writing)
+
+# 10. the first run through the command line (R37) ------------------------------------------------------------------
+with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE, require_headers={"X-Token": SECRET}) as fake:
+    env = Env(d)
+    prov = os.path.join(env.home, ".grow-pm", "providers")
+    os.makedirs(prov)
+    open(os.path.join(prov, "zorg-growth.yaml"), "w").write(reg_text("zorg-growth", fake.url, "ZORG_MCP_HEADERS"))
+    open(os.path.join(prov, "zorg-brain.yaml"), "w").write(reg_text("zorg-brain", fake.url, ""))
+    rc, out, res = env.run("repo", "status")
+    seeded = [l for l in out.splitlines() if l.startswith("Довірено")]
+    check("10.1 the first repo status after the update trusts both, one line each, and the requests go",
+          rc == 0 and seeded == ["Довірено наявну реєстрацію zorg-brain: %s (без змінної)" % fake.url.rsplit("/", 1)[0],
+                                 "Довірено наявну реєстрацію zorg-growth: %s (змінна ZORG_MCP_HEADERS)" % fake.url.rsplit("/", 1)[0]]
+          and reqs(fake) > 0 and all(r["trusted"] for r in res["repos"]), (out, seeded))
+    rc, out, res = env.run("repo", "status")
+    check("10.2 the second run: no line", rc == 0 and "Довірено" not in out, out)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

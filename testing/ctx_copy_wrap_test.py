@@ -21,6 +21,9 @@ import ctx_copy as cp  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import provider_bundle as pb  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+from ctx_testenv import approving  # noqa: E402
+
+approving(cp)                                           # since v4.9.1: every pass here is of an approved address (a temp home)
 
 cm.McpClient.BACKOFF = 0.0
 KIT = os.path.join(ROOT, "examples", "provider-kit", "zorg-core")

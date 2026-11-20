@@ -25,6 +25,7 @@ import ctx_blocks as cb  # noqa: E402
 import ctx_common as cc  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_repos as cr  # noqa: E402
+import ctx_endpoints as cep  # noqa: E402
 import ctx_store as cs  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
 import provider_bundle as pb_mod  # noqa: E402
@@ -364,9 +365,22 @@ def tree_state(*roots):
     return out
 
 
+TRUST = {"home": None}                                  # since v4.9.1: the temp home whose trust file approves a test's servers
+
+
 def repo_of(reg):
-    """A registration dict as `find_registrations` reads it → the repository."""
-    return cr.normalise(reg)
+    """A registration dict as `find_registrations` reads it → the repository. Since v4.9.1, inside a block that set
+    TRUST["home"] (a temp home, never the real one), a registration with an address the engine may reach is approved
+    there first, as `ctx provider trust` would — the fetch and reach tests are about what follows the approval; the
+    refusals are testing/ctx_endpoints_test.py's."""
+    r = cr.normalise(reg)
+    home, ep = TRUST["home"], r["endpoint"]
+    if home and ep["url"] and not cep._problem(r["id"], ep["url"], ep["headers_env"]):
+        if not os.path.lexists(cep.trust_file(home)):
+            cep.seed(home, [])
+        cep.approve(home, r)
+        r["_trust_home"] = cep.Home(home)
+    return r
 
 
 def region(ns, bid, v, body):
@@ -385,6 +399,7 @@ with tempfile.TemporaryDirectory() as d:
     core = os.path.join(d, "ZorgCore")
     growth = os.path.join(d, "ZorgGrowthCore")
     home = os.path.join(d, "home")
+    TRUST["home"] = home
     shutil.copytree(CORE_FIX, core)
     shutil.copytree(os.path.join(REPOS_FIX, "zorg-growth"), growth)
     os.makedirs(os.path.join(home, ".grow-pm"))
@@ -1146,6 +1161,7 @@ with tempfile.TemporaryDirectory() as d:
             "schema: provider-registration/2\nid: zorg-growth\nkind: mcp\nauthority: team\nendpoint:\n  url: %s\n  root: \"ZorgGrowth/\"\n"
             "blocks_file: %s\nblocks_source: mcp\nteam: team-alpha\n" % (fake.url, GROWTH_FILE))
         loaded = {r["id"]: r for r in cr.load_repos(ctx_text, home)}
+        cep.approve(home, loaded["zorg-growth"])        # since v4.9.1: this server's address, approved (a temp home)
         before_home = tree_state(home)
         fcore, fgrowth = cr.fetch(loaded["zorg-core"]), cr.fetch(loaded["zorg-growth"])
         check("…and the home is untouched by the fetch", tree_state(home) == before_home, "")
@@ -1171,8 +1187,10 @@ with tempfile.TemporaryDirectory() as d:
     # --- nothing was written anywhere
     check("fetch writes nothing: the cores are as they were", tree_state(core, growth) == before_cores,
           [k for k, v in tree_state(core, growth).items() if before_cores.get(k) != v])
-    check("…and the home holds only the registrations the test put there",
-          sorted(os.listdir(os.path.join(home, ".grow-pm"))) == ["providers"]
+    check("…and the home holds only the registrations the test put there (and, since v4.9.1, the trust file the test "
+          "approved its servers in — a fetch writes neither)",
+          sorted(os.listdir(os.path.join(home, ".grow-pm"))) == ["providers", "trust"]
+          and sorted(os.listdir(os.path.join(home, ".grow-pm", "trust"))) == ["providers.json"]
           and sorted(os.listdir(provdir)) == ["zorg-core.yaml", "zorg-growth.yaml"], os.listdir(os.path.join(home, ".grow-pm")))
 
 # --- v3.13.1: text a server sent loses the bidi overrides too, in one place for the blocks and the repositories

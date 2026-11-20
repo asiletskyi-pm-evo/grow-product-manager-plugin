@@ -85,6 +85,7 @@ try:
     folder = cp.copy_dir(env.home, "zorg-growth")
     with FakeMcp(tree=tree()) as fake:
         open(reg, "w", encoding="utf-8").write(REG.format(url=fake.url, sync="daily", status="active"))
+        env.trust("zorg-growth")                      # since v4.9.1: a new or changed address, approved
         print("— 1. no copy: the sync never makes one")
         rc, out, res = env.run("provider", "sync", "--if-due", "--now", at(0))
         check("no copy key, no folder", rc == 0 and "copy" not in res and not os.path.exists(folder), res)
@@ -135,6 +136,7 @@ try:
         env.run("repo", "copy", "zorg-growth", "--now", at(6))
     with FakeMcp(tree=tree()) as quiet:
         open(reg, "w", encoding="utf-8").write(REG.format(url=quiet.url, sync="daily", status="active"))
+        env.trust("zorg-growth")                      # since v4.9.1: a new or changed address, approved
         t0 = time.monotonic()
         rc, out, res = env.run("provider", "sync", "--if-due", "--now", at(6, 3))
         took = time.monotonic() - t0
@@ -142,6 +144,7 @@ try:
               rc == 0 and res.get("copy") == {"zorg-growth": "not-due"} and out.strip().startswith("CTX_RESULT")
               and quiet.seen == [] and took < 2.5, (took, quiet.methods(), out))
     open(reg, "w", encoding="utf-8").write(REG.format(url="http://127.0.0.1:9/mcp", sync="daily", status="active"))
+    env.trust("zorg-growth")                      # since v4.9.1: a new or changed address, approved
 
     print("— 5. status, list, health")
     rc, out, res = env.run("repo", "status", "zorg-growth")
@@ -162,6 +165,7 @@ try:
     print("— 6. paused, sync off")
     for sync, status in (("off", "active"), ("daily", "paused")):
         open(reg, "w", encoding="utf-8").write(REG.format(url="http://127.0.0.1:9/mcp", sync=sync, status=status))
+        env.trust("zorg-growth")                      # since v4.9.1: a new or changed address, approved
         rc, out, res = env.run("provider", "sync", "--if-due", "--now", at(9))
         check("sync %s / %s: no background" % (sync, status), "copy" not in res, res)
         if sync == "off":
@@ -172,6 +176,7 @@ try:
     del os.environ["GROW_PM_COPY_FOREGROUND"]
     with FakeMcp(tree=tree()) as fake:
         open(reg, "w", encoding="utf-8").write(REG.format(url=fake.url, sync="daily", status="active"))
+        env.trust("zorg-growth")                      # since v4.9.1: a new or changed address, approved
         st = cp.load_state(folder)
         old = (datetime.datetime.now().astimezone() - datetime.timedelta(days=2)).isoformat(timespec="seconds")
         st["complete_at"] = st["attempt_at"] = old

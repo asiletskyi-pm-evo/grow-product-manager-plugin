@@ -9,7 +9,7 @@ that fetches blocks never branches on the schema version.
 
 `fetch` reads a repository's blocks ("theirs") from its MCP server or from its core folder; the registrations
 themselves are read from local files only. `reach` says whether a repository answers, `public_url` how its endpoint
-may be shown (both moved here from ctx.py in v3.14); `serves_product` whether it serves a product record (moved here
+may be shown (both moved here from ctx.py in v3.14); since v4.9.1 every client comes from `ctx_endpoints.client_for`; `serves_product` whether it serves a product record (moved here
 from ctx.py in v3.15: `--product` and the resolver match a product the same way). Nothing is ever written. Stdlib only.
 """
 import collections
@@ -411,23 +411,29 @@ def _copy_why(copy_root, manifest):
     return "" if manifest is not None else COPY_ADVICE
 
 
-def _header_hint(ep, hdrs):
-    """"; <why the variable gives no header>" when the registration names one and it gave none, else ""."""
-    return "; " + cm.header_problem(ep["headers_env"]) if ep["headers_env"] and not hdrs else ""
+def _header_hint(ep):
+    """"; <why the variable gives no header>" when the registration names one and it gives none, else "" — the
+    variable's name, never its value (`ctx_mcp.header_problem`)."""
+    problem = cm.header_problem(ep["headers_env"]) if ep["headers_env"] else ""
+    return "; " + problem if problem else ""
 
 
-def _from_mcp(repo, blocks_file, client_factory, deadline=None):
-    """(text, None) of the blocks file as the server serves it, or (None, why not). The client keeps `deadline`."""
+def _from_mcp(repo, blocks_file, client_factory=None, deadline=None):
+    """(text, None) of the blocks file as the server serves it, or (None, why not). The client keeps `deadline`. Since
+    v4.9.1 the client comes from `ctx_endpoints.client_for`: an address you did not approve gets no request, and the
+    reason is its line (`<id>: адресу не схвалено (…) — нічого не надіслано…`)."""
     ep = repo["endpoint"]
     if not ep["url"]:
         return None, "no endpoint url in the registration"
     if not blocks_file:
         return None, "the registration names no blocks_file"
-    hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
     try:
-        client = client_factory(ep["url"], headers=hdrs, deadline=deadline)
+        client = ce.client_for(repo, factory=client_factory, deadline=deadline)
+    except ce.Untrusted as e:
+        return None, e.line
+    try:
         if not client.probe():
-            hint = _header_hint(ep, hdrs)
+            hint = _header_hint(ep)
             return None, "MCP unreachable: %s%s" % (_clean(getattr(client, "last_error", "") or "no answer"), hint)
         note = client.call(NOTE_TOOL, {"path": ep["root"] + blocks_file})      # Ruling P1: plain concatenation
     except cm.McpError as e:
@@ -536,17 +542,19 @@ def reach(repo, deadline=None):
     if repo["kind"] == "mcp" or ep["url"]:
         if not ep["url"]:
             return False, "no endpoint url in the registration"
-        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
-        client = cm.McpClient(ep["url"], headers=hdrs, deadline=deadline)
+        try:                                            # since v4.9.1: an address you did not approve is not probed
+            client = ce.client_for(repo, deadline=deadline)
+        except ce.Untrusted as e:
+            return False, cc.clip(e.line, MAX_ERROR)
         if client.probe():
             return True, ""
-        return False, cc.clip(client.last_error + _header_hint(ep, hdrs), MAX_ERROR)
+        return False, cc.clip(client.last_error + _header_hint(ep), MAX_ERROR)
     if repo["core_root"]:
         return (True, "") if os.path.isdir(repo["core_root"]) else (False, "core folder not found")
     return False, "no endpoint and no core folder in the registration"
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True, manifest=None):
+def fetch(repo, client_factory=None, now=None, include_skipped=False, deadline=None, team=True, manifest=None):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -573,7 +581,9 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     `deadline` (since v3.14; a time.monotonic() moment, None for none) bounds the whole fetch: the client keeps it —
     every request gets what is left, none is made once it has passed (the error then says "deadline reached") — and
     the core folder is read within `cs.read_budget` of what is left, so a file iCloud never delivers costs that, not
-    the store's own 30 s. `client_factory` is called as (url, headers=…, deadline=…).
+    the store's own 30 s. `client_factory` (the client of ctx_mcp when None) is called as (url, headers=…, deadline=…) —
+    since v4.9.1 only through `ctx_endpoints.client_for`, so a registration whose address you did not approve gets no
+    request: its line is the server's error (under "auto" the core folder is still read).
     `team` False (since v3.14; `repo status`, which wants the source's version alone) never builds the team region: the
     blocks file is read and nothing else — the core's manifest only when it names the blocks file or the namespace —
     and team, team_source, team_error stay empty.

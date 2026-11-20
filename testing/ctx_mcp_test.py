@@ -24,6 +24,7 @@ os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx as ctxmain  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_repos as crp  # noqa: E402
+import ctx_endpoints as cep  # noqa: E402
 from ctx_mcp import McpClient, McpError, McpRefused  # noqa: E402
 from mcp_fake import BLOCKS, FakeMcp  # noqa: E402
 
@@ -750,9 +751,19 @@ class Env:
         self.ctx = os.path.join(self.home, ".grow-pm", "local-context.md")
         open(self.ctx, "w", encoding="utf-8", newline="").write(self.text)
 
-    def reg(self, name, body):
+    def reg(self, name, body, trust=True):
+        """Write a registration; since v4.9.1 then approve its address as the user would (`ctx provider trust`, in this
+        temp home) — the checks below are about what follows the approval; the refusals are ctx_endpoints_test.py's."""
         open(os.path.join(self.providers, name + ".yaml"), "w", encoding="utf-8", newline="").write(
             body.replace("{core}", self.core))
+        if trust and "url:" in body:
+            saved = os.environ.pop("GROW_PM_CONTEXT_PATH", None)
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    ctxmain.main(["provider", "trust", name, "--home", self.home, "--context", self.ctx])
+            finally:
+                if saved is not None:
+                    os.environ["GROW_PM_CONTEXT_PATH"] = saved
 
     def run(self, *args, **env_extra):
         env = dict(os.environ)
@@ -846,8 +857,8 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
     real_client, cm.McpClient = cm.McpClient, Noisy
     buf, saved_ctx = io.StringIO(), os.environ.pop("GROW_PM_CONTEXT_PATH", None)
     try:
-        raw_ok, raw_why = crp.reach({"kind": "mcp", "endpoint": {"url": "http://127.0.0.1:9/mcp", "headers_env": "", "root": ""},
-                                     "core_root": ""})
+        raw_ok, raw_why = crp.reach({"id": "zorg-noisy", "kind": "mcp", "core_root": "", "_trust_home": cep.Home(e.home),
+                                     "endpoint": {"url": "http://127.0.0.1:9/mcp", "headers_env": "ZORG_GROWTH_MCP_HEADERS", "root": ""}})
         with contextlib.redirect_stdout(buf):
             rc_ = ctxmain.main(["repo", "status", "zorg-noisy", "--home", e.home, "--context", e.ctx])
     finally:
@@ -924,8 +935,10 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
           and res.get("unreadable") and "zorg-broken.yaml" in res["unreadable"][0]["file"], out)
     os.remove(os.path.join(e.providers, "zorg-broken.yaml"))
 
-    check("repo status is a reading command: nothing is written", not os.path.exists(os.path.join(e.vault, "Notes", "_System", "context"))
-          and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots")) and sorted(os.listdir(os.path.join(e.home, ".grow-pm"))) == ["local-context.md"],
+    check("repo status is a reading command: nothing is written — but the trust file, once, at the first run after v4.9.1",
+          not os.path.exists(os.path.join(e.vault, "Notes", "_System", "context"))
+          and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots"))
+          and sorted(os.listdir(os.path.join(e.home, ".grow-pm"))) == ["local-context.md", "trust"],
           os.listdir(os.path.join(e.home, ".grow-pm")))
     check("…and the engine only called what the allow-list names (a handshake, and the note with the blocks)",
           set(s["method"] for s in fake.seen) <= {"initialize", "notifications/initialized", "tools/call"}

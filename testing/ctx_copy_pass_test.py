@@ -20,8 +20,10 @@ os.environ["NO_PROXY"] = "127.0.0.1,localhost"
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 import ctx_copy as cp  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
-from ctx_testenv import Env  # noqa: E402
+from ctx_testenv import Env, approving  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+
+approving(cp)                                           # since v4.9.1: every in-process pass here is of an approved address
 
 cm.McpClient.BACKOFF = 0.0
 fails = 0

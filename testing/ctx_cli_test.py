@@ -851,10 +851,17 @@ untouched = []
 
 
 def plan_run(e, core, *args):
-    """A plan run, with the proof that it wrote nothing: the home, the vault and the core are the same bytes after it."""
+    """A plan run, with the proof that it wrote nothing: the home, the vault and the core are the same bytes after it.
+    Since v4.9.1 the first command after the update that may reach a server writes the trust file, once
+    (context-provider-protocol.md §13): a plan that creates it has written nothing else."""
+    trust = os.path.join(e.home, ".grow-pm", "trust", "providers.json")
+    fresh = not os.path.exists(trust)
     before = tree_of(e.home, e.vault, core)
     rc, out, res = run_ok(e, "provider", "plan", *args)
-    untouched.append(tree_of(e.home, e.vault, core) == before)
+    after = tree_of(e.home, e.vault, core)
+    if fresh:
+        after.pop(trust, None)
+    untouched.append(after == before)
     return rc, out, res
 
 
@@ -4328,7 +4335,8 @@ KOSHYK = "Notes/Кошик — графік роботи продавця.md"
 with tempfile.TemporaryDirectory() as d:
     env = SearchEnv(d)
     before = tree(env.store)
-    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+    first_trust = os.path.join(env.home, ".grow-pm", "trust")       # since v4.9.1: written once, by the first search
+    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)}
     rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours", "--json")
     check("ctx search --json: exit 0, nothing but the CTX_RESULT line", rc == 0 and res
           and out.strip().startswith("CTX_RESULT ") and out.strip().count("\n") == 0, (rc, out[-500:]))
@@ -4379,8 +4387,9 @@ with tempfile.TemporaryDirectory() as d:
           and res5.get("header", "").startswith("> [own · ") and out5.strip().count("\n") == 0, (rc5, out5[-300:]))
     rc, out, _ = run_ok(env, "search", "--get", "0000000000")
     check("--get of an id no search gave: exit 3, one line why", rc == 3 and "0000000000" in out, (rc, out[-300:]))
-    check("search writes only <home>/.grow-pm/index/ — last.json beside the index",
-          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)} == home_before
+    check("search writes only <home>/.grow-pm/index/ — last.json beside the index (and, since v4.9.1, the trust file once)",
+          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)}
+          == home_before
           and os.path.isfile(os.path.join(env.index, "last.json")))
 
     rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours")

@@ -322,3 +322,4 @@ def revoke(home, rid):
         data["entries"] = kept
         _write(home, data)
     return gone
+

@@ -26,6 +26,10 @@ import ctx_read as cr  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_stem as st  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+import ctx_common as cc  # noqa: E402
+import ctx_endpoints as cep  # noqa: E402
+import ctx_repos as crp  # noqa: E402
+from ctx_testenv import approve  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "search")
 NOW = datetime.datetime(2026, 10, 20, 12, 0)
@@ -87,8 +91,14 @@ class Env:
     def note(self, rel):
         return os.path.join(self.vault, *rel.split("/"))
 
-    def reg(self, rid, text):
+    def reg(self, rid, text, trust=True):
+        """Write a registration; since v4.9.1 then approve its address in this temp home, as `ctx provider trust` would —
+        the search's refusals are testing/ctx_endpoints_test.py's."""
         write(os.path.join(self.providers, rid + ".yaml"), text)
+        repo = crp.normalise(cc.read_yaml_subset(text))
+        ep = repo["endpoint"]
+        if trust and ep["url"] and not cep._problem(repo["id"], ep["url"], ep["headers_env"]):
+            approve(self.home, repo)
 
     def sctx(self, **kw):
         return cs_.context_for(self.home, self.text, self.store, **kw)
