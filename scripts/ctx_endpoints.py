@@ -58,7 +58,10 @@ MAX_BYTES = 1024 * 1024
 ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")           # an id a command line may carry as it is (§3b: kebab-case, ≤ 64)
 VAR = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}\Z")     # a variable name, nothing a shell or a line would read otherwise
 COMMAND = "ctx provider trust"
-REASONS = {"new": "нова", "changed": "змінилась", "transport": "не https", "unreadable": "файл довіри не читається"}
+REASONS = {"new": "нова", "changed": "змінилась", "transport": "не https", "unreadable": "файл довіри не читається",
+           "unseeded": "файлу довіри ще немає"}
+SEED_MARK = (".grow-pm", ".trust-seeded")               # the first run happened in this home — outside trust/, which may go
+LINE_MAX = 300                                          # a refusal line, its «Схвалити: …» tail included (callers clip at 300)
 NOTHING_SENT = "нічого не надіслано"
 
 
@@ -122,6 +125,20 @@ def _shown(rid):
 
 def _var_word(var):
     return "змінна %s" % var if var else "без змінної"
+
+
+def var_shown(var):
+    """A variable as a line shows it, with the header it gives — its NAME, never its value (review of the branch #7: any
+    variable holding `Name: value` becomes a header): `змінна X → заголовок Y` · `змінна X (заголовка не дає: <why>)` ·
+    `без змінної` · `змінна з непростою назвою` (not repeated)."""
+    if not var:
+        return "без змінної"
+    if not VAR.match(var):
+        return "змінна з непростою назвою"
+    got = cm.headers_from_env(var)
+    if got:
+        return "змінна %s → заголовок %s" % (var, next(iter(got)))
+    return "змінна %s (заголовка не дає: %s)" % (var, _safe(cm.header_problem(var), 120))
 
 
 # ------------------------------------------------------------------ the file
@@ -260,6 +277,17 @@ def seed(home, repos, late=(), now=None):
     path = trust_file(home)
     if os.path.lexists(path) or os.path.islink(os.path.dirname(path)):
         return []
+    addressed = any((r.get("endpoint") or {}).get("url") for r in repos or ())
+    mark = os.path.join(home, *SEED_MARK)
+    if os.path.lexists(mark):                           # review of the branch #1: the first run was here — never a second
+        stamp = now or datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        try:
+            if not _write(home, {"schema": SCHEMA, "seeded_at": stamp, "entries": []}, exclusive=True):
+                return []
+        except (OSError, cs.PathRefused, TrustError):
+            return []                                   # the verdicts say «файлу довіри ще немає»
+        return ["файлу довіри не було, хоча перший запуск тут уже відбувся — створено порожній: кожну адресу схвалиш "
+                "заново (%s <id>)" % COMMAND] if addressed else []
     if late:
         return ["довіру адресам ще не встановлено: реєстрація ще завантажується (%s) — до наступного запуску %s"
                 % (_safe(os.path.basename(late[0])), NOTHING_SENT)]
@@ -280,15 +308,31 @@ def seed(home, repos, late=(), now=None):
             continue
         ids.add(rid)
         entries.append(_entry(rid, address, var, now, SEEDED))
-        lines.append("Довірено наявну реєстрацію %s: %s (%s%s)" % (rid, address.origin, _var_word(var), _query_word(address)))
+        lines.append("Довірено наявну реєстрацію %s: %s (%s%s)" % (rid, address.origin, var_shown(var), _query_word(address)))
     stamp = now or datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     try:
         if not _write(home, {"schema": SCHEMA, "seeded_at": stamp, "entries": entries}, exclusive=True):
             return []                                   # another run seeded it meanwhile: its lines were its own
     except (OSError, cs.PathRefused, TrustError) as e:
+        if not addressed:                               # review of the branch #4: nothing to say on every skill start
+            return []
         why = e.strerror if isinstance(e, OSError) and e.strerror else str(e) or type(e).__name__
         return ["файл довіри не створено (%s) — жодну адресу не схвалено, %s" % (_safe(why, 200), NOTHING_SENT)]
+    _mark(home, stamp)
     return lines
+
+
+def _mark(home, stamp):
+    """The mark that the first run happened in this home, beside the trust folder: a trust file that goes later (deleted,
+    a backup restored without it) comes back empty, never seeded again. A mark that cannot be written costs only that."""
+    mark = os.path.join(home, *SEED_MARK)
+    try:
+        cs.check_target(mark)
+        fd = os.open(mark, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(stamp + "\n")
+    except (OSError, cs.PathRefused):
+        pass
 
 
 def _problem(rid, url, var):
@@ -314,9 +358,14 @@ def _home_of(repo, home):
     return h if isinstance(h, Home) else None
 
 
-def _refusal(rid, why, detail, hint=True):
-    tail = ". Схвалити: %s %s" % (COMMAND, rid) if hint and ID.match(rid or "") else ""
-    return Untrusted(rid, why, "%s: адресу не схвалено (%s) — %s%s" % (_shown(rid), detail, NOTHING_SENT, tail))
+def _refusal(rid, why, detail, hint=True, after=""):
+    """The line: at most LINE_MAX characters with its tail whole — the detail is cut to fit (review of the branch #5:
+    a caller's clip at 300 must never take the «Схвалити: …» a skill asks by)."""
+    tail = ". Схвалити: %s %s" % (COMMAND, rid) if hint and ID.match(rid or "") else after
+    head = "%s: адресу не схвалено (" % _shown(rid)
+    rest = ") — %s%s" % (NOTHING_SENT, tail)
+    detail = cc.clip(detail, max(20, LINE_MAX - len(head) - len(rest)))
+    return Untrusted(rid, why, head + detail + rest)
 
 
 def verdict(repo, home=None):
@@ -339,7 +388,11 @@ def verdict(repo, home=None):
         data = load(where)
     except TrustError as e:
         return _refusal(rid, "unreadable", "%s: %s" % (REASONS["unreadable"], _safe(e, 200)), hint=False)
-    entry = next((e for e in (data or {}).get("entries") or () if e.get("id") == rid), None)
+    if data is None:                                    # review of the branch #3: no approval can succeed here yet
+        return _refusal(rid, "unseeded", REASONS["unseeded"], hint=False,
+                        after="; схвалиш там, де ctx може писати в ~/.grow-pm (%s %s)" % (COMMAND, rid)
+                        if ID.match(rid or "") else "")
+    entry = next((e for e in data.get("entries") or () if e.get("id") == rid), None)
     if entry is None:
         return _refusal(rid, "new", new)
     if (entry.get("url") == address.normal and (entry.get("query_sha256") or None) == address.query_sha
@@ -456,6 +509,10 @@ def check_protocol(root):
             errs.append("scripts/%s reads a header with headers_from_env — only ctx_endpoints.client_for may" % name)
         if re.search(r"\b_parse_env\b", code):
             errs.append("scripts/%s calls ctx_mcp._parse_env, which gives the header's raw value" % name)
+        if name != "ctx_mcp.py" and re.search(r"^\s*(import\s+(urllib\.request|http\.client|socket|requests)\b|from\s+"
+                                              r"(urllib\.request|urllib\s+import\s+request|http\.client|http\s+import\s+client|"
+                                              r"socket|requests)\b)", code, re.M):
+            errs.append("scripts/%s imports a way to the network — requests go only through ctx_mcp, by client_for" % name)
         if any(re.search(r"os\.environ|getenv", line) and "headers_env" in line for line in code.splitlines()):
             errs.append("scripts/%s reads the variable endpoint.headers_env names from the environment itself" % name)
     me = _code(_read(root, "scripts/ctx_endpoints.py") or "")

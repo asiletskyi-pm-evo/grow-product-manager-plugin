@@ -943,7 +943,7 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=ROOTED, require_headers={"
     check("repo status is a reading command: nothing is written — but the trust file, once, at the first run after v4.9.1",
           not os.path.exists(os.path.join(e.vault, "Notes", "_System", "context"))
           and not os.path.exists(os.path.join(e.home, ".grow-pm", "snapshots"))
-          and sorted(os.listdir(os.path.join(e.home, ".grow-pm"))) == ["local-context.md", "trust"],
+          and sorted(os.listdir(os.path.join(e.home, ".grow-pm"))) == [".trust-seeded", "local-context.md", "trust"],
           os.listdir(os.path.join(e.home, ".grow-pm")))
     check("…and the engine only called what the allow-list names (a handshake, and the note with the blocks)",
           set(s["method"] for s in fake.seen) <= {"initialize", "notifications/initialized", "tools/call"}

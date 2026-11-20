@@ -1189,7 +1189,7 @@ with tempfile.TemporaryDirectory() as d:
           [k for k, v in tree_state(core, growth).items() if before_cores.get(k) != v])
     check("…and the home holds only the registrations the test put there (and, since v4.9.1, the trust file the test "
           "approved its servers in — a fetch writes neither)",
-          sorted(os.listdir(os.path.join(home, ".grow-pm"))) == ["providers", "trust"]
+          set(os.listdir(os.path.join(home, ".grow-pm"))) <= {"providers", "trust", ".trust-seeded"}
           and set(os.listdir(os.path.join(home, ".grow-pm", "trust"))) <= {"providers.json", ".lock"}
           and sorted(os.listdir(provdir)) == ["zorg-core.yaml", "zorg-growth.yaml"], os.listdir(os.path.join(home, ".grow-pm")))
 

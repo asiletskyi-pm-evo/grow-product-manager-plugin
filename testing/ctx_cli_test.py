@@ -861,6 +861,7 @@ def plan_run(e, core, *args):
     after = tree_of(e.home, e.vault, core)
     if fresh:
         after.pop(trust, None)
+        after.pop(os.path.join(e.home, ".grow-pm", ".trust-seeded"), None)     # its mark, beside the trust folder
     untouched.append(after == before)
     return rc, out, res
 
@@ -4336,7 +4337,9 @@ with tempfile.TemporaryDirectory() as d:
     env = SearchEnv(d)
     before = tree(env.store)
     first_trust = os.path.join(env.home, ".grow-pm", "trust")       # since v4.9.1: written once, by the first search
-    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)}
+    first_mark = os.path.join(env.home, ".grow-pm", ".trust-seeded")
+    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)
+                   and p != first_mark}
     rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours", "--json")
     check("ctx search --json: exit 0, nothing but the CTX_RESULT line", rc == 0 and res
           and out.strip().startswith("CTX_RESULT ") and out.strip().count("\n") == 0, (rc, out[-500:]))
@@ -4388,8 +4391,8 @@ with tempfile.TemporaryDirectory() as d:
     rc, out, _ = run_ok(env, "search", "--get", "0000000000")
     check("--get of an id no search gave: exit 3, one line why", rc == 3 and "0000000000" in out, (rc, out[-300:]))
     check("search writes only <home>/.grow-pm/index/ — last.json beside the index (and, since v4.9.1, the trust file once)",
-          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)}
-          == home_before
+          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)
+           and p != first_mark} == home_before
           and os.path.isfile(os.path.join(env.index, "last.json")))
 
     rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours")

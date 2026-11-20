@@ -1521,6 +1521,7 @@ def cmd_repo_list(a, c):
     for r in repos:
         blocks, version, checked, error = _list_state(c, r["id"])
         rows.append(dict({k: v for k, v in r.items() if k != "_trust_home"},      # the engine's own key (v4.9.1), not shown
+                         endpoint=dict(r["endpoint"], url=crp.public_url(r["endpoint"]["url"])),   # as parsed: no credentials, query
                          blocks=blocks, base_version=version, checked=checked, search_only=crp.search_only(r)))
         if error is not None:
             rows[-1]["state_error"] = error
@@ -1549,7 +1550,7 @@ def cmd_repo_list(a, c):
             print("warning: %s: %s" % (cb.clip(r["id"], cb.HEADER_CLIP), warning))
         r["namespace_warning"] = warning
     for path, why in skipped:
-        print("unreadable registration: %s (%s)" % (path, why))
+        print("unreadable registration: %s (%s)" % (cc.CONTROLS.sub(" ", path), why))
     return 0, {"command": "repo", "action": "list", "repos": rows,
                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
@@ -1559,7 +1560,7 @@ def _trust_prelude(c, repos=None, skipped=None, notes=None):
     first run after the update — `ctx_endpoints.seed`: the registrations already there trusted, once, one line each —
     and two registration files of one id whose endpoints differ (`notes`). `repos`, with the `skipped` and `notes` of
     their read, when the command has read every registration; else they are read here, and only when the trust file is
-    not there yet. The lines are kept on `c.trust_lines` too."""
+    not there yet."""
     out = list(notes or [])
     if not os.path.lexists(cep.trust_file(c.home)):
         if repos is None:
@@ -1570,7 +1571,6 @@ def _trust_prelude(c, repos=None, skipped=None, notes=None):
         out += cep.seed(c.home, repos, late=late, now=now())
     for line in out:
         print(line)
-    c.trust_lines = list(getattr(c, "trust_lines", None) or []) + out
     return out
 
 
@@ -1639,7 +1639,7 @@ def cmd_repo_status(a, c):
     else:
         print(NO_REPOS)
     for path, why in skipped:
-        print("unreadable registration: %s (%s)" % (path, why))
+        print("unreadable registration: %s (%s)" % (cc.CONTROLS.sub(" ", path), why))
     return 0, {"command": "repo", "action": "status", "repos": rows,
                "unreadable": [{"file": p, "reason": w} for p, w in skipped]}
 
@@ -2920,7 +2920,7 @@ def _in_scope(c, a, skipped, registered=None):
     if registered is not None:
         registered.update(r["id"] for r in repos)
     for path, why in skipped:
-        print("unreadable registration: %s (%s)" % (path, why))
+        print("unreadable registration: %s (%s)" % (cc.CONTROLS.sub(" ", path), why))
     if a.product:
         repos = _product_repos(c, repos, a.product)
     search = [r["id"] for r in repos if crp.search_only(r)]
@@ -3084,8 +3084,8 @@ def cmd_provider_sync(a, c):
     deadline = time.monotonic() + sy.BUDGET_S          # the whole run, the registrations' read included (as in v3.23)
     skipped, notes = [], []
     loaded = None if a.repo else crp.load_repos(c.text, c.home, deadline=deadline, skipped=skipped, notes=notes)
-    _trust_prelude(c, loaded, skipped, notes)          # since v4.9.1: the first run after the update, once
-    rc, out = _provider_sync_blocks(a, c, loaded, deadline)
+    _trust_prelude(c, loaded, skipped, [] if a.if_due else notes)   # since v4.9.1: the first run after the update, once
+    rc, out = _provider_sync_blocks(a, c, loaded, deadline, shadow=notes if a.if_due else [])
     try:                                                # since v3.24.0: the copies, after the blocks (C7)
         rows = loaded if loaded is not None else [r for r in crp.load_repos(c.text, c.home) if r["id"] == a.repo]
         copies = start_copies(c, rows, _sync_now(a.now), c.home, c.found)
@@ -3104,7 +3104,7 @@ def cmd_provider_sync(a, c):
     return rc, out
 
 
-def _provider_sync_blocks(a, c, loaded=None, deadline=None):
+def _provider_sync_blocks(a, c, loaded=None, deadline=None, shadow=()):
     deadline = time.monotonic() + sy.BUDGET_S if deadline is None else deadline
     at = _sync_now(a.now)
     quiet = {"command": "provider", "action": "sync", "synced": []}
@@ -3130,6 +3130,8 @@ def _provider_sync_blocks(a, c, loaded=None, deadline=None):
         print("nothing to sync — no repository has `sync: daily` in its registration (context-connect turns it on)")
     if not repos:
         return 0, quiet
+    for line in shadow:                                 # since v4.9.1: two files of one id — only when a pass is due
+        print(line)
     for repo in repos:                                  # since v4.9.1: its server gets nothing — the skill asks one question
         refused = cep.verdict(repo) if repo["endpoint"]["url"] else None
         if refused is not None:
@@ -3285,7 +3287,7 @@ def _overlay_repos(c, a):
     skipped = []
     repos = crp.load_repos(c.text, c.home, skipped=skipped)
     for path, why in skipped:
-        print("unreadable registration: %s (%s)" % (path, why))
+        print("unreadable registration: %s (%s)" % (cc.CONTROLS.sub(" ", path), why))
     return [r for r in repos if ov.REPO_ID.match(str(r.get("id"))) and os.path.isfile(ov.path_of(c.store.root, r["id"]))]
 
 
@@ -3572,13 +3574,6 @@ def cmd_provider(a, c):
     raise Usage("provider takes adopt, plan, apply, sync, trust or untrust")
 
 
-def _var_shown(var):
-    """A variable's name as a line shows it: `змінна NAME`, `без змінної`, or a name that is not plain — not repeated."""
-    if not var:
-        return "без змінної"
-    return "змінна %s" % var if cep.VAR.match(var) else "змінна з непростою назвою"
-
-
 def cmd_provider_trust(a, c):
     """`provider trust <id> [--code C]` · `provider trust --list` (since v4.9.1, context-provider-protocol.md §13). Without
     --code it reads only: the id, its address as the engine parses it (no credentials, no query — «з параметрами запиту»
@@ -3612,14 +3607,14 @@ def cmd_provider_trust(a, c):
     address = cep.parse(ep["url"])
     print("схвалення адреси реєстрації %s" % cep._shown(repo["id"]))
     print("  адреса: %s%s" % (cep.shown(ep["url"]) or "—", " (з параметрами запиту)" if address and address.query_sha else ""))
-    print("  %s" % _var_shown(ep["headers_env"]))
-    print("  файл реєстрації: %s" % repo.get("_file", ""))
+    print("  %s" % cep.var_shown(ep["headers_env"]))
+    print("  файл реєстрації: %s" % cc.CONTROLS.sub(" ", repo.get("_file", "")))
     out["id"] = repo["id"]
     code = cep.code_of(repo)
     if cep.verdict(repo) is None:
         print("вже схвалено — нічого не змінено")
         return 0, dict(out, changed=False, code=code)
-    problem = cep._problem(repo["id"], ep["url"], ep["headers_env"]) if ep["url"] else "немає адреси"
+    problem = cep._problem(repo["id"], ep["url"], ep["headers_env"]) if ep["url"] else "нема адреси"
     if problem:
         print("ctx: refused — %s: %s" % (cep._shown(repo["id"]), problem))
         return 4, dict(out, changed=False, error=problem)
@@ -3632,7 +3627,7 @@ def cmd_provider_trust(a, c):
     except (cep.TrustError, OSError, cs.PathRefused) as e:
         print("ctx: refused — %s" % e)
         return 4, dict(out, changed=False, error=str(e))
-    print("схвалено: %s → %s (%s) — записано в %s" % (repo["id"], address.origin, _var_shown(ep["headers_env"]),
+    print("схвалено: %s → %s (%s) — записано в %s" % (repo["id"], address.origin, cep.var_shown(ep["headers_env"]),
                                                     cep.trust_file(c.home)))
     return 0, dict(out, changed=True, code=code, url=entry["url"], headers_env=entry["headers_env"])
 
@@ -3656,7 +3651,8 @@ def _trust_list(c, repos, out):
             state = ("реєстрації немає" if reg is None else "діє" if cep.verdict(reg) is None else "реєстрація змінилась")
             entries.append(dict(e, state=state))
             print("  %s  %s  %s  %s %s · %s" % (cep._shown(e["id"]), cep.shown(e["url"]) or "?",
-                                              _var_shown(e.get("headers_env") or ""), e.get("how") or "?",
+                                              cep._var_word(e.get("headers_env") or "") if cep.VAR.match(e.get("headers_env") or "x")
+                                              else "змінна з непростою назвою", e.get("how") or "?",
                                               e.get("at") or "?", state))
         if not data["entries"]:
             print("  —")

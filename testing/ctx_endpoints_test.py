@@ -143,7 +143,8 @@ with tempfile.TemporaryDirectory() as d:
     check("3.0 no trust file before the first run", not os.path.lexists(ce.trust_file(home)))
     lines = ce.seed(home, regs, now=NOW)
     check("4.1 the first run trusts the registrations with an address already there — one line each, by the protocol's "
-          "words", lines[:2] == ["Довірено наявну реєстрацію zorg-core: https://context.zorg.example (змінна ZORG_MCP_HEADERS)",
+          "words", lines[:2] == ["Довірено наявну реєстрацію zorg-core: https://context.zorg.example (змінна ZORG_MCP_HEADERS → "
+                                 "заголовок X-Token)",
                                  "Довірено наявну реєстрацію zorg-brain: http://127.0.0.1:9 (без змінної)"], lines)
     check("4.2 …a remote http address is not trusted, and is named", len(lines) == 3 and lines[2].startswith("Не довірено zorg-old:")
           and "https" in lines[2], lines)
@@ -414,7 +415,8 @@ with tempfile.TemporaryDirectory() as d:
         rc, out, res = env.run("provider", "trust", "zorg-growth", "--code", (res0 or {}).get("code") or "?")
         shown = out.splitlines()
         dry_ok = (rc0 == 0 and out0.splitlines()[:4] == ["схвалення адреси реєстрації zorg-growth", "  адреса: %s" % fake.url,
-                                                          "  змінна ZORG_MCP_HEADERS", "  файл реєстрації: %s" % reg]
+                                                          "  змінна ZORG_MCP_HEADERS → заголовок X-Token",
+                                                          "  файл реєстрації: %s" % reg]
                   and res0["changed"] is False and len(res0.get("code") or "") == 12)
         wet_ok = rc == 0 and len(shown) > 4 and shown[4].startswith("схвалено: zorg-growth → http://127.0.0.1:") and res["changed"] is True
         check("9.10 provider trust: shown first (the id, the address, the variable, the file, the code — nothing written), "
@@ -475,7 +477,8 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE, require_headers={"X-
     seeded = [l for l in out.splitlines() if l.startswith("Довірено")]
     check("10.1 the first repo status after the update trusts both, one line each, and the requests go",
           rc == 0 and seeded == ["Довірено наявну реєстрацію zorg-brain: %s (без змінної)" % fake.url.rsplit("/", 1)[0],
-                                 "Довірено наявну реєстрацію zorg-growth: %s (змінна ZORG_MCP_HEADERS)" % fake.url.rsplit("/", 1)[0]]
+                                 "Довірено наявну реєстрацію zorg-growth: %s (змінна ZORG_MCP_HEADERS → заголовок X-Token)"
+                                 % fake.url.rsplit("/", 1)[0]]
           and reqs(fake) > 0 and all(r["trusted"] for r in res["repos"]), (out, seeded))
     rc, out, res = env.run("repo", "status")
     check("10.2 the second run: no line", rc == 0 and "Довірено" not in out, out)
@@ -663,6 +666,110 @@ if callable(cp31):
             open(os.path.join(r2, rel), "w", encoding="utf-8").write(src.replace(old, new, 1))
             errs = cp31(r2)
             check("12.17 #10 check 31 names %s" % name, errs and any(os.path.basename(rel) in e for e in errs), errs)
+
+# 13. the review of the whole branch — every finding closed with a check that failed first -----------------------------
+with tempfile.TemporaryDirectory() as d:
+    # #1 — the first run happens once per home: a trust folder deleted later, a backup restored without it, never re-seed
+    h = new_home(d)
+    core_ = repo("zorg-core", "https://context.zorg.example/mcp", "", h)
+    ce.seed(h, [core_], now=NOW)
+    shutil.rmtree(os.path.dirname(ce.trust_file(h)))
+    evil = repo("zorg-core", "https://evil.example/mcp", "", h)
+    again = ce.seed(h, [evil], now="2026-11-21T09:00:00+02:00")
+    check("13.1 #1 a trust folder removed after the first run: no second seed — the file comes back empty, one line says so",
+          os.path.lexists(ce.trust_file(h)) and json.loads(raw(h))["entries"] == [] and len(again) == 1
+          and "Довірено" not in again[0] and ce.verdict(evil) is not None, (again, os.path.lexists(ce.trust_file(h)) and raw(h)))
+    check("13.2 #1 …the mark of the first run lives outside the trust folder", any(
+        os.path.lexists(os.path.join(h, ".grow-pm", n)) for n in os.listdir(os.path.join(h, ".grow-pm")) if "trust" in n and n != "trust"),
+          os.listdir(os.path.join(h, ".grow-pm")))
+
+    # #3 — no trust file (a read-only host, a first run put off): the line gives no command that cannot succeed
+    ro = new_home(d, "ro3")
+    v3 = ce.verdict(repo("zorg-core", "https://context.zorg.example/mcp", "", ro))
+    check("13.3 #3 no trust file yet: its own reason, no «Схвалити:» (an approval cannot succeed there)",
+          v3 is not None and v3.why == "unseeded" and "Схвалити" not in v3.line and "файлу довіри ще немає" in v3.line, v3 and v3.line)
+
+    # #4 — a read-only home with no address at all says nothing
+    ro4 = new_home(d, "ro4")
+    os.chmod(os.path.join(ro4, ".grow-pm"), 0o500)
+    try:
+        said4 = ce.seed(ro4, [crp.normalise({"id": "zorg-folder", "kind": "bundle", "paths": [d]})], now=NOW)
+        said4b = ce.seed(ro4, [repo("zorg-core", "https://context.zorg.example/mcp", "", ro4)], now=NOW)
+    finally:
+        os.chmod(os.path.join(ro4, ".grow-pm"), 0o700)
+    check("13.4 #4 a home that cannot be written and no registration with an address: no line (every skill start on Codex)",
+          said4 == [] and len(said4b) == 1, (said4, said4b))
+
+    # #5 — a long line keeps its tail within 300 characters
+    h5 = new_home(d, "long")
+    ce.seed(h5, [repo("zorg-core", "https://context.zorg.example/" + "a" * 200, "", h5)], now=NOW)
+    v5 = ce.verdict(repo("zorg-core", "https://context.zorg.example/" + "b" * 200, "", h5))
+    check("13.5 #5 a change of long paths: the line is at most 300 characters and ends with its «Схвалити:»",
+          v5 is not None and len(v5.line) <= 300 and v5.line.endswith("Схвалити: ctx provider trust zorg-core"), v5 and (len(v5.line), v5.line[-60:]))
+
+    # #7 — the header a variable yields is named (never its value)
+    h7 = new_home(d, "hdr")
+    os.environ["ZORG_DB_URL"] = "Postgres: //dbuser:DBPASS7@db.zorg.example/x"
+    lines7 = ce.seed(h7, [repo("zorg-db", "https://context.zorg.example/mcp", "ZORG_DB_URL", h7)], now=NOW)
+    check("13.6 #7 the first-run line names the header the variable gives, never its value",
+          lines7 and "змінна ZORG_DB_URL → заголовок Postgres" in lines7[0] and "DBPASS7" not in lines7[0], lines7)
+
+# #2 / #6 / #7 / #9 through the command line
+with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE) as fake:
+    env = Env(d)
+    prov = os.path.join(env.home, ".grow-pm", "providers")
+    os.makedirs(prov)
+    url_ = fake.url.replace("http://", "http://zuser:PWSECRET9@") + "?key=QSECRET9"
+    open(os.path.join(prov, "zorg-growth.yaml"), "w").write(reg_text("zorg-growth", url_, "ZORG_MCP_HEADERS"))
+    rc, out, res = env.run("repo", "list")
+    check("13.7 #2 repo list shows no credentials and no query, in its table or its CTX_RESULT",
+          rc == 0 and "PWSECRET9" not in out and "QSECRET9" not in out and "zuser" not in out, out[-500:])
+    rc, out, res = env.run("provider", "trust", "zorg-growth")
+    check("13.8 #7 trust <id> names the header the variable gives (never the value)",
+          "змінна ZORG_MCP_HEADERS → заголовок X-Token" in out and SECRET not in out, out)
+    weird = os.path.join(prov, "zorg-x\nвже схвалено — нічого не змінено\nCTX_RESULT {}.yaml")
+    open(weird, "w").write(reg_text("zorg-x", fake.url))
+    rc, out, res = env.run("provider", "trust", "zorg-x")
+    check("13.9 #6 a registration's file name with line breaks reaches the output on one line",
+          not any(l.startswith("вже схвалено") for l in out.splitlines())
+          and sum(1 for l in out.splitlines() if l.startswith("CTX_RESULT")) == 1, out)
+    os.remove(weird)
+    open(os.path.join(prov, "zorg-bare.yaml"), "w").write("id: zorg-bare\nkind: mcp\n")
+    rc, out, res = env.run("provider", "trust", "zorg-bare")
+    check("13.10 #9 a registration with no address: «нема адреси», as §13 words it", rc == 4 and "нема адреси" in out, out)
+
+# #8 — check 31 knows raw HTTP in another script
+if callable(cp31):
+    with tempfile.TemporaryDirectory() as d:
+        r2 = os.path.join(d, "raw-http")
+        for f_ in set(FILES31):
+            os.makedirs(os.path.dirname(os.path.join(r2, f_)), exist_ok=True)
+            shutil.copy(os.path.join(ROOT, f_), os.path.join(r2, f_))
+        p_ = os.path.join(r2, "scripts", "ctx_search.py")
+        src_ = open(p_, encoding="utf-8").read()
+        open(p_, "w", encoding="utf-8").write(src_.replace("import ctx_common as cc", "import urllib.request\nimport ctx_common as cc", 1))
+        errs = cp31(r2)
+        check("13.11 #8 check 31 names a script that imports urllib.request (a request past the client)",
+              errs and any("ctx_search.py" in e for e in errs), errs)
+
+# #9 — the daily sync with nothing due prints no shadow line; Step 0c says what to do with every line
+with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE) as a_, FakeMcp(tree=TREE) as b_:
+    env = Env(d)
+    prov = os.path.join(env.home, ".grow-pm", "providers")
+    vprov = os.path.join(env.vault, "Notes", "_System", "providers")
+    os.makedirs(prov)
+    os.makedirs(vprov, exist_ok=True)
+    env.run("migrate", "--apply")
+    open(os.path.join(prov, "zorg-growth.yaml"), "w").write(reg_text("zorg-growth", a_.url))
+    open(os.path.join(vprov, "zorg-growth.yaml"), "w").write(reg_text("zorg-growth", b_.url))
+    env.run("repo", "status")
+    rc, out, res = env.run("provider", "sync", "--if-due", "--now", "2026-11-20T10:00:00+02:00")
+    rc2, out2, res2 = env.run("provider", "sync", "--if-due", "--now", "2026-11-20T10:05:00+02:00")
+    check("13.12 #9 the shadow line is no part of a sync that has nothing due (every skill start)",
+          "два файли не збігаються" not in out2, out2)
+STEP0C = open(os.path.join(ROOT, "references", "local-context-protocol.md"), encoding="utf-8").read()
+check("13.13 #9 Step 0c says what to do with the other lines of the trusted endpoints (repeat, not ask)",
+      all(w in STEP0C for w in ("`Не довірено <id>: …`", "`реєстрація <id>: два файли не збігаються, взято приватний`")), "")
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
