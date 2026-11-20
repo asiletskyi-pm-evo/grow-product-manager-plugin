@@ -188,6 +188,19 @@
                                 own index busy or damaged counts as not answered): exit 5; 0 candidates is exit 0. No store
                                 needed. The ids are merged into <home>/.grow-pm/index/last.json (a save that fails is a line,
                                 never the exit code). A candidate's sources name the repository of a core page.
+  search --type TYPE [--type TYPE …] [--product P] [--json]
+                                (since v4.9.0) the notes of the section index whose frontmatter `type` is one of TYPE (any
+                                case) — no question, no ranking: the index refreshed first (30 s), as a search refreshes it.
+                                A path outside the roots or one the search excludes is never listed; with --product a note
+                                of another product is left out (counted), a note with no product stays. Lines: `Нотатки за
+                                типом: <types>[ · продукт <P>] · знайдено <n>`, per note `N. <title> · <type> · <product> ·
+                                <date> · <path>`, `іншого продукту — не показано: <k>`, then the notes. CTX_RESULT: action
+                                type, types, product, found [{path, file (on disk, "" when not there or not downloaded),
+                                source, title, type, product, date}], notes, sources, index, skipped, counts {found,
+                                skipped_product}. Writes only the index — no last.json. --type with --q, --get or an option
+                                of a question, or an empty TYPE: exit 3; nothing to search: exit 3; the index not read (not
+                                built yet, busy, damaged): exit 5. The journey portfolio finds its notes with it
+                                (journey-protocol §13)
   search --get ID|PATH|NAME [--json]
                                 one section of the last searches (or of the section index, by its id — an id neither
                                 has is tried as a name); for a note's path or its name, as a hub links it (`Name`,
@@ -2168,8 +2181,8 @@ def _search_kinds(value):
 SEARCH_ACTIONS = ("remember", "forget", "eval")
 _SEARCH_OPTS = {"q": "--q", "get": "--get", "skill": "--skill", "product": "--product", "limit": "--limit",
                 "sources": "--sources", "no_hints": "--no-hints", "pick": "--pick", "not_": "--not", "golden": "--golden",
-                "full": "--full"}
-_SEARCH_TAKES = {None: ("q", "get", "skill", "product", "limit", "sources", "no_hints", "full"),
+                "full": "--full", "type_": "--type"}
+_SEARCH_TAKES = {None: ("q", "get", "skill", "product", "limit", "sources", "no_hints", "full", "type_"),
                  "remember": ("q", "product", "pick", "not_"), "forget": ("q", "product"),
                  "eval": ("golden", "no_hints", "sources")}
 
@@ -2180,6 +2193,30 @@ def _search_options(a):
     given = [flag for key, flag in _SEARCH_OPTS.items() if key not in takes and getattr(a, key, None) not in (None, False, [])]
     if given:
         raise Usage("search%s takes no %s" % (" " + a.action if a.action else "", ", ".join(given)))
+
+
+def _search_type(a, c):
+    """`search --type T [--type T …] [--product P] [--json]` (since v4.9.0): the notes of those types in the section index
+    (ctx_search.by_type) — read only, the index refreshed first; no question, no ranking, no last.json. With --q, --get or
+    any option of a question: usage. Nothing to search: exit 3; the index not read: exit 5."""
+    given = [flag for key, flag in _SEARCH_OPTS.items()
+             if key not in ("type_", "product") and getattr(a, key, None) not in (None, False, [])]
+    if given:
+        raise Usage("search --type takes no %s" % ", ".join(given))
+    types = list(dict.fromkeys(t.strip() for t in a.type_ if t and t.strip()))
+    if not types or any(not (t or "").strip() for t in a.type_):
+        raise Usage("--type takes a note type (the frontmatter `type`), once or more")
+    sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
+    out = {"command": "search", "action": "type", "types": types, "product": a.product or ""}
+    if not sctx["roots"]:
+        print("search: nothing to search — no vault in local-context.md and no registered repository with a folder on disk")
+        return 3, dict(out, found=[], notes=[], sources=[], error="nothing to search")
+    res = cs_.by_type(sctx, types, product=a.product)
+    said = any(s["answered"] for s in res["sources"])
+    res = dict(out, **res, counts={"found": len(res["found"]), "skipped_product": res["skipped"]["product"]})
+    if not a.json:
+        sys.stdout.write(cs_.render_typed(res, types, a.product))
+    return (0 if said else 5), res
 
 
 def cmd_search(a, c):
@@ -2194,6 +2231,8 @@ def cmd_search(a, c):
         return _search_hint(a, c)
     if a.action == "eval":
         return _search_eval(a, c)
+    if a.type_ is not None:
+        return _search_type(a, c)
     if a.full and a.get is None:
         raise Usage("--full goes with --get")
     sctx = cs_.context_for(c.home, c.text, store_root=c.store.root)
@@ -3936,6 +3975,7 @@ def build_parser():
     sp.add_argument("--pick", action="append", metavar="ID|PATH")
     sp.add_argument("--not", dest="not_", action="append", metavar="ID|PATH")
     sp.add_argument("--golden", metavar="PATH")
+    sp.add_argument("--type", dest="type_", action="append", metavar="TYPE")
     sp = sub.add_parser("entity", parents=[common]); sp.add_argument("words", nargs="*"); sp.add_argument("--q", action="append")
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
