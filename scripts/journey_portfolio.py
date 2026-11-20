@@ -52,8 +52,9 @@ EN_SKIPS = {"not_cjm_map": "no CJM map — no funnel or stages", "other_product"
             "wrong_type": "neither a journey map nor a CJM note", "sensitive": "a sensitive note — the People contour's only",
             "unreadable": "the note does not read"}
 JOURNEY_TYPE, CJM_TYPE = "cjm-journey", "cjm"
-STAGE_HEAD = re.compile(r"^##[ \t]+([A-Za-zА-ЯІЇЄҐа-яіїєґ]{0,4}\d+[A-Za-z]?)[ \t]+[—–][ \t]+(.+?)[ \t#]*$")
-                                            # `## <ID> — <name>` (R32), the ID a short code with a digit: B1, S2, s3a
+STAGE_HEAD = re.compile(r"^##[ \t]+([A-Za-zА-ЯІЇЄҐа-яіїєґ]{0,4}\d{1,3}[A-Za-z]?)[ \t]+[—–][ \t]+(.+?)[ \t#]*$")
+                                            # `## <ID> — <name>` (R32), the ID a short code with a digit: B1, S2, s3a —
+                                            # never a year («## 2026 — …»)
 METRIC_HEAD = ("метрика", "metric")         # the first header cell of a stage's metrics table
 FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
 COMMENT = re.compile(r"<!--.*?-->|%%.*?%%", re.S)    # an HTML or Obsidian comment: nothing in it is read
@@ -64,6 +65,7 @@ LABELS = {
            "stages_of": "%d з %d оголошених", "metrics": "метрик", "no_product": "продукт не вказано",
            "skipped": "Пропущено", "other": "Іншого продукту — не показано: %d", "empty": "без доказів",
            "icloud": "файл не завантажено з iCloud — відкрий його в Obsidian",
+           "icloud_n": "файлів у теках не завантажено з iCloud: %d — відкрий теку в Obsidian",
            "no_outcome": "без метрики результату", "no_point": "—", "head": "Портфель шляхів: %s · %s · карт %d · "
            "потребують уваги %d · ручних CJM %d · пропущено %d", "head_other": " · іншого продукту %d", "cjm_cols": ("CJM", "воронка",
            "етапи", "метрик на етап", "знімок", "знахідки"), "missing": "теки ще немає: %s"},
@@ -73,6 +75,7 @@ LABELS = {
            "stages_of": "%d of %d declared", "metrics": "metrics", "no_product": "no product named",
            "skipped": "Skipped", "other": "Another product — not shown: %d", "empty": "no evidence",
            "icloud": "the file is not downloaded from iCloud — open it in Obsidian",
+           "icloud_n": "files in the folders not downloaded from iCloud: %d — open the folder in Obsidian",
            "no_outcome": "no outcome metric", "no_point": "—", "head": "Journey portfolio: %s · %s · maps %d · "
            "needing attention %d · hand CJMs %d · skipped %d", "head_other": " · another product %d", "cjm_cols": ("CJM", "funnel",
            "stages", "metrics per stage", "snapshot", "findings"), "missing": "no folder yet: %s"},
@@ -196,7 +199,8 @@ def map_row(note, today, newest):
         attention.append({"reason": "empty_stage", "detail": ", ".join(gaps["empty_stage"])})
     name = os.path.basename(note["path"])
     return {"journey": plain(note["journey"] or note["title"] or os.path.splitext(name)[0]), "note": name,
-            "path": note["path"], "product": plain(note["product"]), "product_missing": not note["product"],
+            "path": note["path"], "product": plain(note["product"]) if cs_.product_key(note["product"]) else "",
+            "product_missing": not cs_.product_key(note["product"]),
             "owner": plain(note["owner"]), "stages": len(note["stages"]), "health": health,
             "reviewed": reviewed, "stale_review": "stale_review" in codes,
             "pains": pains, "anomalies": an, "gaps": gaps, "findings": {"total": len(found), "by": by},
@@ -257,6 +261,7 @@ def read_cjm(path, fm, body, lang):
     if not snapshot:
         findings.append({"finding": "no_snapshot", "detail": "no snapshot date (YYYY-MM-DD) in the frontmatter"})
     product = nt.fm_scalar(fm, "product")
+    product = product if cs_.product_key(product) else ""      # `null`, `~`: no product
     name = os.path.basename(path)
     return {"title": plain(nt.fm_scalar(fm, "title") or nt.fm_scalar(fm, "name") or os.path.splitext(name)[0]),
             "note": name, "path": path, "funnel": plain(funnel), "stages_declared": declared, "stages": stages,
@@ -289,7 +294,7 @@ def collect(paths, dirs, product, today, snapshots, lang):
         except OSError as e:
             raise Bad("the folder does not read: %s" % (e.strerror or type(e).__name__))
         items += [(os.path.join(d, n), False) for n in names if n.lower().endswith(".md")]
-    seen, maps, cjms, skipped, other, ignored = set(), [], [], [], 0, 0
+    seen, maps, cjms, skipped, other, ignored, undownloaded = set(), [], [], [], 0, 0, 0
     for path, named in items:
         try:
             st = os.stat(path)
@@ -300,13 +305,18 @@ def collect(paths, dirs, product, today, snapshots, lang):
             continue
         seen.add(ident)
         name = os.path.basename(path)
-        if os.path.isfile(path) and ci.is_dataless(path):
-            skipped.append({"note": name, "reason": "unreadable", "detail": _labels(lang)["icloud"]})
-            continue                                  # never opened: opening it would start a download
+        if os.path.isfile(path) and ci.is_dataless(path):    # never opened: opening it would start a download
+            if named:
+                skipped.append({"note": name, "reason": "unreadable", "detail": _labels(lang)["icloud"]})
+            else:
+                undownloaded += 1                     # a folder's file is counted — it may be anyone's, never named
+            continue
         try:
             text, fm, body = nt.read_note(path)
         except Bad as e:
-            if not named and str(e) == "the note has no frontmatter":
+            if str(e) == "the note has no frontmatter" and _opens_frontmatter(path):
+                skipped.append({"note": name, "reason": "unreadable", "detail": "the frontmatter is not closed"})
+            elif not named and str(e) == "the note has no frontmatter":
                 ignored += 1                          # a folder's plain markdown is no note of the portfolio
             else:
                 skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
@@ -329,9 +339,10 @@ def collect(paths, dirs, product, today, snapshots, lang):
         if kind == JOURNEY_TYPE:
             try:
                 note = jm.load(path)
-                maps.append(map_row(note, today, newest(note["product"] or product)))
             except Bad as e:
                 skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
+                continue
+            maps.append(map_row(note, today, newest(note["product"])))     # its own product's, as `check` reads it
             continue
         c = read_cjm(path, fm, body, lang)
         if c is None:
@@ -345,7 +356,16 @@ def collect(paths, dirs, product, today, snapshots, lang):
         sorted((m for m in maps if not m["attention"]), key=key)
     cjms.sort(key=lambda c: (c["title"].casefold(), c["note"]))
     return {"maps": maps, "cjm": cjms, "skipped": skipped, "other_products": other, "ignored": ignored,
-            "missing_dirs": missing}
+            "undownloaded": undownloaded, "missing_dirs": missing}
+
+
+def _opens_frontmatter(path):
+    """Does the file open a frontmatter (`---` on its first line, after a BOM) that is never closed?"""
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as fh:
+            return fh.readline().rstrip("\r\n") == "---"
+    except (OSError, UnicodeDecodeError):
+        return False
 
 
 def head(p, product, today, L):
@@ -437,6 +457,8 @@ def chat_table(p, product, today, lang):
         out.append(L["other"] % p["other_products"])
     for d in p["missing_dirs"]:
         out.append(L["missing"] % d)
+    if p.get("undownloaded"):
+        out.append(L["icloud_n"] % p["undownloaded"])
     return "\n".join(out) + "\n"
 
 
@@ -618,6 +640,8 @@ def _portfolio(args):
     today = _today(args)
     if any(not n.strip() for n in args.note) or any(not d.strip() for d in args.dir):
         raise Bad("an empty --note or --dir — a note ctx search lists without a file on disk is named, never passed")
+    if args.snapshots:
+        jm.snapshots(args.snapshots, args.product)    # a folder that does not read stops here (exit 2), never per map
     return collect(args.note, args.dir, args.product, today, args.snapshots, args.lang), today
 
 
@@ -636,6 +660,7 @@ def cmd_render(args):
     p, today = _portfolio(args)
     page = render_html(p, args.product, today.isoformat(), args.lang)
     try:
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)   # the first run: no maps' folder yet
         with open(args.out, "w", encoding="utf-8") as fh:
             fh.write(page)
     except OSError as e:

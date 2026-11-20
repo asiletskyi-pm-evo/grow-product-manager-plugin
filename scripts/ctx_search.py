@@ -745,7 +745,7 @@ def product_key(product):
     name — never a part after `:` as the priors' looser `_product_names` takes it —, the name case-folded when it has
     no slug letters at all (a CJK name, which slugify would make «section»), "" for none."""
     s = N(str(product or "")).strip()
-    if not s:
+    if not s or s.casefold() in ("null", "~", "none"):    # YAML's empty value read as a word: no product
         return ""
     slug = cc.slugify(s)
     return slug if slug != "section" or s.casefold() == "section" else "=" + s.casefold()

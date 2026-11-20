@@ -295,7 +295,7 @@ with tempfile.TemporaryDirectory() as d:
     rc, oute, _ = run("render-html", "--product", "zorg", "--today", TODAY, "--note", notes[0], "--out", page, "--lang", "en")
     he = html.unescape(text(page))
     check("4.11 English labels", rc == 0 and "Journey portfolio" in he and "Journey maps" in he and "review" in he, oute[-300:])
-    rc, outx, rx = run("render-html", "--product", "zorg", "--note", notes[0], "--out", os.path.join(d, "no-such-dir", "p.html"))
+    rc, outx, rx = run("render-html", "--product", "zorg", "--note", notes[0], "--out", os.path.join(page, "under-a-file", "p.html"))
     check("4.12 a page that cannot be written: exit 1", rc == 1 and rx.get("ok") is False, outx[-300:])
     check("4.13 render-html writes nothing but the page — every note byte for byte", digest(fx) == before)
     check("4.14 each map and each hand CJM names its note — the source of its numbers (artifact-publishing.md §9)",
@@ -493,6 +493,57 @@ with tempfile.TemporaryDirectory() as d:
           and "evil.example" not in outu, (ru.get("maps") or [{}])[0].get("gaps"))
     cj9 = run("list", "--product", "zorg", "--note", buyer0)[2].get("cjm") or [{}]
     check("9.9 M-4 the hand CJM's result keys are §13's fields", set(jp8.CJM_FIELDS) <= set(cj9[0]), sorted(cj9[0]))
+
+# 10. review 3 (whole branch, frozen 49dec73): each finding reproduced first
+with tempfile.TemporaryDirectory() as d:
+    first = os.path.join(FIX, "journeys", "zorg", "journey-first-order.md")
+    rep0 = os.path.join(FIX, "journeys", "zorg", "journey-repeat-order.md")
+    buyer0 = os.path.join(FIX, "hand", "cjm-zorg-buyer.md")
+    out10 = os.path.join(d, "vault", "CJM", "journeys", "zorg", "portfolio.html")
+    rc, o10, r10 = run("render-html", "--product", "zorg", "--note", buyer0, "--dir", os.path.dirname(out10), "--out", out10)
+    check("10.1 I-1 the first J7 run with no maps yet: the page creates the maps' folder and is written beside it",
+          rc == 0 and r10.get("ok") is True and os.path.isfile(out10) and r10.get("missing_dirs") == [os.path.dirname(out10)], o10[-300:])
+    fold = os.path.join(d, "fold")
+    os.makedirs(fold)
+    for n in ("1-1 Bea Two.md", "quux-journey.md", "meeting notes.md"):
+        write(os.path.join(fold, n), "---\ntype: meeting\n---\n# x\n")
+    real_dl = jp8.ci.is_dataless
+    jp8.ci.is_dataless = lambda p_: True
+    try:
+        g = jp8.collect([], [fold], "zorg", __import__("datetime").date(2026, 11, 20), None, "uk")
+        g2 = jp8.collect([os.path.join(fold, "quux-journey.md")], [], "zorg", __import__("datetime").date(2026, 11, 20), None, "uk")
+    finally:
+        jp8.ci.is_dataless = real_dl
+    check("10.2 M-1 files of a folder iCloud has not downloaded are counted, never named; a --note one is named",
+          g["skipped"] == [] and g.get("undownloaded") == 3 and [s_["note"] for s_ in g2["skipped"]] == ["quux-journey.md"], (g, g2["skipped"]))
+    nop = os.path.join(d, "journey-repeat-noproduct.md")
+    write(nop, text(rep0).replace("product: zorg\n", ""))
+    snapd = os.path.join(d, "snaps")
+    os.makedirs(snapd)
+    shutil.copy(os.path.join(ROOT, "testing", "fixtures", "journey", "snapshot-2026-11-16.md"), snapd)
+    rc, _, rn = run("list", "--product", "zorg", "--today", TODAY, "--snapshots", snapd, "--note", nop)
+    rc2, outc, _ = run("check", "--note", nop, "--snapshots", snapd, "--today", TODAY, script=os.path.join(ROOT, "scripts", "journey_map.py"))
+    jc = json.loads([l for l in outc.splitlines() if l.startswith("JOURNEY_RESULT ")][-1][len("JOURNEY_RESULT "):])
+    check("10.3 M-2 a map with no product: its findings are journey_map.py check's (no snapshot is its product's)",
+          (rn.get("maps") or [{}])[0].get("findings", {}).get("total") == len(jc.get("findings", [])), ((rn.get("maps") or [{}])[0].get("findings"), jc.get("findings")))
+    rc, o3, r3_ = run("list", "--product", "zorg", "--today", TODAY, "--dir", os.path.join(FIX, "journeys", "zorg"), "--snapshots", first)
+    check("10.4 M-3 a --snapshots that is no folder: exit 2, never «нотатка не читається» on every map", rc == 2 and r3_.get("ok") is False
+          and not r3_.get("skipped"), o3[-300:])
+    unc = os.path.join(d, "unclosed")
+    os.makedirs(unc)
+    write(os.path.join(unc, "journey-unclosed.md"), text(rep0).replace("tags: [zorg, cjm]\n---\n", "tags: [zorg, cjm]\n", 1))
+    rc, o4, r4 = run("list", "--product", "zorg", "--today", TODAY, "--dir", unc)
+    check("10.5 M-4 a note whose frontmatter is never closed is named as unreadable, never silently ignored",
+          [(s_["note"], s_["reason"]) for s_ in r4.get("skipped", [])] == [("journey-unclosed.md", "unreadable")] and r4.get("ignored") == 0, r4)
+    nul = os.path.join(d, "journey-null.md")
+    write(nul, text(first).replace("product: zorg\n", "product: null\n"))
+    rc, o5, r5 = run("list", "--product", "zorg", "--today", TODAY, "--note", nul)
+    check("10.6 M-5 `product: null` (or ~, none) is no product: the map stays, marked", len(r5.get("maps", [])) == 1
+          and r5["maps"][0].get("product_missing") is True and jp8.cs_.same_product("~", "zorg") and jp8.cs_.same_product("None", "zorg"), r5.get("maps"))
+    yr = os.path.join(d, "cjm-year.md")
+    write(yr, text(buyer0).replace("## Нотатки", "## 2026 — Підсумки року"))
+    st = [x["id"] for x in (run("list", "--product", "zorg", "--note", yr)[2].get("cjm") or [{}])[0].get("stages", [])]
+    check("10.7 M-6 a year heading «## 2026 — …» is no stage (an id has at most three digits)", st == ["B1", "B2", "B3"], st)
 
 # 7. validate-consistency.sh check 30 — §13 of the protocol and the script agree, and so do the places that name the
 # portfolio (the publication key, the surfaces row, the scheduled re-render, `ctx search --type`)

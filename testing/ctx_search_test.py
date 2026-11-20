@@ -2820,7 +2820,8 @@ if callable(by_type):
 check("v4.9.0 R1 M-2: same_product — the whole key, never a part after «:»; a CJK name by its own letters; none stays",
       callable(getattr(cs_, "same_product", None)) and cs_.same_product("Zorg: App", "Quux: App") is False
       and cs_.same_product("日本", "中国") is False and cs_.same_product("Zorg App", "zorg-app") is True
-      and cs_.same_product("", "Zorg App") is True and cs_.same_product("Zorg App", None) is True)
+      and cs_.same_product("", "Zorg App") is True and cs_.same_product("Zorg App", None) is True
+      and cs_.same_product("null", "Zorg App") is True and cs_.same_product("~", "Zorg App") is True)
 if callable(by_type):
     with tempfile.TemporaryDirectory() as d:
         env = typed_env(d)
