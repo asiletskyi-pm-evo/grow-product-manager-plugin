@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.9.0
+**Version:** 4.9.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.9.1** — **«Довірені адреси»: the context engine reaches only the provider addresses you approved** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A security fix of the «Skill Security Audit» of v4.8.0 (verdict BLOCK, one high finding): a provider registration named a server address and an environment variable, and the engine sent that variable's header — and every search query and note name — to the address with no check, so whoever could edit the file decided where your token went. Now the engine sends a request only to the pair «address + variable name» approved for the registration's id, kept in `~/.grow-pm/trust/providers.json` (never a value) — every address needs it, with a header or without one; https only, plain http only to this computer; your private registration wins over a vault's of the same id. The first run after the update trusts the registrations already there, once, one line each (`Довірено наявну реєстрацію …`); a new or changed address gets nothing and one line, and a skill asks one question — `ctx provider trust <id>` shows the address, the variable with the header it gives, the file and a code, and only `--code` on your yes approves that pair. One way to a client (`client_for`) for all five places — the daily sync, search on both its paths, the core copy, `repo status`, `provider adopt|plan|apply` — kept by validator check 31. `context-connect` 0.9.2 writes and approves an address in one question; `context-navigator` 0.5.1. A patch between the programme's v4.9.0 and v4.10.0.
 
 **New in v4.9.0** — **«Портфель шляхів»: every journey map of a product and its hand CJM notes in one list, the ones that need attention first** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `cjm-research` 0.18.0 answers «покажи портфель шляхів» with a table computed from the notes every time — there is no portfolio note and no portfolio board. Each journey map shows its owner, its stages, its health score with the change since the previous point and that point's date, its review date («застаріло» past 90 days), its pains by evidence class, its anomalies with the critical ones apart — read from the health-check's own rows, never guessed — its gaps, its findings and where it is published. A map whose health fell by more than 10 points, whose review is stale, that has no owner, a critical anomaly or a stage without evidence stands at the top with its reasons. The CJM notes a team keeps by hand (`type: cjm` with a funnel and stage headings) are listed in a block of their own, partly: the funnel, the stages, the metric rows per stage and the snapshot date — never their links, dashboards, owners, missions or text; a `cjm-research` report is recognised and skipped with why, and neither another product's note nor one the search marks sensitive ever enters. The portfolio finds its notes through the new read-only `ctx search --type`, or, without a context index, in the maps' folder with one question for the hand CJM folder. A page beside the maps carries numbers only — no row text, no link — with a health sparkline per map and sticky headers; it is published as a dashboard under its own key only after the question, and the scheduled health-check re-renders it locally. `scripts/journey_portfolio.py` (`list`, `render-html`, `schema`); validator check 30 keeps the protocol's portfolio table the script's. The fourth release of the programme «Фреймворки»; nested journeys come in v4.10.0 and editing on the page in v4.11.0.
 
@@ -1117,5 +1119,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.9.0  
+**Version:** 4.9.1  
 **Last Updated:** November 2026

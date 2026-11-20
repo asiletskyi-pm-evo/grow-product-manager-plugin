@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.9.0
+**Version:** 4.9.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.9.1** — **«Довірені адреси»: the context engine reaches only the provider addresses you approved** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A security fix of the «Skill Security Audit» of v4.8.0 (verdict BLOCK, one high finding): a provider registration named a server address and an environment variable, and the engine sent that variable's header — and every search query and note name — to the address with no check, so whoever could edit the file decided where your token went. Now the engine sends a request only to the pair «address + variable name» approved for the registration's id, kept in `~/.grow-pm/trust/providers.json` (never a value) — every address needs it, with a header or without one; https only, plain http only to this computer; your private registration wins over a vault's of the same id. The first run after the update trusts the registrations already there, once, one line each (`Довірено наявну реєстрацію …`); a new or changed address gets nothing and one line, and a skill asks one question — `ctx provider trust <id>` shows the address, the variable with the header it gives, the file and a code, and only `--code` on your yes approves that pair. One way to a client (`client_for`) for all five places — the daily sync, search on both its paths, the core copy, `repo status`, `provider adopt|plan|apply` — kept by validator check 31. `context-connect` 0.9.2 writes and approves an address in one question; `context-navigator` 0.5.1. A patch between the programme's v4.9.0 and v4.10.0.
 
 **New in v4.9.0** — **«Портфель шляхів»: every journey map of a product and its hand CJM notes in one list, the ones that need attention first** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `cjm-research` 0.18.0 answers «покажи портфель шляхів» with a table computed from the notes every time — there is no portfolio note and no portfolio board. Each journey map shows its owner, its stages, its health score with the change since the previous point and that point's date, its review date («застаріло» past 90 days), its pains by evidence class, its anomalies with the critical ones apart — read from the health-check's own rows, never guessed — its gaps, its findings and where it is published. A map whose health fell by more than 10 points, whose review is stale, that has no owner, a critical anomaly or a stage without evidence stands at the top with its reasons. The CJM notes a team keeps by hand (`type: cjm` with a funnel and stage headings) are listed in a block of their own, partly: the funnel, the stages, the metric rows per stage and the snapshot date — never their links, dashboards, owners, missions or text; a `cjm-research` report is recognised and skipped with why, and neither another product's note nor one the search marks sensitive ever enters. The portfolio finds its notes through the new read-only `ctx search --type`, or, without a context index, in the maps' folder with one question for the hand CJM folder. A page beside the maps carries numbers only — no row text, no link — with a health sparkline per map and sticky headers; it is published as a dashboard under its own key only after the question, and the scheduled health-check re-renders it locally. `scripts/journey_portfolio.py` (`list`, `render-html`, `schema`); validator check 30 keeps the protocol's portfolio table the script's. The fourth release of the programme «Фреймворки»; nested journeys come in v4.10.0 and editing on the page in v4.11.0.
 
@@ -649,13 +651,13 @@ The second contour of the plugin: **manager → people → goals → communicati
 **Trigger phrases:** "карта конкурентів", "реєстр продуктів", "просканируй мої застосунки", "хто конкуренти й дотичні у сфері …", "додай продукт у реєстр", "досліди однакове флоу на конкурентах", "competitor map", "scan my apps"
 
 
-### 32. Context Connect (v0.9.1) — NEW in v3.10.0
+### 32. Context Connect (v0.9.2) — NEW in v3.10.0
 
 **Description:** Connects your context to a shared-context provider — a team's or an organisation's core folder, or its MCP server. Resolves e-mail → team → role from the provider's role model (a dry run first: "I see you as pm in team Alpha; the bundle is N files"), asks whether you have your own Jira project (the write scope of every later task), copies the bundle relevant to you (in place when the core is already your copy), and proposes the core's context blocks for your `local-context.md`: the team block next to your own Team section, every other block in one reference section that never replaces your Product / OKR / CJM sections. Nothing is applied before you answer each discrepancy and confirm; the old file is backed up and the proposal ends with a changelog table. Then a five-question focus interview and a provider registration that the digest, Step 0.5 and the write boundary read. Refresh after a core update is the same run — usually one confirmation. With a context store a refresh ends with the slots (since v3.15.0): in one message each, the bindings of the core's blocks to slots for you to confirm, the divergences between repositories to settle, and — at a refresh — the blocks you had switched off that now have a slot, with a yes per block to bring one back (a no is offered again at the next refresh; `references/context-protocol.md` §5f). Everything provider-specific comes from the provider manifest (`references/context-provider-protocol.md` §3a, §9).
 
 **Trigger phrases:** "connect shared context", "connect me to the team vault", "refresh my bundle", "enrich my context from the core", "add a context provider", «підключи мене до спільного контексту», «онови мій пакет з ядра», «збагати мій контекст блоками ядра»
 
-### 33. Context Navigator (v0.5.0) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
+### 33. Context Navigator (v0.5.1) — NEW in v3.10.0, your whole context since v3.17.0, who is who since v3.18.0, slots since v3.19.0, bridges in your notes since v3.20.0
 
 **Description:** Since v3.17.0 it answers and searches from your whole context — your notes in the plugin's folder (the rest of your vault through a local index of it), every connected core, your local indexes, and the session's live sources when you ask or when your base has nothing direct — with or without a shared core: an answer with a source and a date for every statement, or a list of notes, and a «Де шукав» line naming each source; `/grow-product-manager:find` runs the same search. With a shared core it answers from it instead of from memory: who owns what, what a team or a module does, where a rule lives, which missions a team has, who someone is, what a term means. Reads the provider's own rules (`playbook` in its manifest) once per session and routes each question through its cards and graph — team index → card, module → page, metric card's fact row → actuals → a live source, mission → card → snapshot, person → registry → team — with the note path, the period and source of a number, and the snapshot date in every answer. A reference value is never presented as the current one; a provider that does not answer gets one line, then the local copy; meeting participants resolve to registry cards when the provider ships a resolver. It never writes into the provider's folders.
 
@@ -697,8 +699,8 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Hiring Designer | v0.2.2 | Role design (goal letter first) + universal vacancy profile mapped to the employer HR form |
 | Offboarding Guide | v0.2.3 | Evidence-gated four-meeting offboarding, strictly local |
 | Delegation Coach | v0.2.2 | 7-levels-of-Appelo audit + S1→S4 hand-off plan |
-| Context Connect | v0.9.1 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
-| Context Navigator | v0.5.0 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
+| Context Connect | v0.9.2 | Connect to a team's shared core: e-mail → team → role, the relevant bundle, the core's context blocks proposed into your context, provider registration |
+| Context Navigator | v0.5.1 | Who is who (`ctx entity`), bridges in your notes on your «так» (`ctx entity apply`); answer and search from your whole context (your notes, cores, local indexes, live sources on request), and from a shared core through its rules and graph, with note paths and dates |
 
 ---
 
@@ -1117,5 +1119,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.9.0  
+**Version:** 4.9.1  
 **Last Updated:** November 2026

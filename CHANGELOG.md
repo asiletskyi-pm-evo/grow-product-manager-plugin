@@ -12,6 +12,52 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.9.1 (2026-11-20)
+
+**«Довірені адреси»: the context engine reaches only the provider addresses you approved.** The «Skill Security Audit» of v4.8.0 (2026-11-20, verdict BLOCK) found one high-severity issue: a provider registration — `{vault}/{plugin_folder}/_System/providers/<id>.yaml` or `~/.grow-pm/providers/<id>.yaml` — named `endpoint.url` and `endpoint.headers_env`, and the engine sent the header that variable holds to that address with no check. Whoever could edit the file — a vault shared or synced with others — decided where your token went. Verified on v4.9.0 it was wider: five places built the client (the daily sync, search on both of its paths, the core copy, `repo status` and `provider adopt|plan|apply`), any environment variable could be named, a vault's registration shadowed your private one of the same id, and an address with no header still received your search queries and note names. Now the file does not decide: the engine sends a request — a handshake, a query, a note's name, a header — only to the pair «address + variable name» you approved for the registration's id. PATCH: a fix of the engine's behaviour; the new `ctx provider trust` is part of the fix.
+
+### Fixed
+
+- **One way to a client** (`scripts/ctx_endpoints.py`, `references/context-provider-protocol.md` §13) — `client_for` checks the registration's id, its normalised address (and the hash of its query) and its variable's name against `~/.grow-pm/trust/providers.json` and raises before any request when they are not the pair you approved; all five places use it, and validator check 31 keeps the client class, the header reader and every network import out of every other script. Every registration with an address needs approval (R36) — with a header or without one.
+- **HTTPS only** — plain http only to this computer (`127.0.0.1`, `::1`, `localhost`), checked at the client's transport too; a remote http address gets no request, header or not, and can never be approved. An address that is not plainly one — a space, a control character, a backslash, non-ASCII, percent-encoding or a zone in the host, brackets around anything but a whole IPv6 address, a port that is no port or 0 — is refused; the request goes to the address as parsed (credentials and the fragment never travel), and every place that shows an address shows that one, never the text as written.
+- **Your registration wins** — `~/.grow-pm/providers/` is read before the vaults' folders, so a vault's file never shadows yours of the same id (an id with spaces around it is the same id); two files of one id with different endpoints are named: `реєстрація <id>: два файли не збігаються, взято приватний`.
+- **`repo list`** no longer shows an endpoint with its credentials or query in `CTX_RESULT`.
+
+### Added
+
+- **The trust file** `~/.grow-pm/trust/providers.json` (`provider-trust/1`, 0600 in a 0700 folder, outside every vault and the registrations' folder): per id the normalised address (no login, password, query or fragment), the sha256 of its query, the variable's NAME (never its value), the day and `seeded` | `approved`; written under a lock. A file that is a link, not JSON or of another schema refuses every address and is never rewritten.
+- **The first run after the update** (R37) — the first `ctx` command that may reach a server trusts the registrations already there, once, one line each: `Довірено наявну реєстрацію <id>: <scheme://host> (змінна <VAR> → заголовок <Name> | без змінної)`. Only in a home with an install from before; the mark `~/.grow-pm/.trust-seeded` keeps it once — a trust file that goes later comes back empty, never seeded again. A remote http address is not trusted and is named; a registration still downloading puts it off; a home that cannot be written (Codex read-only) leaves no file and every address refused.
+- **The refusal line** — `<id>: адресу не схвалено (нова: <host> | змінилась: <old> → <new> | …) — нічого не надіслано. Схвалити: ctx provider trust <id>`, at most 300 characters with its tail whole: `repo status` shows it (`не схвалено`, `trusted` in `CTX_RESULT`) and probes nothing; the daily sync prints it for a due repository, sends nothing, starts no copy and never holds a skill; `search` gives it in place of «не відповів» and sends no query (`--get`: exit 5); `repo copy` is refused (exit 4) before anything is written; `provider adopt|plan|apply` give it as the fetch's error. With no trust file yet the reason is `файлу довіри ще немає` and nothing is offered to approve; an id that is not kebab-case is masked and gets no command to paste.
+- **`ctx provider trust <id>`** reads only: the address as parsed, the variable and the header it gives (never the value), the registration file and a code; **`trust <id> --code <code>`** approves exactly that pair — a registration switched between the question and the yes is refused. **`trust --list`** (reads only) and **`untrust <id>`**; `trust --code` and `untrust` are writing commands of `ctx`.
+- **Skills never approve on their own** — the daily sync's refusal line at Step 0c, `context-navigator`'s search and `repo status` each lead to one question at the end of the answer naming the address `trust <id>` showed; `--code` runs only on the user's own yes (`references/local-context-protocol.md` Step 0c, the digest's `Skills:` line). `context-connect` 0.9.2: writing a registration with an address, or replacing the address a core proposes, is one question that approves it too, and a refresh never adds a missing address by itself. `context-navigator` 0.5.1.
+- **Validator check 31** — no script but `ctx_mcp.py` and `ctx_endpoints.py` names the MCP client class, reads the header (`headers_from_env`, `_parse_env`, the environment) or imports a way to the network; the trust file stays under `~/.grow-pm`, outside `providers/` and every vault; §13 names the code's reasons, commands, loopback hosts and lines, and the parser has the commands.
+- **Tests** — `testing/ctx_endpoints_test.py` (the address and its parser differentials, the transport, the trust file, the first run, the verdict, `client_for`, approve/revoke with the code and the lock, the private registration first, each of the five places against a fake loopback server that sees no request without approval, the commands, check 31 with its seeded drifts, and every finding of the two reviews); 18 mutations — the six of the plan and twelve for the reviews' findings — all caught. The existing suites approve their fake servers in their temp homes. Full suite 63/63; acceptance 9/9 including a Codex CLI `-s read-only` run.
+
+### Known limits
+
+- A registration planted before the first run after the update becomes trusted at that run (R37, the user's decision) — and so does what a new machine's synced vault holds at its own first run.
+- Whoever can write `~/.grow-pm` can edit the trust file too — the edge of this model.
+- The `paths` and `writable` of a vault's registration still shape the write boundary (§7) — not part of the finding, named for the next audit.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx_endpoints.py` | new: the trust file, the first run, the verdict, `client_for`, approve/revoke, check 31 |
+| `scripts/ctx_mcp.py` | `split_url`, `transport_problem`: https, http only to this computer, plainly an address |
+| `scripts/ctx_common.py` | `find_registrations`: the private folder first, ids stripped, the shadow line |
+| `scripts/ctx_repos.py`, `ctx_copy.py`, `ctx_search.py`, `ctx.py` | every client through `client_for`; the first run; `provider trust|untrust`; the parsed address shown |
+| `scripts/session_start.py` | the digest's `Skills:` line: repeat «Довірено», one question on a refusal, `--code` only on a yes |
+| `references/context-provider-protocol.md` §13 (+ §3b, §12.7, §12.8, §12.11, §12.12), `context-protocol.md`, `local-context-protocol.md`, `search-protocol.md`, `data-policy.md`, `host-profiles.md`, `AGENTS.md` | the trusted endpoints |
+| `skills/context-connect` 0.9.1 → 0.9.2 (SKILL.md, `connect-steps.md` §6–§7), `skills/context-navigator` 0.5.0 → 0.5.1 | one question that names the address; approve only on a yes |
+| `testing/ctx_endpoints_test.py`, `validate-consistency.sh` (check 31) and the context suites | tests |
+
+### Backwards compatibility
+
+An approved registration behaves as in v4.9.0 (compared on the same fake server: `repo status`, `provider plan`, `search`). On your machine the first skill after the update trusts the registrations already there, once, and says so in one line each; nothing else changes until a registration's address does. A registration with plain http to another computer, or an address that is not plainly one, stops being reached — `repo status` says why.
+
+---
+
 ## v4.9.0 (2026-11-20)
 
 **«Портфель шляхів»: every journey map of a product and its hand CJM notes in one list, the ones that need attention first.** v4.7.0–v4.8.0 gave each journey a note, a page and a board, but nothing showed all of a product's journeys together. Now `cjm-research` answers «покажи портфель шляхів» with a table computed from the notes every time — there is no portfolio note and no portfolio board. The CJM notes a team keeps by hand are read too, partly. The fourth release of the programme «Фреймворки»; nested journeys come in v4.10.0 and editing on the page in v4.11.0.
