@@ -402,6 +402,20 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | Y17 | take the team's board edits back into the checkout journey map | cjm-research |
 | Y18 | онови дошку мапи історій — команда переставила картки | roadmap-architect — NOT cjm-research |
 
+### Group Z — Journey portfolio vs neighbours (added 2026-11-20, v4.9.0)
+
+`cjm-research` mode `journey`, step J7, lists every journey map of a product and its hand CJM notes in one table, the ones that need attention first; a portfolio of projects, initiatives or epics is `roadmap-architect`'s, `project-planning`'s or `product-reporter`'s, «what needs my attention» across work is `focus-advisor`'s.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| Z1 | покажи портфель шляхів продукту | cjm-research |
+| Z2 | усі карти шляху продукту — які з них потребують уваги | cjm-research |
+| Z3 | show the journey portfolio — which journeys need attention | cjm-research |
+| Z4 | зведи всі наші карти шляху й ручні CJM в один список зі здоров'ям і датою рев'ю | cjm-research |
+| Z5 | покажи портфель проєктів команди на наступні квартали | none or roadmap-architect or project-planning or quarterly-planning or product-reporter — NOT cjm-research |
+| Z6 | портфель ініціатив і епіків — статус і що заблоковано | product-reporter or roadmap-architect — NOT cjm-research |
+| Z7 | що потребує моєї уваги сьогодні — пошта, метрики, Jira | focus-advisor — NOT cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -438,6 +452,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-11-16 | **Claude Code, live** (`testing/trigger_claude.py`, model claude-opus-5-5), pre-release v4.7.0 — Group Y in `real` and `visible` modes, then the 11 rows that name cjm-research or a funnel (A1, A2, A5, A8, G8, G10, M8, R14, W5, X9, X11) on the branch and on `main` | Y 10/10 real · 10/10 visible; regression 11/11 on the branch, 11/11 on `main` | None. cjm-research's description changed (the journey map, «карта шляху»); the neighbours held — Y7 → product-analysis, Y8 → roadmap-architect, Y9 → diagram-prototyper, Y10 → brainstorm-features. |
 | 2026-11-16 (2) | **Claude Code, live**, same harness and model, after review 2 — the new rows Y11–Y14 (the nearest neighbours: flow-walkthrough, feedback-triage, product-research, and a journey request without the keyword) and M1, N2 (the rows «карта шляху» could pull) | real: M1, N2, Y11, Y12, Y14 ✅; Y13 1/4 (3 to another installed plugin's research skill). visible: Y11, Y12, Y14 ✅; Y13 3/4 | Y13 never went to cjm-research — the boundary it tests holds; on the crowded `real` listing a generic «огляд практик» goes to another plugin's research skill, the same class as E2/R13 (2026-10-08). The row accepts that alternative. |
 | 2026-11-17 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Y`, mode `real`, model claude-opus-5-5), pre-release v4.8.0 — Group Y once (18 phrases) | Y 18/18 | None. The new Y15–Y17 («забери правки з дошки карти шляху», «опублікуй карту шляху … на дошку», the English take-back) route to cjm-research with its description unchanged — the phrases live in `## Routing`; Y18 «онови дошку мапи історій» stays roadmap-architect; Y1–Y14 unchanged (Y13 → the accepted deep-research alternative). |
+| 2026-11-20 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Z`, mode `real`, model claude-opus-5-5), pre-release v4.9.0 — Group Z once (7 phrases) | Z 7/7 | None. Z1–Z4 («покажи портфель шляхів», «усі карти шляху продукту — які потребують уваги», the English portfolio, «зведи всі карти шляху й ручні CJM») route to cjm-research with its description unchanged — the phrases live in `## Routing`; the neighbours held — Z5 «портфель проєктів» → project-planning, Z6 «портфель ініціатив і епіків» → product-reporter, Z7 «що потребує моєї уваги сьогодні» → focus-advisor. |
 
 ## Maintenance
 

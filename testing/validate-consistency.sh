@@ -647,6 +647,22 @@ else
   ok "journey board: journey-protocol.md §11–§12, journey_map.py, artifact-publishing §1–§2, the miro seed record and board_state.py agree"
 fi
 
+# --- 30. The journey portfolio is one schema (v4.9.0) ----------------------------
+# journey-protocol.md §13 is scripts/journey_portfolio.py's: its commands, the map's columns, the attention reasons and
+# the drop threshold (the health-check's own escalation), the hand CJM's fields, findings and mark, the skips, and how
+# the notes are found (`ctx search --type`). artifact-publishing.md §5 holds the portfolio's key, native-surfaces.md §2
+# its row, cjm-reports.md re-renders its page on schedule, context-protocol.md documents `search --type`, and the
+# script imports journey_map.py rather than copying it. A reason or a field on one side alone would have the skill
+# show the user a portfolio the script does not compute, or read of a hand CJM what the protocol never allowed.
+PORTFOLIO_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import journey_portfolio; print('\n'.join(journey_portfolio.check_protocol('.')))" 2>&1)
+if [ -n "$PORTFOLIO_ERRS" ]; then
+  while IFS= read -r line; do err "journey portfolio: $line"; done <<EOF
+$PORTFOLIO_ERRS
+EOF
+else
+  ok "journey portfolio: journey-protocol.md §13, journey_portfolio.py, artifact-publishing §5, native-surfaces §2, cjm-reports, context-protocol and the import of journey_map agree"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

@@ -163,6 +163,11 @@ SEEDS = [
      "references/journey-protocol.md", "append",
      "- Boards may also be the host's Whiteboards, written element by element.",
      "surface-brand"),
+    # v4.9.0: the journey portfolio's hand-CJM fixture has the shape of a team's own CJM note (stages, metric
+    # tables, owners, missions) — the very place a real one would be pasted in; lint's org layer must read it.
+    ("org: an org name in the journey portfolio's hand-CJM fixture",
+     "testing/fixtures/journey/portfolio/hand/cjm-zorg-buyer.md", "append",
+     "## B4 — Zorgtech checkout", "org-data"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare

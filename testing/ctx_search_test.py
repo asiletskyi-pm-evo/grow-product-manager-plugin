@@ -2689,5 +2689,189 @@ check("v3.18.0 context-navigator: a person, a team, a mission or a Jira key goes
       '`ctx entity "<X>" --skill context-navigator`' in NAV18 and "«хто такий X»" in NAV18 and "«що таке PROJ-1234»" in NAV18,
       NAV18[-800:])
 
+# ------------------------------------------------------------------ v4.9.0 Task 1: `ctx search --type` — notes by type
+# The journey portfolio finds the journey maps and the hand CJM notes by their frontmatter `type` (plan C6): read only,
+# the index refreshed first as a search refreshes it, another product's note left out, the paths a search excludes never.
+CTX_PY = os.path.join(ROOT, "scripts", "ctx.py")
+TYPED = {
+    "Notes/CJM/journeys/zorg-app/journey-first-order.md":
+        "---\ntype: cjm-journey\nproduct: Zorg App\ntitle: Перше замовлення\ndate: 2026-11-16\n---\n# Перше замовлення\n\nx\n",
+    "Notes/CJM/journeys/zorg-app/journey-repeat.md":
+        "---\ntype: CJM-Journey\nproduct: Zorg App\ntitle: Повторне замовлення\ndate: 2026-11-10\n---\n# Повторне\n\nx\n",
+    "Notes/CJM/journeys/quux/journey-signup.md":
+        "---\ntype: cjm-journey\nproduct: Quux Pay\ntitle: Реєстрація Quux\ndate: 2026-11-01\n---\n# Реєстрація\n\nx\n",
+    "ZorgCore/CJM/CJM — покупець.md":
+        "---\ntype: cjm\nfunnel: buyer\nstages: 2\nsnapshot: 2026-10-01\n---\n# CJM покупця\n\n## B1 — Пошук\n\nx\n",
+    "Notes/CJM/Reports/CJM report 2026-10.md":
+        "---\ntype: cjm\nproduct: Zorg App\ndate: 2026-10-20\n---\n# CJM report\n\nx\n",
+    "Notes/_System/_scratch/journey-draft.md":
+        "---\ntype: cjm-journey\nproduct: Zorg App\n---\n# draft\n\nx\n",
+    "Notes/Meetings/Not a journey.md": "---\ntype: meeting\nproduct: Zorg App\ndate: 2026-11-02\n---\n# Sync\n\nx\n",
+}
+ZORG_TYPED = ["Notes/CJM/Reports/CJM report 2026-10.md", "Notes/CJM/journeys/zorg-app/journey-first-order.md",
+              "Notes/CJM/journeys/zorg-app/journey-repeat.md", "ZorgCore/CJM/CJM — покупець.md"]
+
+
+def typed_env(d):
+    env = Env(d)
+    for rel, text in TYPED.items():
+        write(env.note(rel), text)
+    return env
+
+
+def ctx_cli(env, *args):
+    e = dict(os.environ)
+    e.pop("GROW_PM_CONTEXT_PATH", None)
+    e.pop("GROW_PM_PROVIDER_PATHS", None)
+    ctxf = os.path.join(env.home, ".grow-pm", "local-context.md")
+    write(ctxf, env.text)
+    p = subprocess.run([sys.executable, CTX_PY] + list(args) + ["--home", env.home, "--context", ctxf],
+                       capture_output=True, text=True, env=e, timeout=180)
+    lines = [l for l in p.stdout.splitlines() if l.strip()]
+    res = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None
+    return p.returncode, p.stdout + p.stderr, res
+
+
+by_type = getattr(cs_, "by_type", None)
+check("v4.9.0 T1: ctx_search.by_type exists — the notes of the section index by their type", callable(by_type))
+if callable(by_type):
+    with tempfile.TemporaryDirectory() as d:
+        env = typed_env(d)
+        sx = env.sctx()
+        vault0, store0 = tree(env.vault), tree(env.store)
+        res = by_type(sx, ["cjm-journey", "cjm"], product="Zorg App")
+        got = [n["path"] for n in res.get("found", [])]
+        check("…the notes of the types asked, by path; `type` compared case-folded (CJM-Journey is cjm-journey)",
+              got == ZORG_TYPED, got)
+        check("…the index refreshed first, as a search refreshes it", (res.get("index") or {}).get("added", 0) >= len(TYPED)
+              and res.get("sources") == [{"id": "own", "kind": "own", "answered": True}], (res.get("index"), res.get("sources")))
+        check("…another product's note is left out and counted; a note with no product stays (the hand CJM)",
+              "Notes/CJM/journeys/quux/journey-signup.md" not in got and res.get("skipped") == {"product": 1}
+              and "ZorgCore/CJM/CJM — покупець.md" in got, (got, res.get("skipped")))
+        check("…a path the search excludes (_System/_scratch/) and a note of another type never",
+              not any("_scratch" in p or "Not a journey" in p for p in got), got)
+        fo = next((n for n in res.get("found", []) if n["path"].endswith("journey-first-order.md")), {})
+        check("…each: path, file (on disk), source, title, type, product, date, sensitive",
+              set(fo) == {"path", "file", "source", "title", "type", "product", "date", "sensitive"}
+              and fo["file"] == env.note("Notes/CJM/journeys/zorg-app/journey-first-order.md")
+              and (fo["source"], fo["title"], fo["type"], fo["product"], fo["date"][:10])
+              == ("own", "Перше замовлення", "cjm-journey", "Zorg App", "2026-11-16"), fo)
+        hc = next((n for n in res.get("found", []) if n["path"].startswith("ZorgCore/")), {})
+        check("…a core's note names its repository as its source and its file under the core folder",
+              hc.get("source") == "zorg-core" and hc.get("product") == "" and hc.get("file") == env.note("ZorgCore/CJM/CJM — покупець.md"),
+              hc)
+        allp = [n["path"] for n in by_type(sx, ["cjm-journey"]).get("found", [])]
+        check("…no --product: every product's notes of the type", allp == [
+            "Notes/CJM/journeys/quux/journey-signup.md", "Notes/CJM/journeys/zorg-app/journey-first-order.md",
+            "Notes/CJM/journeys/zorg-app/journey-repeat.md"], allp)
+        check("…writes nothing to the vault or the store, and no last.json (it is no search with ids)",
+              tree(env.vault) == vault0 and tree(env.store) == store0 and not os.path.exists(cs_.last_path(env.home)))
+        none = by_type(sx, ["no-such-type"])
+        check("…a type no note carries: nothing found, answered", none.get("found") == [] and none["sources"][0]["answered"] is True,
+              none)
+    with tempfile.TemporaryDirectory() as d:
+        env = typed_env(d)
+        sx = env.sctx()
+        hold_lock(env.home)
+        r = by_type(sx, ["cjm-journey"])
+        check("…no index yet while another process builds it: not answered, the building line, nothing found",
+              r["sources"] == OWN_UNREAD and r["found"] == [] and BUILDING in r["notes"], (r["sources"], r["notes"]))
+        os.remove(index_file(env.home, "index.lock"))
+        r = by_type(sx, ["cjm-journey"], refresh=False)
+        check("…no index and no refresh: not answered, «індексу пошуку ще немає (…) — ctx index rebuild»",
+              r["sources"] == OWN_UNREAD and any(n.startswith("індексу пошуку ще немає (") for n in r["notes"]), r["notes"])
+
+    with tempfile.TemporaryDirectory() as d:
+        env = typed_env(d)
+        rc, out, res = ctx_cli(env, "search", "--type", "cjm-journey", "--type", "cjm", "--product", "Zorg App", "--json")
+        check("CLI `ctx search --type … --product P --json`: exit 0, the CTX_RESULT line only, action type, found, counts",
+              rc == 0 and res and out.strip().count("\n") == 0 and res.get("action") == "type"
+              and [n["path"] for n in res.get("found", [])] == ZORG_TYPED
+              and res.get("types") == ["cjm-journey", "cjm"] and res.get("product") == "Zorg App"
+              and res.get("counts") == {"found": 4, "skipped_product": 1}, (rc, out[-600:]))
+        rc, out, res = ctx_cli(env, "search", "--type", "cjm-journey", "--product", "Zorg App")
+        lines = out.splitlines()
+        check("…human: `Нотатки за типом: <types> · продукт <P> · знайдено <n>`, then `N. <title> · <type> · <product> · "
+              "<date> · <path>`, the other product counted, CTX_RESULT last",
+              rc == 0 and lines[0] == "Нотатки за типом: cjm-journey · продукт Zorg App · знайдено 2"
+              and lines[1] == "1. Перше замовлення · cjm-journey · Zorg App · 2026-11-16 · Notes/CJM/journeys/zorg-app/journey-first-order.md"
+              and "іншого продукту — не показано: 1" in out and lines[-1].startswith("CTX_RESULT "), lines[:5])
+        rc, out, res = ctx_cli(env, "search", "--type", "cjm", "--q", "кошик")
+        check("…--type with --q: usage, exit 3", rc == 3 and "--type" in out, (rc, out[-300:]))
+        rc, out, res = ctx_cli(env, "search", "--type", " ")
+        check("…an empty --type: usage, exit 3", rc == 3, (rc, out[-300:]))
+        rc, out, res = ctx_cli(env, "search", "remember", "--q", "x", "--pick", "y", "--type", "cjm")
+        check("…search remember takes no --type", rc == 3 and "--type" in out, (rc, out[-300:]))
+    with tempfile.TemporaryDirectory() as d:
+        env = typed_env(d)
+        hold_lock(env.home)
+        rc, out, res = ctx_cli(env, "search", "--type", "cjm-journey")
+        check("…the index not read (another process builds it): exit 5, the building line", rc == 5 and BUILDING in out,
+              (rc, out[-400:]))
+        env.text = env.text[:env.text.index("## Obsidian Vaults")]
+        os.remove(index_file(env.home, "index.lock"))
+        for f in os.listdir(env.providers):
+            os.remove(os.path.join(env.providers, f))
+        rc, out, res = ctx_cli(env, "search", "--type", "cjm-journey")
+        check("…nothing to search (no vault, no core): exit 3", rc == 3, (rc, out[-400:]))
+
+# v4.9.0 review 1 (frozen 0af13de): M-2 one product is one key; M-10 scope, a busy index, iCloud, the options of a
+# question; M-11 `--limit 0`; the `sensitive` mark kept
+check("v4.9.0 R1 M-2: same_product — the whole key, never a part after «:»; a CJK name by its own letters; none stays",
+      callable(getattr(cs_, "same_product", None)) and cs_.same_product("Zorg: App", "Quux: App") is False
+      and cs_.same_product("日本", "中国") is False and cs_.same_product("Zorg App", "zorg-app") is True
+      and cs_.same_product("", "Zorg App") is True and cs_.same_product("Zorg App", None) is True
+      and cs_.same_product("null", "Zorg App") is True and cs_.same_product("~", "Zorg App") is True)
+if callable(by_type):
+    with tempfile.TemporaryDirectory() as d:
+        env = typed_env(d)
+        write(env.note("Notes/CJM/journeys/zorg-app/journey-colon.md"),
+              "---\ntype: cjm-journey\nproduct: \"Zorg: App\"\ntitle: Двокрапка\n---\n# x\n")
+        write(env.note("Notes/CJM/journeys/zorg-app/journey-sensitive.md"),
+              "---\ntype: cjm-journey\nproduct: Zorg App\ntitle: Чутлива\nsensitive: true\n---\n# x\n")
+        sx = env.sctx()
+        r = by_type(sx, ["cjm-journey"], product="Quux: App")
+        got = [n["path"] for n in r["found"]]
+        check("…M-2: «Quux: App» never lists «Zorg: App» (they share only «App»)", "Notes/CJM/journeys/zorg-app/journey-colon.md" not in got, got)
+        r = by_type(sx, ["cjm-journey"], product="Zorg App")
+        sv = next((n for n in r["found"] if n["path"].endswith("journey-sensitive.md")), {})
+        check("…M-10: a sensitive note keeps its mark (`sensitive`), as a search shows it", sv.get("sensitive") is True
+              and all(n.get("sensitive") is False for n in r["found"] if n is not sv), sv)
+        real_dl = ci.is_dataless
+        ci.is_dataless = lambda p_: p_.endswith("journey-first-order.md")
+        try:
+            r = by_type(sx, ["cjm-journey"], product="Zorg App", refresh=False)
+        finally:
+            ci.is_dataless = real_dl
+        fo = next((n for n in r["found"] if n["path"].endswith("journey-first-order.md")), {})
+        check("…M-10: a file iCloud has not downloaded is listed with an empty `file` and the line to open it",
+              fo.get("file") == "" and any(n.startswith("файл не завантажено з iCloud: Notes/CJM/journeys/zorg-app/journey-first-order.md")
+                                           for n in r["notes"]), (fo, r["notes"]))
+        real_notes = ci.Index.notes
+
+        def busy_notes(self):
+            self.problem, self.busy = ci.BUSY_NOTE, True
+            return []
+        ci.Index.notes = busy_notes
+        try:
+            r = by_type(sx, ["cjm-journey"], refresh=False)
+        finally:
+            ci.Index.notes = real_notes
+        check("…M-10: a built index another process holds busy has not answered — its line, nothing found",
+              r["sources"] == OWN_UNREAD and r["found"] == [] and ci.BUSY_NOTE in r["notes"], (r["sources"], r["notes"]))
+        for f in os.listdir(env.providers):
+            os.remove(os.path.join(env.providers, f))
+        sx2 = env.sctx()
+        r = by_type(sx2, ["cjm"], refresh=False)
+        check("…M-10: a core no longer registered — its rows still in the index — is never listed (the roots' scope)",
+              not any(n["path"].startswith("ZorgCore/") for n in r["found"]) and r["sources"][0]["answered"] is True,
+              [n["path"] for n in r["found"]])
+    with tempfile.TemporaryDirectory() as d:
+        env = typed_env(d)
+        for extra in (["--get", "x"], ["--limit", "3"], ["--limit", "0"], ["--sources", "own"], ["--no-hints"], ["--skill", "cjm-research"]):
+            rc, out, res = ctx_cli(env, "search", "--type", "cjm", *extra)
+            check("…M-10/M-11: --type with %s is a usage error (exit 3)" % extra[0] + (" 0" if extra[1:] == ["0"] else ""),
+                  rc == 3 and extra[0] in out, (rc, out[-300:]))
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

@@ -12,6 +12,63 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.9.0 (2026-11-20)
+
+**«Портфель шляхів»: every journey map of a product and its hand CJM notes in one list, the ones that need attention first.** v4.7.0–v4.8.0 gave each journey a note, a page and a board, but nothing showed all of a product's journeys together. Now `cjm-research` answers «покажи портфель шляхів» with a table computed from the notes every time — there is no portfolio note and no portfolio board. The CJM notes a team keeps by hand are read too, partly. The fourth release of the programme «Фреймворки»; nested journeys come in v4.10.0 and editing on the page in v4.11.0.
+
+### Added
+
+- **The journey portfolio** (`references/journey-protocol.md` §13, `cjm-research` Step J7) — a row per journey map of the product: its owner, stage count, last health score with the change since the previous point and that point's date, review date («застаріло» past 90 days), pains by evidence class, anomalies with the critical ones apart — a health-check row's status read from its last words by `journey_map.py`'s own labels, a row the PM wrote counted without a level — gaps (`empty_stage`, `no_outcome`), the count of `journey_map.py check`'s findings against the note's own product's snapshots, and the places and versions of its `published` mirror (never a link or an id). Never a row's text, a source or a name; every value page-safe, and a class or a publication value that is not its own word shows as «?».
+- **What needs attention** — a health drop of more than 10 points between the last two points (the scheduled health-check's own escalation), `stale_review`, `no_owner`, a critical anomaly, `empty_stage`; maps with reasons first, more reasons above, then by name; the rest by name.
+- **Hand CJM notes, partly** (R32) — `type: cjm` with a `funnel` field and stage headings `## <ID> — <назва>` (the ID a short code with one to three digits): only the title (else `name`), the funnel, the declared stage count, each stage's id and name, the row count of the first table under it whose first header cell is «Метрика» or «Metric», and the snapshot date; findings `stage_count` and `no_snapshot`; marked «ручна CJM — частково: без джерел, класів і здоров'я», in a block of their own. Never their links, dashboards, modules, owners, teams, missions, meetings or text; HTML and Obsidian comments and fenced blocks are never read. A `cjm-research` report (`type: cjm` without them) is skipped and named.
+- **`scripts/journey_portfolio.py`** — `list` (a markdown table for the chat, then one `PORTFOLIO_RESULT` line), `render-html` (one self-contained page beside the maps: numbers only, no row text, no link, no request; a health sparkline per map; sticky headers and the journey page's one pan script; each row names its note as the source of its numbers; the maps' folder created on the first run), `schema`. Exit 0, 2 for a wrong argument, 1 when the page cannot be written. `journey_map.py` is imported (the note, its findings, the labels, the sparkline, the pan script), never copied. A note the search marks sensitive is never read (skip `sensitive`, named by its file name), another product's note is counted and never named, a file iCloud has not downloaded is never opened, `--out` is never a note.
+- **`ctx search --type T [--type …] [--product P] [--json]`** (`references/context-protocol.md` §3) — the notes of the section index whose frontmatter `type` is one of T, read only: the index refreshed first as a search refreshes it, the search's exclusions and roots, another product's note left out and counted (one product is one key, the slug of its whole name; `null` / `~` is no product), each with its path, its file on disk, its source, title, type, product, date and `sensitive`; no `last.json`. With `--q`, `--get` or an option of a question: exit 3; nothing to search: exit 3; the index not read: exit 5. The portfolio finds its notes with it; without an index, the maps' folder and one question for the hand CJM folder.
+- **Publication** — the portfolio's dashboard under its own key `cjm-research/<product>/portfolio`, only after the question, recorded without `--note` (there is no portfolio note: the key file alone records); no board.
+- **The scheduled health-check** re-renders the portfolio page locally after it refreshes the maps; it never publishes or asks. Its end line: «Новий health-check від <дата>, карти шляху й портфель оновлено локально — опублікувати можна в наступному прогоні.»
+- **Validator check 30** — `journey-protocol.md` §13's commands and their flags, the map's columns, the attention reasons and the «more than 10 points» threshold, the hand CJM's fields, findings, mark and metric-table words, the skips, how the notes are found and the portfolio's own key are `journey_portfolio.py`'s; `artifact-publishing.md` §5, `native-surfaces.md` §2, `cjm-reports.md`, `context-protocol.md` and `cjm-research`'s J7 name the portfolio; the script imports `journey_map.py` and defines none of its readers.
+- **Tests** — `testing/journey_portfolio_test.py` (115 checks), `testing/ctx_search_test.py` (the `--type` block and its review checks), a `seeded_leak_test.py` seed for the hand-CJM fixture (29/29); every check red first, the mutations of the plan caught (a report taken as a hand CJM, a drop that does not raise, a hand CJM's link in the output, another product's note, criticality by a word of its own).
+
+### Changed
+
+- **`cjm-research` 0.18.0** — Step J7 «Portfolio»; the entries «покажи портфель шляхів» and «які шляхи потребують уваги»; `## Routing` phrases. The description is unchanged.
+- **`references/journey-protocol.md`** — the rule of the file names the portfolio; §1 nested journeys are v4.10.0's; §10 the scheduled re-render; §13 «The portfolio»; «What never happens» is §14.
+- **`references/artifact-publishing.md`** — the portfolio's dashboard (consumers, §1) and its key (§5). **`references/native-surfaces.md`** §2 — the journey portfolio's row. **`skills/cjm-research/references/cjm-reports.md`** — the scheduled re-render and its end line. **`references/context-protocol.md`**, **`scripts/ctx.py`** — `search --type`.
+- **`AGENTS.md`, `README.md`** — «Where things live»; «New in v4.9.0».
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/journey_portfolio.py` | new — `list`, `render-html`, `schema`; `check_protocol()` for check 30 |
+| `scripts/ctx_search.py` | `by_type`, `render_typed`, `product_key`, `same_product` |
+| `scripts/ctx.py` | `search --type` and its usage |
+| `references/journey-protocol.md` | §1, §10, §13 «The portfolio», §14 |
+| `references/artifact-publishing.md`, `references/native-surfaces.md`, `references/context-protocol.md` | as above |
+| `skills/cjm-research/SKILL.md` | 0.18.0 — J7, Routing |
+| `skills/cjm-research/references/cjm-reports.md` | the scheduled re-render |
+| `testing/validate-consistency.sh` | check 30 |
+| `testing/journey_portfolio_test.py`, `testing/ctx_search_test.py`, `testing/seeded_leak_test.py` | new and extended tests |
+| `testing/fixtures/journey/portfolio/` | Zorg journey maps, a Quux map, a hand CJM, a report, an index note |
+| `testing/trigger-evals.md`, `testing/test-cases.md`, `testing/output-evals.md`, `testing/host-matrix.md` | Group Z (live 7/7); v4.9.0 cases; the portfolio rubric; the portfolio in the `cjm-research` row (Codex measured 2026-11-20, Codex CLI 0.153.2) |
+| `AGENTS.md`, `README.md` | «Where things live»; «New in v4.9.0», CJM Research 0.18.0 |
+
+### Backwards compatibility
+
+Nothing breaks. Journey notes, hand CJM notes, the journey page, the boards and the story map work as in v4.8.0; the portfolio only reads notes. `ctx search` without `--type` is unchanged.
+
+### Known limits
+
+- No nested journeys in this release — they come in v4.10.0; editing on the page comes in v4.11.0.
+- Hand CJM notes are read partly: funnel, stages, metric rows per stage and the snapshot date. They have no health, pains or gaps until a journey map is built from them (J1 — nothing of the hand note is carried over).
+- The portfolio has no board and no note of its own: it is computed from the notes every time.
+- Without a context index the portfolio sees only the maps' folder and asks for the hand CJM folder in every run; a scheduled run without an index takes the maps' folder alone.
+- An anomaly's criticality is read from a health-check row; an anomaly the PM wrote by hand is counted without a level.
+- A stage heading typed with a plain hyphen («## B1 - Пошук») is no stage; a note whose headings all use one is skipped as «не CJM-карта».
+- A product is one key, the slug of its whole name: names in a script slugify does not transliterate may share a key («中文 App» and «日本 App» are both `app`).
+- A live portfolio over the real vault was not part of acceptance (`ctx search --type` refreshes the real index) — after the release, on request.
+
+---
+
 ## v4.8.0 (2026-11-19)
 
 **«Дошка карти шляху»: the team edits the journey map on a board, and its edits come back into the note only after a question.** v4.7.0 gave the journey map a note, a page and a trend, but the team had nowhere to work on it together. Now `cjm-research` publishes the map to a board — Miro, or the host's own board type where the host has one — as a grid of stages and lanes; what the team changes there is read back, named and taken into the note only through one question and a preview where the PM picks every evidence class. The third release of the programme «Фреймворки» (B-4, second half, part 1); the journey portfolio and nested journeys come in v4.9.0.

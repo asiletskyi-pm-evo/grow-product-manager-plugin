@@ -1,14 +1,14 @@
 # journey-protocol.md
 
-> Shared reference (since v4.7.0). The journey map: one journey of a product, its stages from the CJM config, and on each stage the lanes of what the customer does and feels, where it hurts with evidence, what the numbers say, and what the team does about it — each row with its source and its evidence class. The procedure of `cjm-research` mode `journey` (Step J); the scheduled health-check refreshes the map's numbers locally (§10); since v4.8.0 the team edits the map on a board (§11–§12).
+> Shared reference (since v4.7.0). The journey map: one journey of a product, its stages from the CJM config, and on each stage the lanes of what the customer does and feels, where it hurts with evidence, what the numbers say, and what the team does about it — each row with its source and its evidence class. The procedure of `cjm-research` mode `journey` (Step J); the scheduled health-check refreshes the map's numbers locally (§10); since v4.8.0 the team edits the map on a board (§11–§12); since v4.9.0 the portfolio lists every journey map of the product and its hand CJM notes in one place (§13).
 >
-> **Rule of the file:** the note in the vault is the source of truth (`native-surfaces.md` §2). The dashboard and the board are renders of it, published only through `artifact-publishing.md` after its question; a scheduled run never publishes; what the team changes on the board comes back only through §12, never the health-check rows. Nothing on the map is invented: a row without a source or a class is a finding, a stage without evidence stays a gap `⚠️`, `simulated` input never becomes a pain, and the health score is read only from a snapshot's frontmatter. The map writes nothing to Jira and never names a person.
+> **Rule of the file:** the note in the vault is the source of truth (`native-surfaces.md` §2). The dashboard and the board are renders of it, published only through `artifact-publishing.md` after its question; a scheduled run never publishes; what the team changes on the board comes back only through §12, never the health-check rows. The portfolio (§13) is one more render of the notes, computed every time — no portfolio note, no board — and a hand CJM note is only read, never changed. Nothing on the map is invented: a row without a source or a class is a finding, a stage without evidence stays a gap `⚠️`, `simulated` input never becomes a pain, and the health score is read only from a snapshot's frontmatter. The map writes nothing to Jira and never names a person.
 
 ## 1. The model
 
 - **The journey** — one funnel of the product (the CJM config's) or one named journey inside it («повторне замовлення»). One note per journey.
 - **Stages** — in the order of the CJM config's funnel stages (`local-context.md` → CJM Configuration). A stage's id is `s<n>`, `n` its number in the config's stage table, so a health-check snapshot names the same stage by the same id (§10). The PM may add a stage of their own in the note (a new id: `s3a`, `home`); the script checks that every stage a row uses is declared (`undeclared_stage`, §6). A mismatch between the config's stages and a stage list kept elsewhere is the PM's to settle — in the note or in the config (`plugin-configurator`).
-- **Steps** — an optional column: a smaller action inside a stage, where evidence most often attaches. Nested journeys (a step that opens a journey of its own) are not in this release.
+- **Steps** — an optional column: a smaller action inside a stage, where evidence most often attaches. Nested journeys (a step that opens a journey of its own) are v4.10.0's, not this release's.
 - **No dates on the map** except the dates of the evidence and of the review.
 
 ## 2. The lanes
@@ -205,7 +205,7 @@ When the product has a journey note in the vault, the automated health-check (`c
 - **Never backwards** — a snapshot older than the map's health-check rows is refused, the note untouched.
 - The `health` field gets the snapshot's point (§8), and the page is rendered again next to the note.
 
-It never publishes, asks nothing and never reads or updates a board (§11). The health-check's one end line names the map too: «Новий health-check від <дата>, карту шляху оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
+It never publishes, asks nothing and never reads or updates a board (§11). After the maps it re-renders the portfolio's page locally (§13), and the health-check's one end line names both: «Новий health-check від <дата>, карти шляху й портфель оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
 
 ## 11. The board
 
@@ -290,9 +290,88 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 - **Never a deletion of what the team added.** Any deletion from the board — an orphaned sticky included — is one item at a time, after its own «так».
 - **No state** (another machine, a lost folder, a read-back that failed) → the skill first reads the board back — the record's board, its cells found by their titles (the board tool's own search, or the host's board listed whole) — and rebuilds the state with `board-state`; then «Не можу сказати, що змінилось на дошці»: the question names the rows it could not find (`unmapped_rows` — they would become new stickies) and has one more answer, «показати, що на дошці». Without a read-back no new version is offered — only «нова дошка», «показати, що на дошці» or «ні».
 
-## 13. What never happens
+## 13. The portfolio
 
-- A portfolio of journeys or a nested journey in this release (v4.9.0).
+Every journey map of a product and its hand CJM notes in one list (since v4.9.0, R26, R32): who keeps each map, how healthy it is and where it is going, when it was last reviewed, its pains and anomalies, its gaps and where it is published — the maps that need attention first. It is computed from the notes every time; **there is no portfolio note and no portfolio board**, and the portfolio writes nothing to a note.
+
+**Finding the notes.** `ctx.py search --type cjm-journey --type cjm --product <product> --json` (`context-protocol.md` §3) lists the notes of both types from the context index — the index refreshed first, as a search refreshes it; another product's note is left out — one product is one key, the slug of its whole name (a name with no letters to slug, by its own letters) — and a note with no product (none, or `null` / `~`) stays, marked «продукт не вказано» on its row. Each note's file (`found[].file`) goes to the script as `--note`, except a note marked `sensitive` (named by its title only — `data-policy.md` → Search, rule 1) and one whose file is not on disk or not downloaded (an empty `file`, named by its path) — never read; ctx's line `іншого продукту — не показано: <k>` is said with the table. The script checks a note's sensitivity again itself, so a folder read never takes one either. **Nothing to search or the index not read** (exit 3 or 5) → the maps' folder `CJM/journeys/<product>/` as `--dir`, and one question for the folder of the hand CJM notes — its answer as a second `--dir`, never saved; «немає» is an answer. The note's `type` decides what it is, whichever way it came.
+
+**The script** — `scripts/journey_portfolio.py`, stdlib (Python 3.9); `journey_map.py` is imported (the note, its findings, the health-check's labels, the sparkline and the page's pan script), never copied. Every command ends with one `PORTFOLIO_RESULT {json}` line; exit 0, 2 for a wrong argument, 1 when the page cannot be written:
+
+| Command | What |
+|---|---|
+| `list --product P [--note N …] [--dir D …] [--snapshots D] [--today D] [--lang uk\|en]` | the portfolio: the table for the chat (markdown), then the result — the maps, the hand CJM notes, what was skipped and why; `--snapshots` (the health-check folder) as for `journey_map.py check` |
+| `render-html --product P [--note N …] [--dir D …] [--snapshots D] [--today D] --out F [--lang uk\|en]` | the same portfolio as one self-contained page |
+| `schema` | the commands, columns, attention reasons, hand-CJM fields and findings and skip reasons this section must agree with (`validate-consistency.sh` check 30) |
+
+**A journey map's row** — read from its note by `journey_map.py`; never a row's text, a source or a name, and every value page-safe — a link removed, a contact or a secret hidden; a pain's class or a publication value that is not one of its own words, and a stage id left empty by that, shows as `?`:
+
+| Column | Ukrainian header | What |
+|---|---|---|
+| `journey` | `шлях` | the note's `journey` (else its title) |
+| `owner` | `власник` | the note's `owner` — a role or a team; `⚠️` when empty |
+| `stages` | `етапи` | how many stages it declares |
+| `health` | `здоров'я` | the last point's score of the `health` field — never read from a snapshot's text; a sparkline of every point on the page |
+| `delta` | `зміна` | the last score minus the one before it |
+| `health_date` | `дата точки` | the last point's date |
+| `reviewed` | `рев'ю` | the review date, «застаріло» past 90 days (`stale_review`, §6) |
+| `pains` | `болі` | the pain rows by their class — a word that is no class counted as `?` (a gap row is no pain) |
+| `anomalies` | `аномалії` | the anomaly rows, the critical ones apart: a health-check row's status is read from its last words by the labels `refresh` writes (§10, «— критично» / «— critical»); a row the PM wrote is counted without a level |
+| `gaps` | `розриви` | the stages of `empty_stage` and of `no_outcome` (§6) |
+| `findings` | `знахідки` | how many findings `journey_map.py check` gives (§6) — against the snapshots of the note's own product |
+| `published` | `опубліковано` | the places and versions of its `published` mirror — never a link or an id |
+| `attention` | `увага` | the reasons below |
+
+**What needs attention** — a map with any reason stands first, the maps with more reasons above, then by name; the rest by name; the hand CJM notes in a block of their own after the maps, by name:
+
+| Reason | Ukrainian label | When |
+|---|---|---|
+| `health_drop` | `здоров'я впало` | the last health point is more than 10 points below the one before it — the scheduled health-check's own escalation (`cjm-reports.md`) |
+| `stale_review` | `рев'ю застаріло` | the finding `stale_review` (§6) |
+| `no_owner` | `немає власника` | the finding `no_owner` (§6) |
+| `critical_anomaly` | `критична аномалія` | an anomaly row the health-check marked critical |
+| `empty_stage` | `етап без доказів` | the finding `empty_stage` (§6) |
+
+**A hand CJM note** (R32) — a CJM the team keeps by hand: `type: cjm` with a `funnel` field and at least one stage heading `## <ID> — <назва>`, the ID a short code with one to three digits (`B1`, `S2`, `s3a`) — a heading such as «## Висновки — …» or «## 2026 — …» is no stage; a heading typed with a plain hyphen («## B1 - Пошук») is none either. A `type: cjm` without them (a `cjm-research` report is `type: cjm` too) is skipped and named. It is read **partly**, and the portfolio says so on its row: «ручна CJM — частково: без джерел, класів і здоров'я». Only these are read:
+
+| Field | What |
+|---|---|
+| `title` | the frontmatter's `title`, else `name`, else the file's name |
+| `funnel` | the frontmatter's `funnel` |
+| `stages_declared` | the frontmatter's `stages` — the number of stages it declares |
+| `stages` | each stage heading `## <ID> — <назва>` in order — its id, its name (a link in it dropped) and `metrics`: the row count of the first table under it whose first header cell is «Метрика» or «Metric» — no cell of it read |
+| `snapshot` | the frontmatter's `snapshot`, YYYY-MM-DD |
+
+Never read: links, dashboards, modules, owners, teams, missions, meetings or any text of the note. The note gets no health, no pains and no gaps — it has no sources or classes to give them — and two findings of its own:
+
+| Finding | What |
+|---|---|
+| `stage_count` | the declared `stages` is not the number of stage headings |
+| `no_snapshot` | no `snapshot` date |
+
+«Зібрати з неї карту шляху?» leads to J1 as usual: nothing of the hand note is carried into a map — a map's inputs stay §3, and the hand note itself is never changed.
+
+**Skipped** — each note the portfolio does not show, with why:
+
+| Skip | Ukrainian line | When |
+|---|---|---|
+| `not_cjm_map` | `не CJM-карта — немає воронки чи стадій` | a `type: cjm` note without `funnel` or without a stage heading — named |
+| `other_product` | `нотатка іншого продукту` | a note of another product — counted, never named or shown |
+| `wrong_type` | `не карта шляху й не CJM-нотатка` | a note given by its path whose type is neither — named; one in a folder is counted (`ignored`), never named |
+| `sensitive` | `чутлива нотатка — лише для People-контуру` | a note the search marks sensitive (`sensitive: true`, a people type, a 1-1 — `data-policy.md` → Search, rule 1) — named by its file's name, nothing of it read into the portfolio |
+| `unreadable` | `нотатка не читається` | a note that does not read or parse (a frontmatter never closed included), or a note given by its path that iCloud has not downloaded (never opened — opening it would start a download) — named with why; in a folder, a file with no frontmatter at all is no note of the portfolio (`ignored`) and a file iCloud has not downloaded is counted in one line, never named |
+
+**Where it is shown.**
+- **In the chat** — the table `list` prints, the maps that need attention first, then the hand CJM block, then what was skipped.
+- **The page** — `render-html --out CJM/journeys/<product>/portfolio.html` beside the maps in the vault, the folder created when there is no map yet (without a vault, the working folder; an `--out` that is a note, or any `.md`, is refused): one self-contained HTML page in the journey page's style — a row per map with its health sparkline (each point's date and score), the review, the attention, the hand CJM block, the page's date and each map's note named as its source. **Numbers only**: no row text of any map, no link, no request, every text escaped, a secret or a person's contact hidden, light theme; the header row and the journey column stay in view while the table scrolls in its own frame, and it pans with the mouse — the journey page's one fixed script (§9).
+- **The dashboard** — through `artifact-publishing.md`, after its question, under its own key `cjm-research/<product>/portfolio`, kind `dashboard`: `publications.py find --key <key>` first, a place found offered as «нова версія N»; the candidates the dashboard's (the host's page, HTML in Atlassian Artifacts, «лише файл» always); **no board** for the portfolio. The question says what goes — the journeys' and stages' names, scores and counts, internal data (`data-policy.md`) — and who can open it. After each place: `publications.py record --key <key> --surface <surface> --kind dashboard …` **without `--note`**: there is no portfolio note, so the record lives in the key file alone.
+- **The scheduled health-check** re-renders the page locally after it refreshes the maps (§10, `cjm-reports.md`): the notes `ctx search --type` gives, or without an index the maps' folder alone (no question in a headless run); it never publishes and asks nothing.
+
+**Without SHELL** — the model builds the chat table from the notes it can read, by the rules above, and says in one line that the page, the dashboard and the context index need a shell.
+
+## 14. What never happens
+
+- A nested journey (v4.10.0) or editing on the page (v4.11.0) in this release; a portfolio note or a portfolio board.
 - A publication or a new version without the question; a publication from a scheduled run; a board read, updated or asked about by the scheduled health-check.
 - An automatic two-way sync with a board: the team's changes come back only through §12, the health-check rows never.
 - A class the PM did not pick; a deletion of what the team added; a deletion from a board without its own «так» per item.
@@ -300,4 +379,4 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 - A person's name on the map or a board (the model's `person_name` pass on taken text; a board state keeps the team's texts page-safe, names not filtered, and never leaves this machine); an Opportunity Score.
 - A health score read from a snapshot's text.
 - A write to Jira: an initiative links an existing code; creating one is `roadmap-architect`'s.
-- A change to a CJM tracker the team keeps by hand.
+- A change to a CJM tracker the team keeps by hand, or anything read of a hand CJM note beyond §13's fields.
