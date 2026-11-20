@@ -24,6 +24,7 @@ import urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_copy as ccp  # noqa: E402
+import ctx_endpoints as ce  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import provider_bundle as pb  # noqa: E402
@@ -69,8 +70,10 @@ def normalise(reg):
     path; a relative one is taken beside the registration file; "" for none) and `blocks` is "none" when the
     registration says `blocks: none` (any case) — a core folder registered for search only — else ""; `exclude` the
     expressions (relative to the core folder) the index leaves out of it, [] for none; `connected_as` the mode
-    `ctx repo add` connected a core with no manifest in (`search`, `inferred`, `guest`; "" for any other registration)."""
-    out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
+    `ctx repo add` connected a core with no manifest in (`search`, `inferred`, `guest`; "" for any other registration).
+    Since v4.9.1 a key of the file that starts with `_` is dropped: those are the engine's (`_file`, `_trust_home`), and
+    a registration never sets them."""
+    out = {k: v for k, v in reg.items() if not str(k).startswith("_")}     # access, mode, contract, index, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
     paths = list(reg.get("paths") or [])
@@ -149,10 +152,12 @@ REG_READ_TIMEOUT_S = cc.BOUNDARY_READ_S                 # seconds one registrati
 REG_READ_DEADLINE_S = cc.BOUNDARY_DEADLINE_S            # …and all of them together (since v3.14): 6 — the boundary's budget
 
 
-def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S, deadline=None):
-    """Every registered repository, normalised, in registration order — the vaults' providers folders
-    first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
-    the home is never taken from the environment). An id seen twice keeps the first. Unreadable
+def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S, deadline=None, notes=None):
+    """Every registered repository, normalised, in registration order — `<home>/.grow-pm/providers` (or `extra_dirs`
+    when given, as in find_registrations; the home is never taken from the environment) first since v4.9.1, then the
+    vaults' providers folders. An id seen twice keeps the first; two files of one id with different endpoints add a line
+    to `notes`, when it is a list (`cc.SHADOWED`). Every repository carries `_trust_home`, the home whose trust file
+    decides whether its address may be reached (`ctx_endpoints.Home`, references/context-provider-protocol.md §13). Unreadable
     registrations — and, since v3.13.1, one not read within `timeout` seconds, since v3.14 also one not
     reached before REG_READ_DEADLINE_S for all of them has passed — are left out and, when `skipped`
     is a list, appended to it as (path, reason). Since v3.24.0 a registration with an endpoint and no folder of its own
@@ -166,8 +171,11 @@ def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_RE
     if deadline is not None:
         ends = deadline if ends is None else min(ends, deadline)
     regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout,
-                                 deadline=ends)
-    return [ccp.attach(normalise(r), home) for r in regs]
+                                 deadline=ends, shadowed=notes)
+    out = [ccp.attach(normalise(r), home) for r in regs]
+    for r in out:
+        r["_trust_home"] = ce.Home(home)
+    return out
 
 
 # ------------------------------------------------------------------ fetch

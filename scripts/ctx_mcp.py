@@ -28,7 +28,9 @@ What it will do, and nothing more:
   * take as the answer only the message that carries the request's id — anything else is no answer;
   * send no header whose name is not a token of RFC 7230 or is one that steers the request itself
     (`DENIED_HEADERS`: Host, Content-Length, Transfer-Encoding, Connection);
-  * follow no redirect (a header meant for one host does not travel to another) and speak only http and https;
+  * follow no redirect (a header meant for one host does not travel to another) and speak only https — and http only
+    to this computer (127.0.0.1, ::1, localhost; since v4.9.1, `transport_problem`): a remote address over http gets
+    no request at all, with a header or without one (the queries are internal data too);
   * keep secrets out of every message it raises or keeps: no header value, no url (it may hold credentials) —
     and out of the exception chain: an error is raised outside the `except` that caught the original, so
     `__context__` is None and a traceback prints nothing of the request.
@@ -36,8 +38,13 @@ What it will do, and nothing more:
 The header a server wants (`headers_env` of the registration names an environment variable that holds
 `Name: value`) is read by `headers_from_env` (`header_problem` says why a variable gives none); the value is
 never stored by the engine.
+
+Since v4.9.1 a client is built from a registration only through `ctx_endpoints.client_for`, which checks the address
+and the variable against the ones you approved (references/context-provider-protocol.md §13); validate check 31 keeps
+this class and `headers_from_env` out of every other script.
 """
 import http.client
+import ipaddress
 import json
 import os
 import re
@@ -54,6 +61,9 @@ MAX_BODY = 32 * 1024 * 1024                            # a note is text; more th
 DENIED_HEADERS = frozenset({"host", "content-length", "transfer-encoding", "connection"})   # they steer the request itself
 TOKEN = re.compile(r"[!#$%&'*+\-.^_`|~0-9A-Za-z]+\Z")  # a header name: a token of RFC 7230 (§3.2.6), ASCII only
 DEADLINE = "deadline reached"
+LOOPBACK = ("127.0.0.1", "::1", "localhost")            # since v4.9.1: the only hosts plain http may reach
+_HOST = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\Z")
+TRANSPORT = "only https is spoken, and http only to this computer (127.0.0.1, ::1, localhost)"
 
 
 class McpError(Exception):
@@ -74,6 +84,46 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def split_url(url):
+    """(scheme, host, port, path, query) of an endpoint the engine may read, or None (since v4.9.1). Plainly an address
+    or none: ASCII with no space, control character or backslash (parsers disagree about those), http or https, a host
+    of letters, digits, dots and hyphens or an IPv6 address in brackets (no percent-encoding), a port that is a port.
+    The scheme and the host come lower-cased, a default port as None, an empty path as "/". Credentials and the
+    fragment are not part of what comes back: they are never sent."""
+    if not isinstance(url, str) or not url or not url.isascii() or any(c <= " " or c in "\x7f\\" for c in url):
+        return None
+    try:
+        u = urllib.parse.urlsplit(url)
+        port = u.port
+        host = u.hostname or ""
+    except ValueError:
+        return None
+    scheme = u.scheme.lower()
+    if scheme not in ("http", "https") or not host:
+        return None
+    if ":" in host:                                     # an IPv6 literal: brackets in the netloc, stripped by hostname
+        try:
+            host = ipaddress.IPv6Address(host).compressed
+        except ValueError:
+            return None
+    elif not _HOST.match(host):
+        return None
+    if port == {"http": 80, "https": 443}[scheme]:
+        port = None
+    return scheme, host, port, u.path or "/", u.query
+
+
+def transport_problem(url):
+    """Why no request may go to `url`, or "" (since v4.9.1): an address `split_url` does not read, or plain http to a host
+    that is not this computer (LOOPBACK, exactly). The words carry neither the url nor anything of it."""
+    parts = split_url(url)
+    if parts is None:
+        return "the endpoint is not a plain http or https url"
+    if parts[0] == "http" and parts[1] not in LOOPBACK:
+        return TRANSPORT
+    return ""
 
 
 def _name_problem(name):
@@ -260,12 +310,9 @@ class McpClient:
     def _post(self, message, timeout):
         """One POST → (response headers, content type, body bytes). A failure of the connection raises _Network,
         anything the server answered or a request that cannot be built raises McpError."""
-        try:
-            scheme = urllib.parse.urlsplit(self.url).scheme
-        except ValueError:
-            scheme = ""
-        if scheme not in ("http", "https"):
-            raise McpError("the endpoint is not an http or https url")
+        refused = transport_problem(self.url)          # since v4.9.1: https, and http only to this computer
+        if refused:
+            raise McpError(refused)
         hdrs = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
         hdrs.update(self.headers)
         if self.session_id:

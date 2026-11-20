@@ -330,9 +330,10 @@ with tempfile.TemporaryDirectory() as d:
     e.reg("zorg-dup", "id: zorg-dup\ntitle: from home\nkind: mcp\n", home=True)
     repos = e.repos()
     ids = [x["id"] for x in repos]
-    check("registrations in the home folder are read; the vault's wins on the same id",
+    check("registrations in the home folder are read — first since v4.9.1: yours wins on the same id, a vault's never "
+          "shadows it (context-provider-protocol.md §13)",
           sorted(ids) == ["zorg-dup", "zorg-home"] and ids.index("zorg-dup") < ids.index("zorg-home")
-          and {x["id"]: x["title"] for x in repos}["zorg-dup"] == "from the vault", repos)
+          and {x["id"]: x["title"] for x in repos}["zorg-dup"] == "from home", repos)
     only = cr.load_repos(e.text, e.home, extra_dirs=[])
     check("extra_dirs replaces the home folder (as find_registrations does)", [x["id"] for x in only] == ["zorg-dup"], only)
     skipped = []

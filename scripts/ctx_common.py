@@ -598,9 +598,20 @@ def _read_within(path, timeout):
     return box["text"]
 
 
-def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None, deadline=None):
-    """Read `{vault}/{plugin_folder}/_System/providers/*.yaml` for every vault entry,
-    plus `~/.grow-pm/providers/*.yaml` (or `extra_dirs` when given). Unreadable or
+SHADOWED = "реєстрація %s: два файли не збігаються, взято приватний"
+
+
+def _endpoint_of(r):
+    ep = r.get("endpoint") if isinstance(r.get("endpoint"), dict) else {}
+    return (str(ep.get("url") or "").strip(), str(ep.get("headers_env") or "").strip())
+
+
+def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None, deadline=None, shadowed=None):
+    """Read `~/.grow-pm/providers/*.yaml` (or `extra_dirs` when given) — your private registrations — and then
+    `{vault}/{plugin_folder}/_System/providers/*.yaml` for every vault entry. Since v4.9.1 the private folder comes
+    first: an id met twice keeps the first file, so a vault's registration never shadows yours (the address a request
+    goes to is the private file's); two files of one id whose `endpoint.url` or `endpoint.headers_env` differ append
+    SHADOWED's line to `shadowed`, when it is a list (once per id). Unreadable or
     invalid files are skipped — and listed as (path, reason) in `skipped` when a list
     is given. With `timeout` (seconds, since v3.13.1) each file is read in a daemon thread,
     and one not read within it is skipped as `not available locally (still downloading?)`.
@@ -608,9 +619,9 @@ def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None, dea
     within min(`timeout`, what is left), and once it has passed the rest are not opened at all —
     each is skipped with the same reason. Without either, a file is read as it comes (no thread).
     Returns dicts with normalised `paths`, `writable`."""
-    dirs = [os.path.join(v, f, "_System", "providers") for v, f in entries]
-    dirs += [os.path.expanduser("~/.grow-pm/providers")] if extra_dirs is None else list(extra_dirs)
-    regs, seen = [], set()
+    dirs = [os.path.expanduser("~/.grow-pm/providers")] if extra_dirs is None else list(extra_dirs)
+    dirs += [os.path.join(v, f, "_System", "providers") for v, f in entries]
+    regs, seen, named = [], {}, set()
     for d in dirs:
         for p in sorted(glob.glob(os.path.join(d, "*.yaml"))):
             why, limit, left = None, timeout, None
@@ -639,8 +650,11 @@ def find_registrations(entries, extra_dirs=None, skipped=None, timeout=None, dea
                     skipped.append((p, "no id"))
                 continue
             if rid in seen:
+                if shadowed is not None and rid not in named and _endpoint_of(r) != _endpoint_of(seen[rid]):
+                    named.add(rid)
+                    shadowed.append(SHADOWED % CONTROLS.sub(" ", str(rid))[:80])
                 continue
-            seen.add(rid)
+            seen[rid] = r
             paths = r.get("paths") or ([r["path"]] if r.get("path") else [])
             r["paths"] = [os.path.normpath(os.path.expanduser(N(str(x)))) for x in paths if str(x).strip()]
             r["writable"] = [N(str(x)) for x in (r.get("writable") or []) if str(x).strip()]
