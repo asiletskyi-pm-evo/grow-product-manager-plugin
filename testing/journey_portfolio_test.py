@@ -331,5 +331,49 @@ with tempfile.TemporaryDirectory() as d:
            lambda r, o: [m for m in r.get("maps", []) if m["journey"] == "Повторне замовлення"][0]["anomalies"]["critical"] == 1,
            "a hand-written anomaly rated by its own words")
 
+# 7. validate-consistency.sh check 30 — §13 of the protocol and the script agree, and so do the places that name the
+# portfolio (the publication key, the surfaces row, the scheduled re-render, `ctx search --type`)
+import journey_portfolio as jp  # noqa: E402
+
+cp_ = getattr(jp, "check_protocol", None)
+check("7.0 journey_portfolio.check_protocol exists (validate check 30)", callable(cp_))
+if callable(cp_):
+    errs0 = cp_(ROOT)
+    check("7.1 check 30 is clean on the tree", errs0 == [], errs0)
+    FILES30 = ("references/journey-protocol.md", "references/artifact-publishing.md", "references/native-surfaces.md",
+               "references/context-protocol.md", "skills/cjm-research/references/cjm-reports.md",
+               "skills/cjm-research/SKILL.md", "scripts/journey_portfolio.py")
+    DRIFTS = [
+        ("columns", "references/journey-protocol.md", "| `delta` | `зміна` |", "| `delta` | `різниця` |"),
+        ("attention reasons", "references/journey-protocol.md", "| `health_drop` | `здоров'я впало` |", "| `health_fall` | `здоров'я впало` |"),
+        ("the drop threshold", "references/journey-protocol.md", "more than 10 points below", "10 points or more below"),
+        ("hand-CJM fields", "references/journey-protocol.md", "| `stage_headings` |", "| `headings` |"),
+        ("hand-CJM findings", "references/journey-protocol.md", "| `no_snapshot` |", "| `no_snap` |"),
+        ("skips", "references/journey-protocol.md", "| `wrong_type` | `не карта шляху й не CJM-нотатка` |", "| `wrong_type` | `інший тип` |"),
+        ("commands", "references/journey-protocol.md", "| `schema` | the commands", "| `dump` | the commands"),
+        ("the hand-CJM mark", "references/journey-protocol.md", "«ручна CJM — частково: без джерел, класів і здоров'я»", "«ручна CJM»"),
+        ("finding the notes", "references/journey-protocol.md", "ctx.py search --type cjm-journey --type cjm", "ctx.py search --q journeys"),
+        ("the publication key", "references/artifact-publishing.md", "`cjm-research/<product>/portfolio`", "`cjm-research/<product>/journeys`"),
+        ("the surfaces row", "references/native-surfaces.md", "| The journey portfolio (`cjm-research` Step J7", "| The journey list (`cjm-research` Step J9"),
+        ("the scheduled re-render", "skills/cjm-research/references/cjm-reports.md", "journey_portfolio.py render-html", "journey_portfolio.py list"),
+        ("the ctx row", "references/context-protocol.md", "| `search --type TYPE", "| `search --kind TYPE"),
+        ("journey_map imported", "scripts/journey_portfolio.py", "import journey_map as jm", "import note_table as jm"),
+        ("no copy of journey_map", "scripts/journey_portfolio.py", "# ------------------------------------------------------------------ a journey map's row",
+         "def findings(note, today, newest=None):\n    return []\n\n\n# ------------------------------------------------------------------ a journey map's row"),
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        for name, rel, old, new in DRIFTS:
+            r2 = os.path.join(d, re.sub(r"\W+", "-", name))
+            for f in FILES30:
+                os.makedirs(os.path.dirname(os.path.join(r2, f)), exist_ok=True)
+                shutil.copy(os.path.join(ROOT, f), os.path.join(r2, f))
+            src = text(os.path.join(r2, rel))
+            if old not in src:
+                check("7.x drift site present — %s" % name, False, old)
+                continue
+            write(os.path.join(r2, rel), src.replace(old, new, 1))
+            errs = cp_(r2)
+            check("7.x check 30 names a drift of %s" % name, errs and any(os.path.basename(rel) in e for e in errs), errs)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

@@ -462,6 +462,76 @@ def render_html(p, product, today, lang):
     return "\n".join(out) + "\n"
 
 
+# ------------------------------------------------------------------ check 30
+def _rows(sec, header_re):
+    return [(nt.tick(r[0]) or "?", nt.tick(r[1]) if len(r) > 1 else None) for r in nt.table_after(sec, header_re)]
+
+
+def check_protocol(root):
+    """Errors for validate-consistency.sh check 30 (v4.9.0) — journey-protocol.md §13 is this script's: its commands,
+    the map's columns, the attention reasons and the drop threshold, the hand CJM's fields, findings and mark, the
+    skips, and how the notes are found; artifact-publishing.md §5 has the portfolio's key, native-surfaces.md §2 its
+    row, cjm-reports.md re-renders the page on schedule, context-protocol.md documents `search --type`; this script
+    imports journey_map.py and copies none of it."""
+    errs, texts = [], {}
+    for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/native-surfaces.md",
+                "references/context-protocol.md", "skills/cjm-research/references/cjm-reports.md",
+                "scripts/journey_portfolio.py"):
+        try:
+            with open(os.path.join(root, rel), encoding="utf-8") as fh:
+                texts[rel] = fh.read()
+        except OSError:
+            errs.append("%s is missing" % rel)
+    proto = texts.get("references/journey-protocol.md")
+    if proto is not None:
+        s13 = nt.section(proto, "13. The portfolio")
+        if not s13:
+            errs.append("journey-protocol.md has no §13 «The portfolio»")
+        cmds = [nt.cmd_name(r[0]) for r in nt.table_after(s13, r"\| Command \| What \|")]
+        if cmds != list(COMMANDS):
+            errs.append("journey-protocol.md §13: the commands %s ≠ journey_portfolio.py COMMANDS %s" % ("|".join(cmds), "|".join(COMMANDS)))
+        for what, header, want in (("the columns", r"\| Column \| Ukrainian header \| What \|", list(COLUMNS)),
+                                   ("the attention reasons", r"\| Reason \| Ukrainian label \| When \|", list(ATTENTION)),
+                                   ("the skips", r"\| Skip \| Ukrainian line \| When \|", list(SKIPS))):
+            got = _rows(s13, header)
+            if got != want:
+                errs.append("journey-protocol.md §13: %s %s ≠ journey_portfolio.py %s" % (
+                    what, "|".join("%s/%s" % g for g in got) or "—", "|".join("%s/%s" % w for w in want)))
+        for what, header, want in (("the hand CJM's fields", r"\| Field \| What \|", list(CJM_FIELDS)),
+                                   ("the hand CJM's findings", r"\| Finding \| What \|", list(CJM_FINDINGS))):
+            got = [g for g, _ in _rows(s13, header)]
+            if got != want:
+                errs.append("journey-protocol.md §13: %s %s ≠ journey_portfolio.py %s" % (what, "|".join(got) or "—", "|".join(want)))
+        when = {nt.tick(r[0]): r[2] for r in nt.table_after(s13, r"\| Reason \| Ukrainian label \| When \|") if len(r) > 2}
+        if "more than %d points below" % DROP not in when.get("health_drop", ""):
+            errs.append("journey-protocol.md §13: health_drop does not say «more than %d points below» (journey_portfolio.py DROP)" % DROP)
+        if "«%s»" % LABELS["uk"]["mark"] not in s13:
+            errs.append("journey-protocol.md §13 does not name the hand CJM's mark «%s»" % LABELS["uk"]["mark"])
+        if "ctx.py search --type %s --type %s" % (JOURNEY_TYPE, CJM_TYPE) not in s13:
+            errs.append("journey-protocol.md §13 does not find the notes with `ctx.py search --type %s --type %s`" % (JOURNEY_TYPE, CJM_TYPE))
+    ap = texts.get("references/artifact-publishing.md")
+    if ap is not None and not re.search(r"^\|\s*`cjm-research`\s*\|.*`cjm-research/<product>/portfolio`", nt.section(ap, "5. Publish and record"), re.M):
+        errs.append("artifact-publishing.md §5: the `cjm-research` key row has no `cjm-research/<product>/portfolio`")
+    ns = texts.get("references/native-surfaces.md")
+    if ns is not None and not re.search(r"^\| The journey portfolio \(`cjm-research` Step J7\b", nt.section(ns, "2. Routing"), re.M):
+        errs.append("native-surfaces.md §2: no row «The journey portfolio (`cjm-research` Step J7…)»")
+    rep = texts.get("skills/cjm-research/references/cjm-reports.md")
+    if rep is not None and "journey_portfolio.py render-html" not in rep:
+        errs.append("cjm-reports.md: the automated health-check does not re-render the portfolio (journey_portfolio.py render-html)")
+    cp = texts.get("references/context-protocol.md")
+    if cp is not None and not re.search(r"^\| `search --type TYPE", cp, re.M):
+        errs.append("context-protocol.md §3: no row for `search --type TYPE` (the portfolio finds its notes with it)")
+    src = texts.get("scripts/journey_portfolio.py")
+    if src is not None:
+        if not re.search(r"^import journey_map as jm\b", src, re.M):
+            errs.append("journey_portfolio.py does not import journey_map — a journey note is read by journey_map.py, never copied")
+        own = [n for n in ("load", "findings", "parse", "evidence", "page_worthy", "sparkline", "snapshots")
+               if re.search(r"^def %s\(" % n, src, re.M)]
+        if own:
+            errs.append("journey_portfolio.py defines %s of its own — import them from journey_map.py" % ", ".join(own))
+    return errs
+
+
 # ------------------------------------------------------------------ commands
 def _today(args):
     if not getattr(args, "today", None):
@@ -503,7 +573,8 @@ def cmd_render(args):
 
 def cmd_schema(args):
     result(ok=True, commands=list(COMMANDS), columns=[list(c) for c in COLUMNS], attention=[list(a) for a in ATTENTION],
-           drop=DROP, cjm_fields=list(CJM_FIELDS), cjm_findings=list(CJM_FINDINGS), skips=[list(s) for s in SKIPS])
+           drop=DROP, cjm_fields=list(CJM_FIELDS), cjm_findings=list(CJM_FINDINGS), skips=[list(s) for s in SKIPS],
+           errors=check_protocol(os.path.dirname(HERE)))
     return 0
 
 
