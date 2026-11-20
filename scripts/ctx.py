@@ -192,11 +192,12 @@
                                 (since v4.9.0) the notes of the section index whose frontmatter `type` is one of TYPE (any
                                 case) — no question, no ranking: the index refreshed first (30 s), as a search refreshes it.
                                 A path outside the roots or one the search excludes is never listed; with --product a note
-                                of another product is left out (counted), a note with no product stays. Lines: `Нотатки за
-                                типом: <types>[ · продукт <P>] · знайдено <n>`, per note `N. <title> · <type> · <product> ·
-                                <date> · <path>`, `іншого продукту — не показано: <k>`, then the notes. CTX_RESULT: action
-                                type, types, product, found [{path, file (on disk, "" when not there or not downloaded),
-                                source, title, type, product, date}], notes, sources, index, skipped, counts {found,
+                                of another product is left out (counted) — one product is one key, the slug of its whole
+                                name —, a note with no product stays. Lines: `Нотатки за типом: <types>[ · продукт <P>] ·
+                                знайдено <n>`, per note `N. <title> · <type> · <product> · <date> · <path>[ · sensitive]`,
+                                `іншого продукту — не показано: <k>`, then the notes. CTX_RESULT: action type, types,
+                                product, found [{path, file (on disk, "" when not there or not downloaded), source, title,
+                                type, product, date, sensitive}], notes, sources, index, skipped, counts {found,
                                 skipped_product}. Writes only the index — no last.json. --type with --q, --get or an option
                                 of a question, or an empty TYPE: exit 3; nothing to search: exit 3; the index not read (not
                                 built yet, busy, damaged): exit 5. The journey portfolio finds its notes with it
@@ -2199,8 +2200,8 @@ def _search_type(a, c):
     """`search --type T [--type T …] [--product P] [--json]` (since v4.9.0): the notes of those types in the section index
     (ctx_search.by_type) — read only, the index refreshed first; no question, no ranking, no last.json. With --q, --get or
     any option of a question: usage. Nothing to search: exit 3; the index not read: exit 5."""
-    given = [flag for key, flag in _SEARCH_OPTS.items()
-             if key not in ("type_", "product") and getattr(a, key, None) not in (None, False, [])]
+    given = [flag for key, flag in _SEARCH_OPTS.items() if key not in ("type_", "product")
+             and getattr(a, key, None) is not None and getattr(a, key, None) is not False and getattr(a, key, None) != []]
     if given:
         raise Usage("search --type takes no %s" % ", ".join(given))
     types = list(dict.fromkeys(t.strip() for t in a.type_ if t and t.strip()))

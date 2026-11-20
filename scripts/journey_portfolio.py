@@ -23,6 +23,7 @@ import argparse, datetime, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import ctx_index as ci  # noqa: E402  — is_dataless: a file iCloud has not downloaded is never opened
 import ctx_search as cs_  # noqa: E402  — the product compared as `ctx search --type` compares it
 import journey_map as jm  # noqa: E402  — a journey note: load, findings, the health-check's labels, the page's script
 import note_table as nt  # noqa: E402
@@ -50,13 +51,15 @@ EN_SKIPS = {"not_cjm_map": "no CJM map — no funnel or stages", "other_product"
 JOURNEY_TYPE, CJM_TYPE = "cjm-journey", "cjm"
 STAGE_HEAD = re.compile(r"^##[ \t]+([^\s—–#|]{1,24})[ \t]+[—–][ \t]+(.+?)[ \t#]*$")     # `## <ID> — <name>` (R32)
 METRIC_HEAD = ("метрика", "metric")         # the first header cell of a stage's metrics table
-FENCE = re.compile(r"^[ \t]{0,3}(```|~~~)")
+FENCE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})(.*)$")
+COMMENT = re.compile(r"<!--.*?-->|%%.*?%%", re.S)    # an HTML or Obsidian comment: nothing in it is read
 LABELS = {
     "uk": {"title": "Портфель шляхів", "generated": "Згенеровано", "maps": "Карти шляху", "attention": "Потребують уваги",
            "none": "Карт шляху немає", "stale": "застаріло", "critical": "критичних %d", "cjm": "Ручні CJM-нотатки",
            "mark": "ручна CJM — частково: без джерел, класів і здоров'я", "funnel": "воронка", "snapshot": "знімок",
            "stages_of": "%d з %d оголошених", "metrics": "метрик", "no_product": "продукт не вказано",
            "skipped": "Пропущено", "other": "Іншого продукту — не показано: %d", "empty": "без доказів",
+           "icloud": "файл не завантажено з iCloud — відкрий його в Obsidian",
            "no_outcome": "без метрики результату", "no_point": "—", "head": "Портфель шляхів: %s · %s · карт %d · "
            "потребують уваги %d · ручних CJM %d · пропущено %d · іншого продукту %d", "cjm_cols": ("CJM", "воронка",
            "етапи", "метрик на етап", "знімок", "знахідки"), "missing": "теки ще немає: %s"},
@@ -65,6 +68,7 @@ LABELS = {
            "mark": "hand CJM — partly: no sources, classes or health", "funnel": "funnel", "snapshot": "snapshot",
            "stages_of": "%d of %d declared", "metrics": "metrics", "no_product": "no product named",
            "skipped": "Skipped", "other": "Another product — not shown: %d", "empty": "no evidence",
+           "icloud": "the file is not downloaded from iCloud — open it in Obsidian",
            "no_outcome": "no outcome metric", "no_point": "—", "head": "Journey portfolio: %s · %s · maps %d · "
            "needing attention %d · hand CJMs %d · skipped %d · another product %d", "cjm_cols": ("CJM", "funnel",
            "stages", "metrics per stage", "snapshot", "findings"), "missing": "no folder yet: %s"},
@@ -88,9 +92,9 @@ def plain(s):
 
 
 def _same_product(note_product, asked):
-    """Is a note of the product asked — compared as `ctx search --type` compares it; a note that names no product stays."""
-    mine, want = cs_._product_names(note_product), cs_._product_names(asked)
-    return not mine or not want or bool(mine & want)
+    """Is a note of the product asked — compared as `ctx search --type` compares it (ctx_search.same_product: one
+    whole key, never a part of a name); a note that names no product stays."""
+    return cs_.same_product(note_product, asked)
 
 
 def _labels(lang):
@@ -131,8 +135,19 @@ def published_of(path):
         entries = pub.load(path)[2]
     except (pub.Unreadable, pub.Foreign, OSError, UnicodeDecodeError, ValueError):
         return []
-    return [{k: e[k] for k in ("surface", "kind", "level", "version", "audience") if e.get(k) not in (None, "")}
-            for e in entries]
+    out = []
+    for e in entries:                                # each value the record's own words only — anything else is «?»
+        surface, kind, level = str(e.get("surface") or ""), str(e.get("kind") or ""), str(e.get("level") or "")
+        audience = str(e.get("audience") or "")
+        place = {"surface": surface if surface in pub.SURFACES or pub.SLUG.match(surface) else "?",
+                 "kind": kind if kind in pub.KINDS else "?"}
+        if level:
+            place["level"] = level if level in pub.LEVELS else "?"
+        place["version"] = e.get("version")
+        if audience:
+            place["audience"] = audience if audience in pub.AUDIENCES or re.match(r"^space:[A-Z][A-Z0-9_]{0,31}$", audience) else "?"
+        out.append(place)
+    return out
 
 
 def map_row(note, today, newest):
@@ -149,7 +164,8 @@ def map_row(note, today, newest):
     pains = {}
     for r in live:
         if r["lane"] == "pain":
-            k = r["class"].strip().lower() or "—"
+            cls = r["class"].strip().lower()
+            k = cls if cls in jm.CLASSES else "?" if cls else "—"     # a class's own word, never the cell's text
             pains[k] = pains.get(k, 0) + 1
     an = {"total": 0, "critical": 0, "warning": 0, "positive": 0, "unrated": 0}
     for r in live:
@@ -157,8 +173,9 @@ def map_row(note, today, newest):
             an["total"] += 1
             st = status_of(r["text"]) if jm._is_hc(r) else None
             an[st or "unrated"] += 1
-    gaps = {"empty_stage": [f["stage"] for f in found if f["finding"] == "empty_stage"],
-            "no_outcome": [f["stage"] for f in found if f["finding"] == "no_outcome"]}
+    gaps = {"empty_stage": [plain(f["stage"]) for f in found if f["finding"] == "empty_stage"],
+            "no_outcome": [plain(f["stage"]) for f in found if f["finding"] == "no_outcome"]}
+    reviewed = note["reviewed"] if jm.day(note["reviewed"]) else ""
     by = {}
     for c in codes:
         by[c] = by.get(c, 0) + 1
@@ -166,7 +183,7 @@ def map_row(note, today, newest):
     if prev and prev["score"] - last["score"] > DROP:
         attention.append({"reason": "health_drop", "detail": "%s → %s" % (prev["score"], last["score"])})
     if "stale_review" in codes:
-        attention.append({"reason": "stale_review", "detail": note["reviewed"] or ""})
+        attention.append({"reason": "stale_review", "detail": reviewed})
     if "no_owner" in codes:
         attention.append({"reason": "no_owner", "detail": ""})
     if an["critical"]:
@@ -177,7 +194,7 @@ def map_row(note, today, newest):
     return {"journey": plain(note["journey"] or note["title"] or os.path.splitext(name)[0]), "note": name,
             "path": note["path"], "product": plain(note["product"]), "product_missing": not note["product"],
             "owner": plain(note["owner"]), "stages": len(note["stages"]), "health": health,
-            "reviewed": note["reviewed"] if jm.day(note["reviewed"]) else "", "stale_review": "stale_review" in codes,
+            "reviewed": reviewed, "stale_review": "stale_review" in codes,
             "pains": pains, "anomalies": an, "gaps": gaps, "findings": {"total": len(found), "by": by},
             "published": published_of(note["path"]), "attention": attention}
 
@@ -195,14 +212,17 @@ def read_cjm(path, fm, body, lang):
     """The fields §13 reads of a hand CJM note, or None when it is no CJM map — no `funnel`, or no stage heading
     `## <ID> — <name>` (a cjm-research report is `type: cjm` too)."""
     funnel = nt.fm_scalar(fm, "funnel")
-    stages, cur, fence, run = [], None, False, []
+    stages, cur, fence, run = [], None, "", []
 
     def close():
         if cur is not None and cur["metrics"] is None and run:
             cur["metrics"] = _metric_rows(run)
-    for line in body.split("\n") + [""]:
-        if FENCE.match(line):
-            fence = not fence
+    for line in COMMENT.sub("", body).split("\n") + [""]:
+        f = FENCE.match(line)
+        if f and (not fence or (f.group(1)[0] == fence[0] and len(f.group(1)) >= len(fence) and not f.group(2).strip())):
+            close()                                   # a fence ends a table run: two tables never join into one
+            run = []
+            fence = "" if fence else f.group(1)       # closed only by the same character, at least as long
             continue
         if fence:
             continue
@@ -221,7 +241,10 @@ def read_cjm(path, fm, body, lang):
     for s in stages:
         s["metrics"] = s["metrics"] or 0
     declared = nt.fm_scalar(fm, "stages")
-    declared = int(declared) if declared.isdigit() else None
+    try:
+        declared = int(declared) if declared.isascii() and declared.isdigit() else None
+    except ValueError:
+        declared = None
     snapshot = nt.fm_scalar(fm, "snapshot")
     snapshot = snapshot if jm.day(snapshot) else ""
     findings = []
@@ -255,22 +278,34 @@ def collect(paths, dirs, product, today, newest, lang):
         items += [(os.path.join(d, n), False) for n in names if n.lower().endswith(".md")]
     seen, maps, cjms, skipped, other, ignored = set(), [], [], [], 0, 0
     for path, named in items:
-        real = os.path.realpath(path)
-        if real in seen:
+        try:
+            st = os.stat(path)
+            ident = (st.st_dev, st.st_ino)            # one file by two spellings (a case-insensitive disk) is one
+        except OSError:
+            ident = os.path.realpath(path)
+        if ident in seen:
             continue
-        seen.add(real)
+        seen.add(ident)
         name = os.path.basename(path)
+        if os.path.isfile(path) and ci.is_dataless(path):
+            skipped.append({"note": name, "reason": "unreadable", "detail": _labels(lang)["icloud"]})
+            continue                                  # never opened: opening it would start a download
         try:
             _, fm, body = nt.read_note(path)
         except Bad as e:
-            skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
+            if not named and str(e) == "the note has no frontmatter":
+                ignored += 1                          # a folder's plain markdown is no note of the portfolio
+            else:
+                skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
             continue
         kind = nt.fm_scalar(fm, "type").strip().lower()
         if kind not in (JOURNEY_TYPE, CJM_TYPE):
-            if named:
-                skipped.append({"note": name, "reason": "wrong_type", "detail": "type: %s" % (kind or "—")})
-            else:
+            if not named:
                 ignored += 1
+            elif not _same_product(nt.fm_scalar(fm, "product"), product):
+                other += 1                            # another product's note is never named, whatever its type
+            else:
+                skipped.append({"note": name, "reason": "wrong_type", "detail": "type: %s" % (plain(kind) or "—")})
             continue
         if not _same_product(nt.fm_scalar(fm, "product"), product):
             other += 1
@@ -336,7 +371,8 @@ def _review(m, L):
 def _cells(m, lang):
     L = _labels(lang)
     h = m["health"]
-    return {"journey": m["journey"], "owner": m["owner"] or "⚠️", "stages": str(m["stages"]),
+    return {"journey": m["journey"] + (" (%s)" % L["no_product"] if m["product_missing"] else ""),
+            "owner": m["owner"] or "⚠️", "stages": str(m["stages"]),
             "health": "—" if h["score"] is None else str(h["score"]), "delta": _delta(m), "health_date": h["date"] or "—",
             "reviewed": _review(m, L), "pains": _pains(m), "anomalies": _anomalies(m, L), "gaps": _gaps(m, L),
             "findings": str(m["findings"]["total"]), "published": _published(m),
@@ -561,6 +597,12 @@ def cmd_list(args):
 
 
 def cmd_render(args):
+    out = os.path.realpath(args.out)
+    inputs = {os.path.realpath(n) for n in args.note} | {os.path.realpath(os.path.join(d, f)) for d in args.dir
+                                                          if os.path.isdir(d) for f in os.listdir(d)}
+    if out.lower().endswith(".md") or out in inputs:
+        result(ok=False, error="--out would overwrite a note — the page is an .html file beside the notes, never a note")
+        return 2
     p, today = _portfolio(args)
     page = render_html(p, args.product, today.isoformat(), args.lang)
     try:
@@ -605,6 +647,7 @@ def main(argv=None):
     fn = {"list": cmd_list, "render-html": cmd_render, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
+        result(ok=False, error="a command is needed: %s" % "|".join(COMMANDS))
         return 2
     try:
         return fn(args)

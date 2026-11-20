@@ -740,6 +740,24 @@ def _product_names(product):
     return {cc.slugify(x) for x in (s, s.split(":", 1)[-1]) if x.strip()} - {""}
 
 
+def product_key(product):
+    """A product as one key (since v4.9.0 — `by_type` and the journey portfolio filter by it): the slug of the whole
+    name — never a part after `:` as the priors' looser `_product_names` takes it —, the name case-folded when it has
+    no slug letters at all (a CJK name, which slugify would make «section»), "" for none."""
+    s = N(str(product or "")).strip()
+    if not s:
+        return ""
+    slug = cc.slugify(s)
+    return slug if slug != "section" or s.casefold() == "section" else "=" + s.casefold()
+
+
+def same_product(note_product, asked):
+    """Is a note of the product asked (since v4.9.0)? One key each (`product_key`); a note — or an ask — that names
+    no product: yes."""
+    a, b = product_key(note_product), product_key(asked)
+    return not a or not b or a == b
+
+
 def _under(path, prefix):
     return path == prefix or path.startswith(prefix.rstrip("/") + "/")
 
@@ -1280,7 +1298,7 @@ def run(sctx, queries, skill=None, product=None, limit=LIMIT, which=KINDS, use_h
             "index": index, "last": last}
 
 
-TYPED_FIELDS = ("path", "file", "source", "title", "type", "product", "date")
+TYPED_FIELDS = ("path", "file", "source", "title", "type", "product", "date", "sensitive")
 TYPED_HEAD = "Нотатки за типом: %s%s · знайдено %d"
 TYPED_OTHER = "іншого продукту — не показано: %d"
 
@@ -1293,10 +1311,10 @@ def by_type(sctx, types, product=None, refresh=True):
       (BUILDING_NOTE, NO_INDEX_NOTE, BUSY_NOTE, BROKEN_NOTE); it is never rebuilt here.
     - found: {path (the index name), file (the note's `.md` on disk inside a vault or a core folder, "" when it is not
       there or iCloud has not downloaded it — ICLOUD_OPEN says so), source (`own` or the repository's id), title, type,
-      product, date}, by path. A name outside the roots' scope or one the search excludes (`_System/_scratch/`, the
+      product, date, sensitive}, by path. A name outside the roots' scope or one the search excludes (`_System/_scratch/`, the
       store, a blocks file…) is never listed — the rules of `run`.
-    - `product`: a note whose product is another one (compared as the priors compare it, `_product_names`) is left out
-      and counted in skipped.product; a note with no product stays.
+    - `product`: a note whose product is another one (`same_product`: one whole key each, never a part of a name) is
+      left out and counted in skipped.product; a note with no product stays.
     Writes only the index (the refresh) — never last.json, the store or a vault."""
     start = time.monotonic()
     want = {str(t).strip().casefold() for t in types or () if str(t).strip()}
@@ -1321,7 +1339,6 @@ def by_type(sctx, types, product=None, refresh=True):
             answered = True
     vaults = sctx.get("vaults") or []
     prefixes = [ci.rel_path(r["path"], vaults, r) for r in sctx.get("roots") or []]
-    asked = _product_names(product)
     found, other = [], 0
     for r in rows:
         rel = N(r.get("path") or "")
@@ -1329,16 +1346,15 @@ def by_type(sctx, types, product=None, refresh=True):
             continue
         if not _usable(rel) or not _in_scope(rel, prefixes) or not _keep(sctx, rel):
             continue
-        mine = _product_names(r.get("product"))
-        if asked and mine and not asked & mine:
+        if not same_product(r.get("product"), product):
             other += 1
             continue
         f = _file_of(sctx, rel) or ""
         if f and ci.is_dataless(f):
             _note(notes, [ICLOUD_OPEN % rel])
             f = ""
-        found.append({"path": rel, "file": f, "source": r.get("source") or "own", "title": r.get("title") or "",
-                      "type": str(r.get("type") or ""), "product": r.get("product") or "", "date": r.get("date") or ""})
+        found.append(dict(zip(TYPED_FIELDS, (rel, f, r.get("source") or "own", r.get("title") or "", str(r.get("type") or ""),
+                                             r.get("product") or "", r.get("date") or "", bool(r.get("sensitive"))))))
     found.sort(key=lambda n: n["path"])
     index = None
     if answered or done is not None:
@@ -1355,7 +1371,7 @@ def render_typed(res, types, product=None):
     lines = [TYPED_HEAD % (", ".join(types), " · продукт %s" % product if product else "", len(found))]
     for i, n in enumerate(found, 1):
         lines.append("%d. %s" % (i, " · ".join([n["title"] or "—", n["type"] or "—", n["product"] or "—",
-                                                (n["date"] or "")[:10] or "—", n["path"]])))
+                                                (n["date"] or "")[:10] or "—", n["path"]] + ([SENSITIVE] if n.get("sensitive") else []))))
     other = (res.get("skipped") or {}).get("product") or 0
     if other:
         lines.append(TYPED_OTHER % other)

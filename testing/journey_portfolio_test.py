@@ -247,6 +247,21 @@ with tempfile.TemporaryDirectory() as d:
     rc, outs, r = run("list", "--product", "zorg", "--today", TODAY, "--note", sec)
     st = [s["name"] for s in (r.get("cjm") or [{}])[0].get("stages", [])]
     check("3.6 a stage name holding a secret is hidden whole", st[1:2] and st[1].startswith("[hidden") and "ghp_" not in outs, st)
+    # own review: a folder's plain markdown (no frontmatter) is no note of the portfolio — ignored, never «не читається»;
+    # a fenced block never joins two tables into one metric table
+    fd = os.path.join(d, "folder")
+    os.makedirs(fd)
+    write(os.path.join(fd, "README.md"), "# Як ми ведемо CJM\n\nТекст без frontmatter.\n")
+    shutil.copy(buyer, os.path.join(fd, "cjm-zorg-buyer.md"))
+    rc, _, r = run("list", "--product", "zorg", "--today", TODAY, "--dir", fd)
+    check("3.7 a folder's markdown without frontmatter is ignored, never named as unreadable",
+          rc == 0 and r.get("skipped") == [] and r.get("ignored") == 1 and len(r.get("cjm", [])) == 1, r)
+    fen = os.path.join(v, "cjm-fence.md")
+    write(fen, text(buyer).replace("| CTR видачі | Команда пошуку | 12% |\n",
+                                   "| CTR видачі | Команда пошуку | 12% |\n```\nкод\n```\n| ще | рядок | x |\n| і ще | рядок | y |\n"))
+    rc, _, r = run("list", "--product", "zorg", "--today", TODAY, "--note", fen)
+    st = (r.get("cjm") or [{}])[0].get("stages") or [{}]
+    check("3.8 a fenced block ends a table: B1 keeps the 2 rows of its own metric table", st[0].get("metrics") == 2, st)
     xs = os.path.join(v, "journey-xss.md")
     write(xs, text(notes[0]).replace('journey: "Перше замовлення"', 'journey: "Перше <script>alert(1)</script> замовлення"'))
 
@@ -330,6 +345,93 @@ with tempfile.TemporaryDirectory() as d:
     caught("hc", "st = status_of(r[\"text\"]) if jm._is_hc(r) else None", "st = status_of(r[\"text\"])",
            lambda r, o: [m for m in r.get("maps", []) if m["journey"] == "Повторне замовлення"][0]["anomalies"]["critical"] == 1,
            "a hand-written anomaly rated by its own words")
+
+# 8. review 1 (frozen 0af13de): each finding reproduced first
+HOSTILE = ("evil.example", "bea@zorg", "token=abc", "+380 50", "Bea Two", "<b>x", "&lt;b&gt;x")
+with tempfile.TemporaryDirectory() as d:
+    first = os.path.join(FIX, "journeys", "zorg", "journey-first-order.md")
+    buyer0 = os.path.join(FIX, "hand", "cjm-zorg-buyer.md")
+    hm = os.path.join(d, "journey-hostile.md")
+    write(hm, text(first)
+          .replace('journey: "Перше замовлення"', 'journey: "Перше замовлення https://evil.example/j bea@zorg.example"')
+          .replace('owner: "Команда оформлення Zorg"', 'owner: "Команда https://evil.example/o +380 50 123 45 67"')
+          .replace("reviewed: 2026-11-10", 'reviewed: "see https://evil.example/review bea@zorg.example"')
+          .replace("  - id: s2\n", '  - id: "https://evil.example/s2"\n')
+          .replace("    surface: artifact\n    kind: dashboard\n    level: page\n",
+                   '    surface: "https://evil.example/leak?token=abc"\n    kind: "bea@zorg.example"\n    level: "<b>x</b>"\n')
+          .replace("| p1 | s1 | | pain | Головна довго вантажиться на мобільному | | | | | feedback-triage 2026-10-30, тема «швидкість», pain 6.0 | reported |",
+                   "| p1 | s1 | | pain | Головна довго вантажиться на мобільному | | | | | feedback-triage 2026-10-30, тема «швидкість», pain 6.0 | bea@zorg.example https://evil.example/c |"))
+    hb = os.path.join(d, "cjm-hostile.md")
+    write(hb, text(buyer0).replace('title: "CJM покупця Zorg"', 'title: "CJM [покупця](https://evil.example/t) bea@zorg.example"')
+          .replace("funnel: buyer", "funnel: https://evil.example/f")
+          .replace("## B3 — [[Оплата|Оплата]]", "````\n```\n## Z9 — inside nested fence\n```\n````\n<!-- comment\n## C7 — inside comment Bea Two\n-->\n%% ## C8 — inside an Obsidian comment %%\n## B3 — [[Оплата|Оплата]]"))
+    rc, out8, r8 = run("list", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", hm, "--note", hb)
+    page8 = os.path.join(d, "p8.html")
+    run("render-html", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", hm, "--note", hb, "--out", page8)
+    h8 = text(page8) if os.path.exists(page8) else ""
+    leak = [w for w in HOSTILE if w in out8 or w in h8]
+    check("8.1 I-1/I-2/M-1/M-6 no link, contact or token of a note's class cell, stage id, publication value, review, journey, "
+          "owner or a hand CJM's title and funnel reaches the chat, the result or the page", rc == 0 and not leak, leak)
+    m8 = (r8.get("maps") or [{}])[0]
+    check("8.2 I-1 a class that is no class is counted as «?», never its words", m8.get("pains") == {"observed": 1, "?": 1}, m8.get("pains"))
+    check("8.3 I-2 a review that is no date: «застаріло» with an empty date, never its words", m8.get("reviewed") == ""
+          and all(a.get("detail") == "" for a in m8.get("attention", []) if a.get("reason") == "stale_review"), m8.get("attention"))
+    c8 = (r8.get("cjm") or [{}])[0]
+    check("8.4 M-4 a fenced heading (a longer fence around a shorter one) and a commented one are no stages; B3 after them kept",
+          [x["id"] for x in c8.get("stages", [])] == ["B1", "B2", "B3"], c8.get("stages"))
+    check("8.5 M-1 the first table whose first header cell is «Metric» counts — the module table before it (2 rows) never",
+          [x["metrics"] for x in c8.get("stages", [])] == [2, 1, 0], c8.get("stages"))
+    sup = os.path.join(d, "cjm-sup.md")
+    write(sup, text(buyer0).replace("stages: 4", "stages: ²"))
+    rc, outs, rs = run("list", "--product", "zorg", "--today", TODAY, "--note", sup)
+    check("8.6 M-3 `stages: ²` is no number: no crash, the result line, no stage_count", rc == 0 and rs.get("ok") is True
+          and (rs.get("cjm") or [{}])[0].get("stages_declared") is None, outs[-300:])
+    nop = os.path.join(d, "journey-noproduct.md")
+    write(nop, text(first).replace("product: zorg\n", ""))
+    rc, outn, rn = run("list", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", nop)
+    pn = os.path.join(d, "pn.html")
+    run("render-html", "--product", "zorg", "--today", TODAY, "--lang", "uk", "--note", nop, "--out", pn)
+    check("8.7 M-5 a journey map with no product is marked «продукт не вказано» in the chat and on the page",
+          "Перше замовлення (продукт не вказано)" in outn and "продукт не вказано" in html.unescape(text(pn)), outn[:600])
+    wt = os.path.join(d, "wt.md")
+    write(wt, '---\ntype: "Bea bea@zorg.example https://evil.example/t"\nproduct: zorg\n---\n# x\n')
+    wq = os.path.join(d, "wq.md")
+    write(wq, "---\ntype: meeting\nproduct: quux\n---\n# Quux sync\n")
+    rc, outw, rw = run("list", "--product", "zorg", "--today", TODAY, "--note", wt, "--note", wq)
+    check("8.8 M-6 a wrong type is named page-safe; another product's note of another type is counted, never named",
+          [s_["note"] for s_ in rw.get("skipped", [])] == ["wt.md"] and "evil.example" not in outw and "bea@" not in outw
+          and rw.get("other_products") == 1, rw)
+    up = os.path.join(os.path.dirname(first), "JOURNEY-FIRST-ORDER.md")
+    if os.path.exists(up):                       # a case-insensitive disk (macOS): the same file by two spellings
+        rc, _, ru = run("list", "--product", "zorg", "--today", TODAY, "--note", first, "--note", up)
+        check("8.9 M-7 the same file by two spellings is read once", len(ru.get("maps", [])) == 1, ru.get("maps"))
+    tgt = os.path.join(d, "journey-target.md")
+    write(tgt, text(first))
+    before8 = text(tgt)
+    for out_ in (tgt, os.path.join(d, "x.md")):
+        rc, outo, ro = run("render-html", "--product", "zorg", "--note", tgt, "--out", out_)
+        check("8.10 M-8 --out that is a note given or any .md is refused (exit 2), the note untouched: %s" % os.path.basename(out_),
+              rc == 2 and ro.get("ok") is False and text(tgt) == before8 and not os.path.exists(os.path.join(d, "x.md")), outo[-300:])
+    rc, outh, rh = run()
+    check("8.11 M-11 no command: exit 2 and the result line", rc == 2 and rh.get("ok") is False, outh[-300:])
+    empty = os.path.join(d, "empty.html")
+    run("render-html", "--product", "zorg", "--note", buyer0, "--out", empty)
+    check("8.12 a page with no map carries no script", os.path.exists(empty) and "<script" not in text(empty), "")
+    import journey_portfolio as jp8  # noqa: E402
+    real_dl, real_read = jp8.ci.is_dataless, jp8.nt.read_note
+    opened = []
+    jp8.ci.is_dataless = lambda p_: True
+    jp8.nt.read_note = lambda p_: opened.append(p_) or real_read(p_)
+    try:
+        got8 = jp8.collect([first], [os.path.dirname(first)], "zorg", __import__("datetime").date(2026, 11, 20), None, "uk")
+    finally:
+        jp8.ci.is_dataless, jp8.nt.read_note = real_dl, real_read
+    check("8.13 M-9 a file iCloud has not downloaded is never opened: named as unreadable with the iCloud line",
+          not opened and got8["maps"] == [] and got8["skipped"] and all(s_["reason"] == "unreadable" and "iCloud" in s_["detail"]
+                                                                        for s_ in got8["skipped"]), (opened, got8["skipped"][:2]))
+    check("8.14 M-2 a product is one product: «Quux: App» is not «Zorg: App», «日本» is not «中国», «Zorg App» is «zorg app»",
+          jp8._same_product("Zorg: App", "Quux: App") is False and jp8._same_product("日本", "中国") is False
+          and jp8._same_product("Zorg App", "zorg app") is True and jp8._same_product("", "zorg") is True, "")
 
 # 7. validate-consistency.sh check 30 — §13 of the protocol and the script agree, and so do the places that name the
 # portfolio (the publication key, the surfaces row, the scheduled re-render, `ctx search --type`)
