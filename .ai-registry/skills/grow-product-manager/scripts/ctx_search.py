@@ -740,6 +740,24 @@ def _product_names(product):
     return {cc.slugify(x) for x in (s, s.split(":", 1)[-1]) if x.strip()} - {""}
 
 
+def product_key(product):
+    """A product as one key (since v4.9.0 — `by_type` and the journey portfolio filter by it): the slug of the whole
+    name — never a part after `:` as the priors' looser `_product_names` takes it —, the name case-folded when it has
+    no slug letters at all (a CJK name, which slugify would make «section»), "" for none."""
+    s = N(str(product or "")).strip()
+    if not s or s.casefold() in ("null", "~", "none"):    # YAML's empty value read as a word: no product
+        return ""
+    slug = cc.slugify(s)
+    return slug if slug != "section" or s.casefold() == "section" else "=" + s.casefold()
+
+
+def same_product(note_product, asked):
+    """Is a note of the product asked (since v4.9.0)? One key each (`product_key`); a note — or an ask — that names
+    no product: yes."""
+    a, b = product_key(note_product), product_key(asked)
+    return not a or not b or a == b
+
+
 def _under(path, prefix):
     return path == prefix or path.startswith(prefix.rstrip("/") + "/")
 
@@ -1278,6 +1296,87 @@ def run(sctx, queries, skill=None, product=None, limit=LIMIT, which=KINDS, use_h
     return {"candidates": [_public(c, terms) for c in cands], "notes": notes,
             "sources": [{"id": s["id"], "kind": s["kind"], "answered": s["id"] in answered} for s in srcs],
             "index": index, "last": last}
+
+
+TYPED_FIELDS = ("path", "file", "source", "title", "type", "product", "date", "sensitive")
+TYPED_HEAD = "Нотатки за типом: %s%s · знайдено %d"
+TYPED_OTHER = "іншого продукту — не показано: %d"
+
+
+def by_type(sctx, types, product=None, refresh=True):
+    """`ctx search --type` (since v4.9.0): the notes of the own section index whose frontmatter `type` is one of `types`
+    (compared case-folded) — no question, no ranking: {found, notes, sources, index, skipped}.
+    - The own index is refreshed first as `run` refreshes it (ctx_index.REFRESH_S, never past COMMAND_S; with `refresh`
+      False it is read as it is). An index not built yet, busy or damaged has not answered — the lines of `run`
+      (BUILDING_NOTE, NO_INDEX_NOTE, BUSY_NOTE, BROKEN_NOTE); it is never rebuilt here.
+    - found: {path (the index name), file (the note's `.md` on disk inside a vault or a core folder, "" when it is not
+      there or iCloud has not downloaded it — ICLOUD_OPEN says so), source (`own` or the repository's id), title, type,
+      product, date, sensitive}, by path. A name outside the roots' scope or one the search excludes (`_System/_scratch/`, the
+      store, a blocks file…) is never listed — the rules of `run`.
+    - `product`: a note whose product is another one (`same_product`: one whole key each, never a part of a name) is
+      left out and counted in skipped.product; a note with no product stays.
+    Writes only the index (the refresh) — never last.json, the store or a vault."""
+    start = time.monotonic()
+    want = {str(t).strip().casefold() for t in types or () if str(t).strip()}
+    notes, why, done = [], None, None
+    idx = ci.Index(sctx["home"])
+    if refresh:
+        done, why = _refresh(idx, sctx, max(0.0, min(ci.REFRESH_S, start + COMMAND_S - time.monotonic())), notes)
+    locked = bool((done or {}).get("locked"))
+    answered, rows = False, []
+    if idx.built() is False:
+        locked = locked or idx.lock_held()
+        _note(notes, [BUILDING_NOTE if locked else NO_INDEX_NOTE % (
+            why or (UNFINISHED_WHY if os.path.isfile(idx.db_path) else NO_DB_WHY))])
+    else:
+        if why:
+            _note(notes, [REFRESH_NOTE % why])
+        rows = idx.notes()
+        if idx.problem:
+            _note(notes, [idx.problem])
+            rows = []
+        else:
+            answered = True
+    vaults = sctx.get("vaults") or []
+    prefixes = [ci.rel_path(r["path"], vaults, r) for r in sctx.get("roots") or []]
+    found, other = [], 0
+    for r in rows:
+        rel = N(r.get("path") or "")
+        if str(r.get("type") or "").strip().casefold() not in want:
+            continue
+        if not _usable(rel) or not _in_scope(rel, prefixes) or not _keep(sctx, rel):
+            continue
+        if not same_product(r.get("product"), product):
+            other += 1
+            continue
+        f = _file_of(sctx, rel) or ""
+        if f and ci.is_dataless(f):
+            _note(notes, [ICLOUD_OPEN % rel])
+            f = ""
+        found.append(dict(zip(TYPED_FIELDS, (rel, f, r.get("source") or "own", r.get("title") or "", str(r.get("type") or ""),
+                                             r.get("product") or "", r.get("date") or "", bool(r.get("sensitive"))))))
+    found.sort(key=lambda n: n["path"])
+    index = None
+    if answered or done is not None:
+        state = idx.status() if not idx.busy else _saved_state(idx)
+        index = dict(state, **{k: (done or {}).get(k, 0) for k in ("added", "changed", "removed")}, locked=locked)
+    return {"found": found, "notes": notes, "sources": [{"id": "own", "kind": "own", "answered": answered}],
+            "index": index, "skipped": {"product": other}}
+
+
+def render_typed(res, types, product=None):
+    """The human output of `by_type`'s result: TYPED_HEAD, a line per note `N. <title> · <type> · <product> · <date> ·
+    <path>` (`—` for what the note does not say), TYPED_OTHER when another product's notes were left out, the notes."""
+    found = res.get("found") or []
+    lines = [TYPED_HEAD % (", ".join(types), " · продукт %s" % product if product else "", len(found))]
+    for i, n in enumerate(found, 1):
+        lines.append("%d. %s" % (i, " · ".join([n["title"] or "—", n["type"] or "—", n["product"] or "—",
+                                                (n["date"] or "")[:10] or "—", n["path"]] + ([SENSITIVE] if n.get("sensitive") else []))))
+    other = (res.get("skipped") or {}).get("product") or 0
+    if other:
+        lines.append(TYPED_OTHER % other)
+    lines.extend(res.get("notes") or [])
+    return "\n".join(lines) + "\n"
 
 
 def last_path(home):
