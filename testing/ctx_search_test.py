@@ -26,6 +26,10 @@ import ctx_read as cr  # noqa: E402
 import ctx_search as cs_  # noqa: E402
 import ctx_stem as st  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+import ctx_common as cc  # noqa: E402
+import ctx_endpoints as cep  # noqa: E402
+import ctx_repos as crp  # noqa: E402
+from ctx_testenv import approve  # noqa: E402
 
 FIX = os.path.join(ROOT, "testing", "fixtures", "search")
 NOW = datetime.datetime(2026, 10, 20, 12, 0)
@@ -87,8 +91,14 @@ class Env:
     def note(self, rel):
         return os.path.join(self.vault, *rel.split("/"))
 
-    def reg(self, rid, text):
+    def reg(self, rid, text, trust=True):
+        """Write a registration; since v4.9.1 then approve its address in this temp home, as `ctx provider trust` would —
+        the search's refusals are testing/ctx_endpoints_test.py's."""
         write(os.path.join(self.providers, rid + ".yaml"), text)
+        repo = crp.normalise(cc.read_yaml_subset(text))
+        ep = repo["endpoint"]
+        if trust and ep["url"] and not cep._problem(repo["id"], ep["url"], ep["headers_env"]):
+            approve(self.home, repo)
 
     def sctx(self, **kw):
         return cs_.context_for(self.home, self.text, self.store, **kw)
@@ -2575,7 +2585,7 @@ NAV = read(ROOT, "skills", "context-navigator", "SKILL.md")
 NAV_FM = NAV.split("\n---", 1)[0]
 check("v3.17.0: context-navigator 0.3.0 searches your whole context — the description says so, a missing shared core is "
       "one line and the search goes on, §13 and the «Де шукав» line are named",
-      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM or "version: 0.3.2" in NAV_FM or "version: 0.4.0" in NAV_FM or "version: 0.4.1" in NAV_FM or "version: 0.4.2" in NAV_FM or "version: 0.4.3" in NAV_FM or "version: 0.4.4" in NAV_FM or "version: 0.5.0" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
+      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM or "version: 0.3.2" in NAV_FM or "version: 0.4.0" in NAV_FM or "version: 0.4.1" in NAV_FM or "version: 0.4.2" in NAV_FM or "version: 0.4.3" in NAV_FM or "version: 0.4.4" in NAV_FM or "version: 0.5.0" in NAV_FM or "version: 0.5.1" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
       and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
       and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
 

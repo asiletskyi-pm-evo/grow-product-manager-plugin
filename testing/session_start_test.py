@@ -551,7 +551,10 @@ with tempfile.TemporaryDirectory() as d:                  # the Skills line: the
     line, out = repos_of(ctxp)
     skills = next((l for l in out.splitlines() if l.startswith("Skills:")), "")
     SYNC_FIRST = ('Skills: run python3 "<plugin root>/scripts/ctx.py" provider sync --if-due (repeat any line it prints that starts '
-                  '«Ядро оновило» at the end of your answer), then take this path for Step 0a of references/local-context-protocol.md')
+                  "«Ядро оновило» or «Довірено» at the end of your answer; a line «… адресу не схвалено …» is one question at the "
+                  "end — `ctx provider trust <id>` shows the address and a code, `--code` only on the user's yes), then take "
+                  "this path for Step 0a of "
+                  "references/local-context-protocol.md")       # since v4.9.1: the trusted endpoints' lines
     check("the Skills line (a store exists) starts with the sync, then the v3.13.1 text as it was", skills.startswith(SYNC_FIRST)
           and 'run python3 "<plugin root>/scripts/ctx.py" read --skill <your name> --product' in skills
           and "exits 3" in skills and skills.endswith("Env GROW_PM_CONTEXT_PATH is set for Bash."), skills)

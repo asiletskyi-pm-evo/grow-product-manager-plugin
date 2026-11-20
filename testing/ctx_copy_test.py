@@ -23,6 +23,9 @@ import ctx_index as ci  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import provider_bundle as pb  # noqa: E402
 from mcp_fake import FakeMcp  # noqa: E402
+from ctx_testenv import approving  # noqa: E402
+
+approving(cp)                                           # since v4.9.1: every pass here is of an approved address (a temp home)
 
 cm.McpClient.BACKOFF = 0.0
 FORMS = json.load(open(os.path.join(ROOT, "testing", "fixtures", "copy", "frontmatter-forms.json"), encoding="utf-8"))

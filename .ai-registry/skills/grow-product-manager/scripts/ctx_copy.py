@@ -39,6 +39,7 @@ import unicodedata
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_endpoints as ce  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import ctx_wrappers as cw  # noqa: E402
@@ -75,6 +76,10 @@ class Busy(CopyError):
 
 class Refused(CopyError):
     """A folder the plugin may not write (check_folder)."""
+
+
+class Untrusted(CopyError):
+    """Since v4.9.1: the repository's address is not one you approved (ctx_endpoints) — nothing written, nothing sent."""
 
 
 # ------------------------------------------------------------------ places
@@ -473,7 +478,7 @@ def decide(entry, srv, path, text):
 class Pass:
     """One pass of a copy (see `run`)."""
 
-    def __init__(self, home, repo, now, client_factory=cm.McpClient, progress=None, workers=WORKERS):
+    def __init__(self, home, repo, now, client_factory=None, progress=None, workers=WORKERS):
         self.home, self.repo, self.now = home, repo, now
         self.rid = repo["id"]
         self.folder = copy_dir(home, self.rid)
@@ -497,9 +502,9 @@ class Pass:
             touch_lock(self.lock)
 
     def _client(self):
-        ep = self.repo["endpoint"]
-        hdrs = cm.headers_from_env(ep["headers_env"]) if ep.get("headers_env") else {}
-        return self.factory(ep["url"], headers=hdrs)
+        """A client for the repository's server — since v4.9.1 only through `ctx_endpoints.client_for` (Untrusted: an
+        address you did not approve, no request)."""
+        return ce.client_for(self.repo, self.home, factory=self.factory)
 
     def _write(self, rel, text):
         cs.atomic_write(os.path.join(self.folder, rel), text)
@@ -555,6 +560,9 @@ class Pass:
 
     # -- the run
     def run(self, regs=()):
+        refused = ce.verdict(self.repo, self.home)      # since v4.9.1: before the folder, the lock or the state
+        if refused is not None:
+            raise Untrusted(refused.line)
         check_folder(self.home, self.rid, regs)
         with cs.guard_roots([self.folder, self.conflicts]):
             os.makedirs(os.path.join(self.folder, SERVICE), exist_ok=True)
@@ -586,7 +594,10 @@ class Pass:
         self._prune_backups()
         state["attempt_at"] = stamp(self.now)           # a pass that is cut counts as an attempt (retried in RETRY_S)
         save_state(self.folder, state)
-        client = self._client()
+        try:
+            client = self._client()
+        except ce.Untrusted as e:                       # approved at the start of the pass, not any more
+            return self._result(state, "unreachable", cc.clip(e.line, 300), 0, started)
         if not client.probe():
             return self._result(state, "unreachable", cc.clip(getattr(client, "last_error", "") or "no answer", 300), 0, started)
         try:
@@ -811,9 +822,11 @@ class Pass:
                 self.removed.append(rel)
 
 
-def run(home, repo, now, client_factory=cm.McpClient, regs=(), progress=None, workers=WORKERS):
+def run(home, repo, now, client_factory=None, regs=(), progress=None, workers=WORKERS):
     """One pass of the copy of `repo` (normalised; an endpoint url) at `now` (an aware datetime) → the result
-    (see Pass._result). CopyError / Busy when the folder may not be written or another pass holds it."""
+    (see Pass._result). CopyError / Busy when the folder may not be written or another pass holds it; since v4.9.1
+    Untrusted (a CopyError, its message the line of `ctx_endpoints`) when its address is not approved — before anything
+    is written or sent."""
     return Pass(home, repo, now, client_factory, progress, workers).run(regs)
 
 

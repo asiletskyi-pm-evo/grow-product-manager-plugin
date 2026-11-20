@@ -149,6 +149,7 @@ try:
         check("the team block from the copy, byte for byte the folder's", f2["team"] and f2["team"] == ff["team"]
               and f2["team_source"] == "folder", (f2["team_error"], (f2["team"] or "")[:200], (ff["team"] or "")[:200]))
     set_url(reg, DEAD)
+    env.trust("zorg-core")                              # since v4.9.1: a changed address gets nothing until approved
     r3 = repo_of(env, "zorg-core")
     f3 = crp.fetch(r3)
     check("server down: blocks from the copy", f3["source"] == "folder" and not f3["error"] and f3["blocks"] == ff["blocks"], f3)
@@ -204,6 +205,7 @@ try:
     print("— 5. the team block's reasons")
     with FakeMcp(tree=served(KIT, skip=(MAN, MODEL))) as fake:
         set_url(reg, fake.url)
+        env.trust("zorg-core")                          # since v4.9.1: a changed address gets nothing until approved
         env.run("repo", "copy", "zorg-core", "--now", "2026-10-30T09:00:00+02:00")
         env.run("repo", "copy", "zorg-core", "--now", "2026-10-31T10:00:00+02:00")
         r5 = repo_of(env, "zorg-core")
