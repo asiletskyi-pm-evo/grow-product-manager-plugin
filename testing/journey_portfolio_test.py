@@ -283,6 +283,9 @@ with tempfile.TemporaryDirectory() as d:
     rc, outx, rx = run("render-html", "--product", "zorg", "--note", notes[0], "--out", os.path.join(d, "no-such-dir", "p.html"))
     check("4.12 a page that cannot be written: exit 1", rc == 1 and rx.get("ok") is False, outx[-300:])
     check("4.13 render-html writes nothing but the page — every note byte for byte", digest(fx) == before)
+    check("4.14 each map and each hand CJM names its note — the source of its numbers (artifact-publishing.md §9)",
+          all('<div class="m">%s</div>' % n in hraw for n in ("journey-first-order.md", "journey-returns.md", "journey-xss.md"))
+          and '<span class="m">cjm-zorg-buyer.md</span>' in hraw, "")
 
     # 5. schema
     rc, outs5, sc = run("schema")

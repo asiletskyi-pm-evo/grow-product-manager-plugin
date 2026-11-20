@@ -393,7 +393,7 @@ table.pf th,table.pf td{padding:6px 8px;border-bottom:1px solid #eef0f2;vertical
 table.pf thead th{position:sticky;top:0;z-index:2;background:#d0ebff}
 table.pf th.j{position:sticky;left:0;z-index:1;background:#fff;font-weight:600;white-space:normal;min-width:160px}
 table.pf thead th.j{z-index:3;background:#d0ebff}
-tr.attn th.j{border-left:4px solid #e03131}.reason{color:#c92a2a}.stale{color:#e8590c}.ok{color:#2f9e44}
+.m{color:#57606a;font-size:11px;font-weight:400}tr.attn th.j{border-left:4px solid #e03131}.reason{color:#c92a2a}.stale{color:#e8590c}.ok{color:#2f9e44}
 svg.spark{background:#fff;border:1px solid #dee2e6;border-radius:4px;vertical-align:middle}
 .cjm{background:#fff;border:1px solid #dee2e6;border-radius:8px;padding:10px 12px;margin:10px 0}
 .cjm .mark{color:#57606a;font-size:12px}table.st{border-collapse:collapse;margin-top:6px}table.st td{border:1px solid #dee2e6;padding:2px 8px}"""
@@ -423,8 +423,8 @@ def render_html(p, product, today, lang):
             cl = _cells(m, lang)
             tds = []
             for k, _ in heads:
-                if k == "journey":
-                    tds.append('<th class="j">%s</th>' % esc(cl[k]))
+                if k == "journey":                   # the note is each number's source (artifact-publishing.md §9)
+                    tds.append('<th class="j">%s<div class="m">%s</div></th>' % (esc(cl[k]), esc(m["note"])))
                 elif k == "health" and m["health"]["points"]:
                     tds.append("<td>%s %s</td>" % (_spark(m["health"]["points"]), esc(cl[k])))
                 elif k == "reviewed":
@@ -446,8 +446,8 @@ def render_html(p, product, today, lang):
                                           ", ".join(f["finding"] for f in x["findings"])) if v)
             rows = "".join("<tr><td>%s</td><td>%s</td><td>%d %s</td></tr>" % (esc(s["id"]), esc(s["name"]), s["metrics"],
                                                                               esc(L["metrics"])) for s in x["stages"])
-            out.append('<div class="cjm"><b>%s</b><div class="mark">%s</div><p class="meta">%s</p>'
-                       '<table class="st">%s</table></div>' % (esc(x["title"]), esc(L["mark"]), esc(meta), rows))
+            out.append('<div class="cjm"><b>%s</b> <span class="m">%s</span><div class="mark">%s</div><p class="meta">%s</p>'
+                       '<table class="st">%s</table></div>' % (esc(x["title"]), esc(x["note"]), esc(L["mark"]), esc(meta), rows))
     if p["skipped"]:
         by = {}
         for s in p["skipped"]:
