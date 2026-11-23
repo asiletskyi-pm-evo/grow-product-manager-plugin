@@ -9,7 +9,7 @@ that fetches blocks never branches on the schema version.
 
 `fetch` reads a repository's blocks ("theirs") from its MCP server or from its core folder; the registrations
 themselves are read from local files only. `reach` says whether a repository answers, `public_url` how its endpoint
-may be shown (both moved here from ctx.py in v3.14); `serves_product` whether it serves a product record (moved here
+may be shown (both moved here from ctx.py in v3.14); since v4.9.1 every client comes from `ctx_endpoints.client_for`; `serves_product` whether it serves a product record (moved here
 from ctx.py in v3.15: `--product` and the resolver match a product the same way). Nothing is ever written. Stdlib only.
 """
 import collections
@@ -24,6 +24,7 @@ import urllib.parse
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
 import ctx_copy as ccp  # noqa: E402
+import ctx_endpoints as ce  # noqa: E402
 import ctx_mcp as cm  # noqa: E402
 import ctx_store as cs  # noqa: E402
 import provider_bundle as pb  # noqa: E402
@@ -69,8 +70,10 @@ def normalise(reg):
     path; a relative one is taken beside the registration file; "" for none) and `blocks` is "none" when the
     registration says `blocks: none` (any case) — a core folder registered for search only — else ""; `exclude` the
     expressions (relative to the core folder) the index leaves out of it, [] for none; `connected_as` the mode
-    `ctx repo add` connected a core with no manifest in (`search`, `inferred`, `guest`; "" for any other registration)."""
-    out = dict(reg)                                     # access, mode, contract, index, source_version, writable …
+    `ctx repo add` connected a core with no manifest in (`search`, `inferred`, `guest`; "" for any other registration).
+    Since v4.9.1 a key of the file that starts with `_` is dropped: those are the engine's (`_file`, `_trust_home`), and
+    a registration never sets them."""
+    out = {k: v for k, v in reg.items() if not str(k).startswith("_")}     # access, mode, contract, index, writable …
     rid = _s(reg.get("id"))
     authority = _s(reg.get("authority")) or DEFAULT_AUTHORITY
     paths = list(reg.get("paths") or [])
@@ -149,10 +152,12 @@ REG_READ_TIMEOUT_S = cc.BOUNDARY_READ_S                 # seconds one registrati
 REG_READ_DEADLINE_S = cc.BOUNDARY_DEADLINE_S            # …and all of them together (since v3.14): 6 — the boundary's budget
 
 
-def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S, deadline=None):
-    """Every registered repository, normalised, in registration order — the vaults' providers folders
-    first, then `<home>/.grow-pm/providers` (or `extra_dirs` when given, as in find_registrations;
-    the home is never taken from the environment). An id seen twice keeps the first. Unreadable
+def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_READ_TIMEOUT_S, deadline=None, notes=None):
+    """Every registered repository, normalised, in registration order — `<home>/.grow-pm/providers` (or `extra_dirs`
+    when given, as in find_registrations; the home is never taken from the environment) first since v4.9.1, then the
+    vaults' providers folders. An id seen twice keeps the first; two files of one id with different endpoints add a line
+    to `notes`, when it is a list (`cc.SHADOWED`). Every repository carries `_trust_home`, the home whose trust file
+    decides whether its address may be reached (`ctx_endpoints.Home`, references/context-provider-protocol.md §13). Unreadable
     registrations — and, since v3.13.1, one not read within `timeout` seconds, since v3.14 also one not
     reached before REG_READ_DEADLINE_S for all of them has passed — are left out and, when `skipped`
     is a list, appended to it as (path, reason). Since v3.24.0 a registration with an endpoint and no folder of its own
@@ -166,8 +171,11 @@ def load_repos(context_text, home, extra_dirs=None, skipped=None, timeout=REG_RE
     if deadline is not None:
         ends = deadline if ends is None else min(ends, deadline)
     regs = cc.find_registrations(cc.vault_entries(context_text), extra_dirs=dirs, skipped=skipped, timeout=timeout,
-                                 deadline=ends)
-    return [ccp.attach(normalise(r), home) for r in regs]
+                                 deadline=ends, shadowed=notes)
+    out = [ccp.attach(normalise(r), home) for r in regs]
+    for r in out:
+        r["_trust_home"] = ce.Home(home)
+    return out
 
 
 # ------------------------------------------------------------------ fetch
@@ -403,23 +411,29 @@ def _copy_why(copy_root, manifest):
     return "" if manifest is not None else COPY_ADVICE
 
 
-def _header_hint(ep, hdrs):
-    """"; <why the variable gives no header>" when the registration names one and it gave none, else ""."""
-    return "; " + cm.header_problem(ep["headers_env"]) if ep["headers_env"] and not hdrs else ""
+def _header_hint(ep):
+    """"; <why the variable gives no header>" when the registration names one and it gives none, else "" — the
+    variable's name, never its value (`ctx_mcp.header_problem`)."""
+    problem = cm.header_problem(ep["headers_env"]) if ep["headers_env"] else ""
+    return "; " + problem if problem else ""
 
 
-def _from_mcp(repo, blocks_file, client_factory, deadline=None):
-    """(text, None) of the blocks file as the server serves it, or (None, why not). The client keeps `deadline`."""
+def _from_mcp(repo, blocks_file, client_factory=None, deadline=None):
+    """(text, None) of the blocks file as the server serves it, or (None, why not). The client keeps `deadline`. Since
+    v4.9.1 the client comes from `ctx_endpoints.client_for`: an address you did not approve gets no request, and the
+    reason is its line (`<id>: адресу не схвалено (…) — нічого не надіслано…`)."""
     ep = repo["endpoint"]
     if not ep["url"]:
         return None, "no endpoint url in the registration"
     if not blocks_file:
         return None, "the registration names no blocks_file"
-    hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
     try:
-        client = client_factory(ep["url"], headers=hdrs, deadline=deadline)
+        client = ce.client_for(repo, factory=client_factory, deadline=deadline)
+    except ce.Untrusted as e:
+        return None, e.line
+    try:
         if not client.probe():
-            hint = _header_hint(ep, hdrs)
+            hint = _header_hint(ep)
             return None, "MCP unreachable: %s%s" % (_clean(getattr(client, "last_error", "") or "no answer"), hint)
         note = client.call(NOTE_TOOL, {"path": ep["root"] + blocks_file})      # Ruling P1: plain concatenation
     except cm.McpError as e:
@@ -511,12 +525,10 @@ def namespace_warning(repo, namespace=None):
 
 
 def public_url(url):
-    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment."""
-    try:
-        u = urllib.parse.urlsplit(url)
-        return "%s://%s%s" % (u.scheme, u.netloc.rpartition("@")[2], u.path) if u.scheme and u.netloc else ""
-    except ValueError:
-        return ""
+    """An endpoint as it may be shown: scheme, host, port and path — no credentials, no query, no fragment. Since v4.9.1
+    the address as the engine parses it (`ctx_endpoints.shown`: the host connected to, the path percent-encoded), and ""
+    for one it does not read — never the netloc as written, which another parser may read as another host."""
+    return ce.shown(url)
 
 
 def reach(repo, deadline=None):
@@ -528,17 +540,19 @@ def reach(repo, deadline=None):
     if repo["kind"] == "mcp" or ep["url"]:
         if not ep["url"]:
             return False, "no endpoint url in the registration"
-        hdrs = cm.headers_from_env(ep["headers_env"]) if ep["headers_env"] else {}
-        client = cm.McpClient(ep["url"], headers=hdrs, deadline=deadline)
+        try:                                            # since v4.9.1: an address you did not approve is not probed
+            client = ce.client_for(repo, deadline=deadline)
+        except ce.Untrusted as e:
+            return False, cc.clip(e.line, MAX_ERROR)
         if client.probe():
             return True, ""
-        return False, cc.clip(client.last_error + _header_hint(ep, hdrs), MAX_ERROR)
+        return False, cc.clip(client.last_error + _header_hint(ep), MAX_ERROR)
     if repo["core_root"]:
         return (True, "") if os.path.isdir(repo["core_root"]) else (False, "core folder not found")
     return False, "no endpoint and no core folder in the registration"
 
 
-def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, deadline=None, team=True, manifest=None):
+def fetch(repo, client_factory=None, now=None, include_skipped=False, deadline=None, team=True, manifest=None):
     """A repository's blocks ("theirs") — read only, nothing is written anywhere.
 
     `blocks_source` decides where from: "mcp" asks the server only; "paths" reads the core folder only; "auto"
@@ -565,7 +579,9 @@ def fetch(repo, client_factory=cm.McpClient, now=None, include_skipped=False, de
     `deadline` (since v3.14; a time.monotonic() moment, None for none) bounds the whole fetch: the client keeps it —
     every request gets what is left, none is made once it has passed (the error then says "deadline reached") — and
     the core folder is read within `cs.read_budget` of what is left, so a file iCloud never delivers costs that, not
-    the store's own 30 s. `client_factory` is called as (url, headers=…, deadline=…).
+    the store's own 30 s. `client_factory` (the client of ctx_mcp when None) is called as (url, headers=…, deadline=…) —
+    since v4.9.1 only through `ctx_endpoints.client_for`, so a registration whose address you did not approve gets no
+    request: its line is the server's error (under "auto" the core folder is still read).
     `team` False (since v3.14; `repo status`, which wants the source's version alone) never builds the team region: the
     blocks file is read and nothing else — the core's manifest only when it names the blocks file or the namespace —
     and team, team_source, team_error stay empty.

@@ -59,10 +59,10 @@ import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ctx_common as cc  # noqa: E402
+import ctx_endpoints as ce  # noqa: E402
 import ctx_glossary as gl  # noqa: E402
 import ctx_hints as ch  # noqa: E402
 import ctx_index as ci  # noqa: E402
-import ctx_mcp as cm  # noqa: E402
 import ctx_ops as co  # noqa: E402
 import ctx_read as cr  # noqa: E402
 import ctx_repos as crp  # noqa: E402
@@ -625,9 +625,8 @@ def _mcp(sctx, src, plans, until, box):
     for key, expr, i, asked in jobs:
         rows = []
         if expr:
-            if client is None:
-                client = cm.McpClient(ep["url"], headers=cm.headers_from_env(ep["headers_env"]) if ep["headers_env"]
-                                      else {}, deadline=until)
+            if client is None:                          # since v4.9.1: only an approved address (ctx_endpoints)
+                client = ce.client_for(repo, sctx.get("home"), deadline=until)
             rows = client.call_list("vault_search", {"query": expr, "limit": LIST_LIMIT})
         hits = []
         for r in rows:
@@ -656,6 +655,9 @@ _WORKERS = {"own": _own, "local": _local, "mcp": _mcp}
 def _work(fn, sctx, src, plans, until, box):
     try:
         fn(sctx, src, plans, until, box)
+    except ce.Untrusted as e:                           # since v4.9.1: nothing was sent; its line, not «не відповів»
+        box.pop("lists", None)
+        box["refused"] = e.line
     except Exception:  # noqa: BLE001 — a source that fails is one line, never the search
         box.pop("lists", None)
         box["silent"] = True
@@ -673,7 +675,9 @@ def gather(sctx, variants, sources, deadline):
     - local: the file opened read only (OPEN_S), either shape of `_local_sql`; the unstemmed words (raw_terms),
       LIST_LIMIT notes; a path relative to the index's meta `vault_root` | `vault` gets the vault's name.
     - mcp: `vault_search` {query: the unstemmed words' expression, limit: LIST_LIMIT}; the header of
-      `endpoint.headers_env`; a path is named by `_remote_name`.
+      `endpoint.headers_env`; a path is named by `_remote_name`. Since v4.9.1 only an address you approved is asked
+      (`ctx_endpoints.client_for`): any other gives its line (`<id>: адресу не схвалено (…) — нічого не надіслано…`)
+      instead of `не відповів`, and no query leaves the machine.
     A hit with no usable path is dropped silently, and so is one ctx_index.excluded leaves out (a user's own local index
     also holds the store). A stop-word variant asks nothing: its lists are empty. `notes` also carries the index's
     problem (Index.problem), `індекс оновлюється: N файлів ще не переглянуто` while the own index's last refresh left
@@ -695,7 +699,9 @@ def gather(sctx, variants, sources, deadline):
     lists = {}
     for src, t, until, box in runs:
         t.join(max(0.0, until - time.monotonic()))
-        if t.is_alive() or box.get("silent"):
+        if box.get("refused"):
+            notes.append(box["refused"])
+        elif t.is_alive() or box.get("silent"):
             notes.append(SILENT_NOTE % src["id"])
         elif box.get("schema"):
             notes.append(SCHEMA_NOTE % src["id"])
@@ -2093,9 +2099,11 @@ def _from_mcp(sctx, entry):
     ep = (repo or {}).get("endpoint") or {}
     if not ep.get("url") or not entry.get("remote"):
         raise GetError(3, "%s: no MCP endpoint to read %s" % (entry.get("source"), entry["path"]))
+    try:                                                # since v4.9.1: only an approved address (ctx_endpoints)
+        client = ce.client_for(repo, sctx.get("home"), deadline=time.monotonic() + SOURCE_S)
+    except ce.Untrusted as e:
+        raise GetError(5, e.line)
     try:
-        client = cm.McpClient(ep["url"], headers=cm.headers_from_env(ep["headers_env"]) if ep.get("headers_env") else {},
-                              deadline=time.monotonic() + SOURCE_S)
         note = client.call("vault_get_note", {"path": entry["remote"]})
     except Exception:  # noqa: BLE001 — a server that fails is one line, as in the search
         raise GetError(5, SILENT_NOTE % entry.get("source"))

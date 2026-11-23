@@ -851,10 +851,18 @@ untouched = []
 
 
 def plan_run(e, core, *args):
-    """A plan run, with the proof that it wrote nothing: the home, the vault and the core are the same bytes after it."""
+    """A plan run, with the proof that it wrote nothing: the home, the vault and the core are the same bytes after it.
+    Since v4.9.1 the first command after the update that may reach a server writes the trust file, once
+    (context-provider-protocol.md §13): a plan that creates it has written nothing else."""
+    trust = os.path.join(e.home, ".grow-pm", "trust", "providers.json")
+    fresh = not os.path.exists(trust)
     before = tree_of(e.home, e.vault, core)
     rc, out, res = run_ok(e, "provider", "plan", *args)
-    untouched.append(tree_of(e.home, e.vault, core) == before)
+    after = tree_of(e.home, e.vault, core)
+    if fresh:
+        after.pop(trust, None)
+        after.pop(os.path.join(e.home, ".grow-pm", ".trust-seeded"), None)     # its mark, beside the trust folder
+    untouched.append(after == before)
     return rc, out, res
 
 
@@ -3225,7 +3233,7 @@ need_cst = ["`sync: daily`", "`sync: off`", "except `sync`", "`--choose <block>=
             "One `--choose` takes several answers", "ctx provider sync <repo>"]
 check("connect-steps asks about `sync: daily` once, settles every `?` before it, carves `sync` out of the kept-keys rule and shows several answers per --choose",
       not lacks(cst3, need_cst) and 0 <= i_first < i_q, (lacks(cst3, need_cst), i_first, i_q))
-need_skl = ["version: 0.9.1", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
+need_skl = ["version: 0.9.2", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
 check("the skill is 0.5.0 (slots, v3.15.0) and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
 
 # the registry: one case per area, above v3.13.1
@@ -4203,7 +4211,7 @@ need_15 = [
              "for the second kind keep `ctx slot bind <repo> <block> <slot> --team <team record>` ready",
              "holds for every key except `sync` (and, since v3.15.0, the taking of one id out of `skip_blocks`, below)",
              "**The second exception: one id out of `skip_blocks`** (since v3.15.0)"]),
-    (skl15, ["version: 0.9.1", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "this skill binds only what the user confirms (`ctx slot bind`)", "the publisher's `slot=` and the plugin's own `team#Members` bind without a yes",
+    (skl15, ["version: 0.9.2", "## Step 4a — slots after a refresh (with a store, since v3.15.0)", "this skill binds only what the user confirms (`ctx slot bind`)", "the publisher's `slot=` and the plugin's own `team#Members` bind without a yes",
              "offered at a refresh, in one message (a no is offered again at the next refresh)", "except a divergence, which recommends no side",
              "and the removal of one id from `skip_blocks` on the user's yes for that block (Step 4a)", "adding an id to `skip_blocks` in Step 4a",
              "(the second exception of `references/context-provider-protocol.md` §3b)", "a no changes nothing",
@@ -4211,7 +4219,7 @@ need_15 = [
     (mm15, ["since v3.15.0 the slots (`references/context-protocol.md` §5f)", "the answer per slot being `ctx slot decide <slot> <repo>`",
             "a yes being `ctx slot bind …` for each confirmed one", "### Context slots (only with a context store)"]),
     (cfg15, ["version: 2.17.2"]),
-    (readme15, ["### 32. Context Connect (v0.9.1)", "| Context Connect | v0.9.1 |", "### 10. Plugin Configurator (v2.17.2)", "| Plugin Configurator | v2.17.2 |",
+    (readme15, ["### 32. Context Connect (v0.9.2)", "| Context Connect | v0.9.2 |", "### 10. Plugin Configurator (v2.17.2)", "| Plugin Configurator | v2.17.2 |",
                 "**Slots, the cascade and `ctx explain`** (since v3.15.0)", "and — at a refresh — the blocks you had switched off", "since v3.15.0 `explain` and `slot bind|map|prefer|decide|forget`"]),
     (hp15, ["since v3.15.0 slots and the cascade in `ctx read`, `ctx explain`, `ctx slot …`"]),
 ]
@@ -4328,7 +4336,10 @@ KOSHYK = "Notes/Кошик — графік роботи продавця.md"
 with tempfile.TemporaryDirectory() as d:
     env = SearchEnv(d)
     before = tree(env.store)
-    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)}
+    first_trust = os.path.join(env.home, ".grow-pm", "trust")       # since v4.9.1: written once, by the first search
+    first_mark = os.path.join(env.home, ".grow-pm", ".trust-seeded")
+    home_before = {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)
+                   and p != first_mark}
     rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours", "--json")
     check("ctx search --json: exit 0, nothing but the CTX_RESULT line", rc == 0 and res
           and out.strip().startswith("CTX_RESULT ") and out.strip().count("\n") == 0, (rc, out[-500:]))
@@ -4379,8 +4390,9 @@ with tempfile.TemporaryDirectory() as d:
           and res5.get("header", "").startswith("> [own · ") and out5.strip().count("\n") == 0, (rc5, out5[-300:]))
     rc, out, _ = run_ok(env, "search", "--get", "0000000000")
     check("--get of an id no search gave: exit 3, one line why", rc == 3 and "0000000000" in out, (rc, out[-300:]))
-    check("search writes only <home>/.grow-pm/index/ — last.json beside the index",
-          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index)} == home_before
+    check("search writes only <home>/.grow-pm/index/ — last.json beside the index (and, since v4.9.1, the trust file once)",
+          {p: b for p, b in tree_of(env.home).items() if not p.startswith(env.index) and not p.startswith(first_trust)
+           and p != first_mark} == home_before
           and os.path.isfile(os.path.join(env.index, "last.json")))
 
     rc, out, res = run_ok(env, "search", "--q", "графік роботи продавця", "--q", "seller working hours")
