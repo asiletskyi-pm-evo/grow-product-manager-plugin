@@ -65,6 +65,7 @@ COMMANDS = ("parse", "check", "render-html", "health", "refresh", "tree", "board
 NEST_FINDINGS = ("orphan_child", "nest_cycle", "too_deep", "other_product_parent", "self_parent")
 ORPHAN_WHY = ("no_parent", "bad_parent", "no_stage", "no_stage_in_parent", "no_step")       # why a child hangs on nothing (§14)
 MAX_DEPTH = 3                                    # root → child → grandchild (R38); deeper is a reference by name only
+UNSAFE_MARKS = ("·", "•", "|", "—", "–", ":", "#")   # what a tree board's cell titles and row keys are split by (§14)
 OUTCOME_TBD = "⚠️ TBD"
 REVIEW_DAYS, PAIN_DAYS, MIN_SOLUTIONS = 90, 182, 3
 HC_SOURCE = "health-check"
@@ -176,7 +177,8 @@ def load(path):
             "owner": nt.fm_scalar(fm, "owner"), "reviewed": nt.fm_scalar(fm, "reviewed"), "stages": st, "health": hp,
             "rows": rows, "errors": errors, "type": nt.fm_scalar(fm, "type"),
             "parent": parent_field(fm)[0], "parent_bad": parent_field(fm)[1], "parent_stage": nt.fm_scalar(fm, "parent_stage"),
-            "parent_step": nt.fm_scalar(fm, "parent_step")}
+            "parent_step": nt.fm_scalar(fm, "parent_step"),
+            "parent_step_bad": bool(re.search(r"^parent_step[ \t]*:[ \t]*\S", fm, re.M)) and not nt.fm_scalar(fm, "parent_step")}
 
 
 NO_VALUE = ("", "null", "~", '""', "''")
@@ -197,6 +199,8 @@ def parent_field(fm):
             if not it:
                 if line.strip() == "":
                     continue
+                if line[:1] in " \t" and not items:  # `parent:` written as a mapping: no map's name
+                    return "", "the value is a mapping, not a map's name"
                 break
             items.append(it.group(1).strip().strip("\"'").strip())
         items = [i for i in items if i.lower() not in NO_VALUE]
@@ -418,6 +422,7 @@ def inspect_snapshot(path):
         stages = []
     score = nt.fm_scalar(fm, "health_score")
     return {"name": os.path.basename(path), "product": nt.fm_scalar(fm, "product"), "date": nt.fm_scalar(fm, "date"),
+            "map": link_name(nt.fm_scalar(fm, "map")),
             "period": nt.fm_scalar(fm, "period"), "score": number(score) if score else None, "stages": stages}, ""
 
 
@@ -930,7 +935,7 @@ def name_key(name):
 def unsafe_name(name):
     """Is a map's file name no fit for a page, a board key or a link — a link, a contact or a secret in it, a space, or a
     separator a tree board's cell title or row key is split by («·», «#», «:», «|», a dash)?"""
-    return nt.safe(name) != name or bool(re.search(r"[\s·•|—–:#]", name)) or not name.strip()
+    return nt.safe(name) != name or any(c.isspace() or c in UNSAFE_MARKS for c in name) or not name.strip()
 
 
 def _product_key(p):
@@ -980,8 +985,8 @@ def nest_maps(note_path, maps=(), dirs=()):
         try:
             raw, fm, _ = nt.read_note(path)
         except Bad as e:
-            if named:
-                skip(path, "unreadable", str(e))
+            if named or str(e) != "the note has no frontmatter":
+                skip(path, "unreadable", str(e))     # a map that does not read is named, never taken for plain markdown
             else:
                 counts["ignored"] += 1               # a folder's plain markdown is no map
             continue
@@ -997,7 +1002,8 @@ def nest_maps(note_path, maps=(), dirs=()):
             skip(path, "sensitive", "a sensitive note — never read into the tree")
             continue
         if not subject and unsafe_name(name):
-            skip(path, "unsafe_name", "a file name holding a link, a contact, a secret, « · » or «#» — rename the file to nest it")
+            skip(path, "unsafe_name", "a file name holding a link, a contact, a secret, a space or a separator (%s) — rename the "
+                 "file to nest it" % ", ".join("«%s»" % m_ for m_ in UNSAFE_MARKS))
             continue
         try:
             note = load(path)
@@ -1012,7 +1018,7 @@ def nest_maps(note_path, maps=(), dirs=()):
     return out, skipped, counts
 
 
-def nest_forest(maps):
+def nest_forest(maps, skipped=None):
     """The nesting of the maps (§14): {parent: {child: parent}, children: {parent: [children]}, level: {map: n},
     findings}. A child's link attaches it only when its parent is a map of the same product that declares its
     `parent_stage` and, with a `parent_step`, has a row of that step on that stage — else a finding, never a guess. A
@@ -1038,8 +1044,9 @@ def nest_forest(maps):
             continue
         pn = maps.get(fold.get(name_key(p), ""))
         if pn is None:
-            sp = nt.safe(p)
-            f("orphan_child", name, "parent %s is no map found — renamed, deleted or not given" % sp, why="no_parent", parent=sp)
+            sp, why_ = nt.safe(p), (skipped or {}).get(name_key(p))
+            f("orphan_child", name, ("parent %s was skipped (%s) — see skipped" % (sp, why_)) if why_ else
+              "parent %s is no map found — renamed, deleted or not given" % sp, why="no_parent", parent=sp)
             continue
         p = fold[name_key(p)]
         a, b = _product_key(n["product"]), _product_key(pn["product"])
@@ -1052,6 +1059,10 @@ def nest_forest(maps):
             continue
         if stage not in [s["id"] for s in pn["stages"]]:
             f("orphan_child", name, "%s declares no stage %s" % (p, stage), why="no_stage_in_parent", parent=p)
+            continue
+        if n.get("parent_step_bad"):
+            f("orphan_child", name, "parent_step does not read as one step (a list or a mapping) — write the step as the "
+              "parent's rows write it", why="no_step", parent=nt.safe(p))
             continue
         step = _norm(n.get("parent_step")).casefold()
         if step and not any(r["stage"] == stage and _norm(r["step"]).casefold() == step for r in pn["rows"] if not r["gap"]):
@@ -1191,7 +1202,7 @@ def nest_of(note_path, maps=(), dirs=(), lang=None):
     found, skipped, counts = nest_maps(note_path, maps, dirs)
     name = unicodedata.normalize("NFC", os.path.splitext(os.path.basename(note_path))[0])
     found[name] = note if name not in found else found[name]
-    forest = nest_forest(found)
+    forest = nest_forest(found, {name_key(os.path.splitext(s_["note"])[0]): s_["reason"] for s_ in skipped})
     lang = lang or note["lang"]
     return {"name": name, "note": found[name], "maps": found, "forest": forest, "lang": lang,
             "tree": nest_node(name, found, forest, lang), "ancestors": ancestors(name, found, forest),
@@ -1400,7 +1411,7 @@ def assign_roles(items, note, exclude=(), lookup=None):
             by_text.setdefault(t, []).append(r)
     heads, lanes = _heads(note), _lane_texts()
     for it in items.values():
-        for k in ("role", "row", "stage", "lane", "hc", "origin"):
+        for k in ("role", "row", "stage", "lane", "hc", "origin", "child"):
             it.pop(k, None)
         if it["kind"] == "frame":
             own = parse_cell(it["text"], declared)
@@ -1431,13 +1442,14 @@ def assign_roles(items, note, exclude=(), lookup=None):
             taken.add(r["id"])
             if len(by_text[_norm(it["text"])]) > 1:
                 ambiguous.append(it["id"])
-    marks = tuple(_norm(m).lower() for m in note.get("rollup_marks", ()))
+    marks = note.get("rollup_marks") or {}
     for it in items.values():
         if it.get("role"):
             continue
         t = _norm(it["text"])
-        if t.lower() not in heads and marks and it["kind"] == "sticky" and t.lower().startswith(marks):
-            it["role"], it["origin"] = "rollup", "plugin"   # a child map's roll-up or reference on a tree board (§14)
+        rm = ROLLUP_HEAD.match(t) if marks and it["kind"] == "sticky" and t.lower() not in heads else None
+        if rm and name_key(rm.group(1)) in marks:      # a child map's roll-up or reference on a tree board (§14), by its note's
+            it["role"], it["origin"], it["child"] = "rollup", "plugin", marks[name_key(rm.group(1))][0]   # name
             continue
         it["role"] = ("header" if t.lower() in heads else "lane_name" if t.lower() in lanes
                       else "team" if it["kind"] == "sticky" else "other")
@@ -1529,7 +1541,7 @@ def tree_note(nest, lang):
     child map the board shows with its stages as `<child> · <id>` and its rows as `<child>#<id>` (C7) — so the board's
     own code (roles, states, diffs) reads a tree board unchanged. Only read: never written, never a page."""
     root = nest["note"]
-    stages, rows, heads, marks = list(root["stages"]), list(root["rows"]), [], []
+    stages, rows, heads, marks = list(root["stages"]), list(root["rows"]), [], {}
     for k in tree_blocks(nest):
         n, pre = nest["maps"][k["note"]], k["note"]
         stages += [dict(s_, id="%s · %s" % (pre, s_["id"])) for s_ in n["stages"]]
@@ -1537,11 +1549,27 @@ def tree_note(nest, lang):
             rows.append(dict(r, id=("%s#%s" % (pre, r["id"])) if r["id"] else "", stage="%s · %s" % (pre, r["stage"]),
                              parent=("%s#%s" % (pre, r["parent"])) if r["parent"] else "", note=pre))
         heads += [block_title(k, lang), k["journey"]]
-        marks.append("↳ «%s» · %s" % (k["journey"], k["note"]))
+        marks[name_key(k["note"])] = (k["note"], "rollup")
     for x in _deeper_all(nest["tree"]):
-        marks.append("↳ «%s» · %s" % (x["journey"], x["note"]))
+        marks[name_key(x["note"])] = (x["note"], "reference")
     return dict(root, stages=stages, rows=rows, extra_heads=heads, rollup_marks=marks,
                 tree=[k["note"] for k in tree_blocks(nest)])
+
+
+ROLLUP_HEAD = re.compile(r"^↳ «.*?» · (\S+)")       # a roll-up or reference sticky's first words: the child by its note's name
+
+
+def rollup_ids(items, note):
+    """({child: the element id of its roll-up sticky}, {map: the element id of its reference sticky}) of a tree board —
+    what a new version updates by id (§11, §14)."""
+    marks = note.get("rollup_marks") or {}
+    kinds = {n_: k_ for n_, k_ in marks.values()}
+    ups, refs = {}, {}
+    for mid, it in sorted(items.items()):
+        c = it.get("child")
+        if it.get("role") == "rollup" and c in kinds:
+            (ups if kinds[c] == "rollup" else refs).setdefault(c, mid)
+    return ups, refs
 
 
 def tree_sigs(nest):
@@ -2039,11 +2067,11 @@ def check_protocol(root):
     if texts.get("references/artifact-publishing.md") and not re.search(
             r"^\|\s*`cjm-research`\s*\|.*`cjm-research/<product>/journey-", ap, re.M):
         errs.append("artifact-publishing.md §5: the `cjm-research` key row has no `journey-` key")
-    errs += _check_nest(proto, skill, texts.get("references/artifact-publishing.md", ""))
+    errs += _check_nest(proto, skill, texts.get("references/artifact-publishing.md", ""), rep)
     return errs
 
 
-def _check_nest(proto, skill, ap):
+def _check_nest(proto, skill, ap, rep=""):
     """Check 28's nesting part (v4.10.0, C13 — no new check): §14 «Nested maps» names the script's findings, the why
     codes of orphan_child and the depth; «What never happens» is §15; the skill's Step J runs `nest`; artifact-publishing
     §4 asks two places of two keys in one question."""
@@ -2063,6 +2091,18 @@ def _check_nest(proto, skill, ap):
     for f in NEST_FIELDS:
         if "`%s`" % f not in s14:
             errs.append("journey-protocol.md §14 does not name the child's field `%s` (journey_map.py NEST_FIELDS)" % f)
+    for m_ in UNSAFE_MARKS:
+        if "«%s»" % m_ not in s14:
+            errs.append("journey-protocol.md §14 does not name the unsafe-name mark «%s» (journey_map.py UNSAFE_MARKS)" % m_)
+    sub = NEST_LABELS["uk"]["subtree"].split(" (")[0]
+    if "«%s (N)" % sub not in s14:
+        errs.append("journey-protocol.md §14 does not quote the subtree line «%s (N)…» (journey_map.py NEST_LABELS)" % sub)
+    if skill:
+        for want in ("board-layout --with-children", "board-take --note <child> --diff"):
+            if want not in skill:
+                errs.append("skills/cjm-research/SKILL.md: J8 does not run `%s` (journey-protocol.md §14)" % want)
+    if rep and not re.search(r"^(?=.*journey_map\.py refresh)(?=.*without a `parent`).*$", rep, re.M):
+        errs.append("cjm-reports.md: the scheduled refresh does not say it refreshes the maps without a `parent` (journey-protocol.md §14)")
     if not nt.section(proto, "15. What never happens"):
         errs.append("journey-protocol.md: «What never happens» is not §15 (§14 is «Nested maps» since v4.10.0)")
     if skill and "journey_map.py nest" not in skill:
@@ -2232,6 +2272,13 @@ def cmd_refresh(args):
         raise Bad("%s is not a health-check snapshot (type: cjm-health-check)" % os.path.basename(args.snapshot))
     if not _same_product(snap["product"], note["product"]):
         raise Bad("the snapshot is of product %r, the note of %r" % (snap["product"], note["product"]))
+    mine = unicodedata.normalize("NFC", os.path.splitext(os.path.basename(args.note))[0])
+    if snap["map"] and name_key(snap["map"]) != name_key(mine):
+        raise Bad("the snapshot is of map %s, not of %s — a snapshot made for one map (`map:`) refreshes that map only (§14)"
+                  % (nt.safe(snap["map"]), nt.safe(mine)))
+    if not snap["map"] and (link_name(note["parent"]) or note.get("parent_bad")):
+        raise Bad("%s is a child map — its stages are its own, so the funnel's snapshot never refreshes it; a snapshot made "
+                  "for it names it in its frontmatter (`map: %s`, §14)" % (nt.safe(mine), nt.safe(mine)))
     if day(snap["date"]) is None:
         raise Bad("the snapshot has no date (YYYY-MM-DD) in its frontmatter")
     hc_dates = [r["date"] for r in note["rows"] if not r["gap"] and _is_hc(r) and day(r["date"])]
@@ -2461,7 +2508,8 @@ def cmd_board_state(args):
                           if cell_title(s["id"], l, lang) not in have and cell_title(s["id"], l, "en" if lang == "uk" else "uk") not in have],
            ambiguous=ambiguous, orphans={it["row"]: mid for mid, it in items.items() if it.get("role") == "orphan"},
            rebuilt=rebuilt, last_ignored=last_ignored, gone=sorted(it["row"] for it in items.values() if it.get("gone")),
-           **({"tree": note["tree"]} if nest is not None else {}))
+           **({"tree": note["tree"], "rollups": rollup_ids(items, note)[0], "references": rollup_ids(items, note)[1]}
+              if nest is not None else {}))
     return 0
 
 
@@ -2481,8 +2529,9 @@ def keep_last(items, last, note, rows, shown, declared):
             continue
         if old.get("origin") == "team" and it.get("role") in ("row", "team"):
             it["origin"] = "team"                          # a team sticky stays the team's, whatever row a take made of it
-        if old.get("role") == "rollup" and it.get("role") == "team":
-            it["role"], it["origin"] = "rollup", "plugin"  # a child's roll-up stays the plugin's, its child gone or renamed
+        if old.get("role") == "rollup" and it.get("role") in ("team", "rollup"):
+            it["role"], it["origin"] = "rollup", "plugin"  # a child's roll-up stays the plugin's, its child gone or renamed,
+            it["child"] = it.get("child") or old.get("child")   # and keeps its child by its element id
         if it.get("role") != "row" and old.get("role") in ("row", "orphan"):
             if old.get("origin", "plugin") != "team" and rid not in shown:
                 it["role"], it["row"], it["origin"] = "orphan", rid, "plugin"   # the plugin's sticky of a row the board no longer shows
@@ -2510,8 +2559,9 @@ def cmd_board_diff(args):
     note, nest = board_note(args, tree=bool(meta.get("tree")))
     if nest is not None and meta.get("rebuilt") and not meta.get("tree"):
         last, _, _ = load_board_state(args.last, note, args.surface)   # an older read: its roles by the tree
+    ups = dict(zip(("rollups", "references"), rollup_ids(last, note))) if nest is not None else {}
     if not args.now:
-        result(ok=True, state="scope", surface=surface, scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last))
+        result(ok=True, state="scope", surface=surface, scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), **ups)
         return 0
     now = _read_now(args.now, args.surface or surface)
     lost = missing_cells(last, now)
@@ -2520,7 +2570,7 @@ def cmd_board_diff(args):
                why="the read lacks %d cell(s) the state holds — read the board again, every page, into a fresh folder" % len(lost))
         return 0
     payload = dict(ok=True, state="diff", surface=surface, **board_diff(last, now, note))
-    payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), note=table_sig(plain))
+    payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), note=table_sig(plain), **ups)
     if nest is not None:
         payload["map"] = nt.safe(unicodedata.normalize("NFC", os.path.splitext(os.path.basename(args.note))[0]))
         payload["tree"] = tree_sigs(nest)            # a take into a child checks its own note (§14, C8)
@@ -2578,6 +2628,15 @@ def take_diffs(note, name, diffs):
     both, never automatically). Raises Bad for a diff of another journey or one older than the note."""
     now = table_sig(note)
     parts = []
+    import hashlib
+    for d in diffs:                                  # one order whatever the command line's: by board, then by content
+        d["_tag"] = "%s@%s" % (nt.safe(str(d.get("map") or name)), str(d.get("surface") or "?"))
+        d["_dig"] = hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()[:8]
+    diffs = sorted(diffs, key=lambda d: (d["_tag"], d["_dig"]))
+    tags = [d["_tag"] for d in diffs]
+    for d in diffs:
+        if tags.count(d["_tag"]) > 1:
+            d["_tag"] += "#" + d["_dig"]
     for i, d in enumerate(diffs, 1):
         sig, tree = d.get("note"), d.get("tree") if isinstance(d.get("tree"), dict) else {}
         mine = next((k for k in tree if name_key(k) == name_key(name)), None)   # the name as the tree resolved it
@@ -2610,7 +2669,7 @@ def take_diffs(note, name, diffs):
                     continue
                 e = dict(e)
                 if e.get("id") is not None and str(e["id"]) in shared:
-                    e["id"] = "%d:%s" % (i, e["id"])
+                    e["id"] = "%s:%s" % (d["_tag"], e["id"])   # an id two boards share, named by its board
                 owner = _owner(e, tree)
                 if owner == child:
                     merged[cat].append(dict(_plain(e, child) if child else e, board=i))

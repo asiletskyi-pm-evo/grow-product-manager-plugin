@@ -411,7 +411,7 @@ try:
     rf = os.path.join(d, "refresh-tree")
     shutil.copytree(nest, rf)
     snap = os.path.join(d, "snap", "2026-11-23.md")
-    write(snap, "---\ntype: cjm-health-check\nproduct: zorg\ndate: 2026-11-23\nperiod: 2026-11-16..2026-11-22\nhealth_score: 58\n"
+    write(snap, "---\ntype: cjm-health-check\nproduct: zorg\nmap: journey-payment\ndate: 2026-11-23\nperiod: 2026-11-16..2026-11-22\nhealth_score: 58\n"
                 "stages:\n  - id: s2\n    metric: \"card -> confirm\"\n    value: \"55.0%\"\n    baseline: \"66.0%\"\n"
                 "    deviation: \"-16.7%\"\n    status: critical\n---\n\n# Health-check\n")
     root_before = read(os.path.join(rf, "journey-first-order.md"))
@@ -638,7 +638,7 @@ try:
     write(os.path.join(r3, "journey-payment.md"), text(pay).replace("| id | етап | крок | доріжка | текст | рівень | ціль | parent | код | джерело | клас | дата |",
                                                                      "| id | stage | step | lane | text | level | target | parent | code | source | class | date |"))
     snap3 = os.path.join(d, "snap3", "2026-11-23.md")
-    write(snap3, "---\ntype: cjm-health-check\nproduct: zorg\ndate: 2026-11-23\nhealth_score: 61\nstages:\n  - id: s1\n"
+    write(snap3, "---\ntype: cjm-health-check\nproduct: zorg\nmap: journey-3ds\ndate: 2026-11-23\nhealth_score: 61\nstages:\n  - id: s1\n"
                  "    metric: \"redirect -> code\"\n    value: \"93%\"\n    status: warning\n---\n")
     rc, out, res = run("refresh", "--note", os.path.join(r3, "journey-3ds.md"), "--snapshot", snap3)
     check("12.12 #3/#6c a grandchild's refresh re-renders both pages above it; one that cannot be written is named, the refresh ok",
@@ -858,7 +858,7 @@ try:
     rc, out, res = run("board-take", "--note", PW["pay"], "--diff", PW["td"], PW["od"], "--take", ids[0], "--dry-run")
     vids = sorted(v["id"] for c in res.get("conflicts", []) for v in c["versions"])
     check("13.12 #8 two host boards whose ids collide: the versions prefixed by their diff, the bare id refused",
-          len(set(ids)) == 1 and vids == ["1:%s" % ids[0], "2:%s" % ids[0]]
+          len(set(ids)) == 1 and vids == sorted(["journey-first-order@whiteboard:%s" % ids[0], "journey-payment@whiteboard:%s" % ids[0]])
           and any(r["id"] == ids[0] and r["why"] == "unknown" for r in res.get("refused", [])), (ids, vids, res.get("refused")))
     PM = pair("mv", "miro", move_to("Форма картки скидає", "journey-payment · s3 · болі"), move_to("Форма картки скидає", "s1 · болі"))
     rc, out, res = run("board-take", "--note", PM["pay"], "--diff", PM["td"], PM["od"], "--dry-run")
@@ -892,7 +892,7 @@ try:
 
     # mutants that stayed green in review 2
     for name, old, new, cmd, test in (
-            ("no-prefix", '                    e["id"] = "%d:%s" % (i, e["id"])', '                    pass',
+            ("no-prefix", '                    e["id"] = "%s:%s" % (d["_tag"], e["id"])', '                    pass  #',
              lambda m: run("board-take", "--note", PW["pay"], "--diff", PW["td"], PW["od"], "--take", ids[0], "--dry-run", script=m),
              lambda r: not any(rr["why"] == "unknown" for rr in r.get("refused", []))),
             ("no-move-conflict", '    for cat, what in (("changed", "text"), ("moved", "cell")):', '    for cat, what in (("changed", "text"),):',
@@ -901,7 +901,7 @@ try:
             ("no-rerole", "        last, _, _ = load_board_state(args.last, note, args.surface)   # an older read: its roles by the tree", "        pass",
              lambda m: run("board-diff", "--last", P["tlast"], "--now", P["tnow"], "--note", P["root"], "--with-children", script=m),
              lambda r: not any(c.get("row") == "journey-payment#pc1" for c in r.get("changed", []))),
-            ("rollup-any-kind", 'marks and it["kind"] == "sticky" and t.lower().startswith(marks)', 'marks and t.lower().startswith(marks)',
+            ("rollup-any-kind", 'if marks and it["kind"] == "sticky" and t.lower() not in heads else None', 'if marks and t.lower() not in heads else None',
              lambda m: run("board-diff", "--last", os.path.join(PL["w"], "t.state.json"), "--now", os.path.join(PL["w"], "t-now.svg"), "--note", PL["root"], script=m),
              lambda r: not any(o.get("id") == "8800" for o in r.get("other", [])))):
         m = mutant(d, name, old, new)
@@ -910,6 +910,90 @@ try:
             continue
         rc, out, res = cmd(m)
         check("M.%s a mutant is caught" % name, test(res), out[-300:])
+
+    # 14. review 3 (opus, whole branch, frozen b2dfbb7): each finding reproduced first
+    r4 = os.path.join(d, "r4")
+    shutil.copytree(nest, r4)
+    funnel = os.path.join(fx, "snapshot-2026-11-16.md")
+    p4, root4 = os.path.join(r4, "journey-payment.md"), os.path.join(r4, "journey-first-order.md")
+    p40, root40 = read(p4), read(root4)
+    rc, out, res = run("refresh", "--note", p4, "--snapshot", funnel, "--lang", "uk")
+    check("14.1 #1 the funnel's snapshot never refreshes a child map (its stages are its own) — refused, the note byte for byte",
+          rc == 2 and "map" in res.get("error", "") and read(p4) == p40, out[-300:])
+    own4 = os.path.join(d, "snap4", "2026-11-23.md")
+    write(own4, "---\ntype: cjm-health-check\nproduct: zorg\nmap: journey-payment\ndate: 2026-11-23\nhealth_score: 60\nstages:\n"
+                "  - id: s2\n    metric: \"card -> confirm\"\n    value: \"57%\"\n    status: critical\n---\n")
+    rc, out, res = run("refresh", "--note", p4, "--snapshot", own4, "--lang", "uk")
+    check("14.2 #1 a snapshot that names the child (`map: journey-payment`) refreshes it", rc == 0 and res.get("health", {}).get("score") == 60, out[-300:])
+    rc, out, res = run("refresh", "--note", root4, "--snapshot", own4, "--lang", "uk")
+    check("14.3 #1 a snapshot of another map never refreshes the root — refused, the root byte for byte",
+          rc == 2 and "map" in res.get("error", "") and read(root4) == root40, out[-300:])
+    rep_ = text(os.path.join(ROOT, "skills", "cjm-research", "references", "cjm-reports.md"))
+    check("14.4 #1 the scheduled health-check refreshes only maps without a `parent`; a child by its own snapshot",
+          re.search(r"^(?=.*journey_map\.py refresh)(?=.*without a `parent`).*$", rep_, re.M) is not None, "cjm-reports.md")
+
+    # #2: the roll-ups and references are mapped to their element ids, so a new version updates them by id
+    rc, out, res = run("board-state", "--read", P["tlast"], "--note", P["root"], "--surface", "miro", "--out", os.path.join(P["w"], "t4.state.json"),
+                       "--with-children")
+    want = {"journey-shipping": P["E"](sticky(P["ti"], "↳ «Вибір доставки» · journey-shipping")),
+            "journey-payment": P["E"](sticky(P["ti"], "↳ «Оплата» · journey-payment")),
+            "journey-3ds": P["E"](sticky(P["ti"], "↳ «3-D Secure» · journey-3ds"))}
+    check("14.5 #2 board-state names each child's roll-up sticky and each reference by its element id",
+          rc == 0 and res.get("rollups") == want and res.get("references") == {"journey-3ds-retry": P["E"](sticky(P["ti"], "↳ «Повтор коду» · journey-3ds-retry"))},
+          (res.get("rollups"), res.get("references")))
+    rc, out, res = run("board-diff", "--last", os.path.join(P["w"], "t4.state.json"), "--note", P["root"])
+    check("14.6 #2 board-diff gives them too (the ids to update)", res.get("rollups") == want, res.get("rollups"))
+    shp = os.path.join(P["w"], "journey-shipping.md")
+    write(shp, text(shp).replace('journey: "Вибір доставки"', 'journey: "Доставка й самовивіз"'))
+    rc, out, res = run("board-state", "--read", P["tlast"], "--note", P["root"], "--surface", "miro", "--last", os.path.join(P["w"], "t4.state.json"),
+                       "--out", os.path.join(P["w"], "t5.state.json"))
+    check("14.7 #2 a child renamed since: its old roll-up keeps its child by its element id", rc == 0
+          and (res.get("rollups") or {}).get("journey-shipping") == want["journey-shipping"], res.get("rollups"))
+
+    # #5: the take does not depend on the order of --diff
+    outs = []
+    for order in ((PW["td"], PW["od"]), (PW["od"], PW["td"])):
+        rc, out, res = run("board-take", "--note", PW["pay"], "--diff", *order, "--dry-run")
+        outs.append(sorted(v["id"] for c in res.get("conflicts", []) for v in c["versions"]))
+    check("14.8 #5 a version's id names its board, whatever the order of --diff", outs[0] == outs[1] and outs[0]
+          and all("@whiteboard:" in i for i in outs[0]), outs)
+    rows_ = []
+    for order in ((P8["td"], P8["od"]), (P8["od"], P8["td"])):
+        rc, out, res = run("board-take", "--note", P8["pay"], "--diff", *order, "--take", *adds, "--class", *["%s=reported" % a for a in adds], "--dry-run")
+        rows_.append(sorted((a.get("element"), a.get("row")) for a in res.get("applied", []) if a.get("action") == "add"))
+    check("14.9 #5 a new row's id is the same in either order", rows_[0] == rows_[1] and rows_[0], rows_)
+
+    # #7 nits: a skipped parent named as such; an unreadable map named; parent as a mapping; parent_step as a list
+    c7 = os.path.join(d, "c7")
+    shutil.copytree(nest, c7)
+    write(os.path.join(c7, "journey-shipping.md"), text(os.path.join(nest, "journey-shipping.md")).replace("type: cjm-journey\n", "type: cjm-journey\nsensitive: true\n"))
+    write(os.path.join(c7, "journey-k-sub.md"), lost_t.replace("parent: journey-gone", "parent: journey-shipping").replace('journey: "journey-lost"', 'journey: "Під доставкою"'))
+    write(os.path.join(c7, "journey-k-map.md"), lost_t.replace("parent: journey-gone\n", "parent:\n  name: journey-first-order\n").replace('journey: "journey-lost"', 'journey: "Мапа"'))
+    write(os.path.join(c7, "journey-k-steps.md"), lost_t.replace("parent: journey-gone\nparent_stage: s1\n", "parent: journey-first-order\nparent_stage: s5\nparent_step: [Оплата карткою, Інше]\n")
+          .replace('journey: "journey-lost"', 'journey: "Два кроки"'))
+    locked = os.path.join(c7, "journey-locked.md")
+    write(locked, text(os.path.join(nest, "journey-self.md")))
+    os.chmod(locked, 0)
+    rc, out, res = run("nest", "--note", os.path.join(c7, "journey-first-order.md"), "--json")
+    os.chmod(locked, 0o644)
+    orph = {f.get("note"): f for f in findings_of(res, "orphan_child")}
+    check("14.10 #7 a child whose parent was skipped: named so, not «renamed, deleted or not given»",
+          "skipped" in (orph.get("journey-k-sub") or {}).get("detail", ""), orph.get("journey-k-sub"))
+    check("14.11 #7 `parent:` written as a mapping is `bad_parent`, never silently a root", (orph.get("journey-k-map") or {}).get("why") == "bad_parent",
+          orph.get("journey-k-map"))
+    check("14.12 #7 `parent_step` written as a list is named (`no_step`), never read as no step",
+          (orph.get("journey-k-steps") or {}).get("why") == "no_step", orph.get("journey-k-steps"))
+    if os.getuid() != 0:
+        check("14.13 #7 a map the folder holds but cannot read is named unreadable, never counted as plain markdown",
+              any(sk.get("note") == "journey-locked.md" and sk.get("reason") == "unreadable" for sk in res.get("skipped", [])), res.get("skipped"))
+
+    # #3: check 28 guards the unsafe-name marks, the subtree wording and the skill's tree board and two-diff take
+    for name, rel, old, new, expect in (
+            ("unsafe marks", "references/journey-protocol.md", "«:», «#»", "«#»", "unsafe"),
+            ("subtree words", "references/journey-protocol.md", "«з дочірніми картами (N)", "«з підкартами (N)", "з дочірніми картами"),
+            ("tree board in J8", "skills/cjm-research/SKILL.md", "board-layout --with-children", "board-layout --tree", "--with-children"),
+            ("two-diff take in J8", "skills/cjm-research/SKILL.md", "board-take --note <child> --diff", "board-take --note <child> --from", "board-take")):
+        drift28(rel, old, new, expect, "14.x #3 check 28 names a drift of %s" % name)
 
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")
