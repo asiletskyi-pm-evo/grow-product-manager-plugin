@@ -2,13 +2,24 @@
 
 # Grow Product Manager
 
-**Version:** 4.9.1
+**Version:** 4.10.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.10.0** — **«Вкладені карти»: a step of a journey map opens a child map, and the whole tree is seen on one page and one board** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks).
+
+- **Nested maps.** In `cjm-research` 0.19.0 a child map names its parent in its own frontmatter (`parent`, `parent_stage`, optional `parent_step`). The parent stores nothing: its children are found among the product's maps on every run, up to three levels. `journey_map.py nest` prints the tree and names what does not attach — an orphan, a cycle, a map too deep, another product's parent — as proposals, never a block.
+- **The roll-up.** The parent's step shows the child's numbers, never a copy of a row: pains by class, anomalies with the critical ones apart, its metric, its last health point and its review date. A child with children of its own adds its subtree.
+- **Page and board.** The root's page opens each child's grid from a chip on its step. The root's board carries each child's block below its grid, its rows keyed `<child>#<id>`.
+- **Publishing and edits.** A child can be published under its own key; one question names both places. What the team changed on several boards comes back in one preview, and a row changed differently on two boards is offered in both versions — one or none, never both.
+- **Portfolio and refresh.** The portfolio lists the maps as a tree. The funnel's snapshot never refreshes a child map; a refreshed child re-renders the pages above it locally.
+- **No paid board account needed.** The journey map's boards are offered with the host's own board first, then Miro.
+
+A map without children works exactly as in v4.9.0. The fifth release of the programme «Фреймворки»; editing on the page comes in v4.11.0.
 
 **New in v4.9.1** — **«Довірені адреси»: the context engine reaches only the provider addresses you approved** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). A security fix of the «Skill Security Audit» of v4.8.0 (verdict BLOCK, one high finding): a provider registration named a server address and an environment variable, and the engine sent that variable's header — and every search query and note name — to the address with no check, so whoever could edit the file decided where your token went. Now the engine sends a request only to the pair «address + variable name» approved for the registration's id, kept in `~/.grow-pm/trust/providers.json` (never a value) — every address needs it, with a header or without one; https only, plain http only to this computer; your private registration wins over a vault's of the same id. The first run after the update trusts the registrations already there, once, one line each (`Довірено наявну реєстрацію …`); a new or changed address gets nothing and one line, and a skill asks one question — `ctx provider trust <id>` shows the address, the variable with the header it gives, the file and a code, and only `--code` on your yes approves that pair. One way to a client (`client_for`) for all five places — the daily sync, search on both its paths, the core copy, `repo status`, `provider adopt|plan|apply` — kept by validator check 31. `context-connect` 0.9.2 writes and approves an address in one question; `context-navigator` 0.5.1. A patch between the programme's v4.9.0 and v4.10.0.
 
@@ -223,7 +234,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.18.0)
+### 1. CJM Research (v0.19.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -233,7 +244,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - **Full** — Complete CJM analysis with all data points and insights
 - **Health-Check** — Assess overall funnel health and drop-off zones
 - **Comparison** — Compare customer journeys across platforms or segments
-- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`)
+- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`)
 
 **Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
 
@@ -668,7 +679,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.18.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board and the journey portfolio |
+| CJM Research | v0.19.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio and nested maps |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
@@ -1119,5 +1130,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.9.1  
+**Version:** 4.10.0  
 **Last Updated:** November 2026

@@ -416,6 +416,20 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | Z6 | портфель ініціатив і епіків — статус і що заблоковано | product-reporter or roadmap-architect — NOT cjm-research |
 | Z7 | що потребує моєї уваги сьогодні — пошта, метрики, Jira | focus-advisor — NOT cjm-research |
 
+### Group AA — Nested journey maps vs neighbours (added 2026-11-24, v4.10.0)
+
+`cjm-research` mode `journey`, step J8, makes a child journey map for a step of a map, shows the tree of maps and rolls each child up onto its parent's step; breaking an epic into stories is `roadmap-architect`'s story map, a drawn hierarchy is `diagram-prototyper`'s, a goal cascade is `goal-setter`'s or `quarterly-planning`'s.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| AA1 | зроби дочірню карту шляху для кроку «Оплата карткою» карти «Перше замовлення» | cjm-research |
+| AA2 | розклади крок «Оплата» нашої карти шляху на окрему карту з власними етапами | cjm-research |
+| AA3 | make a child journey map for the card-payment step of the first-order journey | cjm-research |
+| AA4 | покажи дерево карт шляху продукту — корінь і всі вкладені карти | cjm-research |
+| AA5 | розбий епік «Оплата» на дочірні історії на мапі історій | roadmap-architect — NOT cjm-research |
+| AA6 | намалюй ієрархію екранів оплати як діаграму | diagram-prototyper — NOT cjm-research |
+| AA7 | декомпозуй ціль кварталу на дочірні цілі команд | goal-setter or quarterly-planning — NOT cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
@@ -453,6 +467,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-11-16 (2) | **Claude Code, live**, same harness and model, after review 2 — the new rows Y11–Y14 (the nearest neighbours: flow-walkthrough, feedback-triage, product-research, and a journey request without the keyword) and M1, N2 (the rows «карта шляху» could pull) | real: M1, N2, Y11, Y12, Y14 ✅; Y13 1/4 (3 to another installed plugin's research skill). visible: Y11, Y12, Y14 ✅; Y13 3/4 | Y13 never went to cjm-research — the boundary it tests holds; on the crowded `real` listing a generic «огляд практик» goes to another plugin's research skill, the same class as E2/R13 (2026-10-08). The row accepts that alternative. |
 | 2026-11-17 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Y`, mode `real`, model claude-opus-5-5), pre-release v4.8.0 — Group Y once (18 phrases) | Y 18/18 | None. The new Y15–Y17 («забери правки з дошки карти шляху», «опублікуй карту шляху … на дошку», the English take-back) route to cjm-research with its description unchanged — the phrases live in `## Routing`; Y18 «онови дошку мапи історій» stays roadmap-architect; Y1–Y14 unchanged (Y13 → the accepted deep-research alternative). |
 | 2026-11-20 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Z`, mode `real`, model claude-opus-5-5), pre-release v4.9.0 — Group Z once (7 phrases) | Z 7/7 | None. Z1–Z4 («покажи портфель шляхів», «усі карти шляху продукту — які потребують уваги», the English portfolio, «зведи всі карти шляху й ручні CJM») route to cjm-research with its description unchanged — the phrases live in `## Routing`; the neighbours held — Z5 «портфель проєктів» → project-planning, Z6 «портфель ініціатив і епіків» → product-reporter, Z7 «що потребує моєї уваги сьогодні» → focus-advisor. |
+| 2026-11-24 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups AA`, mode `real`, the working tree of `feature/frameworks-v4.10.0` after task 6, model claude-fable-5-2), pre-release v4.10.0 — Group AA once (7 phrases) | AA 7/7 | None. AA1–AA4 («дочірня карта для кроку … карти …», «розклади крок на окрему карту», the English child map, «дерево карт шляху») route to cjm-research with its description unchanged — the phrases live in `## Routing`; the neighbours held — AA5 «дочірні історії на мапі історій» → roadmap-architect, AA6 «ієрархія екранів як діаграма» → diagram-prototyper, AA7 «дочірні цілі команд» → goal-setter. |
 
 ## Maintenance
 

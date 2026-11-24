@@ -155,7 +155,7 @@ with tempfile.TemporaryDirectory() as d:
           and rp.get("published") == [], fo.get("published"))
     check("1.15 each map row: only the portfolio's fields — no row of the map", set(fo) == {
         "journey", "note", "path", "product", "owner", "stages", "health", "reviewed", "stale_review", "pains", "anomalies",
-        "gaps", "findings", "published", "attention", "product_missing"}, sorted(fo))
+        "gaps", "findings", "published", "attention", "product_missing", "nest"}, sorted(fo))   # nest: v4.10.0, §14
     cj = res.get("cjm") or []
     check("1.16 the hand CJM: its own block, partly — funnel, stages from the headings with the metric rows of the first "
           "metric table under each, the snapshot, the mark",
@@ -315,8 +315,8 @@ with tempfile.TemporaryDirectory() as d:
           and sc.get("drop") == 10, outs5[-800:])
 
     # 6. mutations (ledger): each caught by the assertions above
-    def caught(tag, old, new, judge, why):
-        m = mutant(d, tag, old, new)
+    def caught(tag, old, new, judge, why, target="journey_portfolio.py"):
+        m = mutant(d, tag, old, new, target)
         if m is None:
             check("6.%s mutation site present — %s" % (tag, why), False, "pattern not in the script: %r" % old)
             return
@@ -341,7 +341,8 @@ with tempfile.TemporaryDirectory() as d:
            lambda r, o: r.get("other_products") == 1 and "Реєстрація" not in o, "another product's note in the portfolio")
     caught("word", 'if t.endswith("— " + label):', "if label in t:",
            lambda r, o: [m for m in r.get("maps", []) if m["journey"] == "Повторне замовлення"][0]["anomalies"]
-           == {"total": 3, "critical": 1, "warning": 0, "positive": 1, "unrated": 1}, "criticality by a word of its own")
+           == {"total": 3, "critical": 1, "warning": 0, "positive": 1, "unrated": 1}, "criticality by a word of its own",
+           target="journey_map.py")          # since v4.10.0 the label is read by journey_map.hc_status, shared with the nesting
     caught("hc", "st = status_of(r[\"text\"]) if jm._is_hc(r) else None", "st = status_of(r[\"text\"])",
            lambda r, o: [m for m in r.get("maps", []) if m["journey"] == "Повторне замовлення"][0]["anomalies"]["critical"] == 1,
            "a hand-written anomaly rated by its own words")
@@ -593,6 +594,64 @@ if callable(cp_):
             write(os.path.join(r2, rel), src.replace(old, new, 1))
             errs = cp_(r2)
             check("7.x check 30 names a drift of %s" % name, errs and any(os.path.basename(rel) in e for e in errs), errs)
+
+# 10. v4.10.0 — the portfolio as a tree (journey-protocol.md §13–§14, C10): children indented under their parent, each
+#     map's own attention, the parent's «діти: N · уваги потребують M», the parent's health its own
+NEST = os.path.join(ROOT, "testing", "fixtures", "journey", "nest")
+with tempfile.TemporaryDirectory() as d:
+    before = digest(NEST)
+    rc, out, res = run("list", "--product", "zorg", "--dir", NEST, "--today", "2026-11-24", "--lang", "uk")
+    maps = res.get("maps", [])
+    order = [m["note"] for m in maps]
+    i = order.index("journey-first-order.md") if "journey-first-order.md" in order else -1
+    check("10.1 the children follow their parent in tree order (its stage order), each level deeper", rc == 0 and i >= 0
+          and order[i:i + 5] == ["journey-first-order.md", "journey-shipping.md", "journey-payment.md", "journey-3ds.md", "journey-3ds-retry.md"]
+          and [m.get("nest", {}).get("level") for m in maps[i:i + 5]] == [1, 2, 2, 3, 4], order)
+    fo = maps[i] if i >= 0 else {}
+    check("10.2 the parent: «діти: 4 · уваги потребують 2» — its subtree, the ones with a reason of their own",
+          fo.get("nest", {}).get("children") == 4 and fo.get("nest", {}).get("children_attention") == 2, fo.get("nest"))
+    by = {m["note"]: m for m in maps}
+    check("10.3 each map's attention is its own — the parent raises none for its children, its health is its own",
+          fo.get("attention") == [] and fo.get("health", {}).get("score") == 68
+          and [a["reason"] for a in by.get("journey-payment.md", {}).get("attention", [])] == ["critical_anomaly"]
+          and [a["reason"] for a in by.get("journey-shipping.md", {}).get("attention", [])] == ["stale_review"], (fo.get("attention"), fo.get("health")))
+    check("10.4 a child names its parent; a map hanging on nothing is a root with its finding",
+          by.get("journey-payment.md", {}).get("nest", {}).get("parent") == "journey-first-order"
+          and by.get("journey-lost.md", {}).get("nest", {}).get("level") == 1
+          and by.get("journey-lost.md", {}).get("nest", {}).get("finding") == "orphan_child"
+          and by.get("journey-3ds-retry.md", {}).get("nest", {}).get("finding") == "too_deep", {k: by.get(k, {}).get("nest") for k in ("journey-payment.md", "journey-lost.md")})
+    table = [l for l in out.splitlines() if l.startswith("| ")]
+    check("10.5 the chat table: the children indented with ↳ by level, the parent's count beside its name",
+          any("| Перше замовлення (діти: 4 · уваги потребують 2) |" in l for l in table)
+          and any("| ↳ Вибір доставки |" in l for l in table) and any("| ↳ Оплата (діти: 2 · уваги потребують 0) |" in l for l in table)
+          and any("| ↳↳ 3-D Secure (діти: 1 · уваги потребують 0) |" in l for l in table)
+          and any("| ↳↳↳ Повтор коду (⚠️ too_deep) |" in l for l in table), "\n".join(table[:8]))
+    page = os.path.join(d, "portfolio.html")
+    rc, out, res = run("render-html", "--product", "zorg", "--dir", NEST, "--today", "2026-11-24", "--lang", "uk", "--out", page)
+    h = text(page) if os.path.exists(page) else ""
+    check("10.6 the page: the same tree — indented rows by depth, the parent's count", rc == 0
+          and re.search(r'<tr class="d1[^"]*"><th class="j">↳ Оплата', h) is not None
+          and re.search(r'<tr class="d2[^"]*"><th class="j">↳↳ 3-D Secure', h) is not None
+          and "діти: 4 · уваги потребують 2" in h, re.findall(r"<tr[^>]*><th class=\"j\">[^<]{0,40}", h)[:6])
+    check("10.7 nothing written to a note", digest(NEST) == before, "a note changed")
+    rc, out, res = run("list", "--product", "zorg", "--dir", os.path.join(FIX, "journeys"), "--today", TODAY, "--lang", "uk")
+    check("10.8 a portfolio without nesting: every map a root, no ↳, no count", rc == 0
+          and all(m.get("nest", {}).get("level") == 1 for m in res.get("maps", [])) and "↳" not in out and "діти:" not in out, out[:400])
+
+# 11. review 2 of v4.10.0 (frozen 49c226e): a map whose name differs only in letter case never takes a parent's children
+with tempfile.TemporaryDirectory() as d:
+    two = os.path.join(d, "two")
+    os.makedirs(two)
+    shutil.copy(os.path.join(NEST, "journey-first-order.md"), os.path.join(two, "Journey-First-Order.md"))
+    for dirs in ((NEST, two), (two, NEST)):
+        rc, out, res = run("list", "--product", "zorg", "--dir", *dirs, "--today", "2026-11-24", "--lang", "uk")
+        by = {m["note"]: m for m in res.get("maps", [])}
+        first = "journey-first-order.md" if dirs[0] == NEST else "Journey-First-Order.md"
+        other = "Journey-First-Order.md" if first == "journey-first-order.md" else "journey-first-order.md"
+        check("11.1 #6 one name in two folders (%s first): the children hang under the first only, as `nest` reads it" % first,
+              rc == 0 and by.get(first, {}).get("nest", {}).get("children") == 4 and by.get(other, {}).get("nest", {}).get("children") == 0
+              and by.get("journey-payment.md", {}).get("nest", {}).get("parent") == os.path.splitext(first)[0],
+              {k: by.get(k, {}).get("nest") for k in (first, other, "journey-payment.md")})
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

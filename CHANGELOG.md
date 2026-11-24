@@ -12,6 +12,93 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.10.0 (2026-11-24)
+
+**«Вкладені карти»: a step of a journey map opens a child map, and the whole tree is seen on one page and one board.** v4.7.0–v4.9.0 gave each journey a note, a page, a board and a row in the portfolio, but a step that is a journey of its own — «Оплата» in «Перше замовлення» — could only become a second map with no tie to the first. Now a map names its parent in its frontmatter; the parent shows the child's roll-up on its step without a copy of a row; the root's page and board carry the whole tree, up to three levels; a child can be published on its own; and what the team changed on several boards comes back in one preview. The whole map works on the host's own tools, and its boards are offered with the host's own board first. The fifth release of the programme «Фреймворки»; editing on the page comes in v4.11.0.
+
+### Added
+
+- **The link lives in the child** (`references/journey-protocol.md` §7, §14) — three frontmatter fields:
+  - `parent` — the parent's `journey-<slug>`. A wiki link (quoted or not), a flow list and Obsidian's list property of one item are read too.
+  - `parent_stage` — the parent's stage id.
+  - `parent_step` — optional.
+
+  The parent stores nothing: its children are found among the product's maps on every run (`ctx search --type cjm-journey`, otherwise the maps' folder). A name resolves the way Obsidian and the disk resolve it — any case, either Unicode form. A nesting never crosses products, and a hand CJM note never nests.
+- **`journey_map.py nest --note <map> [--map N …] [--dir D …] [--lang] [--json]`** — prints the map's subtree, in the parent's stage order. It writes nothing.
+  - Levels count from the top root, three at most (R38); a fourth-level map shows only as a reference by name.
+  - Findings are proposals, never a block: `orphan_child` (why: `no_parent`, `bad_parent`, `no_stage`, `no_stage_in_parent`, `no_step`), `nest_cycle`, `too_deep`, `other_product_parent`, `self_parent`.
+  - A map is skipped as `unsafe_name` when its file name is not page-safe, holds a space, or holds a mark the tree board splits titles and keys by: «·», «•», «|», «—», «–», «:» or «#».
+- **The roll-up** (R30) — what the parent shows on the child's step: numbers and one metric, never a copy of a row.
+  - The pains the child's page shows, by class.
+  - Its anomalies. An anomaly counts as critical only by the label `refresh` puts at the end of a row; a row the PM wrote is counted unrated.
+  - Its journey-level metric, else `⚠️ TBD`.
+  - Its last health point, else «немає знімка».
+  - Its review date.
+
+  A child with children of its own adds a line for its subtree: «з дочірніми картами (N): болі X · аномалії Y (критичних Z)». A child's numbers never change its parent's health score.
+- **The tree page** (`render-html`, R31) — each child has a chip in its stage's «дії» cell. A click or Enter opens the child's grid in a `<details>` below the parent's; every grid keeps its sticky headers and its own pan, nested up to three levels. A child's own page names the maps above it. The page's rules stay as before: only page-safe text, no link, no request, one fixed script with no note data in it. A map with no child, no parent and no reference renders the v4.9.0 page byte for byte.
+- **The tree board** (`board-layout --with-children`, §11) — each child gets a block below the root's grid, its cells «<child> · <stage> · <lane>» and its rows keyed `<child>#<id>`.
+  - A roll-up sticky sits on the parent's step. On Miro it links to the child's first cell; on the host's board it names the child's section, because that board's links are http(s) only (measured 2026-11-24).
+  - A map below three levels gets a reference sticky.
+  - `board-state` and `board-diff` read a tree board as one note and name each roll-up and reference sticky by its element id (`rollups`, `references`). A new version updates them by id, and a roll-up whose child left the tree is never taken for a team row.
+- **One preview from several boards** (§12) — `board-take` takes one diff per board.
+  - A note's own entries are taken; a tree board's `<name>#…` keys are made plain; another map's entries are refused `other_note`.
+  - A row changed differently on two boards is offered in every version, and the PM takes one or none, never both (`conflict`). This covers a changed text, a changed cell, and a row removed on one board but changed on the other. `row:<id>` never gets past this check.
+  - Only the note the row lives in is written. Diffs are taken in one order, whatever order they are given in.
+- **A child's own publication** (`references/artifact-publishing.md` §4–§5) — a child has its own key, `cjm-research/<product>/journey-<slug>`. When its root is already published, one question names both places, and each is published only when the answer names it. The question for a tree page or board lists the child maps whose rows it carries.
+- **The portfolio as a tree** (`scripts/journey_portfolio.py`, §13) — each root is followed by its children, in the parent's stage order and indented with ↳ by level. A parent shows «діти: N · уваги потребують M»; each map's attention and health stay its own. A portfolio without nesting looks as before.
+- **One map's snapshot** (§10, `references/vault-schema.md`) — a cjm-health-check snapshot may name the map it was made for (`map: journey-<slug>`).
+  - The funnel's snapshot never refreshes a child map. A snapshot naming another map is refused, and the note is left untouched.
+  - The scheduled health-check refreshes only maps without a `parent`.
+  - A refreshed child re-renders the pages of the maps above it, locally (`pages_above`). A page that cannot be written is named and the refresh still succeeds. Nothing is published.
+- **The host's own board first** — the journey map's boards are offered with the host's own board type first, then a registry record's board (Miro). The whole map works on the host's own tools, and no paid board account is needed (§11, `artifact-publishing.md` §3, `cjm-research` J4). This was the user's rule during acceptance.
+- **Tests**
+  - `testing/journey_nest_test.py`: 163 checks, including 15 mutations — the plan's own and those for the findings of three reviews. Every check was red first.
+  - `testing/journey_portfolio_test.py`: the tree (§10–§11).
+  - The Zorg tree fixtures in `testing/fixtures/journey/nest/`, with v4.9.0 goldens for a map without children.
+  - Full suite 64/64.
+  - Acceptance 10/10, including a Codex CLI `-s read-only` run.
+
+### Changed
+
+- **`cjm-research` 0.19.0** — Step J8 «Nested maps» (it asks for a parent only when the request names one); J4 offers the host's own board first; new `## Routing` phrases (trigger Group AA, live 7/7). The description is unchanged.
+- **`references/journey-protocol.md`** — §1, §7, §9 (`nest`, `--map` / `--dir`, `--with-children`, `board-take --diff` per board), §10, §11, §12 and §13 updated; new §14 «Nested maps»; «What never happens» moves to §15.
+- **`references/artifact-publishing.md`** — §3 the host's own board first; §4 two places of two keys in one question; §5 a child's own key.
+- **`skills/cjm-research/references/cjm-reports.md`** — the scheduled refresh covers maps without a `parent`; pages above a refreshed child are re-rendered.
+- **`references/vault-schema.md`** — the optional `map:` on cjm-health-check.
+- **Validator** — check 28 now also guards §14's findings, why codes, depth, fields and unsafe marks, §15, Step J8, the scheduled refresh's «without a parent» and artifact-publishing's two places. Check 29 keeps the host-first order in all three places. No new check.
+- **`README.md`** — CJM Research 0.19.0; «New in v4.10.0».
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/journey_map.py` | `nest`; the roll-up; the tree page; the tree board; `board-take` over several diffs; one map's snapshot; pages above a refreshed child; check 28's nesting part, check 29's host-first order |
+| `scripts/journey_portfolio.py` | the tree order; `status_of` through `journey_map.hc_status` |
+| `references/journey-protocol.md` | §1, §7, §9–§13, §14 «Nested maps», §15 |
+| `references/artifact-publishing.md`, `references/vault-schema.md` | as above |
+| `skills/cjm-research/SKILL.md` | 0.19.0 — J8, J4, Routing |
+| `skills/cjm-research/references/cjm-reports.md` | the scheduled refresh; pages above |
+| `testing/journey_nest_test.py`, `testing/journey_portfolio_test.py` | new and extended tests |
+| `testing/fixtures/journey/nest/` | the Zorg tree, broken links, a cycle, another product's parent; goldens |
+| `testing/trigger-evals.md`, `testing/test-cases.md`, `testing/output-evals.md`, `testing/host-matrix.md` | Group AA (live 7/7); v4.10.0 cases; the nesting rubric; nested maps in the `cjm-research` row |
+| `README.md` | «New in v4.10.0», CJM Research 0.19.0 |
+
+### Backwards compatibility
+
+Nothing breaks. A map without a `parent` and without children behaves as in v4.9.0: its page is byte for byte the same, and its board and result lines are as before. The story map's board is unchanged (`scripts/board_state.py` is untouched). A snapshot without `map:` refreshes the maps without a parent, as before. One visible change: the journey map's board question now lists the host's own board before Miro.
+
+### Known limits
+
+- The tree is computed from the notes on every run, so renaming a parent's file breaks its children's links (`orphan_child`) until their `parent` is set again.
+- On the host's board the roll-up sticky names the child's section; it has no link.
+- No health-check writes a snapshot for one child map yet. A child's numbers change when the PM updates it (J5) or when a snapshot made for it is given.
+- The story map's board is still Miro only.
+- A live run on the real funnel was not part of acceptance; it can be done after the release, on request.
+- Editing on the page comes in v4.11.0.
+
+---
+
 ## v4.9.1 (2026-11-20)
 
 **«Довірені адреси»: the context engine reaches only the provider addresses you approved.** The «Skill Security Audit» of v4.8.0 (2026-11-20, verdict BLOCK) found one high-severity issue: a provider registration — `{vault}/{plugin_folder}/_System/providers/<id>.yaml` or `~/.grow-pm/providers/<id>.yaml` — named `endpoint.url` and `endpoint.headers_env`, and the engine sent the header that variable holds to that address with no check. Whoever could edit the file — a vault shared or synced with others — decided where your token went. Verified on v4.9.0 it was wider: five places built the client (the daily sync, search on both of its paths, the core copy, `repo status` and `provider adopt|plan|apply`), any environment variable could be named, a vault's registration shadowed your private one of the same id, and an address with no header still received your search queries and note names. Now the file does not decide: the engine sends a request — a handshake, a query, a note's name, a header — only to the pair «address + variable name» you approved for the registration's id. PATCH: a fix of the engine's behaviour; the new `ctx provider trust` is part of the fix.

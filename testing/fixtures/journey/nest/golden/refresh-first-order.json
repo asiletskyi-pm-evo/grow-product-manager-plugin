@@ -1,0 +1,29 @@
+{
+ "added": [
+  "a-s3-cart-checkout"
+ ],
+ "date": "2026-11-16",
+ "errors": [],
+ "health": {
+  "date": "2026-11-16",
+  "score": 64,
+  "snapshot": "snapshot-2026-11-16.md"
+ },
+ "kept": [],
+ "line": "Карту шляху оновлено локально — опублікувати можна в наступному прогоні.",
+ "note_written": true,
+ "ok": true,
+ "published": false,
+ "removed": [],
+ "replaced": [
+  "m-s1-visit-search",
+  "m-s2-search-cart",
+  "a-s2-search-cart",
+  "m-s3-cart-checkout",
+  "m-s4-checkout-payment"
+ ],
+ "skipped": [],
+ "skipped_entries": [],
+ "skipped_stages": [],
+ "snapshot": "snapshot-2026-11-16.md"
+}

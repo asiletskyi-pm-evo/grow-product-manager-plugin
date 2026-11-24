@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="uk"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Карта шляху — Перше замовлення</title><style>:root{color-scheme:light}
+*{box-sizing:border-box}body{margin:0;padding:24px;background:#f7f7f5;color:#1f2328;font:14px/1.4 -apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:16px;margin:18px 0 6px}.meta{color:#57606a;margin:2px 0}
+.wrap{overflow:auto;margin-top:12px;max-height:max(320px,80vh);border:1px solid #dee2e6;border-radius:8px;background:#f7f7f5;cursor:grab;touch-action:pan-x pan-y}
+.wrap.panning{cursor:grabbing;user-select:none}.wrap:focus-visible{outline:2px solid #1c7ed6;outline-offset:2px}
+table.grid{border-collapse:separate;border-spacing:6px}
+th,td{vertical-align:top}th.stage{position:sticky;top:0;z-index:2;background:#d0ebff;border-radius:6px;padding:6px 8px;text-align:left;min-width:190px;box-shadow:0 -6px 0 #f7f7f5}
+th.stage .o{color:#57606a;font-size:12px;font-weight:400}th.lane{position:sticky;left:0;z-index:1;background:#fff;border-left:4px solid #868e96;border-radius:4px;padding:6px 8px;text-align:left;width:140px;font-weight:600;box-shadow:-6px 0 0 #f7f7f5}
+th.corner{position:sticky;top:0;left:0;z-index:3;background:#f7f7f5}
+.item{background:#fff;border-radius:6px;padding:6px 8px;margin-bottom:6px;border-left:4px solid #adb5bd;max-width:240px}
+.item .m{color:#57606a;font-size:11px;margin-top:2px}.item.gap{border:1px dashed #e8590c;color:#e8590c}
+.l-pain{border-left-color:#e03131}.l-metric,.l-anomaly{border-left-color:#1c7ed6}.l-opportunity{border-left-color:#f08c00}
+.l-solution{border-left-color:#2f9e44}.l-experiment{border-left-color:#7048e8}.l-initiative{border-left-color:#495057}
+.target{font-weight:700}svg.spark{background:#fff;border:1px solid #dee2e6;border-radius:4px}
+table.pts{border-collapse:collapse;margin-top:6px;background:#fff}table.pts td{border:1px solid #dee2e6;padding:2px 8px}</style></head><body>
+<h1>Карта шляху: Перше замовлення</h1>
+<p class="meta">Нотатка: journey-first-order.md · zorg · Власник: Команда оформлення Zorg · Рев&#x27;ю: 2026-11-02</p>
+<p class="meta">Згенеровано: DATE</p>
+<h2>Здоров&#x27;я</h2>
+<svg class="spark" width="260" height="56" viewBox="0 0 260 56" role="img"><polyline fill="none" stroke="#1c7ed6" stroke-width="2" points="130.0,21.8"/><circle cx="130.0" cy="21.8" r="3" fill="#1c7ed6"><title>2026-11-16: 64</title></circle></svg>
+<table class="pts"><tr><td>2026-11-16</td></tr><tr><td>64</td></tr><tr><td class="m">snapshot-2026-11-16.md</td></tr></table>
+<div class="wrap" tabindex="0"><table class="grid"><thead><tr><th class="corner"></th>
+<th class="stage">s1 · Візит<div class="o">visit -&gt; search &gt;= 45%</div></th>
+<th class="stage">s2 · Пошук<div class="o">search -&gt; cart &gt;= 35%</div></th>
+<th class="stage">s3 · Кошик<div class="o">cart -&gt; checkout &gt;= 55%</div></th>
+<th class="stage">s4 · Оформлення<div class="o">checkout -&gt; payment &gt;= 72%</div></th>
+<th class="stage">s5 · Оплата<div class="o">⚠️ TBD</div></th>
+</tr></thead><tbody>
+<tr><th class="lane">дії</th>
+<td>
+<div class="item l-action"><div class="t">Приходить із пошукової реклами на головну</div><div class="m">walkthrough 2026-10-12, крок 1 · observed · 2026-10-12</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+<div class="item gap">⚠️ немає доказів</div>
+</td>
+</tr>
+<tr><th class="lane">точки контакту</th>
+<td>
+<div class="item l-touchpoint"><div class="t">Головна сторінка, мобільний веб</div><div class="m">walkthrough 2026-10-12, крок 1 · observed · 2026-10-12</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">досвід</th>
+<td>
+</td>
+<td>
+<div class="item l-experience"><div class="t">Багато зусиль, щоб звузити видачу</div><div class="m">feedback-triage 2026-10-30, тема «фільтри», pain 6.0 · reported · 2026-10-30</div></div>
+</td>
+<td>
+</td>
+<td>
+<div class="item l-experience"><div class="t">Тривога: чи не задорого вийде з доставкою</div><div class="m">feedback-triage 2026-10-30, тема «доставка», pain 7.5 · reported · 2026-10-30</div></div>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">болі</th>
+<td>
+</td>
+<td>
+<div class="item l-pain"><div class="t">Фільтри скидаються після повернення назад до видачі</div><div class="m">Фільтри · walkthrough 2026-10-12, крок 4 · observed · 2026-10-12</div></div>
+</td>
+<td>
+<div class="item l-pain"><div class="t">Не видно вартості доставки до оформлення</div><div class="m">feedback-triage 2026-10-30, тема «доставка», pain 7.5 · reported · 2026-10-30</div></div>
+<div class="item l-pain"><div class="t">Покупці питають у підтримці про строки доставки</div><div class="m">product-research 2026-09-20, синтез інтерв&#x27;ю · reported · 2026-09-20</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">метрики</th>
+<td>
+<div class="item l-metric"><div class="t">visit -&gt; search: 43.5% (база 45.0%, -3.3%)</div><div class="m">transition · health-check 2026-11-16, 2026-11-09..2026-11-15 · measured · 2026-11-16</div></div>
+</td>
+<td>
+<div class="item l-metric"><div class="t">search -&gt; cart: 29.0% (база 35.0%, -17.1%)</div><div class="m">transition · health-check 2026-11-16, 2026-11-09..2026-11-15 · measured · 2026-11-16</div></div>
+</td>
+<td>
+<div class="item l-metric"><div class="t">cart -&gt; checkout: 37.0% (база 50.0%, -26.0%)</div><div class="m">transition · health-check 2026-11-16, 2026-11-09..2026-11-15 · measured · 2026-11-16</div></div>
+</td>
+<td>
+<div class="item l-metric"><div class="t">checkout -&gt; payment: 71.0% (база 72.0%, -1.4%)</div><div class="m">transition · health-check 2026-11-16, 2026-11-09..2026-11-15 · measured · 2026-11-16</div></div>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">аномалії</th>
+<td>
+</td>
+<td>
+<div class="item l-anomaly"><div class="t">search -&gt; cart: -17.1% від бази — попередження</div><div class="m">health-check 2026-11-16, 2026-11-09..2026-11-15 · measured · 2026-11-16</div></div>
+</td>
+<td>
+<div class="item l-anomaly"><div class="t">cart -&gt; checkout: -26.0% від бази — критично</div><div class="m">health-check 2026-11-16, 2026-11-09..2026-11-15 · measured · 2026-11-16</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">можливості</th>
+<td>
+</td>
+<td>
+<div class="item l-opportunity"><div class="t">Не губити вибір покупця між кроками</div><div class="m">зі слів PM</div></div>
+</td>
+<td>
+<div class="item l-opportunity target"><div class="t">🎯 Покупець знає повну ціну й строк доставки ще в кошику</div><div class="m">зі слів PM · ціль</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">рішення</th>
+<td>
+</td>
+<td>
+</td>
+<td>
+<div class="item l-solution"><div class="t">Калькулятор доставки в кошику</div><div class="m">Hypotheses/hypothesis-delivery-calculator</div></div>
+<div class="item l-solution"><div class="t">Безкоштовна доставка від порогу, показана в кошику</div><div class="m">cjm-research hypotheses 2026-10-31, H2</div></div>
+<div class="item l-solution"><div class="t">Строк доставки на картці товару</div><div class="m">Hypotheses/hypothesis-delivery-date-on-card</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">ініціативи</th>
+<td>
+</td>
+<td>
+</td>
+<td>
+<div class="item l-initiative"><div class="t">Епік «Прозора доставка»</div><div class="m">PROJ-1234 · roadmap-architect PROJ-1234</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+<tr><th class="lane">експерименти</th>
+<td>
+</td>
+<td>
+</td>
+<td>
+<div class="item l-experiment"><div class="t">A/B калькулятора доставки</div><div class="m">exp-delivery-calc-20261020 · experiment-tracker registry</div></div>
+</td>
+<td>
+</td>
+<td>
+</td>
+</tr>
+</tbody></table></div>
+<script>(function(){var w=document.querySelector(".wrap");if(!w)return;var p=null;w.addEventListener("pointerdown",function(e){if(e.button!==0)return;p={x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,i:e.pointerId,m:false};});w.addEventListener("pointermove",function(e){if(!p)return;var dx=e.clientX-p.x,dy=e.clientY-p.y;if(!p.m&&Math.abs(dx)+Math.abs(dy)<4)return;if(!p.m){p.m=true;try{w.setPointerCapture(p.i)}catch(_){}w.classList.add("panning");}w.scrollLeft=p.l-dx;w.scrollTop=p.t-dy;});function end(){if(!p)return;if(p.m){try{w.releasePointerCapture(p.i)}catch(_){}}p=null;w.classList.remove("panning");}w.addEventListener("pointerup",end);w.addEventListener("pointercancel",end);})();</script>
+</body></html>

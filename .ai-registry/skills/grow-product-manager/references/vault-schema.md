@@ -182,6 +182,7 @@ previous_health_check: string (wikilink to previous health check)
 date: date (the day of the check, YYYY-MM-DD — since v4.7.0)
 period: string (the analysed period, e.g. "2026-10-26..2026-11-01" — since v4.7.0)
 stages: list (one entry per stage: id (s<n>), metric, value, baseline, deviation, status — since v4.7.0)
+map: string (optional, since v4.10.0 — the one journey map this snapshot is made for, journey-<slug>; without it the snapshot is the funnel's and never refreshes a child map, journey-protocol.md §14)
 ```
 
 The machine fields a journey map reads — `health_score`, `date`, `stages` — are written in the frontmatter by the health-check since v4.7.0 (`skills/cjm-research/references/cjm-reports.md` → Save health-check snapshot); a snapshot saved before then is read as it was, and a score is never taken from its text (`journey-protocol.md` §8).
