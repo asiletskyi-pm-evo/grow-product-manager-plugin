@@ -119,13 +119,9 @@ def _skip_label(code, lang):
 # ------------------------------------------------------------------ a journey map's row
 def status_of(text):
     """The health-check status a refreshed anomaly row ends with — `— <label>` by journey_map's own labels (REFRESH), in
-    either language; None for any other ending. A word inside the text is no status."""
-    t = str(text or "").rstrip()
-    for L in jm.REFRESH.values():
-        for code, label in L["status"].items():
-            if t.endswith("— " + label):
-                return code
-    return None
+    either language; None for any other ending. A word inside the text is no status. Since v4.10.0 journey_map's
+    `hc_status` — one reading for the portfolio and a child's roll-up (§14)."""
+    return jm.hc_status(text)
 
 
 def _num(x):

@@ -13,6 +13,9 @@
   board-diff   the board's last state against a read-back: what the team changed, moved, added and removed, the
                health-check edits apart (named, never taken)
   board-take   what the PM took from the board into the note — every other byte kept; --dry-run is the preview
+  nest         the nesting (v4.10.0): the map's subtree of child maps by their `parent` links, each child's roll-up
+               (pains by class, anomalies, outcome metric, last health point) — never a copy of a row — and the
+               findings of the nesting; nothing written
   schema       the fields, columns, lanes, levels, findings, board roles and commands the protocol must agree with
                (checks 28 and 29)
 
@@ -33,7 +36,8 @@ import ctx_never as cn  # noqa: E402
 import note_table as nt  # noqa: E402
 import publications as pub  # noqa: E402
 
-FIELDS = ("product", "journey", "owner", "reviewed", "stages", "health", "published")
+FIELDS = ("product", "journey", "owner", "reviewed", "stages", "parent", "parent_stage", "parent_step", "health", "published")
+NEST_FIELDS = ("parent", "parent_stage", "parent_step")                       # the link lives in the child (§14)
 COLUMNS = (("id", "id"), ("stage", "етап"), ("step", "крок"), ("lane", "доріжка"), ("text", "текст"), ("level", "рівень"),
            ("target", "ціль"), ("parent", "parent"), ("code", "код"), ("source", "джерело"), ("class", "клас"),
            ("date", "дата"))
@@ -57,7 +61,11 @@ FINDINGS = ("no_owner", "stale_review", "no_outcome", "empty_stage", "undeclared
             "pain_no_action", "few_solutions", "stale_metric", "duplicate_id", "link", "secret", "contact")
 MODEL_FINDINGS = ("opportunity_no_story", "two_pains", "person_name")
 COMMANDS = ("parse", "check", "render-html", "health", "refresh", "tree", "board-layout", "board-state", "board-diff",
-            "board-take", "schema")
+            "board-take", "nest", "schema")
+NEST_FINDINGS = ("orphan_child", "nest_cycle", "too_deep", "other_product_parent", "self_parent")
+ORPHAN_WHY = ("no_parent", "no_stage", "no_stage_in_parent", "no_step")       # why a child hangs on nothing (§14)
+MAX_DEPTH = 3                                    # root → child → grandchild (R38); deeper is a reference by name only
+OUTCOME_TBD = "⚠️ TBD"
 REVIEW_DAYS, PAIN_DAYS, MIN_SOLUTIONS = 90, 182, 3
 HC_SOURCE = "health-check"
 ANOMALY_STATUSES = ("warning", "critical", "positive")
@@ -166,7 +174,9 @@ def load(path):
     return {"path": path, "text": text, "eol": eol, "lines": lines, "cols": cols, "table_end": table[-1][0], "lang": lang,
             "title": title, "product": nt.fm_scalar(fm, "product"), "journey": nt.fm_scalar(fm, "journey"),
             "owner": nt.fm_scalar(fm, "owner"), "reviewed": nt.fm_scalar(fm, "reviewed"), "stages": st, "health": hp,
-            "rows": rows, "errors": errors}
+            "rows": rows, "errors": errors, "type": nt.fm_scalar(fm, "type"),
+            "parent": nt.fm_scalar(fm, "parent"), "parent_stage": nt.fm_scalar(fm, "parent_stage"),
+            "parent_step": nt.fm_scalar(fm, "parent_step")}
 
 
 def _public(r):
@@ -219,6 +229,7 @@ def parse(note):
         grid.setdefault(r["stage"], {l: [] for l in LANE_IDS}).setdefault(r["lane"], []).append(r["id"])
     return {"title": note["title"], "product": note["product"], "journey": note["journey"], "owner": note["owner"],
             "reviewed": note["reviewed"], "stages": note["stages"], "health": note["health"], "lanes": list(LANE_IDS),
+            "parent": note["parent"], "parent_stage": note["parent_stage"], "parent_step": note["parent_step"],
             "rows": [_public(r) for r in note["rows"] if not r["gap"]],
             "gaps": [{"row": r["id"], "stage": r["stage"], "lane": r["lane"], "text": r["text"]} for r in note["rows"] if r["gap"]],
             "grid": grid, "trees": {s: tree(note, s) for s in declared}, "errors": note["errors"]}
@@ -471,6 +482,18 @@ REFRESH = {
 
 def _is_hc(r):
     return r["lane"] in ("metric", "anomaly") and r["source"].startswith(HC_SOURCE)
+
+
+def hc_status(text):
+    """The health-check status a refreshed anomaly row ends with — «— <label>» by REFRESH's own labels, in either
+    language (the portfolio and the nesting read it alike); None for any other ending — a word inside the text, or a
+    row the PM wrote, is no status."""
+    t = str(text or "").rstrip()
+    for L in REFRESH.values():
+        for code, label in L["status"].items():
+            if t.endswith("— " + label):
+                return code
+    return None
 
 
 def wanted_rows(snap, lang, declared):
@@ -742,6 +765,316 @@ def mermaid(t):
                 lines.append("  %s%s" % (xn, shape % _label(x["id"] + ": ", "%s %s" % (x["text"], x["code"]))))
                 lines.append("  %s --> %s" % (sn, xn))
     return "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------------ nesting (§14, since v4.10.0)
+NEST_LABELS = {
+    "uk": {"head": "Дерево «%s» (%s) · рівень %d · дочірніх карт у дереві %d", "pains": "болі", "anomalies": "аномалії",
+           "critical": "критичних %d", "outcome": "результат", "health": "здоров'я", "no_snapshot": "немає знімка",
+           "reviewed": "рев'ю", "step": "крок", "deeper": "глибше — лише посилання, рівень %d (too_deep)",
+           "findings": "Знахідки вкладеності:", "skipped": "Пропущено", "ancestors": "Над нею: %s", "none": "дочірніх карт немає",
+           "level": "рівень"},
+    "en": {"head": "Tree «%s» (%s) · level %d · child maps in the tree %d", "pains": "pains", "anomalies": "anomalies",
+           "critical": "critical %d", "outcome": "outcome", "health": "health", "no_snapshot": "no snapshot",
+           "reviewed": "reviewed", "step": "step", "deeper": "deeper — a reference only, level %d (too_deep)",
+           "findings": "Findings of the nesting:", "skipped": "Skipped", "ancestors": "Above it: %s", "none": "no child maps",
+           "level": "level"},
+}
+NEST_SKIPS = ("unreadable", "wrong_type", "sensitive", "duplicate")
+
+
+def link_name(value):
+    """A map's name from a `parent` value: `journey-<slug>`, also written as `[[journey-<slug>]]` (an alias or a heading
+    after it dropped), with `.md` or a folder before it — the name alone."""
+    s = str(value or "").strip()
+    m = re.match(r"^\[\[([^\]|#]*)(?:#[^\]|]*)?(?:\|[^\]]*)?\]\]$", s)
+    if m:
+        s = m.group(1).strip()
+    s = s.replace("\\", "/").rsplit("/", 1)[-1].strip()
+    return s[:-3] if s.lower().endswith(".md") else s
+
+
+def _product_key(p):
+    import ctx_search as cs_                         # one product is one key, as `ctx search --type` compares it
+    return cs_.product_key(p)
+
+
+def nest_maps(note_path, maps=(), dirs=()):
+    """({name: note}, skipped, counts) — the journey maps the nesting reads: the note itself, the maps given and every .md
+    directly inside each folder — with neither maps nor folders, the note's own folder (§7: the product's maps live in
+    one). A file is read once (two spellings of one file are one); a file iCloud has not downloaded is never opened; a
+    note the search marks sensitive is never read in; a note of another type is no map (a hand CJM note never nests);
+    the first map of a name is kept — the link is by name. Only read, never written."""
+    import ctx_index as ci
+    items = [(note_path, True)] + [(p, True) for p in maps or ()]
+    folders = list(dirs or ()) if (maps or dirs) else [os.path.dirname(os.path.abspath(note_path))]
+    for f in folders:
+        if not os.path.isdir(f):
+            raise Bad("%s is not a folder" % f)
+        try:
+            names = sorted(os.listdir(f))
+        except OSError as e:
+            raise Bad("the folder does not read: %s" % (e.strerror or type(e).__name__))
+        items += [(os.path.join(f, n), False) for n in names if n.lower().endswith(".md")]
+    out, skipped, seen = {}, [], set()
+    counts = {"ignored": 0, "undownloaded": 0}
+
+    def skip(path, reason, detail):
+        skipped.append({"note": os.path.basename(path), "reason": reason, "detail": detail})
+    for path, named in items:
+        try:
+            st = os.stat(path)
+            ident = (st.st_dev, st.st_ino)
+        except OSError:
+            ident = os.path.realpath(path)
+        if ident in seen:
+            continue
+        seen.add(ident)
+        if os.path.isfile(path) and ci.is_dataless(path):     # never opened: opening it would start a download
+            if named:
+                skip(path, "unreadable", "the file is not downloaded from iCloud — open it in Obsidian")
+            else:
+                counts["undownloaded"] += 1
+            continue
+        try:
+            raw, fm, _ = nt.read_note(path)
+        except Bad as e:
+            if named:
+                skip(path, "unreadable", str(e))
+            else:
+                counts["ignored"] += 1               # a folder's plain markdown is no map
+            continue
+        kind = nt.fm_scalar(fm, "type").strip().lower()
+        if kind != "cjm-journey":
+            if named:
+                skip(path, "wrong_type", "type: %s — not a journey map" % (nt.safe(kind) or "—"))
+            else:
+                counts["ignored"] += 1
+            continue
+        if ci.note_meta(path.replace(os.sep, "/"), raw)["sensitive"]:
+            skip(path, "sensitive", "a sensitive note — never read into the tree")
+            continue
+        try:
+            note = load(path)
+        except Bad as e:
+            skip(path, "unreadable", str(e))
+            continue
+        name = os.path.splitext(os.path.basename(path))[0]
+        if name in out:
+            skip(path, "duplicate", "a second map named %s — the first is kept (a link is by name)" % name)
+            continue
+        out[name] = note
+    return out, skipped, counts
+
+
+def nest_forest(maps):
+    """The nesting of the maps (§14): {parent: {child: parent}, children: {parent: [children]}, level: {map: n},
+    findings}. A child's link attaches it only when its parent is a map of the same product that declares its
+    `parent_stage` and, with a `parent_step`, has a row of that step on that stage — else a finding, never a guess. A
+    cycle is named once and broken: each map of it stands alone. A level counts from the top root; past MAX_DEPTH a
+    map is too_deep — a reference by name only."""
+    found, par = [], {}
+
+    def f(code, name, detail, **more):
+        found.append(dict({"finding": code, "note": name, "detail": detail}, **more))
+    for name in sorted(maps):
+        n = maps[name]
+        p = link_name(n.get("parent"))
+        if not p:
+            continue
+        if p == name:
+            f("self_parent", name, "the map names itself as its parent")
+            continue
+        pn = maps.get(p)
+        if pn is None:
+            f("orphan_child", name, "parent %s is no map found — renamed, deleted or not given" % p, why="no_parent", parent=p)
+            continue
+        a, b = _product_key(n["product"]), _product_key(pn["product"])
+        if a and b and a != b:
+            f("other_product_parent", name, "its parent %s is a map of another product — a nesting stays in one product" % p, parent=p)
+            continue
+        stage = str(n.get("parent_stage") or "").strip()
+        if not stage:
+            f("orphan_child", name, "no parent_stage — the stage of %s it opens from" % p, why="no_stage", parent=p)
+            continue
+        if stage not in [s["id"] for s in pn["stages"]]:
+            f("orphan_child", name, "%s declares no stage %s" % (p, stage), why="no_stage_in_parent", parent=p)
+            continue
+        step = _norm(n.get("parent_step")).casefold()
+        if step and not any(r["stage"] == stage and _norm(r["step"]).casefold() == step for r in pn["rows"] if not r["gap"]):
+            f("orphan_child", name, "no row of %s on %s has the step «%s»" % (p, stage, nt.safe(_norm(n.get("parent_step")))),
+              why="no_step", parent=p)
+            continue
+        par[name] = p
+    ring_of = set()
+    for name in sorted(par):                         # walk up from every map: a map met again on its walk closes a cycle
+        walk, seen, cur = [name], {name}, par.get(name)
+        while cur is not None:
+            if cur in seen:
+                ring = walk[walk.index(cur):]
+                if not set(ring) & ring_of:
+                    ring_of |= set(ring)
+                    f("nest_cycle", sorted(ring)[0], "the maps hang under each other in a ring — each stands alone "
+                      "until a link is fixed", maps=sorted(ring))
+                break
+            if cur in ring_of:
+                break
+            seen.add(cur)
+            walk.append(cur)
+            cur = par.get(cur)
+    for name in ring_of:
+        par.pop(name, None)
+    level = {}
+    for name in maps:
+        k, cur, seen = 1, par.get(name), {name}
+        while cur is not None and cur not in seen:
+            seen.add(cur)
+            k += 1
+            cur = par.get(cur)
+        level[name] = k
+    children = {}
+    for c in sorted(par):
+        children.setdefault(par[c], []).append(c)
+
+    def place(c):
+        pn, n = maps[par[c]], maps[c]
+        ids = [s["id"] for s in pn["stages"]]
+        stage, step = str(n.get("parent_stage") or "").strip(), _norm(n.get("parent_step")).casefold()
+        first = next((i for i, r in enumerate(pn["rows"]) if r["stage"] == stage and step and _norm(r["step"]).casefold() == step), -1)
+        return (ids.index(stage) if stage in ids else len(ids), first, c)
+    for p in children:
+        children[p].sort(key=place)
+    for name in sorted(maps):
+        if level[name] > MAX_DEPTH:
+            up = name
+            for _ in range(level[name] - MAX_DEPTH):
+                up = par[up]
+            f("too_deep", name, "level %d, under %s (level %d) — shown by a reference only, never its grid (R38)"
+              % (level[name], up, MAX_DEPTH), level=level[name], under=up)
+    return {"parent": par, "children": children, "level": level, "findings": found}
+
+
+def rollup(note, lang="uk"):
+    """A child's roll-up on its parent's step (R30) — numbers and one metric, never a copy of a row: the pains its page
+    shows, by class (a simulated or unsourced pain is none; a health-check row is no pain); the anomalies its page
+    shows, the critical ones by the label `refresh` ends a row with (§10) — a row the PM wrote is counted unrated; its
+    journey-level metric (§4), else ⚠️ TBD; its last health point, else «немає знімка»; its review date."""
+    declared = [s["id"] for s in note["stages"]]
+    shown = [r for r in note["rows"] if not r["gap"] and page_worthy(r, declared)]
+    pains, an = {}, {"total": 0, "critical": 0, "warning": 0, "positive": 0, "unrated": 0}
+    for r in shown:
+        if r["lane"] == "pain":
+            cls = r["class"].strip().lower()
+            pains[cls] = pains.get(cls, 0) + 1
+    for r in shown:
+        if r["lane"] == "anomaly":
+            an["total"] += 1
+            st = hc_status(r["text"]) if _is_hc(r) else None
+            an[st or "unrated"] += 1
+    outcome = next((_norm(nt.safe(r["text"])) for r in shown if r["lane"] == "metric" and r["level"].strip().lower() == "journey"), "")
+    pts = sorted((p for p in note["health"] if isinstance(p.get("score"), (int, float)) and day(p.get("date"))),
+                 key=lambda p: (p["date"], p.get("snapshot") or ""))
+    last = pts[-1] if pts else None
+    return {"pains": dict(sorted(pains.items())), "pains_total": sum(pains.values()), "anomalies": an,
+            "outcome": outcome or OUTCOME_TBD,
+            "health": {"score": last["score"], "date": last["date"]} if last else None,
+            "health_label": "" if last else NEST_LABELS.get(lang, NEST_LABELS["en"])["no_snapshot"],
+            "reviewed": note["reviewed"] if day(note["reviewed"]) else ""}
+
+
+def _journey_name(note, name):
+    return _norm(nt.safe(note["journey"] or note["title"] or name))
+
+
+def nest_node(name, maps, forest, lang, seen=None):
+    """The node of a map in its tree: its link, its roll-up, its children while their level is MAX_DEPTH or less, and the
+    first level past it as references (`deeper`) — never a row of any map."""
+    seen = set() if seen is None else seen
+    seen.add(name)
+    n = maps[name]
+    linked = name in forest["parent"]
+    out = {"note": name, "journey": _journey_name(n, name), "level": forest["level"][name],
+           "stage": str(n.get("parent_stage") or "").strip() if linked else "",
+           "step": _norm(nt.safe(n.get("parent_step"))) if linked else "", "rollup": rollup(n, lang), "children": [], "deeper": []}
+    for c in forest["children"].get(name, []):
+        if c in seen:
+            continue
+        if forest["level"][c] > MAX_DEPTH:
+            out["deeper"].append({"note": c, "journey": _journey_name(maps[c], c), "level": forest["level"][c],
+                                  "stage": str(maps[c].get("parent_stage") or "").strip(),
+                                  "step": _norm(nt.safe(maps[c].get("parent_step")))})
+        else:
+            out["children"].append(nest_node(c, maps, forest, lang, seen))
+    return out
+
+
+def ancestors(name, maps, forest):
+    """The maps above `name`, the top root first — each with the stage and step the next one opens from."""
+    chain, cur, seen = [], forest["parent"].get(name), {name}
+    while cur is not None and cur not in seen:
+        seen.add(cur)
+        chain.append({"note": cur, "journey": _journey_name(maps[cur], cur), "level": forest["level"][cur]})
+        cur = forest["parent"].get(cur)
+    return chain[::-1]
+
+
+def nest_of(note_path, maps=(), dirs=(), lang=None):
+    """Everything the nesting of one map needs: {name, note, maps, forest, tree, ancestors, skipped, counts} — raises Bad
+    when the note is no journey map."""
+    note = load(note_path)
+    if note["type"].strip().lower() != "cjm-journey":
+        raise Bad("%s is not a journey map (type: %s)" % (os.path.basename(note_path), note["type"] or "—"))
+    found, skipped, counts = nest_maps(note_path, maps, dirs)
+    name = os.path.splitext(os.path.basename(note_path))[0]
+    found[name] = note if name not in found else found[name]
+    forest = nest_forest(found)
+    lang = lang or note["lang"]
+    return {"name": name, "note": found[name], "maps": found, "forest": forest, "lang": lang,
+            "tree": nest_node(name, found, forest, lang), "ancestors": ancestors(name, found, forest),
+            "skipped": skipped, "counts": counts}
+
+
+def _rollup_words(ru, L):
+    pains = "%s %d" % (L["pains"], ru["pains_total"]) + (" (%s)" % " · ".join("%s %d" % kv for kv in ru["pains"].items()) if ru["pains"] else "")
+    an = ru["anomalies"]
+    anom = "%s %d" % (L["anomalies"], an["total"]) + (" (%s)" % (L["critical"] % an["critical"]) if an["critical"] else "")
+    health = ("%s %s (%s)" % (L["health"], ru["health"]["score"], ru["health"]["date"]) if ru["health"]
+              else "%s: %s" % (L["health"], ru["health_label"]))
+    parts = [pains, anom, "%s: %s" % (L["outcome"], ru["outcome"]), health]
+    if ru["reviewed"]:
+        parts.append("%s %s" % (L["reviewed"], ru["reviewed"]))
+    return " · ".join(parts)
+
+
+def nest_text(nest):
+    """The tree for the chat: the map, its children indented by level with their roll-up, the references past the
+    depth, then the findings of the nesting."""
+    L = NEST_LABELS.get(nest["lang"], NEST_LABELS["en"])
+    t = nest["tree"]
+
+    def count(n):
+        return len(n["children"]) + sum(count(k) for k in n["children"])
+    out = [L["head"] % (t["journey"], t["note"], t["level"], count(t))]
+    if nest["ancestors"]:
+        out.append(L["ancestors"] % " → ".join("«%s» (%s)" % (a["journey"], a["note"]) for a in nest["ancestors"]))
+
+    def walk(n, depth):
+        for k in n["children"]:
+            where = k["stage"] + (" · %s «%s»" % (L["step"], k["step"]) if k["step"] else "")
+            out.append("%s- %s · «%s» (%s): %s" % ("  " * depth, where, k["journey"], k["note"], _rollup_words(k["rollup"], L)))
+            walk(k, depth + 1)
+        for x in n["deeper"]:
+            out.append("%s- «%s» (%s): %s" % ("  " * depth, x["journey"], x["note"], L["deeper"] % x["level"]))
+    walk(t, 0)
+    if not t["children"] and not t["deeper"]:
+        out.append(L["none"])
+    if nest["forest"]["findings"]:
+        out += ["", L["findings"]]
+        for f_ in nest["forest"]["findings"]:
+            out.append("- %s: %s — %s" % (f_["finding"], ", ".join(f_.get("maps") or [f_["note"]]), f_["detail"]))
+    for s_ in nest["skipped"]:
+        out.append("%s: %s — %s" % (L["skipped"], s_["note"], s_["detail"]))
+    return "\n".join(out) + "\n"
 
 
 # ------------------------------------------------------------------ the board (§11–§12, since v4.8.0)
@@ -1851,12 +2184,25 @@ def cmd_board_take(args):
     return 0
 
 
+def cmd_nest(args):
+    n = nest_of(args.note, args.map, args.dir, args.lang)
+    if not args.json:
+        sys.stdout.write(nest_text(n))
+    t = n["tree"]
+    result(ok=True, note=n["name"], journey=t["journey"], product=nt.safe(n["note"]["product"]), level=t["level"],
+           ancestors=n["ancestors"], tree=t, maps=len(n["maps"]), depth=MAX_DEPTH, findings=n["forest"]["findings"],
+           skipped=n["skipped"], ignored=n["counts"]["ignored"], undownloaded=n["counts"]["undownloaded"],
+           note_written=False, errors=n["note"]["errors"])
+    return 0
+
+
 def cmd_schema(args):
     result(ok=True, fields=list(FIELDS), columns=[list(c) for c in COLUMNS], lanes=[list(l) for l in LANES],
            lanes_order=list(LANE_IDS), levels=list(LEVELS), classes=list(CLASSES), findings=list(FINDINGS),
            model_findings=list(MODEL_FINDINGS), commands=list(COMMANDS), board_roles=list(BOARD_ROLES),
            diff_categories=list(DIFF_CATEGORIES), take_refused=list(TAKE_REFUSED), take_named=list(TAKE_NAMED),
-           team_source=TEAM_SOURCE, errors=check_protocol(os.path.dirname(HERE)))
+           team_source=TEAM_SOURCE, nest_fields=list(NEST_FIELDS), nest_findings=list(NEST_FINDINGS), orphan_why=list(ORPHAN_WHY),
+           max_depth=MAX_DEPTH, errors=check_protocol(os.path.dirname(HERE)))
     return 0
 
 
@@ -1908,6 +2254,12 @@ def main(argv=None):
     p.add_argument("--drop", nargs="*", default=[], help="row ids gone from the board that leave the note")
     p.add_argument("--date", help="YYYY-MM-DD of the team's board (default: today, UTC)")
     p.add_argument("--dry-run", action="store_true", help="the preview: nothing written")
+    p = sub.add_parser("nest")
+    p.add_argument("--note", required=True, help="the map whose subtree is shown — a root, or a child at its own level")
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest — ctx search --type cjm-journey's files")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
+    p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
+    p.add_argument("--json", action="store_true", help="the result line alone, no tree for the chat")
     sub.add_parser("schema")
     try:
         args = ap.parse_args(argv)
@@ -1918,7 +2270,7 @@ def main(argv=None):
         return 2
     fn = {"parse": cmd_parse, "check": cmd_check, "render-html": cmd_render, "health": cmd_health,
           "refresh": cmd_refresh, "tree": cmd_tree, "board-layout": cmd_board_layout, "board-state": cmd_board_state,
-          "board-diff": cmd_board_diff, "board-take": cmd_board_take, "schema": cmd_schema}.get(args.cmd)
+          "board-diff": cmd_board_diff, "board-take": cmd_board_take, "nest": cmd_nest, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2

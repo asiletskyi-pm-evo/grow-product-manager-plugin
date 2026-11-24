@@ -126,6 +126,9 @@ Checked when the map is built (Step J2) and on every refresh. The structural che
 | `owner` | a role or a team that keeps the map alive — never a person's name (`people-context-protocol.md`) |
 | `reviewed` | the date of the last review, YYYY-MM-DD |
 | `stages` | the stages in order, a list of `id`, `name` and `outcome` (a metric and a target, else `⚠️ TBD`) |
+| `parent` | only in a child map (since v4.10.0, §14): the parent map's name, `journey-<slug>` — the link lives in the child, the parent stores nothing |
+| `parent_stage` | the parent's stage id the child opens from (§14) |
+| `parent_step` | the step of that stage as the parent's rows write it — optional: without it the child hangs on the stage (§14) |
 | `health` | written only by `journey_map.py health` and `refresh`: a list of `date`, `score` and `snapshot` (the snapshot's file name) — joined, never erased (§8) |
 | `published` | the mirror of the publication record (`artifact-publishing.md` §5), written only by `publications.py` |
 
@@ -187,6 +190,7 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 | `board-state --read R… --note P --surface miro\|whiteboard [--last S] --out F` | the board read back, kept as its state (§12): every element and its role |
 | `board-diff --last L [--now N…] --note P [--surface miro\|whiteboard] [--out F]` | what the team did on the board since the state (§12), by element id; without `--now` the ids, the rows and the area to read back; without `--last` (or its file) the state is `unknown` |
 | `board-take --note P --diff D --take <id…> [--class <id>=<class> …] [--parent <id>=<id> …] [--drop <row id> …] [--date D] [--dry-run]` | what the PM took into the note (§12) — every other byte kept; `--dry-run` is the preview |
+| `nest --note P [--map N …] [--dir D …] [--lang uk\|en] [--json]` | the map's subtree of child maps with each child's roll-up, and the findings of the nesting (§14) — nothing written; without `--json` the tree for the chat first |
 | `schema` | the fields, columns, lanes, levels, findings and commands this file must agree with (`validate-consistency.sh` check 28) |
 
 **The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; since v4.8.0 the stage headers and the lane names stay in view while the grid scrolls in its own frame, and the grid pans with the mouse held down (one fixed inline script — no data of the note in it, no request); editing stays on the boards (§11–§12); each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note.

@@ -315,8 +315,8 @@ with tempfile.TemporaryDirectory() as d:
           and sc.get("drop") == 10, outs5[-800:])
 
     # 6. mutations (ledger): each caught by the assertions above
-    def caught(tag, old, new, judge, why):
-        m = mutant(d, tag, old, new)
+    def caught(tag, old, new, judge, why, target="journey_portfolio.py"):
+        m = mutant(d, tag, old, new, target)
         if m is None:
             check("6.%s mutation site present — %s" % (tag, why), False, "pattern not in the script: %r" % old)
             return
@@ -341,7 +341,8 @@ with tempfile.TemporaryDirectory() as d:
            lambda r, o: r.get("other_products") == 1 and "Реєстрація" not in o, "another product's note in the portfolio")
     caught("word", 'if t.endswith("— " + label):', "if label in t:",
            lambda r, o: [m for m in r.get("maps", []) if m["journey"] == "Повторне замовлення"][0]["anomalies"]
-           == {"total": 3, "critical": 1, "warning": 0, "positive": 1, "unrated": 1}, "criticality by a word of its own")
+           == {"total": 3, "critical": 1, "warning": 0, "positive": 1, "unrated": 1}, "criticality by a word of its own",
+           target="journey_map.py")          # since v4.10.0 the label is read by journey_map.hc_status, shared with the nesting
     caught("hc", "st = status_of(r[\"text\"]) if jm._is_hc(r) else None", "st = status_of(r[\"text\"])",
            lambda r, o: [m for m in r.get("maps", []) if m["journey"] == "Повторне замовлення"][0]["anomalies"]["critical"] == 1,
            "a hand-written anomaly rated by its own words")

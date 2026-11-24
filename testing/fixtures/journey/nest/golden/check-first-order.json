@@ -1,0 +1,1 @@
+{"ok": true, "findings": [{"finding": "no_outcome", "detail": "a stage without its outcome metric and target", "stage": "s5"}, {"finding": "empty_stage", "detail": "no row of evidence — a gap", "stage": "s5"}], "newest_snapshot": "2026-11-02", "folder": "read", "errors": []}
