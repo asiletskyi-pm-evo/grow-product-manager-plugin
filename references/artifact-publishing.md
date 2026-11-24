@@ -43,7 +43,7 @@ The audience comes from the skill's own step — `design-bridge` Step 2, a repor
 | the user alone, or the audience is unknown | the host's surfaces in the user's account — the narrowest circle | corporate records |
 | people outside the company (`customer`) | «лише файл», marked as recommended | every other candidate, in the order above |
 
-**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — a registry record's, then the host's own — then «лише файл» (`journey-protocol.md` §11).
+**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — the host's own first, then a registry record's (since v4.10.0: the host's own tools need no account or paid plan of a board tool) — then «лише файл» (`journey-protocol.md` §11).
 
 **Already published** — the result's record (§5–§6) names a place → «нова версія» of that place comes first, before any new place.
 

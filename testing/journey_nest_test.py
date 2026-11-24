@@ -995,6 +995,30 @@ try:
             ("two-diff take in J8", "skills/cjm-research/SKILL.md", "board-take --note <child> --diff", "board-take --note <child> --from", "board-take")):
         drift28(rel, old, new, expect, "14.x #3 check 28 names a drift of %s" % name)
 
+    # 15. the user's rule (2026-11-24, during acceptance): the whole process works on the host's own tools — a board
+    #     tool's paid account is never needed, so the host's own board is the first board offered, a registry record's
+    #     (Miro) after it; check 29 keeps the order in §11, artifact-publishing §3 and the skill's J4
+    r29 = os.path.join(d, "root29n")
+    for rel in ("references/journey-protocol.md", "references/artifact-publishing.md", "references/tools-seed.yaml",
+                "scripts/story_map.py", "scripts/journey_map.py", "skills/cjm-research/SKILL.md"):
+        os.makedirs(os.path.dirname(os.path.join(r29, rel)), exist_ok=True)
+        shutil.copy(os.path.join(ROOT, rel), os.path.join(r29, rel))
+    e29 = jm.check_board_protocol(r29)
+    check("15.1 check 29 is clean: the host's own board comes first", e29 == [], e29)
+    for name, rel, old, new in (
+            ("§11", "references/journey-protocol.md", "then the host's own board, then a registry record's board", "then a registry record's board, then the host's own board"),
+            ("artifact-publishing §3", "references/artifact-publishing.md", "the host's own first, then a registry record's", "a registry record's first, then the host's own"),
+            ("J4", "skills/cjm-research/SKILL.md", "the host's own before a registry record's", "a registry record's before the host's own")):
+        p_ = os.path.join(r29, rel)
+        t0 = text(p_)
+        if old not in t0:
+            check("15.x the order's site is in %s" % rel, False, old)
+            continue
+        write(p_, t0.replace(old, new, 1))
+        e = jm.check_board_protocol(r29)
+        write(p_, t0)
+        check("15.x check 29 names a board tool put before the host's own board in %s" % name, any("host's own board" in x for x in e), e)
+
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")
     rc, out, res = run("render-html", "--note", main, "--out", os.path.join(d, "p-uk.html"), "--lang", "uk")

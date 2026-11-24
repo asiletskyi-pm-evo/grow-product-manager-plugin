@@ -2159,6 +2159,12 @@ def check_board_protocol(root):
             errs.append("artifact-publishing.md §1: the `board` row does not name its consumer `cjm-research` (the journey map)")
         if not re.search(r"ARTIFACT `typed` when it has this kind \([^)]*\bboard\b", nt.section(ap, "2. The candidates")):
             errs.append("artifact-publishing.md §2: ARTIFACT `typed` does not list the board kind (the host's own board)")
+    order = (("references/journey-protocol.md", "then the host's own board, then a registry record's board"),
+             ("references/artifact-publishing.md", "the host's own first, then a registry record's"),
+             ("skills/cjm-research/SKILL.md", "the host's own before a registry record's"))
+    for rel, want in order:                          # the user's rule (v4.10.0): the host's own tools first, a paid
+        if texts.get(rel) is not None and want not in texts[rel]:     # board tool never needed
+            errs.append("%s: the journey map's boards are not offered with the host's own board first (%s)" % (rel, want))
     seed = texts.get("references/tools-seed.yaml")
     if seed is not None:
         m = re.search(r"^  - id: miro\n(?:    .*\n)*?    skills: \[([^\]]*)\]", seed, re.M)
