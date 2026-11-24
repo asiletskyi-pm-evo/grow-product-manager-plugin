@@ -66,7 +66,8 @@ LABELS = {
            "skipped": "Пропущено", "other": "Іншого продукту — не показано: %d", "empty": "без доказів",
            "icloud": "файл не завантажено з iCloud — відкрий його в Obsidian",
            "icloud_n": "файлів у теках не завантажено з iCloud: %d — відкрий теку в Obsidian",
-           "no_outcome": "без метрики результату", "no_point": "—", "head": "Портфель шляхів: %s · %s · карт %d · "
+           "no_outcome": "без метрики результату", "no_point": "—", "kids": "діти: %d · уваги потребують %d",
+           "head": "Портфель шляхів: %s · %s · карт %d · "
            "потребують уваги %d · ручних CJM %d · пропущено %d", "head_other": " · іншого продукту %d", "cjm_cols": ("CJM", "воронка",
            "етапи", "метрик на етап", "знімок", "знахідки"), "missing": "теки ще немає: %s"},
     "en": {"title": "Journey portfolio", "generated": "Generated", "maps": "Journey maps", "attention": "Needs attention",
@@ -76,7 +77,8 @@ LABELS = {
            "skipped": "Skipped", "other": "Another product — not shown: %d", "empty": "no evidence",
            "icloud": "the file is not downloaded from iCloud — open it in Obsidian",
            "icloud_n": "files in the folders not downloaded from iCloud: %d — open the folder in Obsidian",
-           "no_outcome": "no outcome metric", "no_point": "—", "head": "Journey portfolio: %s · %s · maps %d · "
+           "no_outcome": "no outcome metric", "no_point": "—", "kids": "children: %d · needing attention %d",
+           "head": "Journey portfolio: %s · %s · maps %d · "
            "needing attention %d · hand CJMs %d · skipped %d", "head_other": " · another product %d", "cjm_cols": ("CJM", "funnel",
            "stages", "metrics per stage", "snapshot", "findings"), "missing": "no folder yet: %s"},
 }
@@ -291,6 +293,7 @@ def collect(paths, dirs, product, today, snapshots, lang):
             raise Bad("the folder does not read: %s" % (e.strerror or type(e).__name__))
         items += [(os.path.join(d, n), False) for n in names if n.lower().endswith(".md")]
     seen, maps, cjms, skipped, other, ignored, undownloaded = set(), [], [], [], 0, 0, 0
+    notes = {}                                       # the journey maps by name — their nesting (§14), the first of a name
     for path, named in items:
         try:
             st = os.stat(path)
@@ -339,6 +342,7 @@ def collect(paths, dirs, product, today, snapshots, lang):
                 skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
                 continue
             maps.append(map_row(note, today, newest(note["product"])))     # its own product's, as `check` reads it
+            notes.setdefault(os.path.splitext(name)[0], note)
             continue
         c = read_cjm(path, fm, body, lang)
         if c is None:
@@ -348,11 +352,54 @@ def collect(paths, dirs, product, today, snapshots, lang):
 
     def key(m):
         return (m["journey"].casefold(), m["note"])
-    maps = sorted((m for m in maps if m["attention"]), key=lambda m: (-len(m["attention"]), key(m))) + \
-        sorted((m for m in maps if not m["attention"]), key=key)
+    maps = tree_order(maps, notes, key)
     cjms.sort(key=lambda c: (c["title"].casefold(), c["note"]))
     return {"maps": maps, "cjm": cjms, "skipped": skipped, "other_products": other, "ignored": ignored,
             "undownloaded": undownloaded, "missing_dirs": missing}
+
+
+def tree_order(maps, notes, key):
+    """The maps in tree order (§13, §14, C10): the roots — maps hanging on no map of the list — the ones that need
+    attention first, as before; under each root its children in the parent's stage order, every level deeper. Each row
+    gets `nest`: its parent, its level, how many maps hang under it at any depth and how many of them need attention, and
+    its finding of the nesting. A map's attention and health stay its own."""
+    forest = jm.nest_forest(notes)
+    par, kids, level = forest["parent"], forest["children"], forest["level"]
+    found = {}
+    for f in forest["findings"]:
+        for n in f.get("maps") or [f["note"]]:
+            found.setdefault(n, f["finding"])
+    rows = {}
+    for m in maps:
+        n = os.path.splitext(m["note"])[0]
+        if n in notes and notes[n]["path"] == m["path"]:
+            rows[n] = m
+    for m in maps:
+        n = os.path.splitext(m["note"])[0]
+        m["nest"] = {"parent": par.get(n, "") if rows.get(n) is m else "", "level": level.get(n, 1) if rows.get(n) is m else 1,
+                     "children": 0, "children_attention": 0, "finding": found.get(n, "") if rows.get(n) is m else ""}
+
+    def under(n, seen):
+        out = []
+        for c in kids.get(n, []):
+            if c in rows and c not in seen:
+                seen.add(c)
+                out.append(rows[c])
+                out += under(c, seen)
+        return out
+    for n, m in rows.items():
+        sub = under(n, {n})
+        m["nest"]["children"], m["nest"]["children_attention"] = len(sub), sum(1 for x in sub if x["attention"])
+    roots = [m for m in maps if not m["nest"]["parent"]]
+    roots = sorted((m for m in roots if m["attention"]), key=lambda m: (-len(m["attention"]), key(m))) + \
+        sorted((m for m in roots if not m["attention"]), key=key)
+    out = []
+    for m in roots:
+        out.append(m)
+        n = os.path.splitext(m["note"])[0]
+        if rows.get(n) is m:
+            out += under(n, {n})
+    return out
 
 
 def _opens_frontmatter(path):
@@ -410,7 +457,12 @@ def _review(m, L):
 def _cells(m, lang):
     L = _labels(lang)
     h = m["health"]
-    return {"journey": m["journey"] + (" (%s)" % L["no_product"] if m["product_missing"] else ""),
+    nest = m.get("nest") or {}
+    lv = nest.get("level") or 1
+    return {"journey": ("↳" * (lv - 1) + " " if lv > 1 else "") + m["journey"]
+            + (" (%s)" % L["no_product"] if m["product_missing"] else "")
+            + (" (%s)" % (L["kids"] % (nest["children"], nest["children_attention"])) if nest.get("children") else "")
+            + (" (⚠️ %s)" % nest["finding"] if nest.get("finding") else ""),
             "owner": m["owner"] or "⚠️", "stages": str(m["stages"]),
             "health": "—" if h["score"] is None else str(h["score"]), "delta": _delta(m), "health_date": h["date"] or "—",
             "reviewed": _review(m, L), "pains": _pains(m), "anomalies": _anomalies(m, L), "gaps": _gaps(m, L),
@@ -475,6 +527,10 @@ svg.spark{background:#fff;border:1px solid #dee2e6;border-radius:4px;vertical-al
 .cjm .mark{color:#57606a;font-size:12px}table.st{border-collapse:collapse;margin-top:6px}table.st td{border:1px solid #dee2e6;padding:2px 8px}"""
 
 
+CSS_TREE = """
+tr.d1 th.j{padding-left:22px}tr.d2 th.j{padding-left:38px}tr.d3 th.j{padding-left:54px}"""
+
+
 def _spark(points):
     """journey_map's sparkline, a smaller copy for the table's cell — each point's date and score."""
     return jm.sparkline(points).replace('width="260" height="56"', 'width="130" height="32"', 1)
@@ -486,7 +542,8 @@ def render_html(p, product, today, lang):
     heads = [(k, uk if lang == "uk" else EN_COLUMNS[k]) for k, uk in COLUMNS]
     out = ["<!doctype html>", '<html lang="%s"><head><meta charset="utf-8">' % esc(lang),
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(product), CSS),
+           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(product), CSS + (CSS_TREE if any(
+               (m.get("nest") or {}).get("level", 1) > 1 for m in p["maps"]) else "")),
            "<h1>%s: %s</h1>" % (esc(L["title"]), shown(product)),
            '<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(today)),
            '<p class="meta">%s</p>' % esc(head(p, product, today, L)),
@@ -508,7 +565,9 @@ def render_html(p, product, today, lang):
                     tds.append('<td class="%s">%s</td>' % ("reason" if m["attention"] else "ok", esc(cl[k])))
                 else:
                     tds.append("<td>%s</td>" % esc(cl[k]))
-            out.append('<tr%s>%s</tr>' % (' class="attn"' if m["attention"] else "", "".join(tds)))
+            lv = (m.get("nest") or {}).get("level") or 1
+            cls = " ".join(c for c in ("d%d" % min(lv - 1, 3) if lv > 1 else "", "attn" if m["attention"] else "") if c)
+            out.append('<tr%s>%s</tr>' % (' class="%s"' % cls if cls else "", "".join(tds)))
         out.append("</tbody></table></div>")
     else:
         out.append('<p class="meta">%s</p>' % esc(L["none"]))
