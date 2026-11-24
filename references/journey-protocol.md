@@ -236,6 +236,7 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 | `row` | the plugin's sticky of a row — found by its text in its own cell first, then anywhere (it was moved) |
 | `header` | a stage's `<id> · <name>`, its name or its outcome above a column |
 | `lane_name` | a lane's name at the left |
+| `rollup` | on a tree board (since v4.10.0, §14): the plugin's roll-up sticky of a child map, or its reference sticky past the depth — never a row, never taken; its edits named as `other` |
 | `team` | a sticky the note does not hold — the team's |
 | `orphan` | the plugin's own sticky of a row the board no longer shows (with `--last`) |
 | `frame` | any other frame or section |
@@ -280,6 +281,8 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 | `empty` | refused | nothing left to write once a contact and a link are removed |
 | `not_takeable` | refused | an element that is no team sticky and no row's change (`orphaned`, `other`, `unrecorded`) |
 | `unknown` | refused | an id the diff does not name, a row the note no longer has, or a `--drop` of a row the note does not have |
+| `other_note` | refused | on a tree board (§14): another map's row or cell — taken only with `--note` of the map it lives in |
+| `conflict` | refused | one row changed differently on two boards (§14) taken in both versions — the PM takes one or none |
 | `contact_removed` | named | a person's e-mail or phone removed before the write |
 | `link_removed` | named | a link removed before the write |
 | `no_class` | named | an added row of an evidence lane with no class from the PM — the class stays empty |

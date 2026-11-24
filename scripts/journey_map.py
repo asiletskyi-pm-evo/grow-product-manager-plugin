@@ -1167,10 +1167,10 @@ def nest_text(nest):
 
 
 # ------------------------------------------------------------------ the board (§11–§12, since v4.8.0)
-BOARD_ROLES = ("cell", "row", "header", "lane_name", "team", "orphan", "frame", "other")
+BOARD_ROLES = ("cell", "row", "header", "lane_name", "rollup", "team", "orphan", "frame", "other")
 DIFF_CATEGORIES = ("changed", "moved", "added", "removed", "orphaned", "hc_edits", "other", "unrecorded")
 TAKE_REFUSED = ("health_check", "metric_lane", "no_cell", "needs_drop", "not_removed", "taken", "secret", "empty",
-                "not_takeable", "unknown")
+                "not_takeable", "unknown", "other_note", "conflict")
 TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code", "unused")
 COUNTED = ("changed", "moved", "added", "removed", "orphaned", "hc_edits")
 TEAM_SOURCE = {"uk": "дошка команди", "en": "team board"}
@@ -1213,7 +1213,14 @@ def parse_cell(title, declared):
     if not m:
         return None
     lane = lane_of(m.group(2))
-    return (m.group(1), lane) if m.group(1) in declared and lane else None
+    if m.group(1) in declared and lane:
+        return m.group(1), lane
+    t = re.match(r"^\s*(\S+?)\s*·\s*(\S+?)\s*(?:·|•|\||—|–|:|\s-\s)\s*(.+?)\s*$", str(title or ""))
+    if t:                                            # a child's cell on a tree board (§14): «<child> · <stage> · <lane>»
+        sid, lane = "%s · %s" % (t.group(1), t.group(2)), lane_of(t.group(3))
+        if sid in declared and lane:
+            return sid, lane
+    return None
 
 
 def second_line(r):
@@ -1258,7 +1265,7 @@ def _heads(note):
                   "%s · %s %s" % (s["id"], s["name"], s["outcome"])):
             if _norm(t):
                 out.add(_norm(nt.safe(t)).lower())
-    for t in (note.get("title"), note.get("journey")):
+    for t in (note.get("title"), note.get("journey")) + tuple(note.get("extra_heads", ())):
         if _norm(t):
             out.add(_norm(nt.safe(t)).lower())
     return out
@@ -1345,10 +1352,14 @@ def assign_roles(items, note, exclude=(), lookup=None):
             taken.add(r["id"])
             if len(by_text[_norm(it["text"])]) > 1:
                 ambiguous.append(it["id"])
+    marks = tuple(_norm(m).lower() for m in note.get("rollup_marks", ()))
     for it in items.values():
         if it.get("role"):
             continue
         t = _norm(it["text"])
+        if t.lower() not in heads and marks and it["kind"] == "sticky" and t.lower().startswith(marks):
+            it["role"], it["origin"] = "rollup", "plugin"   # a child map's roll-up or reference on a tree board (§14)
+            continue
         it["role"] = ("header" if t.lower() in heads else "lane_name" if t.lower() in lanes
                       else "team" if it["kind"] == "sticky" else "other")
         if it["role"] == "team":
@@ -1379,10 +1390,10 @@ def load_board_state(path, note, surface=None):
             items = data.get("elements")
             if not isinstance(items, dict):
                 raise Bad("the board's state has no elements")
-            return _valid_state(items), data.get("surface"), {"rebuilt": bool(data.get("rebuilt"))}
+            return _valid_state(items), data.get("surface"), {"rebuilt": bool(data.get("rebuilt")), "tree": data.get("tree") or []}
     items = safe_items(bs.read_board(path, surface, lines=True))
     assign_roles(items, note)
-    return items, surface or ("miro" if path.lower().endswith(".svg") else "whiteboard"), {"rebuilt": True}
+    return items, surface or ("miro" if path.lower().endswith(".svg") else "whiteboard"), {"rebuilt": True, "tree": []}
 
 
 def _cell_fields(prefix, c, title):
@@ -1396,6 +1407,67 @@ def table_sig(note):
     import hashlib
     rows = json.dumps([r["cells"] for r in note["rows"]], ensure_ascii=False)
     return {"journey": note["journey"], "product": note["product"], "table": hashlib.sha256(rows.encode("utf-8")).hexdigest()[:16]}
+
+
+def tree_blocks(nest):
+    """The child maps a tree board shows (§14) — the ones the page shows as grids — depth first, the page's order."""
+    out = []
+
+    def walk(n):
+        for k in n["children"]:
+            out.append(k)
+            walk(k)
+    walk(nest["tree"])
+    return out
+
+
+def _deeper_all(n):
+    return list(n["deeper"]) + [x for k in n["children"] for x in _deeper_all(k)]
+
+
+def block_title(k, lang):
+    """The title of a child's block on a tree board — its journey, its note, its level."""
+    return "↳ «%s» · %s · %s" % (k["journey"], k["note"], TREE_LABELS.get(lang, TREE_LABELS["en"])["level"] % k["level"])
+
+
+def _arrow_head(x, lang):
+    NL = NEST_LABELS.get(lang, NEST_LABELS["en"])
+    return "↳ «%s» · %s" % (x["journey"], x["note"]) + (" · %s «%s»" % (NL["step"], x["step"]) if x["step"] else "")
+
+
+def rollup_text(k, lang):
+    """A roll-up sticky (§14): the child and its step on the first line, its numbers on the second — never a row."""
+    return _arrow_head(k, lang) + "\n" + _rollup_words(k["rollup"], NEST_LABELS.get(lang, NEST_LABELS["en"]))
+
+
+def reference_text(x, lang):
+    """A reference sticky past the depth (R38): the map's name and level, no grid, no link."""
+    return _arrow_head(x, lang) + "\n" + TREE_LABELS.get(lang, TREE_LABELS["en"])["deeper"] % x["level"]
+
+
+def tree_note(nest, lang):
+    """The whole tree as one note, the way its board holds it (§14): the map's own stages and rows as they are, and each
+    child map the board shows with its stages as `<child> · <id>` and its rows as `<child>#<id>` (C7) — so the board's
+    own code (roles, states, diffs) reads a tree board unchanged. Only read: never written, never a page."""
+    root = nest["note"]
+    stages, rows, heads, marks = list(root["stages"]), list(root["rows"]), [], []
+    for k in tree_blocks(nest):
+        n, pre = nest["maps"][k["note"]], k["note"]
+        stages += [dict(s_, id="%s · %s" % (pre, s_["id"])) for s_ in n["stages"]]
+        for r in n["rows"]:
+            rows.append(dict(r, id=("%s#%s" % (pre, r["id"])) if r["id"] else "", stage="%s · %s" % (pre, r["stage"]),
+                             parent=("%s#%s" % (pre, r["parent"])) if r["parent"] else "", note=pre))
+        heads += [block_title(k, lang), k["journey"]]
+        marks.append("↳ «%s» · %s" % (k["journey"], k["note"]))
+    for x in _deeper_all(nest["tree"]):
+        marks.append("↳ «%s» · %s" % (x["journey"], x["note"]))
+    return dict(root, stages=stages, rows=rows, extra_heads=heads, rollup_marks=marks,
+                tree=[k["note"] for k in tree_blocks(nest)])
+
+
+def tree_sigs(nest):
+    """{child: its table_sig} of the children a tree board shows — a take into a child checks its own note."""
+    return {k["note"]: table_sig(nest["maps"][k["note"]]) for k in tree_blocks(nest)}
 
 
 def missing_cells(last, now):
@@ -1434,7 +1506,7 @@ def board_diff(last, now, note):
         if old is None:
             f = fresh[mid]
             entry = dict({"id": mid, "kind": it["kind"], "text": it["text"]}, **_cell_fields("cell", cn_, tn))
-            if f.get("role") in ("row", "cell", "header", "lane_name"):
+            if f.get("role") in ("row", "cell", "header", "lane_name", "rollup"):
                 out["unrecorded"].append(dict(entry, role=f["role"], row=f.get("row")))
             elif f.get("role") == "team":
                 out["added"].append(entry)
@@ -2134,11 +2206,58 @@ def cmd_board_layout(args):
             cells.append({"title": cell_title(s["id"], lane, lang), "stage": s["id"], "lane": lane, "column": si, "line": li,
                           "rows": [{"id": r["id"], "text": r["board_text"], "second": r["second"], "health_check": r["hc"]}
                                    for r in rows if r["stage"] == s["id"] and r["lane"] == lane]})
-    result(ok=True, title=nt.safe(note["journey"] or note["title"]), lang=lang, columns=declared,
-           lanes=[{"id": l, "name": names[l]} for l in LANE_IDS], stages=stages, cells=cells,
-           titles=[c["title"] for c in cells], hidden=[r["id"] for r in live if r["id"] and not page_worthy(r, declared)],
-           rows=len(rows), sticky={"row": "yellow", "health_check": "blue"}, errors=note["errors"])
+    payload = dict(ok=True, title=nt.safe(note["journey"] or note["title"]), lang=lang, columns=declared,
+                   lanes=[{"id": l, "name": names[l]} for l in LANE_IDS], stages=stages, cells=cells,
+                   titles=[c["title"] for c in cells], hidden=[r["id"] for r in live if r["id"] and not page_worthy(r, declared)],
+                   rows=len(rows), sticky={"row": "yellow", "health_check": "blue"}, errors=note["errors"])
+    if args.with_children:
+        payload.update(tree_layout(nest_of(args.note, args.map, args.dir, lang), lang))
+        payload["titles"] = payload["titles"] + [c["title"] for b in payload["blocks"] for c in b["cells"]]
+        payload["sticky"] = dict(payload["sticky"], rollup="purple")
+    result(**payload)
     return 0
+
+
+def tree_layout(nest, lang):
+    """The child maps' part of a tree board (§14, C6): a block of cells per child the page shows, below the map's grid,
+    depth first — its cells «<child> · <stage> · <lane>», its rows keyed «<child>#<id>» (C7), the rows its page shows
+    only —; a roll-up sticky per child in its parent's cell «<stage> · дії» with the child's numbers, on Miro linked to
+    the child's first cell (`link_to`); a reference sticky per map past the depth — a name, no grid, no link."""
+    blocks, rollups, refs = [], [], []
+    par = nest["forest"]["parent"]
+    root = nest["name"]
+
+    def parent_cell(child, stage):
+        p = par.get(child)
+        return cell_title(stage if p == root else "%s · %s" % (p, stage), "action", lang)
+    for b, k in enumerate(tree_blocks(nest), 1):
+        n, pre = nest["maps"][k["note"]], k["note"]
+        rows = board_rows(n)
+        declared = [s_["id"] for s_ in n["stages"]]
+        cells = []
+        for li, lane in enumerate(LANE_IDS):
+            for si, s_ in enumerate(n["stages"]):
+                cells.append({"title": cell_title("%s · %s" % (pre, s_["id"]), lane, lang), "stage": s_["id"], "lane": lane,
+                              "column": si, "line": li,
+                              "rows": [{"id": "%s#%s" % (pre, r["id"]), "text": r["board_text"], "second": r["second"],
+                                        "health_check": r["hc"]} for r in rows if r["stage"] == s_["id"] and r["lane"] == lane]})
+        blocks.append({"block": b, "note": pre, "journey": k["journey"], "level": k["level"], "parent": par.get(pre),
+                       "stage": k["stage"], "step": k["step"], "title": block_title(k, lang), "columns": declared,
+                       "stages": [{"id": s_["id"], "name": nt.safe(s_["name"]), "outcome": nt.safe(s_["outcome"] or OUTCOME_TBD),
+                                   "title": nt.safe("%s · %s · %s" % (pre, s_["id"], s_["name"])),
+                                   "gap": not any(r["stage"] == s_["id"] and evidence(r) for r in rows)} for s_ in n["stages"]],
+                       "cells": cells,
+                       "hidden": ["%s#%s" % (pre, r["id"]) for r in n["rows"] if r["id"] and not r["gap"] and not page_worthy(r, declared)]})
+        rollups.append({"cell": parent_cell(pre, k["stage"]), "child": pre, "text": rollup_text(k, lang),
+                        "link_to": cells[0]["title"] if cells else ""})
+
+    def walk(n):
+        for x in n["deeper"]:
+            refs.append({"cell": parent_cell(x["note"], x["stage"]), "child": x["note"], "text": reference_text(x, lang)})
+        for k in n["children"]:
+            walk(k)
+    walk(nest["tree"])
+    return {"blocks": blocks, "rollups": rollups, "references": refs, "nest_findings": len(nest["forest"]["findings"])}
 
 
 def _write_json(path, data):
@@ -2158,8 +2277,18 @@ def _read_now(paths, surface):
     return items
 
 
-def cmd_board_state(args):
+def board_note(args, tree=False):
+    """(the note the board reads against, the nesting or None): the note itself, or — on a tree board (§14) — the whole
+    tree as one note (`tree_note`)."""
     note = load(args.note)
+    if not (tree or getattr(args, "with_children", False)):
+        return note, None
+    nest = nest_of(args.note, getattr(args, "map", ()), getattr(args, "dir", ()), note["lang"])
+    return tree_note(nest, note["lang"]), nest
+
+
+def cmd_board_state(args):
+    note, nest = board_note(args)
     items = _read_now(args.read, args.surface)
     declared = [s["id"] for s in note["stages"]]
     if not any(it["kind"] == "frame" and parse_cell(it["text"], declared) for it in items.values()):
@@ -2185,6 +2314,8 @@ def cmd_board_state(args):
             it["hc"] = True
     state = {"version": 1, "kind": STATE_KIND, "surface": args.surface, "note": os.path.basename(args.note), "rebuilt": rebuilt,
              "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items}
+    if nest is not None:
+        state["tree"] = note["tree"]                 # a tree board (§14): the children it holds
     try:
         out = _write_json(args.out, state)
     except OSError as e:
@@ -2201,7 +2332,8 @@ def cmd_board_state(args):
            missing_cells=[cell_title(s["id"], l, lang) for l in LANE_IDS for s in note["stages"]
                           if cell_title(s["id"], l, lang) not in have and cell_title(s["id"], l, "en" if lang == "uk" else "uk") not in have],
            ambiguous=ambiguous, orphans={it["row"]: mid for mid, it in items.items() if it.get("role") == "orphan"},
-           rebuilt=rebuilt, last_ignored=last_ignored, gone=sorted(it["row"] for it in items.values() if it.get("gone")))
+           rebuilt=rebuilt, last_ignored=last_ignored, gone=sorted(it["row"] for it in items.values() if it.get("gone")),
+           **({"tree": note["tree"]} if nest is not None else {}))
     return 0
 
 
@@ -2243,8 +2375,11 @@ def cmd_board_diff(args):
     if not args.last or not os.path.exists(args.last):
         result(ok=True, state="unknown", why="no last state of the board on this machine")
         return 0
-    note = load(args.note)
-    last, surface, meta = load_board_state(args.last, note, args.surface)
+    plain = load(args.note)
+    last, surface, meta = load_board_state(args.last, plain, args.surface)
+    note, nest = board_note(args, tree=bool(meta.get("tree")))
+    if nest is not None and meta.get("rebuilt") and not meta.get("tree"):
+        last, _, _ = load_board_state(args.last, note, args.surface)   # an older read: its roles by the tree
     if not args.now:
         result(ok=True, state="scope", surface=surface, scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last))
         return 0
@@ -2255,7 +2390,10 @@ def cmd_board_diff(args):
                why="the read lacks %d cell(s) the state holds — read the board again, every page, into a fresh folder" % len(lost))
         return 0
     payload = dict(ok=True, state="diff", surface=surface, **board_diff(last, now, note))
-    payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), note=table_sig(note))
+    payload.update(scope=bs.scope(last), ids=sorted(last), rows=_rows_map(last), note=table_sig(plain))
+    payload["map"] = os.path.splitext(os.path.basename(args.note))[0]
+    if nest is not None:
+        payload["tree"] = tree_sigs(nest)            # a take into a child checks its own note (§14, C8)
     if args.out:
         try:
             payload["out"] = _write_json(args.out, payload)
@@ -2266,16 +2404,107 @@ def cmd_board_diff(args):
     return 0
 
 
+def _owner(e, tree):
+    """The child map an entry of a tree board's diff belongs to — by its row `<child>#<id>`, else by its cell's stage
+    `<child> · <stage>` — or None: the diff's own map."""
+    rid = str(e.get("row") or "")
+    if rid:
+        head = rid.split("#", 1)[0]
+        return head if "#" in rid and head in tree else None
+    for key in ("stage", "stage_to"):
+        st = str(e.get(key) or "")
+        if st:
+            head = st.split(" · ", 1)[0]
+            return head if " · " in st and head in tree else None
+    return None
+
+
+def _plain(e, child):
+    """An entry of a tree board made the child's own: its row id, stages and cell titles without the child's prefix; a
+    cell of another map is no cell of the child (its stage left empty — the take names it no_cell)."""
+    pre_r, pre_s = child + "#", child + " · "
+    out = dict(e)
+    rid = str(e.get("row") or "")
+    if rid.startswith(pre_r):
+        out["row"] = rid[len(pre_r):]
+    for key in ("stage", "stage_to", "stage_from"):
+        v = str(e.get(key) or "")
+        if v:
+            out[key] = v[len(pre_s):] if v.startswith(pre_s) else None
+            if out[key] is None and key != "stage_from":
+                out[key.replace("stage", "lane")] = None
+    for key in ("cell", "to", "from"):
+        v = str(e.get(key) or "")
+        if v.startswith(pre_s):
+            out[key] = v[len(pre_s):]
+    return out
+
+
+def take_diffs(note, name, diffs):
+    """One diff for the note out of every board's diff given (§12, §14, C8): the entries that are this note's — of its
+    own board as they are; of a tree board it is a child on, its `<name>#…` rows and `<name> · …` cells made plain —,
+    every other map's entries apart (`elsewhere`, never taken here), an element id two diffs share prefixed with its
+    diff's number, and the rows two boards changed differently (`conflicts`: the PM takes one version or none, never
+    both, never automatically). Raises Bad for a diff of another journey or one older than the note."""
+    now = table_sig(note)
+    parts = []
+    for i, d in enumerate(diffs, 1):
+        sig, tree = d.get("note"), d.get("tree") if isinstance(d.get("tree"), dict) else {}
+        if name in tree:
+            t = tree[name]
+            if not isinstance(t, dict) or (t.get("journey"), t.get("product")) != (now["journey"], now["product"]):
+                raise Bad("diff %d holds %s as another journey — run board-diff again" % (i, name))
+            if t.get("table") != now["table"]:
+                raise Bad("the note changed since diff %d — run board-diff again before taking anything" % i)
+            parts.append((i, d, name, tree))
+            continue
+        if isinstance(sig, dict):
+            if sig.get("journey") != now["journey"] or sig.get("product") != now["product"]:
+                raise Bad("the diff is of another journey (%s / %s) — run board-diff on this note" % (sig.get("product"), sig.get("journey")))
+            if sig.get("table") != now["table"]:
+                raise Bad("the note changed since the diff — run board-diff again before taking anything")
+        parts.append((i, d, None, tree))
+    ids = {}
+    for i, d, _, _ in parts:
+        for cat in DIFF_CATEGORIES:
+            for e in d.get(cat) or []:
+                if isinstance(e, dict) and e.get("id") is not None:
+                    ids.setdefault(str(e["id"]), set()).add(i)
+    shared = {k for k, v in ids.items() if len(v) > 1}
+    merged, elsewhere = {k: [] for k in DIFF_CATEGORIES}, []
+    for i, d, child, tree in parts:
+        for cat in DIFF_CATEGORIES:
+            for e in d.get(cat) or []:
+                if not isinstance(e, dict):
+                    continue
+                e = dict(e)
+                if e.get("id") is not None and str(e["id"]) in shared:
+                    e["id"] = "%d:%s" % (i, e["id"])
+                owner = _owner(e, tree)
+                if owner == child:
+                    merged[cat].append(dict(_plain(e, child) if child else e, board=i))
+                elif e.get("id") is not None:
+                    elsewhere.append({"id": str(e["id"]), "category": cat, "row": e.get("row"),
+                                      "note": owner or str(d.get("map") or "?"), "board": i})
+    groups = {}
+    for cat, what in (("changed", "text"), ("moved", "cell")):
+        for e in merged[cat]:
+            if e.get("row"):
+                groups.setdefault((what, str(e["row"])), []).append(e)
+    conflicts = []
+    for (what, rid), es in sorted(groups.items()):
+        vals = {(_norm(e.get("now")) if what == "text" else (e.get("stage_to"), e.get("lane_to"))) for e in es}
+        if len({e["board"] for e in es}) > 1 and len(vals) > 1:
+            conflicts.append({"row": rid, "what": what, "versions": [
+                dict({"id": str(e["id"]), "board": e["board"]}, **({"now": e.get("now")} if what == "text" else {"to": e.get("to")}))
+                for e in es]})
+    return merged, elsewhere, conflicts
+
+
 def cmd_board_take(args):
     note = load(args.note)
-    diff = read_diff(args.diff)
-    sig = diff.get("note")
-    if isinstance(sig, dict):
-        now = table_sig(note)
-        if sig.get("journey") != now["journey"] or sig.get("product") != now["product"]:
-            raise Bad("the diff is of another journey (%s / %s) — run board-diff on this note" % (sig.get("product"), sig.get("journey")))
-        if sig.get("table") != now["table"]:
-            raise Bad("the note changed since the diff — run board-diff again before taking anything")
+    name = os.path.splitext(os.path.basename(args.note))[0]
+    diff, elsewhere, conflicts = take_diffs(note, name, [read_diff(p_) for p_ in args.diff])
     missing_cols = [c for c in ("source", "class", "date") if c not in note["cols"]]
     if missing_cols:
         raise Bad("the table has no %s column — a row from the board needs its source, class and date (§7)" % ", ".join(missing_cols))
@@ -2283,7 +2512,23 @@ def cmd_board_take(args):
     if day(when) is None:
         raise Bad("--date is not YYYY-MM-DD")
     picked, parents = _pairs(args.klass, "--class"), _pairs(args.parent, "--parent")
-    plan = take_note(note, diff, args.take or [], picked, parents, args.drop or [], when)
+    take, early = list(args.take or []), []
+    away = {e["id"]: e for e in elsewhere}
+    for i in list(take):
+        if i in away:                                # another map's row on a tree board: taken only into its own note
+            take.remove(i)
+            early.append({"id": i, "why": "other_note", "detail": "%s belongs to %s — take it with --note %s.md"
+                          % (i, away[i]["note"], away[i]["note"])})
+    for c in conflicts:
+        hit = [v["id"] for v in c["versions"] if v["id"] in take]
+        if len(hit) > 1:                             # two boards, two versions of one cell: one or none, never both
+            for i in hit:
+                take.remove(i)
+                early.append({"id": i, "why": "conflict", "detail": "row %s was changed differently on two boards — take "
+                              "one version (%s) or none" % (c["row"], ", ".join(v["id"] for v in c["versions"]))})
+    plan = take_note(note, diff, take, picked, parents, args.drop or [], when)
+    plan["refused"] = early + plan["refused"]
+    plan["elsewhere"], plan["conflicts"] = elsewhere, conflicts
     text = plan.pop("text")
     written = False
     if not args.dry_run and text != note["text"]:
@@ -2358,21 +2603,31 @@ def main(argv=None):
     p = sub.add_parser("board-layout")
     p.add_argument("--note", required=True)
     p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
+    p.add_argument("--with-children", action="store_true", help="a tree board: each child map's block below the map's grid (§14)")
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     p = sub.add_parser("board-state")
     p.add_argument("--read", required=True, nargs="+", help="the board read back: a Miro SVG, or the host board's element list")
     p.add_argument("--note", required=True)
     p.add_argument("--surface", required=True, choices=bs.SURFACES)
     p.add_argument("--last", help="the previous state: a row the board no longer shows keeps its sticky as an orphan")
     p.add_argument("--out", required=True, help="~/.grow-pm/journey-maps/<product>/journey-<slug>.<surface>.board.json")
+    p.add_argument("--with-children", action="store_true", help="a tree board: the child maps' blocks too (§14)")
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     p = sub.add_parser("board-diff")
     p.add_argument("--last", help="the board's state (board-state JSON) or an older read")
     p.add_argument("--now", nargs="+", help="the board read back now: by the state's ids, then over its area")
     p.add_argument("--note", required=True)
     p.add_argument("--surface", choices=bs.SURFACES, help="default: the state's")
     p.add_argument("--out", help="keep the diff for board-take")
+    p.add_argument("--with-children", action="store_true", help="a tree board (default: as its state says, §14)")
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     p = sub.add_parser("board-take")
     p.add_argument("--note", required=True)
-    p.add_argument("--diff", required=True, help="the board-diff result (--out, or its JOURNEY_RESULT line)")
+    p.add_argument("--diff", required=True, action="extend", nargs="+",
+                   help="the board-diff result (--out, or its JOURNEY_RESULT line) — one per board: its own and a tree board it is a child on")
     p.add_argument("--take", nargs="*", default=[], help="element ids (or row ids) the PM takes")
     p.add_argument("--class", dest="klass", action="extend", nargs="+", help="<element id>=<class> the PM picked in the preview")
     p.add_argument("--parent", action="extend", nargs="+", help="<element id>=<row id>")

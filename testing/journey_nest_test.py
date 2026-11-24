@@ -115,6 +115,77 @@ def date_free(s):
     return re.sub(r"(Згенеровано|Generated): \d{4}-\d{2}-\d{2}", r"\1: DATE", s)
 
 
+def board_items(layout):
+    """A board as the model would build it from a board-layout (one id per element, stable across reads): the title,
+    the stage headers, a frame per cell, a sticky per row, and on a tree board each block's title and headers, the
+    roll-up and reference stickies in their parents' cells. Each item: id, kind (frame | sticky | text), text, x, y."""
+    items, n = [], [0]
+
+    def add(kind, text, x, y, cell=None):
+        n[0] += 1
+        items.append({"id": str(n[0]), "kind": kind, "text": text, "x": x, "y": y, "cell": cell})
+        return items[-1]
+    add("text", layout["title"], 0, 0)
+    blocks = [(0, layout["stages"], layout["cells"], "")] + [(b["block"], b["stages"], b["cells"], b["title"]) for b in layout.get("blocks", [])]
+    for bi, stages, cells, title in blocks:
+        y0 = bi * 8000
+        if title:
+            add("text", title, 0, y0 + 20)
+        for si, st in enumerate(stages):
+            add("text", st["title"], 220 + si * 420, y0 + 80)
+        for c in cells:
+            f = add("frame", c["title"], 220 + c["column"] * 420, y0 + 160 + c["line"] * 620)
+            for j, r in enumerate(c["rows"]):
+                add("sticky", r["text"] + ("\n" + r["second"] if r["second"] else ""), 10, 10 + j * 115, cell=f["id"])
+    frames = {it["text"]: it["id"] for it in items if it["kind"] == "frame"}
+    for extra in layout.get("rollups", []) + layout.get("references", []):
+        add("sticky", extra["text"], 10, 470, cell=frames[extra["cell"]])
+    return items
+
+
+def to_svg(items):
+    esc_ = lambda t: t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")  # noqa: E731
+    out = ['<svg xmlns="http://www.w3.org/2000/svg" width="9000" height="40000">']
+    frames = [it for it in items if it["kind"] == "frame"]
+    for it in items:
+        if it["kind"] == "text":
+            out.append('<text data-type="text" data-miro-id="%s" x="%d" y="%d">%s</text>' % (it["id"], it["x"], it["y"], esc_(it["text"])))
+    for f in frames:
+        out.append('<g data-frame="%s" data-miro-id="%s" transform="translate(%d,%d)"><rect data-type="frame" width="400" height="600" />'
+                   % (esc_(f["text"]), f["id"], f["x"], f["y"]))
+        for it in items:
+            if it["kind"] == "sticky" and it["cell"] == f["id"]:
+                out.append('<rect data-type="sticky" data-miro-id="%s" x="%d" y="%d" width="185" height="105" data-content="%s" />'
+                           % (it["id"], it["x"], it["y"], esc_(it["text"].replace("\n", "<br>"))))
+        out.append("</g>")
+    out.append("</svg>")
+    return "\n".join(out)
+
+
+def to_wb(items):
+    frames = {it["id"]: it for it in items if it["kind"] == "frame"}
+    out = []
+    for it in items:
+        if it["kind"] == "frame":
+            out.append({"id": "e" + it["id"], "data": {"type": "container", "x": it["x"], "y": it["y"], "w": 400, "h": 600, "text": it["text"]}})
+        elif it["kind"] == "text":
+            out.append({"id": "e" + it["id"], "data": {"type": "text", "x": it["x"], "y": it["y"], "text": it["text"]}})
+        else:
+            f = frames[it["cell"]]
+            out.append({"id": "e" + it["id"], "data": {"type": "shape", "kind": "rounded", "x": f["x"] + it["x"], "y": f["y"] + it["y"],
+                                                       "w": 185, "h": 105, "color": "yellow", "text": it["text"]}})
+    return json.dumps(out, ensure_ascii=False)
+
+
+def board_read(items, surface, path):
+    write(path, to_svg(items) if surface == "miro" else to_wb(items))
+    return path
+
+
+def eid_of(surface, item_id):
+    return item_id if surface == "miro" else "e" + item_id
+
+
 d = tempfile.mkdtemp(prefix="journey-nest-test-")
 try:
     shutil.copytree(FIX, os.path.join(d, "fx"))
@@ -365,6 +436,136 @@ try:
         mp = os.path.join(d, "m-%s.html" % name)
         rc, out, res = run("render-html", "--note", root, "--out", mp, "--lang", "uk", script=m)
         check("M.%s a mutant is caught by the page's assertions" % name, rc != 0 or test(text(mp) if os.path.exists(mp) else ""), out[-300:])
+
+    # 3. the tree board (§11–§12, §14, C6–C8): blocks below the root's grid, keys <child>#<id>, two boards, one preview
+    rc, out, lay = run("board-layout", "--note", root, "--lang", "uk", "--with-children")
+    blocks = lay.get("blocks", [])
+    check("3.1 board-layout --with-children: a block per child the page shows, depth first, its cells «<child> · <stage> · <lane>»",
+          rc == 0 and [(b["note"], b["level"], len(b["cells"])) for b in blocks]
+          == [("journey-delivery", 2, 10), ("journey-payment", 2, 30), ("journey-3ds", 3, 20)]
+          and "journey-payment · s2 · болі" in lay.get("titles", []) and len(lay.get("titles", [])) == 50 + 60, out[-400:])
+    pb = next((b for b in blocks if b["note"] == "journey-payment"), {})
+    pc = {c["title"]: c for c in pb.get("cells", [])}
+    check("3.2 a child's rows keyed «<child>#<id>» — only the rows its page shows; the rest named in its block",
+          [r["id"] for r in pc.get("journey-payment · s2 · болі", {}).get("rows", [])] == ["journey-payment#pc1", "journey-payment#pc2"]
+          and sorted(pb.get("hidden", [])) == ["journey-payment#pc4", "journey-payment#pc5"], pb.get("hidden"))
+    ru = [(r["cell"], r["child"]) for r in lay.get("rollups", [])]
+    pr = next((r for r in lay.get("rollups", []) if r["child"] == "journey-payment"), {})
+    check("3.3 a roll-up sticky per child in its parent's cell «<stage> · дії», with its numbers; on Miro it links to the child's first cell",
+          ru == [("s4 · дії", "journey-delivery"), ("s5 · дії", "journey-payment"), ("journey-payment · s3 · дії", "journey-3ds")]
+          and "болі 3 (observed 1 · reported 2)" in pr.get("text", "") and pr.get("link_to") == "journey-payment · s1 · дії", lay.get("rollups"))
+    check("3.4 the fourth level: one reference sticky, no block, no link",
+          [(r["cell"], r["child"]) for r in lay.get("references", [])] == [("journey-3ds · s2 · дії", "journey-3ds-retry")]
+          and "link_to" not in (lay.get("references") or [{}])[0] and not any(b["note"] == "journey-3ds-retry" for b in blocks), lay.get("references"))
+    rootcells = json.dumps(lay.get("cells", []), ensure_ascii=False)
+    blockcells = json.dumps([c for b in blocks for c in b["cells"]], ensure_ascii=False)
+    check("3.5 no row of a child in the root's cells; no source, class or date on a child's sticky",
+          "Форма картки скидає" not in rootcells and "Форма картки скидає" in blockcells
+          and not re.search(r"walkthrough|feedback-triage|observed|reported|2026-10-2", blockcells), re.findall(r".{20}(?:walkthrough|observed).{20}", blockcells)[:2])
+    rc, out, lay0 = run("board-layout", "--note", root, "--lang", "uk")
+    check("3.6 without --with-children: the map's own grid alone, as before", rc == 0 and "blocks" not in lay0
+          and lay0.get("cells") == lay.get("cells") and len(lay0.get("titles", [])) == 50, sorted(lay0))
+    check("3.7 the roll-up sticky has its own colour", lay.get("sticky") == {"row": "yellow", "health_check": "blue", "rollup": "purple"}, lay.get("sticky"))
+
+    rc, out, play = run("board-layout", "--note", pay, "--lang", "uk")
+    trees = {}
+    for sf in ("miro", "whiteboard"):
+        E = lambda i, sf=sf: eid_of(sf, i)  # noqa: E731
+        items = board_items(lay)
+        by_text = {}
+        for it in items:
+            by_text.setdefault(it["text"].split("\n")[0], it)
+        last_r = board_read(items, sf, os.path.join(d, "tree-last-%s.%s" % (sf, "svg" if sf == "miro" else "json")))
+        st = os.path.join(d, "journey-first-order.%s.board.json" % sf)
+        rc, out, res = run("board-state", "--read", last_r, "--note", root, "--surface", sf, "--out", st, "--with-children")
+        check("3.8 [%s] board-state of the tree board: every row's sticky keyed, 110 cells, 3 roll-ups and 1 reference" % sf, rc == 0
+              and res.get("rows", {}).get("journey-payment#pc1") == E(by_text["Форма картки скидає введені дані після помилки CVV"]["id"])
+              and res.get("rows", {}).get("p5") == E(by_text["Оплата падає без пояснення причини"]["id"])
+              and res.get("roles", {}).get("cell") == 110 and res.get("roles", {}).get("rollup") == 4 and res.get("unmapped_rows") == []
+              and res.get("tree") == ["journey-delivery", "journey-payment", "journey-3ds"], out[-500:])
+        now = [dict(it) for it in items]
+        pc1 = next(it for it in now if it["text"].startswith("Форма картки скидає"))
+        pc1["text"] = "Форма картки скидає дані після помилки CVV і після оновлення сторінки"
+        p5 = next(it for it in now if it["text"] == "Оплата падає без пояснення причини")
+        p5["text"] = "Оплата падає без пояснення причини й коду помилки"
+        rl = next(it for it in now if it["kind"] == "sticky" and it["text"].startswith("↳ «Оплата» · journey-payment"))
+        rl["text"] = rl["text"] + " — перевірити!"
+        cell = next(it for it in now if it["kind"] == "frame" and it["text"] == "journey-payment · s2 · болі")
+        now.append({"id": "900", "kind": "sticky", "text": "Немає Apple Pay у застосунку", "x": 10, "y": 300, "cell": cell["id"]})
+        now_r = board_read(now, sf, os.path.join(d, "tree-now-%s.%s" % (sf, "svg" if sf == "miro" else "json")))
+        dfile = os.path.join(d, "tree-diff-%s.json" % sf)
+        rc, out, res = run("board-diff", "--last", st, "--now", now_r, "--note", root, "--out", dfile)
+        check("3.9 [%s] board-diff of the tree board (the state says tree): a root row and a child row changed, keyed" % sf, rc == 0
+              and sorted(c["row"] for c in res.get("changed", [])) == ["journey-payment#pc1", "p5"], res.get("changed"))
+        check("3.10 [%s] a team sticky in a child's cell is added with the child's stage; the roll-up's edit is `other`, not counted" % sf,
+              [(a["stage"], a["lane"]) for a in res.get("added", [])] == [("journey-payment · s2", "pain")]
+              and any(o.get("role") == "rollup" for o in res.get("other", []))
+              and res.get("counts") == {"changed": 2, "moved": 0, "added": 1, "removed": 0, "orphaned": 0, "hc_edits": 0}, (res.get("other"), res.get("counts")))
+        check("3.11 [%s] the diff names its map and each child's own digest" % sf, res.get("map") == "journey-first-order"
+              and sorted(res.get("tree", {})) == ["journey-3ds", "journey-delivery", "journey-payment"], (res.get("map"), res.get("tree")))
+        trees[sf] = (dfile, E(pc1["id"]), E(p5["id"]), E("900"))
+
+    # the child's own board (C9): plain ids; pc1 changed there in another way, pc2 changed only there
+    sf = "miro"
+    own = board_items(play)
+    st2 = os.path.join(d, "journey-payment.miro.board.json")
+    rc, out, res = run("board-state", "--read", board_read(own, sf, os.path.join(d, "own-last.svg")), "--note", pay, "--surface", sf, "--out", st2)
+    check("3.12 the child's own board: plain row ids", rc == 0 and "pc1" in res.get("rows", {}) and "journey-payment#pc1" not in res.get("rows", {}), out[-300:])
+    own_now = [dict(it) for it in own]
+    o1 = next(it for it in own_now if it["text"].startswith("Форма картки скидає"))
+    o1["text"] = "Форма картки скидає CVV після помилки"
+    o2 = next(it for it in own_now if it["text"] == "Незрозуміло, чому картку відхилено")
+    o2["text"] = "Незрозуміло, чому банк відхилив картку"
+    odiff = os.path.join(d, "own-diff.json")
+    rc, out, res = run("board-diff", "--last", st2, "--now", board_read(own_now, sf, os.path.join(d, "own-now.svg")), "--note", pay, "--out", odiff)
+    check("3.13 the child's own board diff: pc1 and pc2 changed", rc == 0 and sorted(c["row"] for c in res.get("changed", [])) == ["pc1", "pc2"], res.get("changed"))
+
+    tdiff, t_pc1, t_p5, t_new = trees["miro"]
+    o_pc1, o_pc2 = o1["id"], o2["id"]
+    pay0, root0, tds0 = read(pay), read(root), read(tds)
+    rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, odiff, "--take", t_new, o_pc2, "--dry-run", "--date", "2026-11-24")
+    conf = res.get("conflicts", [])
+    check("3.14 one preview for the child from both boards: pc1 changed differently on the two — both versions shown",
+          rc == 0 and len(conf) == 1 and conf[0]["row"] == "pc1" and sorted(v["id"] for v in conf[0]["versions"]) == sorted([t_pc1, o_pc1]), out[-500:])
+    check("3.15 the root's own row is elsewhere — named with its map, never in this preview",
+          any(e["id"] == t_p5 and e["note"] == "journey-first-order" for e in res.get("elsewhere", []))
+          and not any(a.get("row") == "p5" for a in res.get("applied", [])), res.get("elsewhere"))
+    check("3.16 the added sticky becomes the child's new row on its own stage; the dry run writes nothing",
+          any(a.get("action") == "add" and a.get("cell") == "s2 · болі" for a in res.get("applied", []))
+          and res.get("note_written") is False and read(pay) == pay0, res.get("applied"))
+    rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, odiff, "--take", t_pc1, o_pc1, "--dry-run", "--date", "2026-11-24")
+    check("3.17 both versions taken → both refused `conflict`: the PM takes one or none, never both",
+          sorted((r["id"], r["why"]) for r in res.get("refused", [])) == sorted([(t_pc1, "conflict"), (o_pc1, "conflict")])
+          and not any(a.get("row") == "pc1" for a in res.get("applied", [])), res.get("refused"))
+    rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, odiff, "--take", t_pc1, o_pc2, t_new, t_p5,
+                       "--class", "%s=observed" % t_pc1, "--class", "%s=reported" % o_pc2, "--class", "%s=reported" % t_new, "--date", "2026-11-24")
+    tp = text(pay)
+    check("3.18 the PM picks the root board's version: the child's note alone takes it, with the team's source and date", rc == 0
+          and res.get("note_written") is True
+          and "| pc1 | s2 | Дані картки | pain | Форма картки скидає дані після помилки CVV і після оновлення сторінки |" in tp
+          and "| pc2 | s2 | | pain | Незрозуміло, чому банк відхилив картку |" in tp and "дошка команди 2026-11-24" in tp
+          and re.search(r"\| b1 \| s2 \| \| (?:pain|болі) \| Немає Apple Pay у застосунку \|", tp) is not None, out[-600:])
+    check("3.19 another map's row is refused `other_note`; the root's and the grandchild's notes untouched",
+          any(r["id"] == t_p5 and r["why"] == "other_note" and "journey-first-order" in r["detail"] for r in res.get("refused", []))
+          and read(root) == root0 and read(tds) == tds0, res.get("refused"))
+    rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, "--take", t_new, "--dry-run")
+    check("3.20 a tree board's diff taken into a child that changed since: refused (exit 2) — diff again", rc == 2
+          and "changed since" in res.get("error", ""), out[-300:])
+    rc, out, res = run("board-take", "--note", root, "--diff", tdiff, "--take", t_p5, t_pc1, "--class", "%s=reported" % t_p5, "--date", "2026-11-24")
+    tr_ = text(root)
+    check("3.21 the root takes its own row from its tree board; a child's row is refused `other_note`, its note untouched", rc == 0
+          and "Оплата падає без пояснення причини й коду помилки" in tr_ and "Форма картки скидає дані після помилки CVV і після" not in tr_
+          and any(r["id"] == t_pc1 and r["why"] == "other_note" and "journey-payment" in r["detail"] for r in res.get("refused", [])), out[-500:])
+    write(root, root0)
+    write(pay, pay0)
+
+    # mutation: two boards' versions taken automatically
+    m = mutant(d, "auto-conflict", "        if len(hit) > 1:", "        if False:")
+    if m is None:
+        check("M.auto-conflict the mutation's pattern is in journey_map.py", False, "if len(hit) > 1:")
+    else:
+        rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, odiff, "--take", t_pc1, o_pc1, "--dry-run", "--date", "2026-11-24", script=m)
+        check("M.auto-conflict a take of both versions is caught by 3.17", not any(r.get("why") == "conflict" for r in res.get("refused", [])), out[-300:])
 
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")
