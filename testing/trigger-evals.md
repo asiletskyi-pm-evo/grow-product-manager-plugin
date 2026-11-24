@@ -416,6 +416,20 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | Z6 | портфель ініціатив і епіків — статус і що заблоковано | product-reporter or roadmap-architect — NOT cjm-research |
 | Z7 | що потребує моєї уваги сьогодні — пошта, метрики, Jira | focus-advisor — NOT cjm-research |
 
+### Group AA — Nested journey maps vs neighbours (added 2026-11-24, v4.10.0)
+
+`cjm-research` mode `journey`, step J8, makes a child journey map for a step of a map, shows the tree of maps and rolls each child up onto its parent's step; breaking an epic into stories is `roadmap-architect`'s story map, a drawn hierarchy is `diagram-prototyper`'s, a goal cascade is `goal-setter`'s or `quarterly-planning`'s.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| AA1 | зроби дочірню карту шляху для кроку «Оплата карткою» карти «Перше замовлення» | cjm-research |
+| AA2 | розклади крок «Оплата» нашої карти шляху на окрему карту з власними етапами | cjm-research |
+| AA3 | make a child journey map for the card-payment step of the first-order journey | cjm-research |
+| AA4 | покажи дерево карт шляху продукту — корінь і всі вкладені карти | cjm-research |
+| AA5 | розбий епік «Оплата» на дочірні історії на мапі історій | roadmap-architect — NOT cjm-research |
+| AA6 | намалюй ієрархію екранів оплати як діаграму | diagram-prototyper — NOT cjm-research |
+| AA7 | декомпозуй ціль кварталу на дочірні цілі команд | goal-setter or quarterly-planning — NOT cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |
