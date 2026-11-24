@@ -269,6 +269,103 @@ try:
           rc == 0 and td == [("journey-c4", 4), ("journey-c5", 5), ("journey-c6", 6), ("journey-c7", 7)]
           and [x.get("note") for x in (node(res.get("tree") or {}, "journey-c3") or {}).get("deeper", [])] == ["journey-c4"], (td, out[-300:]))
 
+    # 2. the tree page (§9, §14): chips on the parent's steps, a <details> per child, the fourth level a reference
+    sys.path.insert(0, os.path.dirname(SCRIPT))
+    import journey_map as jm  # noqa: E402 — the page's fixed scripts, to compare bytes
+    page = os.path.join(d, "tree-uk.html")
+    rc, out, res = run("render-html", "--note", root, "--out", page, "--lang", "uk")
+    h = text(page) if os.path.exists(page) else ""
+    check("2.1 render-html of the root: exit 0, three child maps shown, the fourth level a reference", rc == 0
+          and res.get("children") == 3 and res.get("deeper") == ["journey-3ds-retry"], out[-400:])
+    check("2.2 a <details> per child map, the grandchild's inside its parent's", h.count('<details class="child"') == 3
+          and re.search(r'<details class="child" id="n\d+">(?:(?!</details>).)*journey-payment(?:(?!</details>).)*'
+                        r'<details class="child" id="n\d+">(?:(?!</details>).)*journey-3ds\.md', h, re.S) is not None, h[:300])
+    chips = re.findall(r'<div class="item chip" data-open="(n\d+)"', h)
+    ids = re.findall(r'<details class="child" id="(n\d+)"', h)
+    check("2.3 a chip per child on its parent's step, each opening its own <details>", sorted(chips) == sorted(ids) and len(chips) == 3,
+          (chips, ids))
+
+    def grid_of(html, n):
+        """The n-th grid of the page — its <div class="wrap"> … </table></div>."""
+        parts = re.findall(r'<div class="wrap" tabindex="0">.*?</table></div>', html, re.S)
+        return parts[n] if len(parts) > n else ""
+    g0 = grid_of(h, 0)
+    check("2.4 the root's grid holds no row of a child — only the chips' roll-up (R30)",
+          "Форма картки скидає" not in g0 and "Сторінка банку" not in g0 and "Немає доставки у поштомат" not in g0
+          and "болі 3 (observed 1 · reported 2)" in g0 and "Оплачено з першої спроби: 78% замовлень" in g0, g0[:400])
+    s5 = re.search(r'<th class="lane">дії</th>(.*?)</tr>', g0, re.S)
+    cells = re.findall(r"<td>(.*?)</td>", s5.group(1), re.S) if s5 else []
+    check("2.5 the chips stand in their stage's first lane (дії): delivery on s4, payment on s5 with its step",
+          len(cells) == 5 and "journey-delivery" in cells[3] and "journey-payment" in cells[4] and "Оплата карткою" in cells[4]
+          and "journey-payment" not in cells[3], [c[:80] for c in cells])
+    check("2.6 each child's rows only in its own grid — in the page's order: delivery (s4), payment (s5), its 3-D Secure",
+          "Немає доставки у поштомат" in grid_of(h, 1) and "Форма картки скидає" in grid_of(h, 2)
+          and "Сторінка банку не відкривається" in grid_of(h, 3) and "Форма картки скидає" not in grid_of(h, 3),
+          [grid_of(h, i)[:60] for i in range(4)])
+    check("2.7 the fourth level: named (journey and note) with its level, never its grid or rows",
+          "Повтор коду" in h and "journey-3ds-retry.md" in h and "Кнопка «надіслати ще раз»" not in h
+          and h.count('<div class="wrap"') == 4, h.count('<div class="wrap"'))
+    check("2.8 sticky headers in every grid", len(re.findall(r'<th class="stage">', h)) == 5 + 1 + 3 + 2
+          and h.count('<th class="corner">') == 4 and "position:sticky" in h, h.count('<th class="stage">'))
+    scripts = re.findall(r"<script>(.*?)</script>", h, re.S)
+    check("2.9 one fixed script — no data of a note, no request; every grid pans and a chip opens its child",
+          scripts == [jm.PAN_TREE] and not re.search(r"fetch|XMLHttpRequest|import\(|src=|http", jm.PAN_TREE), scripts[:1])
+    check("2.10 no link or request anywhere on the page", not re.search(r"<a |href=|src=|https?://|url\(|@import", h),
+          re.findall(r".{20}(?:href=|src=|https?://).{20}", h)[:3])
+    rc, out, res = run("render-html", "--note", os.path.join(nest, "journey-delivery.md"), "--out", os.path.join(d, "dl.html"), "--lang", "uk")
+    dh = text(os.path.join(d, "dl.html")) if os.path.exists(os.path.join(d, "dl.html")) else ""
+    check("2.11 a child's own page: the maps above it named, no details when it has no child", rc == 0
+          and "Над нею: «Перше замовлення» (journey-first-order)" in dh and "<details" not in dh, out[-300:])
+    rc, out, res = run("render-html", "--note", root, "--out", os.path.join(d, "tree-en.html"), "--lang", "en")
+    check("2.12 the English page", rc == 0 and "Child maps" in text(os.path.join(d, "tree-en.html"))
+          and "pains 3 (observed 1 · reported 2)" in text(os.path.join(d, "tree-en.html")), out[-300:])
+
+    # hostile words in a child: escaped, a link and a contact removed, a secret hidden
+    hz = os.path.join(d, "hostile")
+    shutil.copytree(nest, hz)
+    write(os.path.join(hz, "journey-payment.md"), text(pay)
+          .replace('journey: "Оплата"', 'journey: "Оплата <b>x</b> https://evil.example/j bea@zorg.example"')
+          .replace("| mj1 | s1 | | metric | Оплачено з першої спроби: 78% замовлень |",
+                   "| mj1 | s1 | | metric | Оплачено <script>x</script> 78% https://evil.example/m токен glpat-" + "Qw8" * 7 + " |"))
+    rc, out, res = run("render-html", "--note", os.path.join(hz, "journey-first-order.md"), "--out", os.path.join(d, "hz.html"), "--lang", "uk")
+    hh = text(os.path.join(d, "hz.html")) if os.path.exists(os.path.join(d, "hz.html")) else ""
+    check("2.13 a child's words are page-safe: escaped, no link, no contact, a secret hidden whole", rc == 0
+          and "<b>x</b>" not in hh and "&lt;b&gt;x&lt;/b&gt;" in hh and "evil.example" not in hh and "bea@zorg" not in hh
+          and "glpat-" not in hh and "<script>x</script>" not in hh, re.findall(r".{30}(?:evil|bea@|glpat|<b>x).{30}", hh)[:3])
+    rc, out, res = run("nest", "--note", os.path.join(hz, "journey-first-order.md"), "--json")
+    blob = json.dumps(res, ensure_ascii=False)
+    check("2.14 the nest result is page-safe too", "evil.example" not in blob and "bea@zorg" not in blob and "glpat-" not in blob, blob[:300])
+
+    # the scheduled refresh of a child re-renders the pages above it, locally, and never touches their notes (C11)
+    rf = os.path.join(d, "refresh-tree")
+    shutil.copytree(nest, rf)
+    snap = os.path.join(d, "snap", "2026-11-23.md")
+    write(snap, "---\ntype: cjm-health-check\nproduct: zorg\ndate: 2026-11-23\nperiod: 2026-11-16..2026-11-22\nhealth_score: 58\n"
+                "stages:\n  - id: s2\n    metric: \"card -> confirm\"\n    value: \"55.0%\"\n    baseline: \"66.0%\"\n"
+                "    deviation: \"-16.7%\"\n    status: critical\n---\n\n# Health-check\n")
+    root_before = read(os.path.join(rf, "journey-first-order.md"))
+    rc, out, res = run("refresh", "--note", os.path.join(rf, "journey-payment.md"), "--snapshot", snap, "--lang", "uk")
+    rp = os.path.join(rf, "journey-first-order.html")
+    rh = text(rp) if os.path.exists(rp) else ""
+    check("2.15 a refreshed child re-renders its root's page beside the root, with the new point", rc == 0
+          and res.get("pages_above") == [rp] and "здоров&#x27;я 58 (2026-11-23)" in rh and res.get("published") is False, out[-500:])
+    check("2.16 the root's note is never written by its child's refresh", read(os.path.join(rf, "journey-first-order.md")) == root_before,
+          "the root changed")
+    check("2.17 the child's own page is written too", os.path.exists(os.path.join(rf, "journey-payment.html")), os.listdir(rf))
+
+    # mutations: a child's row copied into the parent, the fourth level in full
+    for name, old, new, test in (
+            ("page-row", "chips.setdefault(k[\"stage\"], []).append(", "chips.setdefault(k[\"stage\"], []).append(\" \".join(r[\"text\"] for r in maps[k[\"note\"]][\"rows\"]) + ",
+             lambda html: "Форма картки скидає" in grid_of(html, 0)),
+            ("page-deep", "MAX_DEPTH = 3", "MAX_DEPTH = 4", lambda html: "Кнопка «надіслати ще раз»" in html)):
+        m = mutant(d, name, old, new)
+        if m is None:
+            check("M.%s the mutation's pattern is in journey_map.py" % name, False, old)
+            continue
+        mp = os.path.join(d, "m-%s.html" % name)
+        rc, out, res = run("render-html", "--note", root, "--out", mp, "--lang", "uk", script=m)
+        check("M.%s a mutant is caught by the page's assertions" % name, rc != 0 or test(text(mp) if os.path.exists(mp) else ""), out[-300:])
+
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")
     rc, out, res = run("render-html", "--note", main, "--out", os.path.join(d, "p-uk.html"), "--lang", "uk")

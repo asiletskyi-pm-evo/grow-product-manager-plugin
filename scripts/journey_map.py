@@ -663,27 +663,39 @@ def sparkline(points):
             '<polyline fill="none" stroke="#1c7ed6" stroke-width="2" points="%s"/>%s</svg>' % (w, h, w, h, pts, dots))
 
 
-def render_html(note, note_name, lang):
-    L = LABELS.get(lang, LABELS["en"])
+# The tree page's one script (since v4.10.0, §14) — on a page that has child maps only, so a map without children keeps
+# the v4.8.0 page byte for byte: every grid pans as PAN's one does, and a roll-up chip (or Enter on it) opens its child's
+# <details> and the ones around it. Fixed bytes — no data of a note ever goes into it — and no request.
+PAN_TREE = ('(function(){document.querySelectorAll(".wrap").forEach(function(w){var p=null;'
+            'w.addEventListener("pointerdown",function(e){if(e.button!==0)return;w._moved=false;'
+            'p={x:e.clientX,y:e.clientY,l:w.scrollLeft,t:w.scrollTop,i:e.pointerId,m:false};});'
+            'w.addEventListener("pointermove",function(e){if(!p)return;var dx=e.clientX-p.x,dy=e.clientY-p.y;'
+            'if(!p.m&&Math.abs(dx)+Math.abs(dy)<4)return;if(!p.m){p.m=true;try{w.setPointerCapture(p.i)}catch(_){}'
+            'w.classList.add("panning");}w.scrollLeft=p.l-dx;w.scrollTop=p.t-dy;});'
+            'function end(){if(!p)return;if(p.m){w._moved=true;try{w.releasePointerCapture(p.i)}catch(_){}}p=null;'
+            'w.classList.remove("panning");}w.addEventListener("pointerup",end);w.addEventListener("pointercancel",end);});'
+            'function open(id){var d=document.getElementById(id);if(!d)return;for(var x=d;x;x=x.parentElement){'
+            'if(x.tagName==="DETAILS")x.open=true;}d.scrollIntoView({block:"start"});}'
+            'document.querySelectorAll("[data-open]").forEach(function(c){var go=function(){var w=c.closest(".wrap");'
+            'if(w&&w._moved){w._moved=false;return;}open(c.getAttribute("data-open"));};c.addEventListener("click",go);'
+            'c.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "){e.preventDefault();go();}});});})();')
+CSS_TREE = """
+.item.chip{border-left-color:#7048e8;background:#f3f0ff;cursor:pointer}.item.chip:focus-visible{outline:2px solid #7048e8}
+.item.ref{border-left-color:#868e96;border-style:dashed;font-style:italic}
+details.child{margin:16px 0 0;border-left:3px solid #d0bfff;padding-left:12px}details.child>summary{cursor:pointer;font-weight:600;margin:4px 0}
+details.child>summary .m{color:#57606a;font-weight:400;font-size:12px}"""
+TREE_LABELS = {"uk": {"children": "Дочірні карти", "above": "Над нею: %s", "level": "рівень %d", "deeper": "окрема карта, рівень %d — "
+                      "відкрий її нотатку (глибше трьох рівнів — лише назва)", "deeper_list": "Глибше — окремі карти: %s"},
+               "en": {"children": "Child maps", "above": "Above it: %s", "level": "level %d", "deeper": "a map of its own, level %d — "
+                      "open its note (past three levels — a name only)", "deeper_list": "Deeper — maps of their own: %s"}}
+
+
+def _grid(note, L, chips=None):
+    """The lines of one map's grid: the rows the page may show, the gap marks, and — on a tree page — the chips of its
+    child maps at the top of their stage's first lane (`chips`: {stage id: [html]})."""
+    chips = chips or {}
+    out = []
     live = [r for r in note["rows"] if not r["gap"]]
-    title = note["journey"] or note["title"] or note_name
-    out = ["<!doctype html>", '<html lang="%s"><head><meta charset="utf-8">' % esc(lang),
-           '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(title), CSS),
-           "<h1>%s: %s</h1>" % (esc(L["title"]), shown(title)),
-           '<p class="meta">%s: %s · %s · %s: %s · %s: %s</p>' % (
-               esc(L["note"]), shown(note_name), shown(note["product"]), esc(L["owner"]), shown(note["owner"] or "⚠️"),
-               esc(L["reviewed"]), shown(note["reviewed"] or "⚠️")),
-           '<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(datetime.date.today().isoformat())),
-           "<h2>%s</h2>" % esc(L["health"])]
-    pts = [p for p in note["health"] if p["score"] is not None and day(p["date"])]
-    if pts:
-        out.append(sparkline(pts))
-        out.append('<table class="pts"><tr>%s</tr><tr>%s</tr><tr>%s</tr></table>' % (
-            "".join("<td>%s</td>" % esc(p["date"]) for p in pts), "".join("<td>%s</td>" % esc(p["score"]) for p in pts),
-            "".join('<td class="m">%s</td>' % shown(p["snapshot"]) for p in pts)))
-    else:
-        out.append('<p class="meta">%s</p>' % esc(L["no_trend"]))
     stages = note["stages"]
     declared = [s["id"] for s in stages]
     hidden = sum(1 for r in live if not page_worthy(r, declared))
@@ -701,6 +713,8 @@ def render_html(note, note_name, lang):
             out.append("<td>")
             if li == 0 and not has_evidence[s["id"]]:
                 out.append('<div class="item gap">⚠️ %s</div>' % esc(L["gap"]))
+            if li == 0:
+                out.extend(chips.get(s["id"], []))
             for r in live:
                 if r["stage"] != s["id"] or r["lane"] != lane or not page_worthy(r, declared):
                     continue
@@ -712,7 +726,82 @@ def render_html(note, note_name, lang):
             out.append("</td>")
         out.append("</tr>")
     out.append("</tbody></table></div>")
-    out.append("<script>%s</script>" % PAN)
+    return out
+
+
+def _tree_parts(nest, lang):
+    """(chips of the map's own grid, the lines of its children's <details>) of a tree page — each child's grid, its
+    own chips and children nested, the first level past MAX_DEPTH as references by name."""
+    L, T, NL = LABELS.get(lang, LABELS["en"]), TREE_LABELS.get(lang, TREE_LABELS["en"]), NEST_LABELS.get(lang, NEST_LABELS["en"])
+    maps, counter = nest["maps"], [0]
+
+    def parts(n):
+        chips, body = {}, []
+        for k in n["children"]:
+            counter[0] += 1
+            nid = "n%d" % counter[0]
+            step = (" · %s «%s»" % (NL["step"], k["step"])) if k["step"] else ""
+            chips.setdefault(k["stage"], []).append(
+                '<div class="item chip" data-open="%s" role="button" tabindex="0"><div class="t">↳ «%s»%s</div>'
+                '<div class="m">%s · %s</div></div>' % (nid, esc(k["journey"]), esc(step), esc(k["note"] + ".md"),
+                                                         esc(_rollup_words(k["rollup"], NL))))
+            kn = maps[k["note"]]
+            kchips, kbody = parts(k)
+            body.append('<details class="child" id="%s"><summary>%s%s → «%s» · %s<span class="m"> · %s · %s</span></summary>' % (
+                nid, esc(k["stage"]), esc(step), esc(k["journey"]), esc(T["level"] % k["level"]), esc(k["note"] + ".md"),
+                esc(_rollup_words(k["rollup"], NL))))
+            body.append('<p class="meta">%s: %s · %s · %s: %s · %s: %s</p>' % (
+                esc(L["note"]), esc(k["note"] + ".md"), shown(kn["product"]), esc(L["owner"]), shown(kn["owner"] or "⚠️"),
+                esc(L["reviewed"]), shown(kn["reviewed"] or "⚠️")))
+            body.extend(_grid(kn, L, kchips))
+            body.extend(kbody)
+            body.append("</details>")
+        for x in n["deeper"]:
+            chips.setdefault(x["stage"], []).append(
+                '<div class="item ref"><div class="t">↳ «%s»%s</div><div class="m">%s · %s</div></div>' % (
+                    esc(x["journey"]), esc((" · %s «%s»" % (NL["step"], x["step"])) if x["step"] else ""),
+                    esc(x["note"] + ".md"), esc(T["deeper"] % x["level"])))
+        if n["deeper"]:
+            body.append('<p class="meta">%s</p>' % esc(T["deeper_list"] % ", ".join(
+                "«%s» (%s.md)" % (x["journey"], x["note"]) for x in n["deeper"])))
+        return chips, body
+    return parts(nest["tree"])
+
+
+def render_html(note, note_name, lang, nest=None):
+    """The page of the map — and, given its nesting (`nest_of`) with child maps, maps above it or references past the
+    depth, the tree page of §14: the same grid with a roll-up chip on each child's step and each child's grid in a
+    <details> below. A map without any of them is the page of v4.9.0, byte for byte."""
+    L = LABELS.get(lang, LABELS["en"])
+    tree = nest is not None and bool(nest["tree"]["children"] or nest["tree"]["deeper"] or nest["ancestors"])
+    T = TREE_LABELS.get(lang, TREE_LABELS["en"])
+    title = note["journey"] or note["title"] or note_name
+    out = ["<!doctype html>", '<html lang="%s"><head><meta charset="utf-8">' % esc(lang),
+           '<meta name="viewport" content="width=device-width,initial-scale=1">',
+           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(title), CSS + (CSS_TREE if tree else "")),
+           "<h1>%s: %s</h1>" % (esc(L["title"]), shown(title)),
+           '<p class="meta">%s: %s · %s · %s: %s · %s: %s</p>' % (
+               esc(L["note"]), shown(note_name), shown(note["product"]), esc(L["owner"]), shown(note["owner"] or "⚠️"),
+               esc(L["reviewed"]), shown(note["reviewed"] or "⚠️")),
+           '<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(datetime.date.today().isoformat()))]
+    if tree and nest["ancestors"]:
+        out.append('<p class="meta">%s</p>' % esc(T["above"] % " → ".join(
+            "«%s» (%s)" % (a["journey"], a["note"]) for a in nest["ancestors"])))
+    out.append("<h2>%s</h2>" % esc(L["health"]))
+    pts = [p for p in note["health"] if p["score"] is not None and day(p["date"])]
+    if pts:
+        out.append(sparkline(pts))
+        out.append('<table class="pts"><tr>%s</tr><tr>%s</tr><tr>%s</tr></table>' % (
+            "".join("<td>%s</td>" % esc(p["date"]) for p in pts), "".join("<td>%s</td>" % esc(p["score"]) for p in pts),
+            "".join('<td class="m">%s</td>' % shown(p["snapshot"]) for p in pts)))
+    else:
+        out.append('<p class="meta">%s</p>' % esc(L["no_trend"]))
+    chips, body = _tree_parts(nest, lang) if tree else ({}, [])
+    out.extend(_grid(note, L, chips))
+    if body:
+        out.append("<h2>%s</h2>" % esc(T["children"]))
+        out.extend(body)
+    out.append("<script>%s</script>" % (PAN_TREE if tree else PAN))
     out.append("</body></html>")
     return "\n".join(out) + "\n"
 
@@ -1887,24 +1976,50 @@ def cmd_check(args):
     return 0
 
 
-def _render_to(note, out, lang):
-    page = render_html(note, os.path.basename(note["path"]), lang)
+def page_nest(note, maps=(), dirs=(), lang=None):
+    """The nesting a map's page shows (§14), or None: a note that is not typed `cjm-journey` renders the page of v4.9.0,
+    and so does one whose own folder cannot be read (maps or folders named are read, or the command stops)."""
+    if str(note.get("type") or "").strip().lower() != "cjm-journey":
+        return None
+    try:
+        return nest_of(note["path"], maps, dirs, lang)
+    except Bad:
+        if maps or dirs:
+            raise
+        return None
+
+
+def _render_to(note, out, lang, maps=(), dirs=()):
+    """(bytes written, the nesting shown) — the map's page, with its child maps when it has any (§14)."""
+    nest = page_nest(note, maps, dirs, lang)
+    page = render_html(note, os.path.basename(note["path"]), lang, nest)
     with open(out, "w", encoding="utf-8") as fh:
         fh.write(page)
-    return len(page.encode("utf-8"))
+    return len(page.encode("utf-8")), nest
+
+
+def _shown_count(n):
+    return len(n["children"]) + sum(_shown_count(k) for k in n["children"])
+
+
+def _deeper_of(n):
+    return [x["note"] for x in n["deeper"]] + [y for k in n["children"] for y in _deeper_of(k)]
 
 
 def cmd_render(args):
     note = load(args.note)
     try:
-        size = _render_to(note, args.out, args.lang)
+        size, nest = _render_to(note, args.out, args.lang, args.map, args.dir)
     except OSError as e:
         result(ok=False, error="the page cannot be written: %s" % (e.strerror or type(e).__name__))
         return 1
     declared = [s["id"] for s in note["stages"]]
     live = [r for r in note["rows"] if not r["gap"]]
     result(ok=True, out=args.out, bytes=size, rows=len(live), not_shown=sum(1 for r in live if not page_worthy(r, declared)),
-           stages=len(note["stages"]), health=len(note["health"]), errors=note["errors"])
+           stages=len(note["stages"]), health=len(note["health"]),
+           children=_shown_count(nest["tree"]) if nest else 0, deeper=_deeper_of(nest["tree"]) if nest else [],
+           above=[a["note"] for a in nest["ancestors"]] if nest else [],
+           nest_findings=len(nest["forest"]["findings"]) if nest else 0, errors=note["errors"])
     return 0
 
 
@@ -1965,8 +2080,16 @@ def cmd_refresh(args):
                    skipped_entries=done["skipped_entries"], health=point, skipped=skipped, out=out, published=False,
                    note_written=True, errors=note["errors"])
     try:
-        _render_to(load(args.note), out, lang)
-    except OSError as e:                             # the note is refreshed; only its page is not
+        _, nest = _render_to(load(args.note), out, lang)
+        above = []                                   # the pages of the maps above it show its roll-up: rendered again,
+        for a in (nest["ancestors"] if nest else []):    # beside each map's note, locally — never published (§10, §14)
+            an = nest["maps"][a["note"]]
+            page = os.path.splitext(an["path"])[0] + ".html"
+            _render_to(load(an["path"]), page, lang)
+            above.append(page)
+        if above:
+            summary["pages_above"] = above
+    except OSError as e:                             # the note is refreshed; only a page is not
         result(ok=False, error="the note is refreshed, the page cannot be written: %s" % (e.strerror or type(e).__name__), **summary)
         return 1
     result(ok=True, line=REFRESH.get(lang, REFRESH["en"])["line"], **summary)
@@ -2218,6 +2341,8 @@ def main(argv=None):
     p.add_argument("--note", required=True)
     p.add_argument("--out", required=True)
     p.add_argument("--lang", default="en", choices=sorted(LABELS))
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     p = sub.add_parser("health")
     p.add_argument("--note", required=True)
     p.add_argument("--snapshots", required=True, help="~/.grow-pm/knowledge-library/health-checks/")
