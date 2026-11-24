@@ -206,7 +206,7 @@ try:
           and res.get("level") == 1 and res.get("ancestors") == [], {k: tree.get(k) for k in ("note", "level")})
     kids = [(k.get("note"), k.get("stage"), k.get("step"), k.get("level")) for k in tree.get("children", [])]
     check("1.3 the root's children in its stage order: delivery on s4 (no step), payment on s5 «Оплата карткою»",
-          kids == [("journey-delivery", "s4", "", 2), ("journey-payment", "s5", "Оплата карткою", 2)], kids)
+          kids == [("journey-shipping", "s4", "", 2), ("journey-payment", "s5", "Оплата карткою", 2)], kids)
     p = node(tree, "journey-payment") or {}
     check("1.4 payment's child: 3-D Secure on s3, step «3-D Secure», level 3 (a wiki-link parent read)",
           [(k.get("note"), k.get("stage"), k.get("step"), k.get("level")) for k in p.get("children", [])]
@@ -227,7 +227,7 @@ try:
     check("1.10 3-D Secure: no journey-level metric → «⚠️ TBD», no health point → «немає знімка»",
           rt.get("outcome") == "⚠️ TBD" and rt.get("health") is None and rt.get("health_label") == "немає знімка"
           and rt.get("pains") == {"observed": 1, "reported": 1}, rt)
-    dl = node(tree, "journey-delivery") or {}
+    dl = node(tree, "journey-shipping") or {}
     check("1.11 delivery: no health point, an old review date as it is", (dl.get("rollup") or {}).get("health") is None
           and (dl.get("rollup") or {}).get("reviewed") == "2026-08-01", dl.get("rollup"))
     td = findings_of(res, "too_deep")
@@ -367,7 +367,7 @@ try:
     s5 = re.search(r'<th class="lane">дії</th>(.*?)</tr>', g0, re.S)
     cells = re.findall(r"<td>(.*?)</td>", s5.group(1), re.S) if s5 else []
     check("2.5 the chips stand in their stage's first lane (дії): delivery on s4, payment on s5 with its step",
-          len(cells) == 5 and "journey-delivery" in cells[3] and "journey-payment" in cells[4] and "Оплата карткою" in cells[4]
+          len(cells) == 5 and "journey-shipping" in cells[3] and "journey-payment" in cells[4] and "Оплата карткою" in cells[4]
           and "journey-payment" not in cells[3], [c[:80] for c in cells])
     check("2.6 each child's rows only in its own grid — in the page's order: delivery (s4), payment (s5), its 3-D Secure",
           "Немає доставки у поштомат" in grid_of(h, 1) and "Форма картки скидає" in grid_of(h, 2)
@@ -383,7 +383,7 @@ try:
           scripts == [jm.PAN_TREE] and not re.search(r"fetch|XMLHttpRequest|import\(|src=|http", jm.PAN_TREE), scripts[:1])
     check("2.10 no link or request anywhere on the page", not re.search(r"<a |href=|src=|https?://|url\(|@import", h),
           re.findall(r".{20}(?:href=|src=|https?://).{20}", h)[:3])
-    rc, out, res = run("render-html", "--note", os.path.join(nest, "journey-delivery.md"), "--out", os.path.join(d, "dl.html"), "--lang", "uk")
+    rc, out, res = run("render-html", "--note", os.path.join(nest, "journey-shipping.md"), "--out", os.path.join(d, "dl.html"), "--lang", "uk")
     dh = text(os.path.join(d, "dl.html")) if os.path.exists(os.path.join(d, "dl.html")) else ""
     check("2.11 a child's own page: the maps above it named, no details when it has no child", rc == 0
           and "Над нею: «Перше замовлення» (journey-first-order)" in dh and "<details" not in dh, out[-300:])
@@ -442,7 +442,7 @@ try:
     blocks = lay.get("blocks", [])
     check("3.1 board-layout --with-children: a block per child the page shows, depth first, its cells «<child> · <stage> · <lane>»",
           rc == 0 and [(b["note"], b["level"], len(b["cells"])) for b in blocks]
-          == [("journey-delivery", 2, 10), ("journey-payment", 2, 30), ("journey-3ds", 3, 20)]
+          == [("journey-shipping", 2, 10), ("journey-payment", 2, 30), ("journey-3ds", 3, 20)]
           and "journey-payment · s2 · болі" in lay.get("titles", []) and len(lay.get("titles", [])) == 50 + 60, out[-400:])
     pb = next((b for b in blocks if b["note"] == "journey-payment"), {})
     pc = {c["title"]: c for c in pb.get("cells", [])}
@@ -452,7 +452,7 @@ try:
     ru = [(r["cell"], r["child"]) for r in lay.get("rollups", [])]
     pr = next((r for r in lay.get("rollups", []) if r["child"] == "journey-payment"), {})
     check("3.3 a roll-up sticky per child in its parent's cell «<stage> · дії», with its numbers; on Miro it links to the child's first cell",
-          ru == [("s4 · дії", "journey-delivery"), ("s5 · дії", "journey-payment"), ("journey-payment · s3 · дії", "journey-3ds")]
+          ru == [("s4 · дії", "journey-shipping"), ("s5 · дії", "journey-payment"), ("journey-payment · s3 · дії", "journey-3ds")]
           and "болі 3 (observed 1 · reported 2)" in pr.get("text", "") and pr.get("link_to") == "journey-payment · s1 · дії", lay.get("rollups"))
     check("3.4 the fourth level: one reference sticky, no block, no link",
           [(r["cell"], r["child"]) for r in lay.get("references", [])] == [("journey-3ds · s2 · дії", "journey-3ds-retry")]
@@ -482,7 +482,7 @@ try:
               and res.get("rows", {}).get("journey-payment#pc1") == E(by_text["Форма картки скидає введені дані після помилки CVV"]["id"])
               and res.get("rows", {}).get("p5") == E(by_text["Оплата падає без пояснення причини"]["id"])
               and res.get("roles", {}).get("cell") == 110 and res.get("roles", {}).get("rollup") == 4 and res.get("unmapped_rows") == []
-              and res.get("tree") == ["journey-delivery", "journey-payment", "journey-3ds"], out[-500:])
+              and res.get("tree") == ["journey-shipping", "journey-payment", "journey-3ds"], out[-500:])
         now = [dict(it) for it in items]
         pc1 = next(it for it in now if it["text"].startswith("Форма картки скидає"))
         pc1["text"] = "Форма картки скидає дані після помилки CVV і після оновлення сторінки"
@@ -502,7 +502,7 @@ try:
               and any(o.get("role") == "rollup" for o in res.get("other", []))
               and res.get("counts") == {"changed": 2, "moved": 0, "added": 1, "removed": 0, "orphaned": 0, "hc_edits": 0}, (res.get("other"), res.get("counts")))
         check("3.11 [%s] the diff names its map and each child's own digest" % sf, res.get("map") == "journey-first-order"
-              and sorted(res.get("tree", {})) == ["journey-3ds", "journey-delivery", "journey-payment"], (res.get("map"), res.get("tree")))
+              and sorted(res.get("tree", {})) == ["journey-3ds", "journey-payment", "journey-shipping"], (res.get("map"), res.get("tree")))
         trees[sf] = (dfile, E(pc1["id"]), E(p5["id"]), E("900"))
 
     # the child's own board (C9): plain ids; pc1 changed there in another way, pc2 changed only there
@@ -566,6 +566,124 @@ try:
     else:
         rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, odiff, "--take", t_pc1, o_pc1, "--dry-run", "--date", "2026-11-24", script=m)
         check("M.auto-conflict a take of both versions is caught by 3.17", not any(r.get("why") == "conflict" for r in res.get("refused", [])), out[-300:])
+
+    # 12. review 1 (opus, frozen fa5afd4): each finding reproduced first
+    import unicodedata
+    r1 = os.path.join(d, "r1")
+    shutil.copytree(nest, r1)
+    lost_t = text(os.path.join(nest, "journey-lost.md"))
+
+    def kid(name, parent_block, stage="s5", step=None, product="zorg", title=None):
+        """A small child map of first-order with its `parent` written as given (the YAML lines themselves)."""
+        t = lost_t.replace("parent: journey-gone\nparent_stage: s1\n", parent_block + "parent_stage: %s\n" % stage
+                           + ('parent_step: "%s"\n' % step if step else "")).replace('journey: "journey-lost"', 'journey: "%s"' % (title or name))
+        write(os.path.join(r1, name + ".md"), t.replace("product: zorg", "product: %s" % product))
+    kid("journey-k-unquoted", "parent: [[journey-first-order]]\n")
+    kid("journey-k-list", 'parent:\n  - "[[journey-first-order]]"\n')
+    kid("journey-k-two", 'parent:\n  - "[[journey-first-order]]"\n  - "[[journey-payment]]"\n')
+    kid("journey-k-odd", "parent: {a: 1}\n")
+    kid("journey-k-null", "parent: null\n")
+    kid("journey-k-case", 'parent: "[[Journey-First-Order]]"\n')
+    write(os.path.join(r1, "journey-self.md"), text(os.path.join(nest, "journey-self.md")).replace("parent: journey-self", "parent: Journey-Self"))
+    nfd = unicodedata.normalize("NFD", "journey-край")
+    write(os.path.join(r1, nfd + ".md"), text(os.path.join(nest, "journey-shipping.md")).replace("parent: journey-first-order\nparent_stage: s4\n", "")
+          .replace('journey: "Вибір доставки"', 'journey: "Край"'))
+    kid("journey-k-nfc", 'parent: "%s"\n' % unicodedata.normalize("NFC", "journey-край"), stage="s1", title="Під краєм")
+    kid("journey-bea@zorg.example", "parent: journey-first-order\n", title="Чужий файл")
+    kid("journey-k-hostile", 'parent: "bea@zorg.example https://evil.example/p"\n')
+    write(os.path.join(r1, "journey-k-tail.md"), lost_t.replace("parent: journey-gone", "parent: journey-loop-a")
+          .replace('journey: "journey-lost"', 'journey: "Хвіст кільця"'))
+    rc, out, res = run("nest", "--note", os.path.join(r1, "journey-first-order.md"), "--json")
+    tr = res.get("tree") or {}
+    names = [k.get("note") for k in tr.get("children", [])]
+    orph = {f.get("note"): f.get("why") for f in findings_of(res, "orphan_child")}
+    check("12.1 #1 a parent written as an unquoted wiki link, or as Obsidian's list property of one, attaches",
+          rc == 0 and "journey-k-unquoted" in names and "journey-k-list" in names, (names, orph))
+    check("12.2 #1 two parents, or a value that reads as no name: orphan_child `bad_parent` — never silently a root",
+          orph.get("journey-k-two") == "bad_parent" and orph.get("journey-k-odd") == "bad_parent", orph)
+    check("12.3 #1 `parent: null` is no parent — no finding", "journey-k-null" not in orph and "journey-k-null" not in names, orph)
+    check("12.4 #5 a link names a map as Obsidian and the disk resolve it — any case; a map named itself in another case is self_parent",
+          "journey-k-case" in names and [f.get("note") for f in findings_of(res, "self_parent")] == ["journey-self"], (names, findings_of(res, "self_parent")))
+    rc5, out5, res5 = run("nest", "--note", os.path.join(r1, nfd + ".md"), "--json")
+    check("12.5 #5 a name stored decomposed (NFD) on disk is the same name as its link (NFC)", rc5 == 0 and "journey-k-nfc" not in orph
+          and [k.get("note") for k in (res5.get("tree") or {}).get("children", [])] == ["journey-k-nfc"], out5[-400:])
+    blob = json.dumps(res, ensure_ascii=False)
+    check("12.6 #4 a file name that is not page-safe is no map of the tree — named by why, never by itself; a parent value is page-safe in a finding",
+          "bea@zorg" not in blob and "evil.example" not in blob and any(sk.get("reason") == "unsafe_name" for sk in res.get("skipped", []))
+          and orph.get("journey-k-hostile") == "no_parent", re.findall(r".{30}(?:bea@|evil\.).{20}", blob)[:3])
+    rc, out, _ = run("render-html", "--note", os.path.join(r1, "journey-first-order.md"), "--out", os.path.join(d, "r1.html"), "--lang", "uk")
+    check("12.7 #4 the page: no unsafe file name", rc == 0 and "bea@zorg" not in text(os.path.join(d, "r1.html")), out[-300:])
+    tail = node(res.get("tree") or {}, "journey-k-tail")
+    rc, out, res = run("nest", "--note", os.path.join(r1, "journey-loop-a.md"), "--json", timeout=20)
+    check("12.8 #6e a chain into a cycle ends: the ring named once, the tail hangs under its ring member",
+          rc == 0 and len(findings_of(res, "nest_cycle")) == 1
+          and [k.get("note") for k in (res.get("tree") or {}).get("children", [])] == ["journey-k-tail"], out[-400:])
+
+    # #2 (C4c): the chip carries the child's own numbers (R30) and, with children of its own, the whole subtree's (R27)
+    rc, out, res = run("nest", "--note", root, "--json")
+    pr = (node(res.get("tree") or {}, "journey-payment") or {}).get("rollup", {})
+    check("12.9 #2 payment's roll-up: its own pains (3) and, with its 3-D Secure, the subtree's (5); the critical ones too",
+          pr.get("pains_total") == 3 and (pr.get("subtree") or {}).get("pains_total") == 5
+          and (pr.get("subtree") or {}).get("critical") == 1 and (pr.get("subtree") or {}).get("maps") == 1, pr)
+    check("12.10 #2 a child with no child of its own carries no subtree line",
+          "subtree" not in ((node(res.get("tree") or {}, "journey-3ds") or {}).get("rollup") or {}), node(res.get("tree") or {}, "journey-3ds"))
+    page2 = os.path.join(d, "tree-sub.html")
+    run("render-html", "--note", root, "--out", page2, "--lang", "uk")
+    check("12.11 #2 the chip says it: «з дочірніми картами (1): болі 5»", "з дочірніми картами (1): болі 5" in grid_of(text(page2), 0), grid_of(text(page2), 0)[:300])
+
+    # #3: a page above that cannot be written never fails the child's refresh; each page in its own map's language
+    r3 = os.path.join(d, "r3")
+    shutil.copytree(nest, r3)
+    os.makedirs(os.path.join(r3, "journey-first-order.html"))          # a folder where the root's page would go
+    write(os.path.join(r3, "journey-payment.md"), text(pay).replace("| id | етап | крок | доріжка | текст | рівень | ціль | parent | код | джерело | клас | дата |",
+                                                                     "| id | stage | step | lane | text | level | target | parent | code | source | class | date |"))
+    snap3 = os.path.join(d, "snap3", "2026-11-23.md")
+    write(snap3, "---\ntype: cjm-health-check\nproduct: zorg\ndate: 2026-11-23\nhealth_score: 61\nstages:\n  - id: s1\n"
+                 "    metric: \"redirect -> code\"\n    value: \"93%\"\n    status: warning\n---\n")
+    rc, out, res = run("refresh", "--note", os.path.join(r3, "journey-3ds.md"), "--snapshot", snap3)
+    check("12.12 #3/#6c a grandchild's refresh re-renders both pages above it; one that cannot be written is named, the refresh ok",
+          rc == 0 and res.get("ok") is True and res.get("pages_above") == [os.path.join(r3, "journey-payment.html")]
+          and [f.get("page") for f in res.get("pages_above_failed", [])] == [os.path.join(r3, "journey-first-order.html")], out[-500:])
+    ph = text(os.path.join(r3, "journey-payment.html")) if os.path.exists(os.path.join(r3, "journey-payment.html")) else ""
+    check("12.13 #3 a page above in its own map's language (payment's headers are English) when --lang is not given",
+          'lang="en"' in ph and "Child maps" in ph, ph[:200])
+
+    # #6d: a file iCloud has not downloaded is never opened — counted in a folder, named when given
+    wrap = os.path.join(d, "dataless.py")
+    write(wrap, "import os, sys\nsys.path.insert(0, %r)\nimport ctx_index\n"
+                "ctx_index.is_dataless = lambda p: os.path.basename(p) == 'journey-shipping.md'\n"
+                "import journey_map\nsys.exit(journey_map.main(sys.argv[1:]))\n" % os.path.dirname(SCRIPT))
+    rc, out, res = run("nest", "--note", root, "--json", script=wrap)
+    check("12.14 #6d a dataless file in the folder: counted, never opened or attached", rc == 0 and res.get("undownloaded") == 1
+          and node(res.get("tree") or {}, "journey-shipping") is None, out[-300:])
+    rc, out, res = run("nest", "--note", root, "--map", os.path.join(nest, "journey-shipping.md"), "--json", script=wrap)
+    check("12.15 #6d a dataless file given by its path: named, never opened", rc == 0
+          and any(sk.get("reason") == "unreadable" and "iCloud" in sk.get("detail", "") for sk in res.get("skipped", [])), out[-300:])
+
+    # #7 nits: the subject is never `skipped`; render-html names no folder-wide finding count
+    sens = os.path.join(d, "sens")
+    shutil.copytree(nest, sens)
+    write(os.path.join(sens, "journey-payment.md"), text(pay).replace("type: cjm-journey\n", "type: cjm-journey\nsensitive: true\n"))
+    rc, out, res = run("nest", "--note", os.path.join(sens, "journey-payment.md"), "--json")
+    check("12.16 #7 the subject itself is never listed as skipped", rc == 0 and not any(sk.get("note") == "journey-payment.md" for sk in res.get("skipped", [])),
+          res.get("skipped"))
+    rc, out, res = run("render-html", "--note", os.path.join(fx, "journey-first-order.md"), "--out", os.path.join(d, "nf.html"))
+    check("12.17 #7 render-html carries no folder-wide nest_findings count", rc == 0 and "nest_findings" not in res, sorted(res))
+
+    # #6b/#6f: sharper mutants
+    for name, old, new, test in (
+            ("hc-only", 'if r["lane"] == "pain":', 'if r["lane"] == "pain" or _is_hc(r):',
+             lambda r: (node(r.get("tree") or {}, "journey-payment") or {}).get("rollup", {}).get("pains_total") != 3),
+            ("pm-rated", 'st = hc_status(r["text"]) if _is_hc(r) else None', 'st = hc_status(r["text"])',
+             lambda r: (node(r.get("tree") or {}, "journey-payment") or {}).get("rollup", {}).get("anomalies", {}).get("critical") != 1),
+            ("no-order", "        children[p].sort(key=place)", "        pass",
+             lambda r: [k.get("note") for k in (r.get("tree") or {}).get("children", [])] != ["journey-shipping", "journey-payment"])):
+        m = mutant(d, name, old, new)
+        if m is None:
+            check("M.%s the mutation's pattern is in journey_map.py" % name, False, old)
+            continue
+        rc, out, res = run("nest", "--note", root, "--json", script=m)
+        check("M.%s a mutant is caught" % name, rc != 0 or test(res), out[-300:])
 
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")

@@ -26,7 +26,7 @@ removal and secret hiding are note_table.py's, shared with story_map.py. Every c
 `JOURNEY_RESULT {json}` line. Stdlib only (Python 3.9). Exit 0; 2 for a wrong argument or a note or snapshot that does
 not read; 1 when a file cannot be written.
 """
-import argparse, datetime, json, os, re, sys, tempfile
+import argparse, datetime, json, os, re, sys, tempfile, unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -63,7 +63,7 @@ MODEL_FINDINGS = ("opportunity_no_story", "two_pains", "person_name")
 COMMANDS = ("parse", "check", "render-html", "health", "refresh", "tree", "board-layout", "board-state", "board-diff",
             "board-take", "nest", "schema")
 NEST_FINDINGS = ("orphan_child", "nest_cycle", "too_deep", "other_product_parent", "self_parent")
-ORPHAN_WHY = ("no_parent", "no_stage", "no_stage_in_parent", "no_step")       # why a child hangs on nothing (§14)
+ORPHAN_WHY = ("no_parent", "bad_parent", "no_stage", "no_stage_in_parent", "no_step")       # why a child hangs on nothing (§14)
 MAX_DEPTH = 3                                    # root → child → grandchild (R38); deeper is a reference by name only
 OUTCOME_TBD = "⚠️ TBD"
 REVIEW_DAYS, PAIN_DAYS, MIN_SOLUTIONS = 90, 182, 3
@@ -175,8 +175,47 @@ def load(path):
             "title": title, "product": nt.fm_scalar(fm, "product"), "journey": nt.fm_scalar(fm, "journey"),
             "owner": nt.fm_scalar(fm, "owner"), "reviewed": nt.fm_scalar(fm, "reviewed"), "stages": st, "health": hp,
             "rows": rows, "errors": errors, "type": nt.fm_scalar(fm, "type"),
-            "parent": nt.fm_scalar(fm, "parent"), "parent_stage": nt.fm_scalar(fm, "parent_stage"),
+            "parent": parent_field(fm)[0], "parent_bad": parent_field(fm)[1], "parent_stage": nt.fm_scalar(fm, "parent_stage"),
             "parent_step": nt.fm_scalar(fm, "parent_step")}
+
+
+NO_VALUE = ("", "null", "~", '""', "''")
+
+
+def parent_field(fm):
+    """(the `parent` value, why it does not read — or "") from a frontmatter (§14, C2a): a scalar, a wiki link written
+    with or without quotes (YAML reads `[[x]]` unquoted as a list), or Obsidian's list property of one item. Two or more
+    parents, or a value that is no name, are named (`bad_parent`), never read as no parent; `null` or `~` is none."""
+    m = re.search(r"^parent[ \t]*:[ \t]*(.*?)[ \t]*$", fm, re.M)
+    if not m:
+        return "", ""
+    raw = m.group(1)
+    if raw.split(" #")[0].strip().lower() in NO_VALUE:
+        items = []
+        for line in fm[m.end():].split("\n")[1:]:
+            it = re.match(r"^[ \t]+-[ \t]*(.*?)[ \t]*$", line)
+            if not it:
+                if line.strip() == "":
+                    continue
+                break
+            items.append(it.group(1).strip().strip("\"'").strip())
+        items = [i for i in items if i.lower() not in NO_VALUE]
+        if len(items) == 1:
+            return items[0], ""
+        return ("", "") if not items else ("", "%d parents — one map hangs under one" % len(items))
+    v = nt.fm_scalar(fm, "parent")
+    if v:
+        return v, ""
+    if re.match(r"^\[\[[^\[\]]+\]\]$", raw):            # an unquoted wiki link
+        return raw, ""
+    flow = re.match(r"^\[(.*)\]$", raw)
+    if flow:
+        items = [i.strip().strip("\"'").strip() for i in flow.group(1).split(",") if i.strip()]
+        if len(items) == 1:
+            return items[0], ""
+        if len(items) > 1:
+            return "", "%d parents — one map hangs under one" % len(items)
+    return "", "the value does not read as a map's name"
 
 
 def _public(r):
@@ -741,14 +780,14 @@ def _tree_parts(nest, lang):
             counter[0] += 1
             nid = "n%d" % counter[0]
             step = (" · %s «%s»" % (NL["step"], k["step"])) if k["step"] else ""
-            chips.setdefault(k["stage"], []).append(
+            chips.setdefault(k["stage"], []).append(                    # the parent's stage id: its own grid's key
                 '<div class="item chip" data-open="%s" role="button" tabindex="0"><div class="t">↳ «%s»%s</div>'
                 '<div class="m">%s · %s</div></div>' % (nid, esc(k["journey"]), esc(step), esc(k["note"] + ".md"),
                                                          esc(_rollup_words(k["rollup"], NL))))
             kn = maps[k["note"]]
             kchips, kbody = parts(k)
             body.append('<details class="child" id="%s"><summary>%s%s → «%s» · %s<span class="m"> · %s · %s</span></summary>' % (
-                nid, esc(k["stage"]), esc(step), esc(k["journey"]), esc(T["level"] % k["level"]), esc(k["note"] + ".md"),
+                nid, shown(k["stage"]), esc(step), esc(k["journey"]), esc(T["level"] % k["level"]), esc(k["note"] + ".md"),
                 esc(_rollup_words(k["rollup"], NL))))
             body.append('<p class="meta">%s: %s · %s · %s: %s · %s: %s</p>' % (
                 esc(L["note"]), esc(k["note"] + ".md"), shown(kn["product"]), esc(L["owner"]), shown(kn["owner"] or "⚠️"),
@@ -862,14 +901,14 @@ NEST_LABELS = {
            "critical": "критичних %d", "outcome": "результат", "health": "здоров'я", "no_snapshot": "немає знімка",
            "reviewed": "рев'ю", "step": "крок", "deeper": "глибше — лише посилання, рівень %d (too_deep)",
            "findings": "Знахідки вкладеності:", "skipped": "Пропущено", "ancestors": "Над нею: %s", "none": "дочірніх карт немає",
-           "level": "рівень"},
+           "level": "рівень", "subtree": "з дочірніми картами (%d): %s %d · %s %d"},
     "en": {"head": "Tree «%s» (%s) · level %d · child maps in the tree %d", "pains": "pains", "anomalies": "anomalies",
            "critical": "critical %d", "outcome": "outcome", "health": "health", "no_snapshot": "no snapshot",
            "reviewed": "reviewed", "step": "step", "deeper": "deeper — a reference only, level %d (too_deep)",
            "findings": "Findings of the nesting:", "skipped": "Skipped", "ancestors": "Above it: %s", "none": "no child maps",
-           "level": "level"},
+           "level": "level", "subtree": "with its child maps (%d): %s %d · %s %d"},
 }
-NEST_SKIPS = ("unreadable", "wrong_type", "sensitive", "duplicate")
+NEST_SKIPS = ("unreadable", "wrong_type", "sensitive", "duplicate", "unsafe_name")
 
 
 def link_name(value):
@@ -880,7 +919,18 @@ def link_name(value):
     if m:
         s = m.group(1).strip()
     s = s.replace("\\", "/").rsplit("/", 1)[-1].strip()
-    return s[:-3] if s.lower().endswith(".md") else s
+    return unicodedata.normalize("NFC", s[:-3] if s.lower().endswith(".md") else s)
+
+
+def name_key(name):
+    """A map's name as a link resolves it — Obsidian and the disk both ignore case and Unicode form (NFC/NFD)."""
+    return unicodedata.normalize("NFC", str(name or "")).casefold()
+
+
+def unsafe_name(name):
+    """Is a map's file name no fit for a page, a board key or a link — a link, a contact or a secret in it, or the
+    tree board's own separators « · » and «#»?"""
+    return nt.safe(name) != name or " · " in name or "#" in name or not name.strip()
 
 
 def _product_key(p):
@@ -909,8 +959,10 @@ def nest_maps(note_path, maps=(), dirs=()):
     counts = {"ignored": 0, "undownloaded": 0}
 
     def skip(path, reason, detail):
-        skipped.append({"note": os.path.basename(path), "reason": reason, "detail": detail})
-    for path, named in items:
+        skipped.append({"note": nt.safe(os.path.basename(path)), "reason": reason, "detail": detail})
+    keys = set()
+    for n_, (path, named) in enumerate(items):
+        subject = n_ == 0                            # the note asked about: never skipped — the command is about it
         try:
             st = os.stat(path)
             ident = (st.st_dev, st.st_ino)
@@ -940,18 +992,22 @@ def nest_maps(note_path, maps=(), dirs=()):
             else:
                 counts["ignored"] += 1
             continue
-        if ci.note_meta(path.replace(os.sep, "/"), raw)["sensitive"]:
+        name = unicodedata.normalize("NFC", os.path.splitext(os.path.basename(path))[0])
+        if not subject and ci.note_meta(path.replace(os.sep, "/"), raw)["sensitive"]:
             skip(path, "sensitive", "a sensitive note — never read into the tree")
+            continue
+        if not subject and unsafe_name(name):
+            skip(path, "unsafe_name", "a file name holding a link, a contact, a secret, « · » or «#» — rename the file to nest it")
             continue
         try:
             note = load(path)
         except Bad as e:
             skip(path, "unreadable", str(e))
             continue
-        name = os.path.splitext(os.path.basename(path))[0]
-        if name in out:
-            skip(path, "duplicate", "a second map named %s — the first is kept (a link is by name)" % name)
+        if name_key(name) in keys:
+            skip(path, "duplicate", "a second map named %s — the first is kept (a link is by name)" % nt.safe(name))
             continue
+        keys.add(name_key(name))
         out[name] = note
     return out, skipped, counts
 
@@ -963,21 +1019,27 @@ def nest_forest(maps):
     cycle is named once and broken: each map of it stands alone. A level counts from the top root; past MAX_DEPTH a
     map is too_deep — a reference by name only."""
     found, par = [], {}
+    fold = {name_key(n_): n_ for n_ in maps}
 
     def f(code, name, detail, **more):
-        found.append(dict({"finding": code, "note": name, "detail": detail}, **more))
+        found.append(dict({"finding": code, "note": nt.safe(name), "detail": detail}, **more))
     for name in sorted(maps):
         n = maps[name]
+        if n.get("parent_bad"):
+            f("orphan_child", name, "parent: %s" % n["parent_bad"], why="bad_parent", parent="")
+            continue
         p = link_name(n.get("parent"))
         if not p:
             continue
-        if p == name:
+        if name_key(p) == name_key(name):
             f("self_parent", name, "the map names itself as its parent")
             continue
-        pn = maps.get(p)
+        pn = maps.get(fold.get(name_key(p), ""))
         if pn is None:
-            f("orphan_child", name, "parent %s is no map found — renamed, deleted or not given" % p, why="no_parent", parent=p)
+            sp = nt.safe(p)
+            f("orphan_child", name, "parent %s is no map found — renamed, deleted or not given" % sp, why="no_parent", parent=sp)
             continue
+        p = fold[name_key(p)]
         a, b = _product_key(n["product"]), _product_key(pn["product"])
         if a and b and a != b:
             f("other_product_parent", name, "its parent %s is a map of another product — a nesting stays in one product" % p, parent=p)
@@ -1094,6 +1156,17 @@ def nest_node(name, maps, forest, lang, seen=None):
                                   "step": _norm(nt.safe(maps[c].get("parent_step")))})
         else:
             out["children"].append(nest_node(c, maps, forest, lang, seen))
+    if out["children"]:                              # R27: the child's numbers with its own children's (C4c)
+        sub, todo = {"maps": 0, "pains_total": out["rollup"]["pains_total"], "anomalies": out["rollup"]["anomalies"]["total"],
+                     "critical": out["rollup"]["anomalies"]["critical"]}, list(out["children"])
+        while todo:
+            k = todo.pop(0)
+            sub["maps"] += 1
+            sub["pains_total"] += k["rollup"]["pains_total"]
+            sub["anomalies"] += k["rollup"]["anomalies"]["total"]
+            sub["critical"] += k["rollup"]["anomalies"]["critical"]
+            todo += k["children"]
+        out["rollup"]["subtree"] = sub
     return out
 
 
@@ -1132,6 +1205,10 @@ def _rollup_words(ru, L):
     parts = [pains, anom, "%s: %s" % (L["outcome"], ru["outcome"]), health]
     if ru["reviewed"]:
         parts.append("%s %s" % (L["reviewed"], ru["reviewed"]))
+    sub = ru.get("subtree")
+    if sub:
+        parts.append(L["subtree"] % (sub["maps"], L["pains"], sub["pains_total"], L["anomalies"], sub["anomalies"])
+                     + (" (%s)" % (L["critical"] % sub["critical"]) if sub["critical"] else ""))
     return " · ".join(parts)
 
 
@@ -2090,8 +2167,7 @@ def cmd_render(args):
     result(ok=True, out=args.out, bytes=size, rows=len(live), not_shown=sum(1 for r in live if not page_worthy(r, declared)),
            stages=len(note["stages"]), health=len(note["health"]),
            children=_shown_count(nest["tree"]) if nest else 0, deeper=_deeper_of(nest["tree"]) if nest else [],
-           above=[a["note"] for a in nest["ancestors"]] if nest else [],
-           nest_findings=len(nest["forest"]["findings"]) if nest else 0, errors=note["errors"])
+           above=[a["note"] for a in nest["ancestors"]] if nest else [], errors=note["errors"])
     return 0
 
 
@@ -2153,17 +2229,23 @@ def cmd_refresh(args):
                    note_written=True, errors=note["errors"])
     try:
         _, nest = _render_to(load(args.note), out, lang)
-        above = []                                   # the pages of the maps above it show its roll-up: rendered again,
-        for a in (nest["ancestors"] if nest else []):    # beside each map's note, locally — never published (§10, §14)
-            an = nest["maps"][a["note"]]
-            page = os.path.splitext(an["path"])[0] + ".html"
-            _render_to(load(an["path"]), page, lang)
-            above.append(page)
-        if above:
-            summary["pages_above"] = above
-    except OSError as e:                             # the note is refreshed; only a page is not
+    except OSError as e:                             # the note is refreshed; only its page is not
         result(ok=False, error="the note is refreshed, the page cannot be written: %s" % (e.strerror or type(e).__name__), **summary)
         return 1
+    above, failed = [], []                           # the pages of the maps above it show its roll-up: rendered again,
+    for a in (nest["ancestors"] if nest else []):    # beside each map's note, locally — never published (§10, §14)
+        an = nest["maps"][a["note"]]
+        page = os.path.splitext(an["path"])[0] + ".html"
+        try:
+            note_a = load(an["path"])
+            _render_to(note_a, page, args.lang or note_a["lang"])     # each page in its own map's language
+            above.append(page)
+        except (OSError, Bad) as e:                  # one page above that cannot be written never fails the refresh
+            failed.append({"page": page, "error": getattr(e, "strerror", None) or str(e) or type(e).__name__})
+    if above:
+        summary["pages_above"] = above
+    if failed:
+        summary["pages_above_failed"] = failed
     result(ok=True, line=REFRESH.get(lang, REFRESH["en"])["line"], **summary)
     return 0
 
@@ -2257,7 +2339,7 @@ def tree_layout(nest, lang):
         for k in n["children"]:
             walk(k)
     walk(nest["tree"])
-    return {"blocks": blocks, "rollups": rollups, "references": refs, "nest_findings": len(nest["forest"]["findings"])}
+    return {"blocks": blocks, "rollups": rollups, "references": refs}
 
 
 def _write_json(path, data):

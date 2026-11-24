@@ -605,7 +605,7 @@ with tempfile.TemporaryDirectory() as d:
     order = [m["note"] for m in maps]
     i = order.index("journey-first-order.md") if "journey-first-order.md" in order else -1
     check("10.1 the children follow their parent in tree order (its stage order), each level deeper", rc == 0 and i >= 0
-          and order[i:i + 5] == ["journey-first-order.md", "journey-delivery.md", "journey-payment.md", "journey-3ds.md", "journey-3ds-retry.md"]
+          and order[i:i + 5] == ["journey-first-order.md", "journey-shipping.md", "journey-payment.md", "journey-3ds.md", "journey-3ds-retry.md"]
           and [m.get("nest", {}).get("level") for m in maps[i:i + 5]] == [1, 2, 2, 3, 4], order)
     fo = maps[i] if i >= 0 else {}
     check("10.2 the parent: «діти: 4 · уваги потребують 2» — its subtree, the ones with a reason of their own",
@@ -614,7 +614,7 @@ with tempfile.TemporaryDirectory() as d:
     check("10.3 each map's attention is its own — the parent raises none for its children, its health is its own",
           fo.get("attention") == [] and fo.get("health", {}).get("score") == 68
           and [a["reason"] for a in by.get("journey-payment.md", {}).get("attention", [])] == ["critical_anomaly"]
-          and [a["reason"] for a in by.get("journey-delivery.md", {}).get("attention", [])] == ["stale_review"], (fo.get("attention"), fo.get("health")))
+          and [a["reason"] for a in by.get("journey-shipping.md", {}).get("attention", [])] == ["stale_review"], (fo.get("attention"), fo.get("health")))
     check("10.4 a child names its parent; a map hanging on nothing is a root with its finding",
           by.get("journey-payment.md", {}).get("nest", {}).get("parent") == "journey-first-order"
           and by.get("journey-lost.md", {}).get("nest", {}).get("level") == 1
