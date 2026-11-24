@@ -43,7 +43,7 @@ The audience comes from the skill's own step — `design-bridge` Step 2, a repor
 | the user alone, or the audience is unknown | the host's surfaces in the user's account — the narrowest circle | corporate records |
 | people outside the company (`customer`) | «лише файл», marked as recommended | every other candidate, in the order above |
 
-**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — a registry record's, then the host's own — then «лише файл» (`journey-protocol.md` §11).
+**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — the host's own first, then a registry record's (since v4.10.0: the host's own tools need no account or paid plan of a board tool) — then «лише файл» (`journey-protocol.md` §11).
 
 **Already published** — the result's record (§5–§6) names a place → «нова версія» of that place comes first, before any new place.
 
@@ -59,6 +59,9 @@ One question in the user's language — a multi-choice one where the host can as
 - **A write the host gate does not see is still a write.** Before a Jira or Confluence write and before an Atlassian Artifacts publication, the skill's write checklist (`artifact-style-gate.md` → Host write gate) is part of this one message (`native-surfaces.md` §3, last bullet).
 - **A new version names its number** — the record's `version` plus one — and who will see it (§6).
 - **«Ні» or «лише файл» is final for the run**: the result stays as the file and the vault copy, and the question is not repeated in the same run.
+- **Two places of two keys in one question** (since v4.10.0, `journey-protocol.md` §14) — a child journey map inside a root already published: the root's new version (its key) and the child's own place (the child's key) are two separate answers of the one question, «обидва» a third; each place is published only when the answer names it — a bare «так» to a question with two places is asked again which, never taken for both.
+
+> «Карта «Оплата» входить у дерево «Перше замовлення», опубліковане як дашборд. Що оновити (внутрішні дані: рядки, метрики, болі карт)? 1) нову версію 3 дашборду «Перше замовлення» — бачиш лише ти; 2) окремий дашборд «Оплата», версія 1 — бачиш лише ти; 3) обидва; 4) лише файл.»
 - **A person's profile is never a candidate**, whatever the answer (`people-context-protocol.md`).
 - **A board in the team's root folder** of the board tool may be visible to the team's members by that team's settings — not measured yet, so the question says both («бачиш ти, а можливо — й учасники команди за її налаштуваннями») and the record keeps `unknown`; a board in a space the PM names is seen by that space's members (`shared`). The host's own board starts private — «бачиш лише ти, поки не поділишся», `private`.
 
@@ -76,7 +79,7 @@ python3 scripts/publications.py record --key <the result's key> [--note <the not
 |---|---|
 | `design-bridge` | `design-bridge/<product>/<deck slug>-<subtype>` — the deck's file name without its date |
 | `product-reporter` | `product-reporter/<product>/<mode>-<subject>-<period>` — the board, or the epic of `initiative-status`; `member-review` and `goal-report` keep no record (they name a person) |
-| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot; `cjm-research/<product>/journey-<slug>` for a journey map's dashboard and its boards (since v4.8.0), all in one question — one per journey, apart from the funnel's, the slug the note's (`journey-protocol.md` §7, §11); `cjm-research/<product>/portfolio` for the journey portfolio's dashboard (since v4.9.0) — recorded without `--note`: the portfolio has no note, so the key file alone records (`journey-protocol.md` §13) |
+| `cjm-research` | `cjm-research/<product>/<mode>-<period>` for the report, `cjm-research/<product>/funnel` for the funnel dashboard — one living dashboard per product, whatever run published the snapshot; `cjm-research/<product>/journey-<slug>` for a journey map's dashboard and its boards (since v4.8.0), all in one question — one per journey, apart from the funnel's, the slug the note's (`journey-protocol.md` §7, §11); a child map (since v4.10.0) under its own slug's key, never its root's — the root's tree page and tree board under the root's (`journey-protocol.md` §14); `cjm-research/<product>/portfolio` for the journey portfolio's dashboard (since v4.9.0) — recorded without `--note`: the portfolio has no note, so the key file alone records (`journey-protocol.md` §13) |
 | `focus-advisor` | none: the board keeps its record in its own state file, `~/.grow-pm/focus/board.yaml` (`--note`) |
 | `roadmap-architect` | `roadmap-architect/<product>/story-map-<slug>` — one key for the map's board and its progress dashboard, both in one question; the slug is the note's (`story-map-protocol.md` §4) |
 
