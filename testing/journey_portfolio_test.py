@@ -638,5 +638,20 @@ with tempfile.TemporaryDirectory() as d:
     check("10.8 a portfolio without nesting: every map a root, no ↳, no count", rc == 0
           and all(m.get("nest", {}).get("level") == 1 for m in res.get("maps", [])) and "↳" not in out and "діти:" not in out, out[:400])
 
+# 11. review 2 of v4.10.0 (frozen 49c226e): a map whose name differs only in letter case never takes a parent's children
+with tempfile.TemporaryDirectory() as d:
+    two = os.path.join(d, "two")
+    os.makedirs(two)
+    shutil.copy(os.path.join(NEST, "journey-first-order.md"), os.path.join(two, "Journey-First-Order.md"))
+    for dirs in ((NEST, two), (two, NEST)):
+        rc, out, res = run("list", "--product", "zorg", "--dir", *dirs, "--today", "2026-11-24", "--lang", "uk")
+        by = {m["note"]: m for m in res.get("maps", [])}
+        first = "journey-first-order.md" if dirs[0] == NEST else "Journey-First-Order.md"
+        other = "Journey-First-Order.md" if first == "journey-first-order.md" else "journey-first-order.md"
+        check("11.1 #6 one name in two folders (%s first): the children hang under the first only, as `nest` reads it" % first,
+              rc == 0 and by.get(first, {}).get("nest", {}).get("children") == 4 and by.get(other, {}).get("nest", {}).get("children") == 0
+              and by.get("journey-payment.md", {}).get("nest", {}).get("parent") == os.path.splitext(first)[0],
+              {k: by.get(k, {}).get("nest") for k in (first, other, "journey-payment.md")})
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

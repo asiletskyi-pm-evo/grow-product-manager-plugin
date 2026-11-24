@@ -115,11 +115,11 @@ def date_free(s):
     return re.sub(r"(Згенеровано|Generated): \d{4}-\d{2}-\d{2}", r"\1: DATE", s)
 
 
-def board_items(layout):
+def board_items(layout, base=0):
     """A board as the model would build it from a board-layout (one id per element, stable across reads): the title,
     the stage headers, a frame per cell, a sticky per row, and on a tree board each block's title and headers, the
     roll-up and reference stickies in their parents' cells. Each item: id, kind (frame | sticky | text), text, x, y."""
-    items, n = [], [0]
+    items, n = [], [base]
 
     def add(kind, text, x, y, cell=None):
         n[0] += 1
@@ -560,9 +560,9 @@ try:
     write(pay, pay0)
 
     # mutation: two boards' versions taken automatically
-    m = mutant(d, "auto-conflict", "        if len(hit) > 1:", "        if False:")
+    m = mutant(d, "auto-conflict", '            refuse_all = len(hit) > 1 or any(h.startswith("row:") for h in hit)', "            refuse_all = False")
     if m is None:
-        check("M.auto-conflict the mutation's pattern is in journey_map.py", False, "if len(hit) > 1:")
+        check("M.auto-conflict the mutation's pattern is in journey_map.py", False, "refuse_all = len(hit) > 1")
     else:
         rc, out, res = run("board-take", "--note", pay, "--diff", tdiff, odiff, "--take", t_pc1, o_pc1, "--dry-run", "--date", "2026-11-24", script=m)
         check("M.auto-conflict a take of both versions is caught by 3.17", not any(r.get("why") == "conflict" for r in res.get("refused", [])), out[-300:])
@@ -716,6 +716,200 @@ try:
     drift28("references/journey-protocol.md", "## 15. What never happens", "## 15. Never", "§15", "5.7 «What never happens» lost as §15 is named")
     drift28("skills/cjm-research/SKILL.md", "journey_map.py nest", "journey_map.py tree-of", "nest", "5.8 the skill's Step J without `nest` is named", count=-1)
     drift28("references/artifact-publishing.md", "**Two places of two keys in one question**", "**Two keys**", "Two places", "5.9 artifact-publishing without the two places in one question is named")
+
+    # 13. review 2 (opus, frozen 49c226e): each finding reproduced first
+    def pair(tag, surface, tree_edit, own_edit, before_tree=None, own_base=5000, mutate=None, align=None):
+        """A fresh copy of the tree; the root's tree board and payment's own board built and kept as states, then
+        edited and diffed. Miro ids are unique across boards (own_base); a host board's are not (own_base=0)."""
+        w = os.path.join(d, "pair-" + tag)
+        shutil.copytree(nest, w)
+        if mutate:
+            mutate(w)
+        rw, pw = os.path.join(w, "journey-first-order.md"), os.path.join(w, "journey-payment.md")
+        ext = "svg" if surface == "miro" else "json"
+        _, _, tl = run("board-layout", "--note", rw, "--lang", "uk", "--with-children")
+        _, _, ol = run("board-layout", "--note", pw, "--lang", "uk")
+        ti = board_items(tl)
+        if align:                                    # two host boards made apart number their elements alike: one row's
+            a_t = next(x["id"] for x in ti if x["kind"] == "sticky" and x["text"].startswith(align))     # sticky gets one id
+            a_o = next(x["id"] for x in board_items(ol) if x["kind"] == "sticky" and x["text"].startswith(align))
+            own_base = int(a_t) - int(a_o)
+        oi = board_items(ol, own_base)
+        if before_tree:
+            before_tree(ti)
+        ts, ost = os.path.join(w, "t.state.json"), os.path.join(w, "o.state.json")
+        run("board-state", "--read", board_read(ti, surface, os.path.join(w, "t-last." + ext)), "--note", rw, "--surface", surface,
+            "--out", ts, "--with-children")
+        run("board-state", "--read", board_read(oi, surface, os.path.join(w, "o-last." + ext)), "--note", pw, "--surface", surface, "--out", ost)
+        tn, on = [dict(x) for x in ti], [dict(x) for x in oi]
+        tree_edit(tn)
+        own_edit(on)
+        td, od = os.path.join(w, "t.diff.json"), os.path.join(w, "o.diff.json")
+        tnow = board_read(tn, surface, os.path.join(w, "t-now." + ext))
+        _, _, r1 = run("board-diff", "--last", ts, "--now", tnow, "--note", rw, "--out", td)
+        _, _, r2 = run("board-diff", "--last", ost, "--now", board_read(on, surface, os.path.join(w, "o-now." + ext)), "--note", pw, "--out", od)
+        E = lambda it: eid_of(surface, it["id"])  # noqa: E731
+        return {"w": w, "root": rw, "pay": pw, "td": td, "od": od, "ti": ti, "oi": oi, "tn": tn, "on": on, "E": E, "tdiff": r1,
+                "odiff": r2, "ts": ts, "tnow": tnow, "tlast": os.path.join(w, "t-last." + ext)}
+
+    def sticky(items, start):
+        return next(it for it in items if it["kind"] == "sticky" and it["text"].startswith(start))
+
+    def frame(items, title):
+        return next(it for it in items if it["kind"] == "frame" and it["text"] == title)
+
+    def set_text(start, new):
+        def f(items):
+            sticky(items, start)["text"] = new
+        return f
+    keep = lambda items: None  # noqa: E731
+
+    # #1 (high): `row:<id>` never gets past the conflict guard — in either diff order, alone or with an element
+    P = pair("row", "miro", set_text("Форма картки скидає", "Версія кореня"), set_text("Форма картки скидає", "Версія своєї дошки"))
+    t1, o1 = P["E"](sticky(P["tn"], "Версія кореня")), P["E"](sticky(P["on"], "Версія своєї дошки"))
+    for order in ((P["td"], P["od"]), (P["od"], P["td"])):
+        rc, out, res = run("board-take", "--note", P["pay"], "--diff", *order, "--take", "row:pc1", "--dry-run")
+        check("13.1 #1 `--take row:pc1` of a row changed on two boards is refused `conflict` (diff order %s)" % ("tree, own" if order[0] == P["td"] else "own, tree"),
+              rc == 0 and any(r["id"] == "row:pc1" and r["why"] == "conflict" for r in res.get("refused", []))
+              and not any(a.get("row") == "pc1" for a in res.get("applied", [])), (res.get("refused"), res.get("applied")))
+    rc, out, res = run("board-take", "--note", P["pay"], "--diff", P["td"], P["od"], "--take", "row:pc1", o1, "--dry-run")
+    check("13.2 #1 `row:pc1` with one version's element: both refused `conflict`, nothing applied to pc1",
+          sorted(r["why"] for r in res.get("refused", []) if r["id"] in ("row:pc1", o1)) == ["conflict", "conflict"]
+          and not any(a.get("row") == "pc1" for a in res.get("applied", [])), res.get("refused"))
+    rc, out, res = run("board-take", "--note", P["pay"], "--diff", P["td"], P["od"], "--take", t1, "--class", "%s=observed" % t1, "--dry-run")
+    check("13.3 #1 one version by its element: taken", any(a.get("row") == "pc1" and a.get("after") == "Версія кореня" for a in res.get("applied", [])),
+          res.get("applied"))
+
+    # #3: board-state keeps a tree state a tree, the flag forgotten
+    rc, out, res = run("board-state", "--read", P["tnow"], "--note", P["root"], "--surface", "miro", "--last", P["ts"],
+                       "--out", os.path.join(P["w"], "t2.state.json"))
+    check("13.4 #3 board-state with --last of a tree state and no --with-children: the tree kept, child rows still keyed",
+          rc == 0 and res.get("tree") == ["journey-shipping", "journey-payment", "journey-3ds"] and "journey-payment#pc2" in res.get("rows", {})
+          and res.get("roles", {}).get("rollup") == 4, out[-400:])
+
+    # #2: a roll-up whose child left the tree never comes back as a team row
+    def unlink(w):
+        pass
+    P2 = pair("stale", "miro", keep, keep)
+    sh = os.path.join(P2["w"], "journey-shipping.md")
+    write(sh, text(sh).replace("parent: journey-first-order\nparent_stage: s4\n", ""))
+    st2 = os.path.join(P2["w"], "t3.state.json")
+    rc, out, res = run("board-state", "--read", P2["tlast"], "--note", P2["root"], "--surface", "miro", "--last", P2["ts"], "--out", st2, "--with-children")
+    rid = P2["E"](sticky(P2["ti"], "↳ «Вибір доставки» · journey-shipping"))
+    stj = json.loads(text(st2)) if os.path.exists(st2) else {}
+    check("13.5 #2 the roll-up of a child that left the tree stays `rollup` in the re-kept state",
+          rc == 0 and (stj.get("elements", {}).get(rid) or {}).get("role") == "rollup", (stj.get("elements", {}).get(rid), out[-300:]))
+    rc, out, res = run("board-diff", "--last", st2, "--now", P2["tlast"], "--note", P2["root"])
+    check("13.6 #2 …and is never offered as a team addition", rc == 0 and res.get("added") == [], res.get("added"))
+
+    # #4: a child file name the tree board cannot parse is no map of the tree
+    c4 = os.path.join(d, "c4")
+    shutil.copytree(nest, c4)
+    os.rename(os.path.join(c4, "journey-shipping.md"), os.path.join(c4, "journey shipping.md"))
+    write(os.path.join(c4, "journey·x.md"), text(os.path.join(nest, "journey-shipping.md")).replace('journey: "Вибір доставки"', 'journey: "Ікс"'))
+    rc, out, res = run("nest", "--note", os.path.join(c4, "journey-first-order.md"), "--json")
+    check("13.7 #4 a file name with a space or «·» is skipped unsafe_name, never half-nested",
+          rc == 0 and sum(1 for sk in res.get("skipped", []) if sk.get("reason") == "unsafe_name") == 2
+          and [k.get("note") for k in (res.get("tree") or {}).get("children", [])] == ["journey-payment"], res.get("skipped"))
+
+    # #5: board-take finds the note by name as the tree does — any case, either Unicode form
+    def nfd_child(w):
+        n = unicodedata.normalize("NFD", "journey-край-оплати")
+        write(os.path.join(w, n + ".md"), text(os.path.join(nest, "journey-shipping.md")).replace("parent_stage: s4", "parent_stage: s3")
+              .replace('journey: "Вибір доставки"', 'journey: "Край оплати"'))
+    P5 = pair("nfd", "miro", keep, keep, mutate=nfd_child)
+    nfdp = os.path.join(P5["w"], unicodedata.normalize("NFD", "journey-край-оплати") + ".md")
+    rc, out, res = run("board-take", "--note", nfdp, "--diff", P5["td"], "--dry-run")
+    check("13.8 #5 a child stored NFD, passed by its real path: its tree board's diff is its own", rc == 0, out[-300:])
+    up = os.path.join(P5["w"], "JOURNEY-PAYMENT.md")
+    if os.path.exists(up):                           # a case-insensitive disk (APFS by default)
+        rc, out, res = run("board-take", "--note", up, "--diff", P5["td"], "--dry-run")
+        check("13.9 #5 a child passed in another letter case: its tree board's diff is its own", rc == 0, out[-300:])
+
+    # #7: a row removed on one board and changed on the other; the same sticky added on both boards
+    def drop_pc2(items):
+        items.remove(sticky(items, "Незрозуміло, чому картку відхилено"))
+    P7 = pair("rm", "miro", set_text("Незрозуміло, чому картку відхилено", "Незрозуміло, чому банк відхилив"), drop_pc2)
+    t7 = P7["E"](sticky(P7["tn"], "Незрозуміло, чому банк відхилив"))
+    rc, out, res = run("board-take", "--note", P7["pay"], "--diff", P7["td"], P7["od"], "--take", t7, "--drop", "pc2", "--dry-run")
+    check("13.10 #7 removed on one board, changed on the other: a conflict — the change and the drop both refused",
+          any(c.get("row") == "pc2" and c.get("what") == "removed" for c in res.get("conflicts", []))
+          and sorted(r["why"] for r in res.get("refused", []) if r["id"] in (t7, "pc2")) == ["conflict", "conflict"], (res.get("conflicts"), res.get("refused")))
+
+    def add_same(items):
+        items.append({"id": "%d" % (len(items) + 7000), "kind": "sticky", "text": "Немає Google Pay", "x": 10, "y": 360,
+                      "cell": frame(items, next(t for t in ("journey-payment · s2 · болі", "s2 · болі") if any(i["kind"] == "frame" and i["text"] == t for i in items)))["id"]})
+    P8 = pair("dup", "miro", add_same, add_same)
+    adds = [a["id"] for a in P8["tdiff"].get("added", [])] + [a["id"] for a in P8["odiff"].get("added", [])]
+    rc, out, res = run("board-take", "--note", P8["pay"], "--diff", P8["td"], P8["od"], "--take", *adds,
+                       "--class", *["%s=reported" % a for a in adds], "--dry-run")
+    check("13.11 #7 the same sticky added on both boards: one row, the second refused `taken`",
+          sum(1 for a in res.get("applied", []) if a.get("action") == "add") == 1 and any(r["why"] == "taken" for r in res.get("refused", [])),
+          (res.get("applied"), res.get("refused")))
+
+    # #8: two host boards — ids collide; moves; a loose text; a team sticky moved into a child's cell; an older raw --last
+    def move_to(start, title):
+        def f(items):
+            sticky(items, start)["cell"] = frame(items, title)["id"]
+        return f
+    PW = pair("wb", "whiteboard", set_text("Форма картки скидає", "Версія кореня"), set_text("Форма картки скидає", "Версія своєї дошки"),
+              align="Форма картки скидає")
+    ids = [c["id"] for c in PW["tdiff"].get("changed", [])] + [c["id"] for c in PW["odiff"].get("changed", [])]
+    rc, out, res = run("board-take", "--note", PW["pay"], "--diff", PW["td"], PW["od"], "--take", ids[0], "--dry-run")
+    vids = sorted(v["id"] for c in res.get("conflicts", []) for v in c["versions"])
+    check("13.12 #8 two host boards whose ids collide: the versions prefixed by their diff, the bare id refused",
+          len(set(ids)) == 1 and vids == ["1:%s" % ids[0], "2:%s" % ids[0]]
+          and any(r["id"] == ids[0] and r["why"] == "unknown" for r in res.get("refused", [])), (ids, vids, res.get("refused")))
+    PM = pair("mv", "miro", move_to("Форма картки скидає", "journey-payment · s3 · болі"), move_to("Форма картки скидає", "s1 · болі"))
+    rc, out, res = run("board-take", "--note", PM["pay"], "--diff", PM["td"], PM["od"], "--dry-run")
+    check("13.13 #8 one row moved to two different cells on two boards: a conflict of `cell`",
+          any(c.get("row") == "pc1" and c.get("what") == "cell" for c in res.get("conflicts", [])), res.get("conflicts"))
+
+    def loose(items):
+        items.append({"id": "8800", "kind": "text", "text": "↳ «Оплата» · journey-payment — примітка команди", "x": 4000, "y": 40})
+    PL = pair("loose", "miro", loose, keep)
+    check("13.14 #8 a loose text that starts like a roll-up is `other`, never the plugin's",
+          any(o.get("id") == "8800" and o.get("change") == "added" for o in PL["tdiff"].get("other", []))
+          and not any(u.get("id") == "8800" for u in PL["tdiff"].get("unrecorded", [])), (PL["tdiff"].get("other"), PL["tdiff"].get("unrecorded")))
+
+    def team_note(items):
+        items.append({"id": "8900", "kind": "sticky", "text": "Командна нотатка про оплату", "x": 10, "y": 360, "cell": frame(items, "s5 · болі")["id"]})
+    PT = pair("tm", "miro", move_to("Командна нотатка про оплату", "journey-payment · s2 · болі"), keep, before_tree=team_note)
+    rc, out, res = run("board-take", "--note", PT["pay"], "--diff", PT["td"], "--take", "8900", "--class", "8900=reported", "--dry-run")
+    check("13.15 #8 a team sticky moved from a root cell into a child's cell is the child's — by where it is now",
+          rc == 0 and any(a.get("action") == "add" and a.get("cell") == "s2 · болі" for a in res.get("applied", [])), (res.get("applied"), res.get("refused")))
+    rc, out, res = run("board-diff", "--last", P["tlast"], "--now", P["tnow"], "--note", P["root"], "--with-children")
+    check("13.16 #8 an older raw read as --last of a tree board: its roles by the tree",
+          rc == 0 and any(c.get("row") == "journey-payment#pc1" for c in res.get("changed", [])), res.get("changed"))
+
+    # #9 nit: a map without children keeps its result lines; the root's own name page-safe in the chat fields
+    plain_ = os.path.join(d, "plain")
+    os.makedirs(plain_)
+    shutil.copy(os.path.join(fx, "journey-first-order.md"), plain_)
+    pn = os.path.join(plain_, "journey-first-order.md")
+    rc, out, res = run("render-html", "--note", pn, "--out", os.path.join(plain_, "p.html"))
+    check("13.17 #9 render-html of a map without children: no nesting keys", rc == 0 and not ({"children", "deeper", "above"} & set(res)), sorted(res))
+
+    # mutants that stayed green in review 2
+    for name, old, new, cmd, test in (
+            ("no-prefix", '                    e["id"] = "%d:%s" % (i, e["id"])', '                    pass',
+             lambda m: run("board-take", "--note", PW["pay"], "--diff", PW["td"], PW["od"], "--take", ids[0], "--dry-run", script=m),
+             lambda r: not any(rr["why"] == "unknown" for rr in r.get("refused", []))),
+            ("no-move-conflict", '    for cat, what in (("changed", "text"), ("moved", "cell")):', '    for cat, what in (("changed", "text"),):',
+             lambda m: run("board-take", "--note", PM["pay"], "--diff", PM["td"], PM["od"], "--dry-run", script=m),
+             lambda r: not any(c.get("what") == "cell" for c in r.get("conflicts", []))),
+            ("no-rerole", "        last, _, _ = load_board_state(args.last, note, args.surface)   # an older read: its roles by the tree", "        pass",
+             lambda m: run("board-diff", "--last", P["tlast"], "--now", P["tnow"], "--note", P["root"], "--with-children", script=m),
+             lambda r: not any(c.get("row") == "journey-payment#pc1" for c in r.get("changed", []))),
+            ("rollup-any-kind", 'marks and it["kind"] == "sticky" and t.lower().startswith(marks)', 'marks and t.lower().startswith(marks)',
+             lambda m: run("board-diff", "--last", os.path.join(PL["w"], "t.state.json"), "--now", os.path.join(PL["w"], "t-now.svg"), "--note", PL["root"], script=m),
+             lambda r: not any(o.get("id") == "8800" for o in r.get("other", [])))):
+        m = mutant(d, name, old, new)
+        if m is None:
+            check("M.%s the mutation's pattern is in journey_map.py" % name, False, old)
+            continue
+        rc, out, res = cmd(m)
+        check("M.%s a mutant is caught" % name, test(res), out[-300:])
 
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")

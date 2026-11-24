@@ -342,7 +342,9 @@ def collect(paths, dirs, product, today, snapshots, lang):
                 skipped.append({"note": name, "reason": "unreadable", "detail": str(e)})
                 continue
             maps.append(map_row(note, today, newest(note["product"])))     # its own product's, as `check` reads it
-            notes.setdefault(os.path.splitext(name)[0], note)
+            stem = jm.unicodedata.normalize("NFC", os.path.splitext(name)[0])
+            if all(jm.name_key(k) != jm.name_key(stem) for k in notes):    # one map per name, the first — as `nest` reads
+                notes[stem] = note
             continue
         c = read_cjm(path, fm, body, lang)
         if c is None:
@@ -371,11 +373,11 @@ def tree_order(maps, notes, key):
             found.setdefault(n, f["finding"])
     rows = {}
     for m in maps:
-        n = os.path.splitext(m["note"])[0]
+        n = jm.unicodedata.normalize("NFC", os.path.splitext(m["note"])[0])
         if n in notes and notes[n]["path"] == m["path"]:
             rows[n] = m
     for m in maps:
-        n = os.path.splitext(m["note"])[0]
+        n = jm.unicodedata.normalize("NFC", os.path.splitext(m["note"])[0])
         m["nest"] = {"parent": par.get(n, "") if rows.get(n) is m else "", "level": level.get(n, 1) if rows.get(n) is m else 1,
                      "children": 0, "children_attention": 0, "finding": found.get(n, "") if rows.get(n) is m else ""}
 
@@ -396,7 +398,7 @@ def tree_order(maps, notes, key):
     out = []
     for m in roots:
         out.append(m)
-        n = os.path.splitext(m["note"])[0]
+        n = jm.unicodedata.normalize("NFC", os.path.splitext(m["note"])[0])
         if rows.get(n) is m:
             out += under(n, {n})
     return out
