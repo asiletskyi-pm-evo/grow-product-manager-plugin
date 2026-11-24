@@ -685,6 +685,38 @@ try:
         rc, out, res = run("nest", "--note", root, "--json", script=m)
         check("M.%s a mutant is caught" % name, rc != 0 or test(res), out[-300:])
 
+    # 5. validate check 28 (C13): §14's findings, why codes and depth, the `nest` command, the skill's Step J naming the
+    #    child, artifact-publishing's two places in one question, §15 — no new check
+    r28 = os.path.join(d, "root28")
+    for rel in ("references/journey-protocol.md", "references/vault-schema.md", "references/artifact-publishing.md",
+                "skills/cjm-research/SKILL.md", "references/vault-protocol.md", "skills/cjm-research/references/cjm-reports.md"):
+        os.makedirs(os.path.dirname(os.path.join(r28, rel)), exist_ok=True)
+        shutil.copy(os.path.join(ROOT, rel), os.path.join(r28, rel))
+    e28 = jm.check_protocol(r28)
+    check("5.1 check 28 is clean on the tree", e28 == [], e28)
+    rc, out, res = run("schema")
+    check("5.2 schema prints the nesting's fields, findings, why codes and depth", res.get("nest_findings") == list(jm.NEST_FINDINGS)
+          and res.get("orphan_why") == list(jm.ORPHAN_WHY) and res.get("max_depth") == 3
+          and res.get("nest_fields") == ["parent", "parent_stage", "parent_step"], out[-300:])
+
+    def drift28(rel, old, new, expect, name, count=1):
+        p_ = os.path.join(r28, rel)
+        t0 = text(p_)
+        if old not in t0:
+            check(name, False, "pattern not in %s" % rel)
+            return
+        write(p_, t0.replace(old, new, count))
+        e = jm.check_protocol(r28)
+        write(p_, t0)
+        check(name, any(expect in x for x in e), e)
+    drift28("references/journey-protocol.md", "| `nest_cycle` | maps hang", "| `nest_ring` | maps hang", "§14", "5.3 a finding §14 renames is named")
+    drift28("references/journey-protocol.md", "| `no_stage_in_parent` | the parent", "| `stage_missing` | the parent", "§14", "5.4 a why code that drifts is named")
+    drift28("references/journey-protocol.md", "three levels at most", "four levels at most", "three levels", "5.5 a depth the protocol changes alone is named")
+    drift28("references/journey-protocol.md", "## 14. Nested maps", "## 14. Trees", "§14", "5.6 a protocol without its §14 «Nested maps» is named")
+    drift28("references/journey-protocol.md", "## 15. What never happens", "## 15. Never", "§15", "5.7 «What never happens» lost as §15 is named")
+    drift28("skills/cjm-research/SKILL.md", "journey_map.py nest", "journey_map.py tree-of", "nest", "5.8 the skill's Step J without `nest` is named", count=-1)
+    drift28("references/artifact-publishing.md", "**Two places of two keys in one question**", "**Two keys**", "Two places", "5.9 artifact-publishing without the two places in one question is named")
+
     # 9. regression — a map without children behaves as in v4.9.0 (the goldens of 332d1a5)
     main = os.path.join(fx, "journey-first-order.md")
     rc, out, res = run("render-html", "--note", main, "--out", os.path.join(d, "p-uk.html"), "--lang", "uk")

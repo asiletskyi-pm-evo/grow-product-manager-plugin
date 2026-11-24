@@ -1,14 +1,14 @@
 # journey-protocol.md
 
-> Shared reference (since v4.7.0). The journey map: one journey of a product, its stages from the CJM config, and on each stage the lanes of what the customer does and feels, where it hurts with evidence, what the numbers say, and what the team does about it — each row with its source and its evidence class. The procedure of `cjm-research` mode `journey` (Step J); the scheduled health-check refreshes the map's numbers locally (§10); since v4.8.0 the team edits the map on a board (§11–§12); since v4.9.0 the portfolio lists every journey map of the product and its hand CJM notes in one place (§13).
+> Shared reference (since v4.7.0). The journey map: one journey of a product, its stages from the CJM config, and on each stage the lanes of what the customer does and feels, where it hurts with evidence, what the numbers say, and what the team does about it — each row with its source and its evidence class. The procedure of `cjm-research` mode `journey` (Step J); the scheduled health-check refreshes the map's numbers locally (§10); since v4.8.0 the team edits the map on a board (§11–§12); since v4.9.0 the portfolio lists every journey map of the product and its hand CJM notes in one place (§13); since v4.10.0 a step of a map may open a child map of its own — the tree (§14).
 >
-> **Rule of the file:** the note in the vault is the source of truth (`native-surfaces.md` §2). The dashboard and the board are renders of it, published only through `artifact-publishing.md` after its question; a scheduled run never publishes; what the team changes on the board comes back only through §12, never the health-check rows. The portfolio (§13) is one more render of the notes, computed every time — no portfolio note, no board — and a hand CJM note is only read, never changed. Nothing on the map is invented: a row without a source or a class is a finding, a stage without evidence stays a gap `⚠️`, `simulated` input never becomes a pain, and the health score is read only from a snapshot's frontmatter. The map writes nothing to Jira and never names a person.
+> **Rule of the file:** the note in the vault is the source of truth (`native-surfaces.md` §2). The dashboard and the board are renders of it, published only through `artifact-publishing.md` after its question; a scheduled run never publishes; what the team changes on the board comes back only through §12, never the health-check rows. The portfolio (§13) is one more render of the notes, computed every time — no portfolio note, no board — and a hand CJM note is only read, never changed. Nothing on the map is invented: a row without a source or a class is a finding, a stage without evidence stays a gap `⚠️`, `simulated` input never becomes a pain, and the health score is read only from a snapshot's frontmatter. A child map's rows live in its own note only: the parent shows the child's roll-up, never a copy of a row, and the nesting writes nothing to any note (§14). The map writes nothing to Jira and never names a person.
 
 ## 1. The model
 
 - **The journey** — one funnel of the product (the CJM config's) or one named journey inside it («повторне замовлення»). One note per journey.
 - **Stages** — in the order of the CJM config's funnel stages (`local-context.md` → CJM Configuration). A stage's id is `s<n>`, `n` its number in the config's stage table, so a health-check snapshot names the same stage by the same id (§10). The PM may add a stage of their own in the note (a new id: `s3a`, `home`); the script checks that every stage a row uses is declared (`undeclared_stage`, §6). A mismatch between the config's stages and a stage list kept elsewhere is the PM's to settle — in the note or in the config (`plugin-configurator`).
-- **Steps** — an optional column: a smaller action inside a stage, where evidence most often attaches. Nested journeys (a step that opens a journey of its own) are v4.10.0's, not this release's.
+- **Steps** — an optional column: a smaller action inside a stage, where evidence most often attaches. Since v4.10.0 a step — or a whole stage — may open a journey map of its own, a child map with its own stages, lanes and evidence (§14).
 - **No dates on the map** except the dates of the evidence and of the review.
 
 ## 2. The lanes
@@ -115,7 +115,7 @@ Checked when the map is built (Step J2) and on every refresh. The structural che
 
 ## 7. The note
 
-`type: cjm-journey`, saved to `CJM/journeys/{product}/` by the vault save (`vault-schema.md`); without a vault, a file in the workspace (`persistent-storage.md`). The file name is `journey-<slug>`, the slug from the journey's name («checkout»), and it never changes — the publication key is built from it (§9). A later run updates the same note in place: its table, its sections and the fields the skill owns, never the fields other writers own — `published` (`publications.py`), `health` (`journey_map.py`), `created`, `related` stay as they are (`vault-protocol.md`).
+`type: cjm-journey`, saved to `CJM/journeys/{product}/` by the vault save (`vault-schema.md`); without a vault, a file in the workspace (`persistent-storage.md`). The file name is `journey-<slug>`, the slug from the journey's name («checkout»), and it never changes — the publication key is built from it (§9), and a child map names its parent by it (§14). A later run updates the same note in place: its table, its sections and the fields the skill owns, never the fields other writers own — `published` (`publications.py`), `health` (`journey_map.py`), `created`, `related` stay as they are (`vault-protocol.md`).
 
 **Frontmatter** — the journey's own fields, next to the vault's usual ones:
 
@@ -182,18 +182,18 @@ Then two sections the skill writes and the PM may edit: **«Здоров'я»** 
 |---|---|
 | `parse --note P` | the stages, the rows by stage and lane, the gap rows, each stage's tree — plus the structural errors of the table |
 | `check --note P [--snapshots D] [--today D]` | the script's findings of §6, each with its row or stage |
-| `render-html --note P --out F [--lang uk\|en]` | the page below |
+| `render-html --note P --out F [--lang uk\|en] [--map N …] [--dir D …]` | the page below — with the map's child maps when it has any (§14): the note's own folder, or the maps and folders named |
 | `health --note P --snapshots D` | the `health` field from the snapshots' frontmatter (§8) |
-| `refresh --note P --snapshot S [--out F] [--lang uk\|en]` | the scheduled refresh of §10 — the language of the note's headers when `--lang` is not given |
+| `refresh --note P --snapshot S [--out F] [--lang uk\|en]` | the scheduled refresh of §10 — the language of the note's headers when `--lang` is not given; the pages of the maps above a child rendered again (§14) |
 | `tree --stage S --note P [--out F]` | the stage's opportunity tree as Mermaid text (also into `F`), and `few_solutions` when its target has fewer than three solutions |
-| `board-layout --note P [--lang uk\|en]` | the board's grid (§11): the stages with their outcome, the lanes, a cell per lane of every stage with its rows' board text and second line, the cell titles to read back, the rows the board leaves out |
-| `board-state --read R… --note P --surface miro\|whiteboard [--last S] --out F` | the board read back, kept as its state (§12): every element and its role |
-| `board-diff --last L [--now N…] --note P [--surface miro\|whiteboard] [--out F]` | what the team did on the board since the state (§12), by element id; without `--now` the ids, the rows and the area to read back; without `--last` (or its file) the state is `unknown` |
-| `board-take --note P --diff D --take <id…> [--class <id>=<class> …] [--parent <id>=<id> …] [--drop <row id> …] [--date D] [--dry-run]` | what the PM took into the note (§12) — every other byte kept; `--dry-run` is the preview |
+| `board-layout --note P [--lang uk\|en] [--with-children] [--map N …] [--dir D …]` | the board's grid (§11): the stages with their outcome, the lanes, a cell per lane of every stage with its rows' board text and second line, the cell titles to read back, the rows the board leaves out; with `--with-children` the tree board (§14) |
+| `board-state --read R… --note P --surface miro\|whiteboard [--last S] --out F [--with-children] [--map N …] [--dir D …]` | the board read back, kept as its state (§12): every element and its role; a tree board's state remembers its children (§14) |
+| `board-diff --last L [--now N…] --note P [--surface miro\|whiteboard] [--out F] [--with-children] [--map N …] [--dir D …]` | what the team did on the board since the state (§12), by element id; without `--now` the ids, the rows and the area to read back; without `--last` (or its file) the state is `unknown`; a tree board as its state says (§14) |
+| `board-take --note P --diff D… --take <id…> [--class <id>=<class> …] [--parent <id>=<id> …] [--drop <row id> …] [--date D] [--dry-run]` | what the PM took into the note (§12) — every other byte kept; `--dry-run` is the preview; one diff per board — the note's own and a tree board it is a child on, in one preview (§14) |
 | `nest --note P [--map N …] [--dir D …] [--lang uk\|en] [--json]` | the map's subtree of child maps with each child's roll-up, and the findings of the nesting (§14) — nothing written; without `--json` the tree for the chat first |
 | `schema` | the fields, columns, lanes, levels, findings and commands this file must agree with (`validate-consistency.sh` check 28) |
 
-**The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; since v4.8.0 the stage headers and the lane names stay in view while the grid scrolls in its own frame, and the grid pans with the mouse held down (one fixed inline script — no data of the note in it, no request); editing stays on the boards (§11–§12); each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note.
+**The page** — `render-html`: one self-contained HTML page — the grid of stages across and lanes down, each stage with its outcome; since v4.8.0 the stage headers and the lane names stay in view while the grid scrolls in its own frame, and the grid pans with the mouse held down (one fixed inline script — no data of the note in it, no request); editing stays on the boards (§11–§12); each row's text with its source, class and date; the health trend as an inline SVG sparkline with each point's date, score and snapshot; the note's name, the owner, the review date and the date of the page at the top. **Only what the map may show:** a row without a source, an evidence row whose class its lane does not take (a simulated pain) or whose date is missing, and a row off the declared stages or the ten lanes are left out — the page says how many, the note's findings name them; a stage with no evidence shows its gap. No external request, no link (codes only), every text escaped, a person's e-mail or phone and a string holding a secret hidden, light theme. Always written next to the note. Since v4.10.0 a map with child maps (or above one, or a reference past the depth) gets the tree page of §14; a map with none of them renders exactly as before.
 
 **Publication** — through `artifact-publishing.md`, never around it. The kind is `dashboard`, and since v4.8.0 a board is the second place of the same question (§11); the key `cjm-research/<product>/journey-<slug>` — one dashboard and its boards per journey, apart from the funnel's `cjm-research/<product>/funnel`. `publications.py find --key <key> --note <note>` runs first; a place found is offered as «нова версія N». The question names each candidate, what goes (internal data: the map's rows, metrics, pains) and who can open it; «лише файл» is always one answer, and «ні» or «лише файл» is final for the run. After each place: `publications.py record --key <key> --note <note> --surface <surface> --kind dashboard …` (a board: §11). Sharing — to named people only, a separate question after the publication (`artifact-publishing.md` §7). The page is a snapshot with its date on every surface.
 
@@ -207,7 +207,7 @@ When the product has a journey note in the vault, the automated health-check (`c
 - **Replaced** — a `metric` or `anomaly` row with the id whose source starts with `health-check`: its text, source, class and date; every other cell the PM wrote (step, level, target, parent, code, a column of their own) stays. **Added** — a new id gets a row after its stage's last row, a metric at level `transition` (a funnel stage's metric is the conversion to the next stage). **Removed** — a health-check anomaly row `a-<stage>-…` of a stage the snapshot covers that the snapshot no longer has (it resolved).
 - **Kept and named** — a row with the id but another source or lane, and an id that appears twice; every other row, and every other byte of the note, stays as it was.
 - **Never backwards** — a snapshot older than the map's health-check rows is refused, the note untouched.
-- The `health` field gets the snapshot's point (§8), and the page is rendered again next to the note.
+- The `health` field gets the snapshot's point (§8), and the page is rendered again next to the note. When the map is a child (§14), the pages of the maps above it are rendered again beside their notes too — their notes never written, a page that cannot be written named (`pages_above_failed`), never a failed refresh.
 
 It never publishes, asks nothing and never reads or updates a board (§11). After the maps it re-renders the portfolio's page locally (§13), and the health-check's one end line names both: «Новий health-check від <дата>, карти шляху й портфель оновлено локально — опублікувати можна в наступному прогоні.» The next interactive run offers the publication with its question (§9).
 
@@ -224,6 +224,7 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 - **The record** after each board: `publications.py record --key <key> --note <note> --kind board --surface miro --id <board id> --url <link> --audience unknown`, or `--kind board --surface artifact --level typed … --audience private`; the audience on the first record only — a new version keeps it.
 - **The state** — after each board publication the skill reads the board back (§12) and keeps it: `journey_map.py board-state --read <reads> --note <note> --surface miro|whiteboard [--last <the previous state>] --out ~/.grow-pm/journey-maps/<product>/journey-<slug>.<surface>.board.json`, `<surface>` the record's (`miro`, `artifact`); `--last` every time there is a previous state — a new version, a take, a rebuilt state — so a sticky keeps its row by its element id. The board's texts are internal data: the state stays on this machine, like the vault.
 - **A new version** of a board is an update of the same board by element ids — each row's sticky by the id its state names, a row without one as a new sticky — after §12; never a new board unless the PM chooses one there.
+- **A tree board** (since v4.10.0, §14) — `board-layout --with-children`: below the map's grid, a block per child map the page shows, depth first, its cells titled `<child> · <stage id> · <lane>` and its rows keyed `<child>#<row id>`; in the parent's cell `<stage> · дії` a roll-up sticky with the child's numbers (its own colour), on Miro linked to the child's first cell (`link_to`), on the host's board naming the child — the type links only to http(s) pages, never to an element of the same board (measured 2026-11-24); past three levels a reference sticky, no grid, no link. `board-state` and `board-diff` with `--with-children` read it; its state is the root's key's, one per surface, and remembers its children.
 - **No board tool in the session** → the dashboard and the file, and once per run the registry's one line (`tool-registry.md` §4: `tools_scan.py suggest --skill cjm-research --need board`). **Without SHELL** — the note only, and the one line of §9.
 
 ## 12. What the team changed on the board — only through a question
@@ -293,6 +294,7 @@ The board is one more render of the note (since v4.8.0): the team reads and edit
 | `unused` | named | a `--class` or `--parent` key that matches no taken element or new row |
 
   A changed text goes into its row (a second line that is the row's own code or «health-check» is not part of it; an initiative's epic or feature code, or an experiment's registry id, on its own second line goes into `код` — a second line that is no code stays in the text, never read as one); a moved row takes its new stage and lane, every other cell kept; an added sticky becomes a new row `b<n>` — numbered in the diff's order, so the preview and the take give an element the same id — after its stage's last row, its source `дошка команди <date>` (`team board <date>` in an English note), its date the board's, its class the PM's (`--class` keyed by the element's id or by the new row's id the preview shows). One element taken twice is one row.
+- **Two boards, one preview** (since v4.10.0, §14) — a child map's row may stand on two boards: the root's tree board (`<child>#<row id>`) and the child's own (`<row id>`). `board-diff` runs per board; `board-take --note <child> --diff <the root board's> <the child's own>` makes one preview for the child: each diff's entries of this note made plain, another map's entries refused `other_note` (taken only into the note they live in), an element id two diffs share prefixed `<n>:`. A row changed differently on the two boards is listed in `conflicts` with both versions: the PM takes one or none — both taken are refused `conflict`, and nothing is ever picked for the PM. The take writes the child's note alone.
 - **Health-check rows** never come back from the board: their edits are named in the question, and the board's next version gives them back the note's text — the question says so.
 - **Never a deletion of what the team added.** Any deletion from the board — an orphaned sticky included — is one item at a time, after its own «так».
 - **No state** (another machine, a lost folder, a read-back that failed) → the skill first reads the board back — the record's board, its cells found by their titles (the board tool's own search, or the host's board listed whole) — and rebuilds the state with `board-state`; then «Не можу сказати, що змінилось на дошці»: the question names the rows it could not find (`unmapped_rows` — they would become new stickies) and has one more answer, «показати, що на дошці». Without a read-back no new version is offered — only «нова дошка», «показати, що на дошці» or «ні».
@@ -329,7 +331,7 @@ Every journey map of a product and its hand CJM notes in one list (since v4.9.0,
 | `published` | `опубліковано` | the places and versions of its `published` mirror — never a link or an id |
 | `attention` | `увага` | the reasons below |
 
-**What needs attention** — a map with any reason stands first, the maps with more reasons above, then by name; the rest by name; the hand CJM notes in a block of their own after the maps, by name:
+**What needs attention** — a map with any reason stands first, the maps with more reasons above, then by name; the rest by name; the hand CJM notes in a block of their own after the maps, by name. Since v4.10.0 the order is a tree (§14): the roots in that order, each followed by its child maps in the parent's stage order, indented with `↳` by level; a parent shows «діти: N · уваги потребують M» — the maps under it at any depth and how many of them have a reason of their own; a map's reasons and health are its own, never raised or lowered by its children:
 
 | Reason | Ukrainian label | When |
 |---|---|---|
@@ -376,9 +378,51 @@ Never read: links, dashboards, modules, owners, teams, missions, meetings or any
 
 **Without SHELL** — the model builds the chat table from the notes it can read, by the rules above, and says in one line that the page, the dashboard and the context index need a shell.
 
-## 14. What never happens
+## 14. Nested maps
 
-- A nested journey (v4.10.0) or editing on the page (v4.11.0) in this release; a portfolio note or a portfolio board.
+Since v4.10.0 (R27, R30, R31, R38): a step of a map — «Оплата» in «Перше замовлення» — opens a child map («Оплата»), and that one a grandchild («3-D Secure»). The parent shows each child's roll-up on its step; the root shows the whole tree on its page and its board; a child may also be published on its own.
+
+**The link lives in the child.** Three fields of the child's frontmatter (§7): `parent` — the parent's file name `journey-<slug>` (also read as a wiki link `[[journey-<slug>]]`, quoted or not, or Obsidian's list property of one); `parent_stage` — the parent's stage id; `parent_step` — optional, the step as the parent's rows write it; without it the child hangs on the stage. The parent stores nothing: its children are found among the product's maps every time — the notes `ctx.py search --type cjm-journey --product <product> --json` gives, else the maps' folder. A name resolves as Obsidian and the disk resolve it: any case, either Unicode form. A hand CJM note (`type: cjm`) never nests. One product: a nesting never crosses products.
+
+**`journey_map.py nest --note <map>`** computes the map's subtree and prints it for the chat (`--json`: the result line alone); it writes nothing. A map attaches only when every part of its link holds; anything else is a finding of the script — a proposal, never a block:
+
+| Finding | What | Proposal |
+|---|---|---|
+| `orphan_child` | the map hangs on nothing: why below | fix the link — the parent's name, its stage, its step |
+| `nest_cycle` | maps hang under each other in a ring — named once, each stands alone | break the ring in one `parent` |
+| `too_deep` | a map below three levels — shown by a reference only, never its grid (R38) | hang it higher, or keep it a map of its own |
+| `other_product_parent` | the parent is another product's map | a parent of the same product, or no parent |
+| `self_parent` | the map names itself | another parent, or none |
+
+| Why | When |
+|---|---|
+| `no_parent` | `parent` names no map found — renamed, deleted or not given |
+| `bad_parent` | `parent` holds two parents, or a value that is no map's name |
+| `no_stage` | no `parent_stage` |
+| `no_stage_in_parent` | the parent declares no such stage |
+| `no_step` | no row of the parent on that stage has the step |
+
+A map whose file name is not page-safe or holds « · » or «#» (the tree board's separators) is skipped (`unsafe_name`) — rename the file to nest it.
+
+**Depth.** A level counts from the top root: the root 1, a child 2, a grandchild 3 — three levels at most; a map below is `too_deep` and appears only as a reference by its name and level, on the page and on the board, whatever map the command is run on.
+
+**The roll-up (R30)** — on the parent's step, numbers and one metric, never a copy of a row: the pains the child's page shows, by class (a simulated or unsourced pain is none, a health-check row is no pain); the anomalies its page shows, the critical ones by the label `refresh` ends a row with (§10) — a row the PM wrote is counted unrated; its metric of level `journey` (§4), else `⚠️ TBD`; its last health point, else «немає знімка»; its review date. A child with children of its own adds «з дочірніми картами (N): болі X · аномалії Y (критичних Z)» over the subtree the tree shows (R27). The parent's own health score never changes from its children.
+
+**The page (R31)** — `render-html`: on the parent's grid, a chip per child at the top of its stage's first lane (`дії`), the step named on it; a click (or Enter) opens the child's `<details>` below the parent's grid — the child's grid with its sticky headers, its own chips and its own children, nested to three levels; past them a reference by name, never a grid. The page's rules stay §9's: only page-safe text, no link, no request; one fixed script, no data of a note in it, which pans every grid and opens a chip's child. A child's own page names the maps above it.
+
+**The board (R31)** — §11's tree board: each child's block below the root's grid, its rows keyed `<child>#<row id>`; on the child's own board plain ids (C7). States per board and surface; what the team changed comes back through §12's one preview per note, a row changed differently on two boards offered in both versions — one or none, never both.
+
+**A child's own publication (R31, C9).** Its key is its own: `cjm-research/<product>/journey-<slug of the child>` — its page and its boards as any map's (§9, §11). When the child is inside a root already published, the one question of Step J4 names both places — the root's new version and the child's own place — each published only when the answer names it (`artifact-publishing.md` §4).
+
+**The portfolio** (§13) lists the maps as a tree; **the scheduled health-check** (§10) refreshes each map as before and renders the pages above a refreshed child again, locally — it never publishes.
+
+**Known limits.** The tree is computed from the notes every time: renaming a parent's file breaks its children's links (`orphan_child`) until their `parent` is set again. On the host's board the roll-up sticky names the child's section, with no link.
+
+## 15. What never happens
+
+- Editing on the page (v4.11.0) in this release; a portfolio note or a portfolio board; nesting across products.
+- A child's row copied into its parent — on the page, the board, the chat or a note; a note written by the nesting; a child's numbers changing its parent's health score; a grid below three levels.
+- A row changed differently on two boards taken automatically, or in both versions.
 - A publication or a new version without the question; a publication from a scheduled run; a board read, updated or asked about by the scheduled health-check.
 - An automatic two-way sync with a board: the team's changes come back only through §12, the health-check rows never.
 - A class the PM did not pick; a deletion of what the team added; a deletion from a board without its own «так» per item.

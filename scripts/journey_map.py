@@ -2033,6 +2033,36 @@ def check_protocol(root):
     if texts.get("references/artifact-publishing.md") and not re.search(
             r"^\|\s*`cjm-research`\s*\|.*`cjm-research/<product>/journey-", ap, re.M):
         errs.append("artifact-publishing.md §5: the `cjm-research` key row has no `journey-` key")
+    errs += _check_nest(proto, skill, texts.get("references/artifact-publishing.md", ""))
+    return errs
+
+
+def _check_nest(proto, skill, ap):
+    """Check 28's nesting part (v4.10.0, C13 — no new check): §14 «Nested maps» names the script's findings, the why
+    codes of orphan_child and the depth; «What never happens» is §15; the skill's Step J runs `nest`; artifact-publishing
+    §4 asks two places of two keys in one question."""
+    errs = []
+    s14 = nt.section(proto, "14. Nested maps")
+    if not s14:
+        return ["journey-protocol.md has no §14 «Nested maps» (v4.10.0)"]
+    got = [nt.tick(r[0]) or "?" for r in nt.table_after(s14, r"\| Finding \| What \| Proposal \|")]
+    if got != list(NEST_FINDINGS):
+        errs.append("journey-protocol.md §14: the nesting's findings %s ≠ journey_map.py NEST_FINDINGS %s" % ("|".join(got) or "—", "|".join(NEST_FINDINGS)))
+    why = [nt.tick(r[0]) or "?" for r in nt.table_after(s14, r"\| Why \| When \|")]
+    if why != list(ORPHAN_WHY):
+        errs.append("journey-protocol.md §14: orphan_child's why codes %s ≠ journey_map.py ORPHAN_WHY %s" % ("|".join(why) or "—", "|".join(ORPHAN_WHY)))
+    words = {3: "three"}
+    if "%s levels at most" % words.get(MAX_DEPTH, MAX_DEPTH) not in s14:
+        errs.append("journey-protocol.md §14 does not say «%s levels at most» (journey_map.py MAX_DEPTH)" % words.get(MAX_DEPTH, MAX_DEPTH))
+    for f in NEST_FIELDS:
+        if "`%s`" % f not in s14:
+            errs.append("journey-protocol.md §14 does not name the child's field `%s` (journey_map.py NEST_FIELDS)" % f)
+    if not nt.section(proto, "15. What never happens"):
+        errs.append("journey-protocol.md: «What never happens» is not §15 (§14 is «Nested maps» since v4.10.0)")
+    if skill and "journey_map.py nest" not in skill:
+        errs.append("skills/cjm-research/SKILL.md: Step J does not run `journey_map.py nest` for a child map (journey-protocol.md §14)")
+    if ap and not re.search(r"\*\*Two places of two keys in one question\*\*.*journey-protocol\.md` §14", nt.section(ap, "4. One question")):
+        errs.append("artifact-publishing.md §4: no «Two places of two keys in one question» rule for a child map (journey-protocol.md §14)")
     return errs
 
 
