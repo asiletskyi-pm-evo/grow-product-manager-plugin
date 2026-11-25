@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC-journey-4110-page — editing the journey map on its page (v4.11.0, references/journey-protocol.md §9, §12, §14).
+"""TC-journey-4120-page — editing the journey map on its page (v4.12.0, references/journey-protocol.md §9, §12, §14).
 
 The fictional «Zorg» maps (testing/fixtures/journey/) are copied into a temp folder.
 
@@ -172,7 +172,7 @@ try:
     check("2.1 page-diff reads the file inside a pasted text: exit 0, a diff of the page", rc == 0 and res.get("state") == "diff"
           and res.get("surface") == "page" and os.path.exists(df), out[-300:])
     c = res.get("counts", {})
-    check("2.2 each op in its category — the board's and the links of v4.11.0", (c.get("changed"), c.get("moved"), c.get("added"),
+    check("2.2 each op in its category — the board's and the links of v4.12.0", (c.get("changed"), c.get("moved"), c.get("added"),
           c.get("removed"), c.get("relinked"), c.get("recoded"), c.get("retargeted"), c.get("hc_edits")) == (1, 1, 2, 1, 1, 1, 1, 1), c)
     check("2.3 an unchanged text is no edit; one element per row (i1's parent and code share it)",
           not any(e.get("row") == "e1" for e in res.get("changed", []))

@@ -430,7 +430,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | AA6 | намалюй ієрархію екранів оплати як діаграму | diagram-prototyper — NOT cjm-research |
 | AA7 | декомпозуй ціль кварталу на дочірні цілі команд | goal-setter or quarterly-planning — NOT cjm-research |
 
-### Group AB — Editing the journey map on its page vs neighbours (added 2026-11-25, v4.11.0)
+### Group AB — Editing the journey map on its page vs neighbours (added 2026-11-25, v4.12.0)
 
 `cjm-research` mode `journey`, step J9, takes the edits made on the journey map's page — a file the page saved, or the text it copied — into the map through the board's preview; the board's edits alone are J6, a story map's edits are `roadmap-architect`'s, a page of a document or a ticket is not a journey map.
 

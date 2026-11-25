@@ -13,7 +13,7 @@
   board-diff   the board's last state against a read-back: what the team changed, moved, added and removed, the
                health-check edits apart (named, never taken)
   board-take   what the PM took from the board into the note — every other byte kept; --dry-run is the preview
-  page-diff    the edits made on the map's page (v4.11.0) — a file the page saved, or the text it copied — as a diff
+  page-diff    the edits made on the map's page (v4.12.0) — a file the page saved, or the text it copied — as a diff
                board-take reads: one preview for the board's and the page's edits, a child's rows into its own note
   nest         the nesting (v4.10.0): the map's subtree of child maps by their `parent` links, each child's roll-up
                (pains by class, anomalies, outcome metric, last health point) — never a copy of a row — and the
@@ -736,7 +736,7 @@ TREE_LABELS = {"uk": {"children": "Дочірні карти", "above": "Над 
                       "open its note (past three levels — a name only)", "deeper_list": "Deeper — maps of their own: %s"}}
 
 
-# ------------------------------------------------------------------ editing on the page (v4.11.0, §9)
+# ------------------------------------------------------------------ editing on the page (v4.12.0, §9)
 # The switch «Редагувати» on every page of the map (the user's decision, 2026-11-25): the page reads what it may edit from
 # the attributes of its markup (`edit_attrs`), keeps the edits in memory and hands them over as a file of edits — saved, or
 # copied as text — never a request; `page-diff` turns that file into a diff the board's take reads (§12). The script is
@@ -1040,7 +1040,7 @@ EDIT_ATTR_RE = re.compile(r' data-(?:%s)="[^"]*"' % "|".join(EDIT_ATTRS))
 
 
 def strip_edit(page):
-    """The page without its editing (v4.11.0): the bar, its CSS, its script and its attributes — what is left is the page of
+    """The page without its editing (v4.12.0): the bar, its CSS, its script and its attributes — what is left is the page of
     v4.10.0 byte for byte (the tests' regression)."""
     page = page.replace(CSS_EDIT, "", 1).replace("\n<script>%s</script>" % EDIT, "", 1)
     page = re.sub(r'\n<div class="edit-bar"[^\n]*', "", page, count=1)
@@ -1049,7 +1049,7 @@ def strip_edit(page):
 
 def _grid(note, L, chips=None, name=None):
     """The lines of one map's grid: the rows the page may show, the gap marks, and — on a tree page — the chips of its
-    child maps at the top of their stage's first lane (`chips`: {stage id: [html]}). Since v4.11.0 the grid carries what
+    child maps at the top of their stage's first lane (`chips`: {stage id: [html]}). Since v4.12.0 the grid carries what
     the page's editing reads (§9): the map's name and the digest of its rows on its frame, each cell's stage, lane and
     title, each row's id, lane, parent, code, target and whether it is locked — attributes of the markup, page-safe, never
     in the script."""
@@ -1136,7 +1136,7 @@ def _tree_parts(nest, lang):
 def render_html(note, note_name, lang, nest=None):
     """The page of the map — and, given its nesting (`nest_of`) with child maps, maps above it or references past the
     depth, the tree page of §14: the same grid with a roll-up chip on each child's step and each child's grid in a
-    <details> below. A map without any of them is the page of v4.9.0, byte for byte — apart from the editing of v4.11.0
+    <details> below. A map without any of them is the page of v4.9.0, byte for byte — apart from the editing of v4.12.0
     (§9): the switch «Редагувати», its CSS, its one fixed script and the attributes it reads (`strip_edit` removes exactly
     them)."""
     L = LABELS.get(lang, LABELS["en"])
@@ -1585,7 +1585,7 @@ def nest_text(nest):
 BOARD_ROLES = ("cell", "row", "header", "lane_name", "rollup", "team", "orphan", "frame", "other")
 DIFF_CATEGORIES = ("changed", "moved", "added", "removed", "relinked", "recoded", "retargeted", "orphaned", "hc_edits",
                    "other", "unrecorded")
-LINK_CATEGORIES = ("relinked", "recoded", "retargeted")       # only from the page (v4.11.0): a board's sticky carries no link
+LINK_CATEGORIES = ("relinked", "recoded", "retargeted")       # only from the page (v4.12.0): a board's sticky carries no link
 TAKE_REFUSED = ("health_check", "metric_lane", "no_cell", "needs_drop", "not_removed", "taken", "secret", "empty",
                 "not_takeable", "unknown", "other_note", "conflict")
 TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code", "bad_target",
@@ -2056,7 +2056,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
     team_source = "%s %s" % (TEAM_SOURCE.get(lang, TEAM_SOURCE["en"]), when)
     page_source = "%s %s" % (PAGE_SOURCE.get(lang, PAGE_SOURCE["en"]), when)
 
-    def source_of(e):                                # an edit from the page (v4.11.0) is the team page's, else the board's
+    def source_of(e):                                # an edit from the page (v4.12.0) is the team page's, else the board's
         return page_source if isinstance(e, dict) and e.get("via") == "page" else team_source
     applied, refused, named, ask, prop = [], [], [], [], []
     used_keys = set()
@@ -2189,7 +2189,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
                     elif ln not in LANE_CLASSES and cls_now:
                         named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes no class (§2) — %s cleared" % (ln, cls_now)})
                         edits[rid] = dict(edits.get(rid, {}), **{"class": ""})
-                elif cat in LINK_CATEGORIES:             # a link the page changed (v4.11.0): checked once the moves are known
+                elif cat in LINK_CATEGORIES:             # a link the page changed (v4.12.0): checked once the moves are known
                     links.append((i, rid, cat, e))
             continue
         if not cats & {"added", "changed", "moved"}:
@@ -2210,7 +2210,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
         ls, code = code_line(ln, _lines(text), i, None, named)
         code = code or ""
         page_code = _norm(e0.get("code")) if e0.get("via") == "page" else ""
-        if page_code and not code:                   # the page's own code field (v4.11.0), checked as the sticky's line is
+        if page_code and not code:                   # the page's own code field (v4.12.0), checked as the sticky's line is
             if ln in ("initiative", "experiment") and (CODE if ln == "initiative" else EXP_ID).match(page_code) and not cn.scan(page_code):
                 code = page_code
             else:
@@ -2263,7 +2263,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
             named.append({"element": i, "row": nid, "why": "orphan", "detail": "%s needs its parent" % _a(ln)})
             prop.append({"element": i, "row": nid, "lane": ln, "candidates": cands})
     target_now = {r["id"]: r["target"].strip().lower() in YES for r in live}
-    for i, rid, cat, e in links:                     # the page's links (v4.11.0): §5's rules, as check names them
+    for i, rid, cat, e in links:                     # the page's links (v4.12.0): §5's rules, as check names them
         r = by_id[rid]
         st, ln = stage_lane(r)
         if cat == "relinked":
@@ -2485,12 +2485,12 @@ def check_protocol(root):
 
 
 def _check_page(proto, skill):
-    """Check 28's page part (v4.11.0 — no new check): §9 «Editing on the page» names the page's ops as the script does;
+    """Check 28's page part (v4.12.0 — no new check): §9 «Editing on the page» names the page's ops as the script does;
     §15 keeps the page from any request and from a write past §12's preview; the skill's Step J9 runs `page-diff`."""
     errs = []
     s9 = nt.section(proto, "9. The script")
     if "**Editing on the page**" not in s9:
-        errs.append("journey-protocol.md §9 has no «Editing on the page» (v4.11.0)")
+        errs.append("journey-protocol.md §9 has no «Editing on the page» (v4.12.0)")
     ops = [nt.tick(r[0]) or "?" for r in nt.table_after(s9, r"\| Op \| What \|")]
     if ops != list(EDIT_OPS):
         errs.append("journey-protocol.md §9: the page's ops %s ≠ journey_map.py EDIT_OPS %s" % ("|".join(ops), "|".join(EDIT_OPS)))
@@ -2498,9 +2498,9 @@ def _check_page(proto, skill):
         errs.append("journey-protocol.md §9 does not name the file of edits' kind «%s»" % EDIT_KIND)
     s15 = nt.section(proto, "15. What never happens")
     if "A request from the page" not in s15:
-        errs.append("journey-protocol.md §15 does not keep the page from any request (v4.11.0)")
+        errs.append("journey-protocol.md §15 does not keep the page from any request (v4.12.0)")
     if skill is not None and not re.search(r"^- \*\*J9\b.*page-diff", skill, re.M):
-        errs.append("skills/cjm-research/SKILL.md has no step J9 that runs page-diff (the page's edits, v4.11.0)")
+        errs.append("skills/cjm-research/SKILL.md has no step J9 that runs page-diff (the page's edits, v4.12.0)")
     return errs
 
 
@@ -3049,7 +3049,7 @@ def _plain(e, child):
     rid = str(e.get("row") or "")
     if rid.startswith(pre_r):
         out["row"] = rid[len(pre_r):]
-    for key in ("parent", "parent_now", "parent_last"):         # a link the page changed (v4.11.0) names a row of the child
+    for key in ("parent", "parent_now", "parent_last"):         # a link the page changed (v4.12.0) names a row of the child
         v = str(e.get(key) or "")
         if v.startswith(pre_r):
             out[key] = v[len(pre_r):]
@@ -3252,7 +3252,7 @@ SHARED_MAX_DOCS = 5000
 
 
 def read_shared(path):
-    """The page's shared edits (since v4.11.0, the user's decision of 2026-11-25): a folder of the artifact's `edits`
+    """The page's shared edits (since v4.12.0, the user's decision of 2026-11-25): a folder of the artifact's `edits`
     documents, one JSON file each, as the host's database tool saves them. Another person's input: each document is read
     on its own, a file too large, unreadable or not an object skipped. Returns [(doc id, body)]."""
     docs = []
@@ -3326,7 +3326,7 @@ def _s(v):
 
 def page_diff(note, name, nest, data, lang):
     """The page's edits as a diff the board's take reads (§12): one element per row the page changed (`p<n>`), its entries
-    in the categories of board-diff plus the links of v4.11.0 (relinked, recoded, retargeted), each `via: page`; a child
+    in the categories of board-diff plus the links of v4.12.0 (relinked, recoded, retargeted), each `via: page`; a child
     map's rows and cells keyed as on a tree board (`<child>#<id>`, `<child> · <stage>`), so `board-take --note <child>`
     takes them into the child's own note. Texts page-safe, as a board's are. Returns (diff, skipped)."""
     maps = {name_key(name): (name, note, "")}

@@ -66,7 +66,7 @@ def write(p, data):
 
 
 def text(p):
-    """A file's text; a page the script rendered without its editing (v4.11.0) — the bar, its CSS, its script and its
+    """A file's text; a page the script rendered without its editing (v4.12.0) — the bar, its CSS, its script and its
     attributes, which testing/journey_page_edit_test.py checks — so the page's own assertions stay as they were."""
     t = read(p).decode("utf-8")
     if str(p).endswith(".html") and os.sep + "golden" + os.sep not in str(p):
