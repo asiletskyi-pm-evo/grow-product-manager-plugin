@@ -13,7 +13,10 @@ Fictional «Zorg» notes and boards (testing/fixtures/story-map/) are copied int
 - baseline: only the `baseline` field changes, every other byte stays (LF and CRLF); another slice's entry is kept;
 - board-diff: changed / moved / added / removed by data-miro-id, cards found by their text, the area to read back,
   `unknown` without a state, a board that does not parse refused;
-- schema: check 26's check_protocol is clean on a sound tree and names each drift.
+- schema: check 26's check_protocol is clean on a sound tree and names each drift;
+- v4.11.2 (§12): the board on the host's own board type (`--surface whiteboard`, fixtures story-map/wb-*) — the same
+  roles as on Miro, the diff's categories, a person's note always the team's, `partial` on a read missing a page,
+  an empty read refused, the state's surface taken on `--last`; the Miro replay still byte for byte.
 Mutations: a script whose baseline rewrites another field, one that skips escaping, and one that skips the skeleton
 check are each caught by the same assertions. Stdlib only; run from the repo root:
 
@@ -77,7 +80,7 @@ def mutant(d, name, old, new, target="story_map.py"):
 d = tempfile.mkdtemp(prefix="story-map-test-")
 try:
     for f in os.listdir(FIX):
-        shutil.copy(os.path.join(FIX, f), d)
+        (shutil.copytree if os.path.isdir(os.path.join(FIX, f)) else shutil.copy)(os.path.join(FIX, f), os.path.join(d, f))
     note = os.path.join(d, "map-parcel-locker.md")
     bad = os.path.join(d, "map-findings.md")
     status = os.path.join(d, "status-zorg.json")
@@ -615,6 +618,109 @@ try:
     else:
         n, bad = replay(mb, "relframe")
         check("11.3 M4 a reader whose stickies lose their frame-relative place is caught by the replay", bool(bad), bad)
+
+    # 12. v4.11.2: the story map's board on the host's own board type (`--surface whiteboard`, plan C6–C8, C13).
+    #     wb-last.json — the Zorg board as the host's list (activity and steps rounded blocks outside sections, a
+    #     section per slice, cards rounded blocks); wb-now/ — an element folder: c1 moved MVP → R2, c4 retitled, a step
+    #     renamed, a person's note in MVP; wb-partial.json — a read with the R2 page skipped.
+    wl, wn, wp = (os.path.join(d, n) for n in ("wb-last.json", "wb-now", "wb-partial.json"))
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", os.path.join(d, "board-last.svg"), "--note", note,
+                       "--out", os.path.join(d, "m.board.json"))
+    miro_roles = res.get("roles")
+    wst = os.path.join(d, "wb.artifact.board.json")
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", wl, "--note", note, "--out", wst)
+    check("12.1 the host's board gives every element the role it has on Miro (5 cards, 3 slices, the backbone)",
+          rc == 0 and res.get("roles") == {"other": 1, "activity": 1, "step": 2, "slice": 3, "card": 5}
+          and res.get("cards") == {"c1": "wb-c1", "c3": "wb-c3", "c2": "wb-c2", "c4": "wb-c4", "c5": "wb-c5"}
+          and res.get("slices") == {"mvp": "wb-mvp", "r1": "wb-r1", "r2": "wb-r2"}, (rc, out))
+    rc2, out2, res2 = run("board-state", "--read", os.path.join(d, "board-last.svg"), "--note", note, "--out", os.path.join(d, "m2.board.json"))
+    mr = dict(res2.get("roles") or {})
+    mr.pop("frame", None)                           # the Miro fixture also has the backbone's frame
+    check("12.2 the same map on Miro: the same cards, slices and backbone", {k: v for k, v in mr.items()} ==
+          {"activity": 1, "step": 2, "slice": 3, "card": 5} and set(res2.get("cards", {})) == set(res.get("cards", {})),
+          (res2.get("roles"), miro_roles))
+    st = json.loads(read(wst).decode("utf-8")) if os.path.exists(wst) else {}
+    check("12.3 the host's state names its surface; a Miro state never does", st.get("surface") == "whiteboard"
+          and res.get("surface") == "whiteboard" and "surface" not in res2
+          and os.path.exists(os.path.join(d, "m2.board.json"))
+          and "surface" not in json.loads(read(os.path.join(d, "m2.board.json")).decode("utf-8")), (res.get("surface"), list(st)[:3]))
+    check("12.4 the host's state keeps no author of a person's note", os.path.exists(wst) and b"author" not in read(wst), "")
+    rc, out, res = run("board-diff", "--last", wst, "--now", wn, "--note", note)
+    cnt = res.get("counts", {})
+    check("12.5 board-diff on the host's board: changed 1, moved 1 (c1 MVP → R2), added 1, removed 0, backbone 1",
+          res.get("state") == "diff" and res.get("surface") == "whiteboard"
+          and cnt == {"changed": 1, "moved": 1, "added": 1, "removed": 0, "backbone": 1, "orphaned": 0}
+          and [m.get("card") for m in res.get("moved", [])] == ["c1"]
+          and res["moved"][0]["frame_to"].startswith("R2") and [c.get("card") for c in res.get("changed", [])] == ["c4"], (cnt, out))
+    check("12.6 a person's note on the host's board is the team's addition, never a card of the plugin",
+          [a["id"] for a in res.get("added", [])] == ["mwkxzorg-n1"] and res.get("unrecorded") == []
+          and res["added"][0]["frame"].startswith("MVP"), (res.get("added"), res.get("unrecorded")))
+    check("12.7 a renamed step is a backbone change, named with its old and new text",
+          [(b.get("role"), b.get("change"), b.get("now")) for b in res.get("backbone", [])] == [("step", "text", "Обрати поштомат на карті")],
+          res.get("backbone"))
+    rc, out, res = run("board-diff", "--last", wst, "--now", wp, "--note", note)
+    check("12.8 a read missing a page is `partial`, naming the slice section and the step it lacks — never «removed»",
+          res.get("state") == "partial" and sorted(m["id"] for m in res.get("missing", [])) == ["wb-r2", "wb-s2"]
+          and "removed" not in res and "counts" not in res, out)
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", wp, "--last", wst, "--note", note,
+                       "--out", os.path.join(d, "wb-p.board.json"))
+    check("12.9 board-state refuses a partial read of the host's board (exit 2, no state written)",
+          rc == 2 and "partial" in res.get("error", "") and not os.path.exists(os.path.join(d, "wb-p.board.json")), (rc, out))
+    em = os.path.join(d, "wb-empty")
+    os.makedirs(em)
+    rc, out, res = run("board-diff", "--last", wst, "--now", em, "--note", note)
+    rc2, out2, _ = run("board-state", "--surface", "whiteboard", "--read", os.path.join(d, "wb-empty-list.json"), "--note", note,
+                       "--out", os.path.join(d, "wb-e.board.json")) if write(os.path.join(d, "wb-empty-list.json"), "[]") is None else (0, "", {})
+    check("12.10 an empty read of the host's board exits 2 — on board-diff and board-state", rc == 2 and rc2 == 2, (out, out2))
+    rc, out, res = run("board-diff", "--last", wst, "--now", os.path.join(d, "wb-now", "elements"), "--note", note)
+    check("12.11 `--last` takes the surface from the state: a host read needs no `--surface`", rc == 0
+          and res.get("state") == "diff" and res.get("surface") == "whiteboard", out)
+    rc, out, res = run("board-diff", "--last", wl, "--surface", "whiteboard", "--now", wn, "--note", note)
+    check("12.12 a host list as `--last` is a read with `--surface whiteboard`, its roles by the note now",
+          res.get("state") == "diff" and res.get("counts", {}).get("moved") == 1 and res.get("counts", {}).get("added") == 1, out)
+    rc, out, res = run("board-diff", "--last", wst)
+    check("12.13 the host state's area answer names its surface and the card → element map",
+          res.get("state") == "scope" and res.get("surface") == "whiteboard" and res.get("cards", {}).get("c1") == "wb-c1", out)
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", wn, "--last", wst, "--note", note,
+                       "--out", os.path.join(d, "wb2.artifact.board.json"))
+    st2 = json.loads(read(os.path.join(d, "wb2.artifact.board.json")).decode("utf-8")) if rc == 0 else {}
+    check("12.14 the next state of the host's board keeps the person's note as a sticky, never a card, c1 by its id",
+          rc == 0 and st2.get("elements", {}).get("mwkxzorg-n1", {}).get("role") == "sticky"
+          and res.get("cards", {}).get("c1") == "wb-c1", out)
+    rc, out, res = run("board-state", "--surface", "figjam", "--read", wl, "--note", note, "--out", os.path.join(d, "x.json"))
+    check("12.15 an unknown surface is refused by the command line", rc == 2 and not os.path.exists(os.path.join(d, "x.json")), out)
+
+    # mutations of §12
+    def mrun(script, *args):
+        return run(*args, script=script)
+    mm = mutant(d, "wbmiro", 'items = bs.read_boards(paths, surface)', 'items = bs.read_boards(paths, "miro")')
+    if mm is None:
+        check("12.M1 mutation site present (the host's read)", False, "pattern not in story_map.py")
+    else:
+        rc, out, res = mrun(mm, "board-state", "--surface", "whiteboard", "--read", wl, "--note", note, "--out", os.path.join(d, "mm.json"))
+        check("12.M1 a host read through the Miro reader is caught (12.1)", not (rc == 0 and res.get("roles", {}).get("card") == 5), out)
+    mm = mutant(d, "wbnopartial", 'lost = missing_backbone(last, now, p) if surface != "miro" else []', 'lost = []')
+    if mm is None:
+        check("12.M2 mutation site present (the partial guard)", False, "pattern not in story_map.py")
+    else:
+        rc, out, res = mrun(mm, "board-diff", "--last", wst, "--now", wp, "--note", note)
+        check("12.M2 no partial guard: the read's skipped page counts as removed — caught (12.8)",
+              res.get("state") != "partial" and res.get("counts", {}).get("removed", 0) > 0, out)
+    mm = mutant(d, "wbdefault", 'p.add_argument("--surface", choices=bs.SURFACES, default="miro"',
+                'p.add_argument("--surface", choices=bs.SURFACES, default="whiteboard"')
+    if mm is None:
+        check("12.M3 mutation site present (board-state's default surface)", False, "pattern not in story_map.py")
+    else:
+        n, bad = replay(mm, "wbdefault")
+        check("12.M3 a default of `whiteboard` turns the Miro replay red (11.1)", bool(bad), bad)
+    mm = mutant(d, "wbstate", 'return data["elements"], data.get("surface") or "miro"', 'return data["elements"], "miro"')
+    if mm is None:
+        check("12.M4 mutation site present (the state's surface on --last)", False, "pattern not in story_map.py")
+    else:
+        rc, out, res = mrun(mm, "board-diff", "--last", wst, "--now", os.path.join(d, "wb-now", "elements"), "--note", note)
+        check("12.M4 the state's surface ignored on `--last` is caught (12.11)", not (rc == 0 and res.get("surface") == "whiteboard"), out)
+    n, bad = replay(SCRIPT, "after12")
+    check("12.16 after the host's board the Miro replay is still byte for byte (%d cases)" % n, n >= 14 and not bad, bad)
 finally:
     shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(SAFE_HOME, ignore_errors=True)

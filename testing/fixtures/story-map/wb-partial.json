@@ -1,0 +1,132 @@
+{
+ "elements": [
+  {
+   "id": "wb-title",
+   "data": {
+    "type": "text",
+    "x": 0,
+    "y": -80,
+    "text": "Zorg: доставка в поштомат",
+    "size": "large"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-a1",
+   "data": {
+    "type": "shape",
+    "kind": "rounded",
+    "x": 0,
+    "y": 0,
+    "w": 500,
+    "h": 120,
+    "color": "orange",
+    "text": "Обрати доставку"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-s1",
+   "data": {
+    "type": "shape",
+    "kind": "rounded",
+    "x": 0,
+    "y": 160,
+    "w": 240,
+    "h": 120,
+    "color": "light_blue",
+    "text": "Побачити поштомат у кошику"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-mvp",
+   "data": {
+    "type": "container",
+    "x": -20,
+    "y": 320,
+    "w": 2000,
+    "h": 280,
+    "text": "MVP — частка замовлень у поштомат ≥ 15 %"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-c1",
+   "data": {
+    "type": "shape",
+    "kind": "rounded",
+    "x": 0,
+    "y": 340,
+    "w": 240,
+    "h": 120,
+    "color": "yellow",
+    "text": "Поштомат як спосіб доставки в кошику\nPROJ-1234.1"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-c3",
+   "data": {
+    "type": "shape",
+    "kind": "rounded",
+    "x": 260,
+    "y": 340,
+    "w": 240,
+    "h": 120,
+    "color": "yellow",
+    "text": "Список найближчих поштоматів за адресою\nPROJ-1234.2"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-r1",
+   "data": {
+    "type": "container",
+    "x": -20,
+    "y": 640,
+    "w": 2000,
+    "h": 280,
+    "text": "R1 — повторні замовлення в поштомат ≥ 40 %"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-c2",
+   "data": {
+    "type": "shape",
+    "kind": "rounded",
+    "x": 0,
+    "y": 660,
+    "w": 240,
+    "h": 120,
+    "color": "yellow",
+    "text": "Ціна й строк доставки в поштомат поруч зі способом"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  },
+  {
+   "id": "wb-c4",
+   "data": {
+    "type": "shape",
+    "kind": "rounded",
+    "x": 260,
+    "y": 660,
+    "w": 240,
+    "h": 120,
+    "color": "yellow",
+    "text": "Карта поштоматів з фільтром «працює цілодобово»"
+   },
+   "version": 1,
+   "updatedAt": "2026-11-25T10:00:00Z"
+  }
+ ]
+}

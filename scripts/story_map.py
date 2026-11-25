@@ -8,7 +8,11 @@
   progress     per slice: the status spread, % done, what is blocked, added / removed / moved against the baseline
   baseline     a slice's baseline into the frontmatter field `baseline` — every other byte of the note kept
   board-state  the board read back after a publication, kept with which sticky is which card, activity, step or slice
-  board-diff   a board's last state against a read-back, by data-miro-id: card changes apart from backbone and other items
+  board-diff   a board's last state against a read-back, by element id: card changes apart from backbone and other items;
+               on the host's board a read lacking a slice section or a backbone block is `partial`, never «removed»
+
+Both board commands read a Miro board's SVG (`--surface miro`, the default, its bytes as at v4.6.0) or, since v4.11.2,
+the host's own board type's element list (`--surface whiteboard`); board-diff takes the surface from the state.
   schema       the fields, columns, findings, statuses and commands the protocol must agree with (check 26)
 
 The note is the source of truth: a markdown table of cards under its frontmatter (`product`, `epic`, `slices`,
@@ -414,12 +418,42 @@ def render_baseline(entries, eol):
 
 # ------------------------------------------------------------------ board
 # Reading a board back is scripts/board_state.py's since v4.8.0 (shared with journey_map.py); the roles of the map's
-# stickies and the diff stay here. A story map's board is a Miro board: every read is its SVG.
+# stickies and the diff stay here. Since v4.11.2 a story map's board is a Miro board (its SVG) or the host's own board
+# type (its element list, `--surface whiteboard`); the Miro path keeps its bytes — `surface` is named only for the host's.
 _plain, _scope = bs.plain, bs.scope
+BACKBONE = ("slice", "backlog", "activity", "step")   # the plugin never deletes these: one gone from a host read = partial
 
 
-def read_boards(paths):
-    return bs.read_boards(paths, "miro")
+def read_boards(paths, surface="miro"):
+    """{id: item} of the reads on one surface. The host's board is read whole, page by page: an empty read is refused
+    (an error the tool returned, a folder of nothing) — never a board where everything was removed."""
+    items = bs.read_boards(paths, surface)
+    if surface != "miro" and not items:
+        raise Bad("the read-back holds no element — read the board again, every page, into a fresh folder")
+    return items
+
+
+def missing_backbone(last, now, p=None):
+    """The slice sections and backbone blocks of the last state a host read lacks — what the note still has; [] when the
+    read shares no element with the state (a new board, its first state)."""
+    if not set(last) & set(now):
+        return []
+    slices = {s["slice"] for s in p["slices"]} if p else None
+    names = ({a["name"] for a in p["activities"]} | {s for a in p["activities"] for s in a["steps"]}) if p else None
+    out = []
+    for mid, it in sorted(last.items()):
+        role = it.get("role")
+        if mid in now or role not in BACKBONE:
+            continue
+        if p is not None and ((role == "slice" and it.get("slice") not in slices) or
+                              (role in ("activity", "step") and it["text"] not in names)):
+            continue                                # the note dropped it: its block may go with it
+        out.append({"id": mid, "role": role, "text": it["text"], "slice": it.get("slice")})
+    return out
+
+
+def _surf(surface):
+    return {"surface": surface} if surface != "miro" else {}
 
 
 def _rendered(c):
@@ -475,21 +509,39 @@ def assign_roles(items, p):
     return ambiguous
 
 
-def load_state(path, p):
-    """The last state: a board-state JSON, or a board SVG whose roles are read against the note as it is now."""
-    if path.lower().endswith(".json"):
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            items = data["elements"]
-            if not isinstance(items, dict):
-                raise ValueError
-        except (OSError, ValueError, KeyError, TypeError):
-            raise Bad("the board's state does not read")
-        return items
-    items = bs.read_miro_svg(path)
+def _state(path):
+    """The board-state JSON at `path` — a mapping `elements` and a `note` field — or None: anything else is a read."""
+    if os.path.isdir(path) or not path.lower().endswith(".json"):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) and isinstance(data.get("elements"), dict) and "note" in data else None
+
+
+def load_state(path, p, surface=None):
+    """(items, surface) of the last state: a board-state JSON (its surface its own, Miro when it names none), or a board
+    read — a Miro SVG, or with `--surface whiteboard` the host's list — whose roles are read against the note now."""
+    data = _state(path)
+    if data is not None:
+        return data["elements"], data.get("surface") or "miro"
+    if (surface or "miro") == "miro":
+        if path.lower().endswith(".json"):          # the Miro path as at v4.6.0: a .json is a state or nothing
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    items = json.load(fh)["elements"]
+                if not isinstance(items, dict):
+                    raise ValueError
+            except (OSError, ValueError, KeyError, TypeError):
+                raise Bad("the board's state does not read")
+            return items, "miro"
+        items = bs.read_miro_svg(path)
+    else:
+        items = read_boards([path], surface)
     assign_roles(items, p)
-    return items
+    return items, surface or "miro"
 
 
 def board_diff(last, now, p):
@@ -691,17 +743,24 @@ def cmd_baseline(args):
 
 def cmd_board_state(args):
     p = parse(load(args.note))
-    items = read_boards(args.read)
+    items = read_boards(args.read, args.surface)
     ambiguous = assign_roles(items, p)
-    if args.last and os.path.isfile(args.last):      # a card the note dropped keeps its sticky as the plugin's own
+    if args.last and _there(args.last, args.surface):   # a card the note dropped keeps its sticky as the plugin's own
         in_note = {c["id"] for c in p["cards"]}
-        for mid, old in load_state(args.last, p).items():
+        last, _ = load_state(args.last, p, args.surface)
+        lost = missing_backbone(last, items, p) if args.surface != "miro" else []
+        if lost:
+            raise Bad("the read lacks %d slice section(s) or backbone block(s) the last state holds (%s) — read the board "
+                      "again, every page, into a fresh folder; a state is never kept from a partial read"
+                      % (len(lost), ", ".join(x["text"] for x in lost[:3])))
+        for mid, old in last.items():
             it = items.get(mid)
             if it is not None and old.get("role") in ("card", "orphan") and old.get("card") not in in_note \
                     and it.get("role") != "card":
                 it["role"], it["card"] = "orphan", old.get("card")
-    state = {"version": 1, "note": os.path.basename(args.note),
-             "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items}
+    state = dict({"version": 1}, **_surf(args.surface))
+    state.update({"note": os.path.basename(args.note),
+                  "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "elements": items})
     out = os.path.abspath(args.out)
     try:
         os.makedirs(os.path.dirname(out), exist_ok=True)
@@ -716,9 +775,9 @@ def cmd_board_state(args):
     roles = {}
     for it in items.values():
         roles[it["role"]] = roles.get(it["role"], 0) + 1
-    result(ok=True, out=out, cards=cards, slices={it["slice"]: mid for mid, it in items.items() if it.get("slice")},
+    result(ok=True, out=out, **dict(_surf(args.surface), cards=cards, slices={it["slice"]: mid for mid, it in items.items() if it.get("slice")},
            roles=roles, unmapped_cards=[c["id"] for c in p["cards"] if c["id"] not in cards], ambiguous=ambiguous,
-           orphans={it["card"]: mid for mid, it in items.items() if it.get("role") == "orphan"})
+           orphans={it["card"]: mid for mid, it in items.items() if it.get("role") == "orphan"}))
     return 0
 
 
@@ -727,18 +786,30 @@ def _card_ids(items):
     return {it["card"]: mid for mid, it in items.items() if it.get("role") == "card" and it.get("card")}
 
 
+def _there(path, surface):
+    """A last state or read to compare with: a file — or, on the host's board, a folder of its elements too."""
+    return os.path.isfile(path) or (surface not in (None, "miro") and os.path.isdir(path))
+
+
 def cmd_board_diff(args):
-    if not args.last or not os.path.isfile(args.last):
+    if not args.last or not _there(args.last, args.surface):
         result(ok=True, state="unknown", why="no last state of the board on this machine")
         return 0
     p = parse(load(args.note)) if args.note else None
-    last = load_state(args.last, p)
+    last, surface = load_state(args.last, p, args.surface)
+    surface = args.surface or surface              # the state's own surface unless one is named
     if not args.now:
-        result(ok=True, state="scope", scope=_scope(last), ids=sorted(last), cards=_card_ids(last))
+        result(ok=True, state="scope", **dict(_surf(surface), scope=_scope(last), ids=sorted(last), cards=_card_ids(last)))
         return 0
-    now = read_boards(args.now)
+    now = read_boards(args.now, surface)
+    lost = missing_backbone(last, now, p) if surface != "miro" else []
+    if lost:                                       # the plugin never deletes a slice or a backbone block: a partial read
+        result(ok=True, state="partial", surface=surface, missing=lost, ids=sorted(last), cards=_card_ids(last),
+               why="the read lacks %d slice section(s) or backbone block(s) the state holds — read the board again, every "
+                   "page, into a fresh folder; nothing is offered from a partial read" % len(lost))
+        return 0
     changed, moved, added, removed, backbone, other, unrecorded, orphaned = board_diff(last, now, p)
-    result(ok=True, state="diff", changed=changed, moved=moved, added=added, removed=removed, backbone=backbone,
+    result(ok=True, state="diff", **_surf(surface), changed=changed, moved=moved, added=added, removed=removed, backbone=backbone,
            other=other, unrecorded=unrecorded, orphaned=orphaned,
            counts={"changed": len(changed), "moved": len(moved), "added": len(added), "removed": len(removed),
                    "backbone": len(backbone), "orphaned": len(orphaned)},
@@ -770,13 +841,18 @@ def main(argv=None):
     p.add_argument("--slice", required=True)
     p.add_argument("--date")
     p = sub.add_parser("board-state")
-    p.add_argument("--read", required=True, nargs="+", help="the board read back (by ids first, then the area)")
+    p.add_argument("--read", required=True, nargs="+", help="the board read back (Miro: by ids first, then the area; "
+                   "the host's board: every page of its list)")
+    p.add_argument("--surface", choices=bs.SURFACES, default="miro", help="the read's format (default: miro)")
     p.add_argument("--note", required=True)
     p.add_argument("--last", help="the previous state: a card the note dropped keeps its sticky as an orphan")
-    p.add_argument("--out", required=True, help="~/.grow-pm/story-maps/<key>.board.json")
+    p.add_argument("--out", required=True, help="~/.grow-pm/story-maps/<key>.board.json (the host's board: "
+                   "<key>.artifact.board.json)")
     p = sub.add_parser("board-diff")
     p.add_argument("--last", help="the board's state (board-state JSON) or an older board SVG")
-    p.add_argument("--now", nargs="+", help="the board read back now: by the state's ids, then over its area")
+    p.add_argument("--now", nargs="+", help="the board read back now: by the state's ids, then over its area (Miro), "
+                   "or every page of the host's list")
+    p.add_argument("--surface", choices=bs.SURFACES, help="the reads' format (default: the state's, else miro)")
     p.add_argument("--note")
     sub.add_parser("schema")
     args = ap.parse_args(argv)
