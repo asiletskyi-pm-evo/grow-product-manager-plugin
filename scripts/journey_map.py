@@ -765,7 +765,11 @@ EDIT_LABELS = {
            "target": "Цільова можливість етапу (лише одна на етап)", "remove": "Прибрати рядок з карти",
            "restore": "Повернути рядок", "reset": "Відмінити правки рядка", "close": "Закрити",
            "apply": "Застосувати", "cancel": "Скасувати", "none": "— не вказано —", "add": "+ Додати",
-           "b-edit": "змінено", "b-new": "новий", "b-gone": "прибрано"},
+           "b-edit": "змінено", "b-new": "новий", "b-gone": "прибрано",
+           "you": "ти", "someone": "колега", "by": "Останню правку зробив(ла): %s", "syncfail": "Правку не збережено у спільне сховище — перевір доступ і спробуй ще раз.",
+           "s-wait": "Підключаю спільні правки…", "s-slow": "Спільні правки поки недоступні — можливо, немає звʼязку.",
+           "s-on": "Спільні правки: усі бачать їх одразу", "s-off": "Спільні правки недоступні", "s-stale": "%d старих правок не показано",
+           "help-shared": "Правки зберігаються одразу, і всі, хто має доступ до редагування, бачать їх наживо. Перетягни картку, щоб перенести; клацни, щоб змінити текст і звʼязки; «+ Додати» створює рядок. У карту правки потрапляють лише після перегляду PM («забери правки зі сторінки карти шляху»)."},
     "en": {"on": "Edit", "off": "Done", "save": "Save edits", "copy": "Copy edits",
            "count": "Edits: %d", "copied": "Copied. Paste the edits into a chat with the PM: they reach the map after the PM's preview.",
            "copyfail": "Copying is blocked — select the text in the field below and copy it.",
@@ -784,7 +788,11 @@ EDIT_LABELS = {
            "target": "The stage's target opportunity (one per stage)", "remove": "Remove the row from the map",
            "restore": "Bring the row back", "reset": "Undo this row's edits", "close": "Close",
            "apply": "Apply", "cancel": "Cancel", "none": "— not set —", "add": "+ Add",
-           "b-edit": "edited", "b-new": "new", "b-gone": "removed"},
+           "b-edit": "edited", "b-new": "new", "b-gone": "removed",
+           "you": "you", "someone": "a colleague", "by": "Last edited by: %s", "syncfail": "The edit is not saved to the shared store — check your access and try again.",
+           "s-wait": "Connecting the shared edits…", "s-slow": "The shared edits are not reachable yet — maybe no connection.",
+           "s-on": "Shared edits: everyone sees them at once", "s-off": "The shared edits are unavailable", "s-stale": "%d old edits not shown",
+           "help-shared": "Edits are saved at once, and everyone who may edit sees them live. Drag a card to move it; click it to change its text and links; «+ Add» creates a row. Edits reach the map only after the PM's preview («take the edits from the journey map's page»)."},
 }
 CSS_EDIT = r"""
 .edit-bar{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.edit-bar button,.edit-form button{font:inherit;padding:6px 12px;border:1px solid #adb5bd;border-radius:6px;background:#fff;color:#1f2328;cursor:pointer}
@@ -795,6 +803,10 @@ body.editing .edit-bar .edit-toggle{background:#1c7ed6;color:#fff}body.editing .
 .edit-msg{display:none;flex-basis:100%;padding:8px 10px;border-radius:6px;background:#e7f5ff;color:#1864ab;font-size:13px}.edit-msg.shown{display:block}
 .edit-bar .edit-help{flex-basis:100%;margin:0;color:#57606a;font-size:13px;line-height:1.5}
 .edit-bar .edit-save,.edit-bar .edit-copy,.edit-bar .edit-count,.edit-bar .edit-help{display:none}body.editing .edit-bar .edit-save,body.editing .edit-bar .edit-copy,body.editing .edit-bar .edit-count{display:inline-block}body.editing .edit-bar .edit-help{display:block}
+.edit-sync{display:none;font-size:13px;color:#2b8a3e}body.shared .edit-sync{display:inline-block}body.shared .edit-sync::before{content:"\25CF  "}
+body.readonly .edit-toggle{display:none}body.shared.editing .edit-bar .edit-save,body.shared.editing .edit-bar .edit-copy{display:none}
+body:not(.shared) .edit-bar .edit-help-shared,body.shared.editing .edit-bar .edit-help:not(.edit-help-shared){display:none!important}
+.f-who{margin:-8px 0 0;color:#868e96;font-size:12px}.f-who:empty{display:none}
 .edit-out{flex-basis:100%;min-height:70px;max-height:140px;font:12px monospace}body.has-edits .edit-bar .edit-help{display:none}
 @media (min-width:900px){body.panel{padding-right:396px}}
 .edit-add{display:none;width:100%;margin-top:4px;font:inherit;font-size:12px;border:1px dashed #ced4da;border-radius:6px;background:transparent;color:#868e96;cursor:pointer;padding:3px 6px;text-align:left}
@@ -820,19 +832,22 @@ function qa(s,r){return Array.prototype.slice.call((r||document).querySelectorAl
 function A(e,k){return(e&&e.getAttribute("data-"+k))||"";}
 function L(k){return A(bar,"l-"+k);}
 var P={pain:["opportunity"],solution:["opportunity"],experiment:["solution"],initiative:["pain","opportunity","solution"]};
-var CODE={initiative:"c-init",experiment:"c-exp"},LOCK={metric:1,anomaly:1},FLAG="🎯 ";
-var ed={},home={},adds=[],cur=null,dirty=false,drag=null,dragged=false;
-var form=q(".edit-form",bar),out=q(".edit-out",bar),cnt=q(".edit-count",bar),msg=q(".edit-msg",bar),tog=q(".edit-toggle",bar);
-var f={title:q(".f-title",form),where:q(".f-where",form),text:q(".f-text",form),stage:q(".f-stage",form),lane:q(".f-lane",form),
-parent:q(".f-parent",form),phint:q(".f-phint",form),code:q(".f-code",form),clabel:q(".f-clabel",form),target:q(".f-target",form),
-remove:q(".f-remove",form),reset:q(".f-reset",form)};
+var CODE={initiative:"c-init",experiment:"c-exp"},LOCK={metric:1,anomaly:1},FLAG="🎯 ",SEP="\u0001";
+var ed={},meta={},adds={},nadd=0,cur=null,dirty=false,drag=null,dragged=false,home={},items={},names={};
+var shared=null,me=null,canWrite=true,stale=0;
+var form=q(".edit-form",bar),out=q(".edit-out",bar),cnt=q(".edit-count",bar),msg=q(".edit-msg",bar),tog=q(".edit-toggle",bar),
+sync=q(".edit-sync",bar);
+var f={title:q(".f-title",form),where:q(".f-where",form),who:q(".f-who",form),text:q(".f-text",form),stage:q(".f-stage",form),
+lane:q(".f-lane",form),parent:q(".f-parent",form),phint:q(".f-phint",form),code:q(".f-code",form),clabel:q(".f-clabel",form),
+target:q(".f-target",form),remove:q(".f-remove",form),reset:q(".f-reset",form)};
 function on(){return document.body.classList.contains("editing");}
 function say(k,keep){msg.textContent=k?L(k):"";msg.className="edit-msg"+(k?" shown":"");clearTimeout(say.t);
 if(k&&!keep)say.t=setTimeout(function(){say("");},6000);}
 function box(el,show){(el.closest(".f-box")||el).hidden=!show;}
 function wrapOf(e){return e.closest(".wrap");}
 function own(list,w){return list.filter(function(e){return e.closest(".wrap")===w;});}
-function key(w,row){return A(w,"map")+"\u0001"+row;}
+function key(w,row){return A(w,"map")+SEP+row;}
+function wrapByMap(m){return qa(".wrap[data-map]").filter(function(x){return A(x,"map")===m;})[0];}
 function txt(it){var t=q(".t",it).textContent;return t.indexOf(FLAG)===0?t.slice(FLAG.length):t;}
 function cellOf(it){var td=it.closest("td");return{stage:A(td,"stage"),lane:A(td,"lane")};}
 function stagesOf(w){var tr=own(qa("tbody tr",w),w)[0],ths=own(qa("thead th.stage",w),w);if(!tr)return[];
@@ -843,13 +858,41 @@ return td?{id:A(td,"lane"),name:th?th.textContent:A(td,"lane")}:null;}).filter(f
 function nameOf(list,id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i].name;}return id;}
 function tdOf(w,stage,lane){return own(qa("td[data-stage]",w),w).filter(function(t){return A(t,"stage")===stage&&A(t,"lane")===lane;})[0];}
 function place(it,td){if(td&&it.parentNode!==td)td.insertBefore(it,q(".edit-add",td));}
-function orig(it){var c=cellOf(it);return{text:txt(it),stage:c.stage,lane:c.lane,parent:A(it,"parent"),code:A(it,"code"),
-target:A(it,"target")==="1"};}
-function base(it){var w=wrapOf(it),k=key(w,A(it,"row"));if(!home[k])home[k]={o:orig(it),td:it.parentNode,next:it.nextSibling,t:q(".t",it).textContent};
-return home[k];}
-function now(it){var h=base(it),e=ed[key(wrapOf(it),A(it,"row"))]||{},v={};for(var x in h.o){v[x]=e.hasOwnProperty(x)?e[x]:h.o[x];}
-v.remove=!!e.remove;return v;}
-function badge(it,k){if(k){it.setAttribute("data-eb",L(k));}else{it.removeAttribute("data-eb");}}
+qa("td[data-stage]").forEach(function(td){if(LOCK[A(td,"lane")])return;var b=document.createElement("button");
+b.type="button";b.className="edit-add";b.textContent=L("add");td.appendChild(b);});
+qa(".item[data-row]").forEach(function(it,i){var w=wrapOf(it);if(!w)return;var c=cellOf(it),k=key(w,A(it,"row"));items[k]=it;
+home[k]={o:{text:txt(it),stage:c.stage,lane:c.lane,parent:A(it,"parent"),code:A(it,"code"),target:A(it,"target")==="1"},
+td:it.parentNode,ord:i,t:q(".t",it).textContent};it._ord=i;});
+function now(k){var h=home[k],e=ed[k]||{},v={};for(var x in h.o){v[x]=e.hasOwnProperty(x)?e[x]:h.o[x];}v.remove=!!e.remove;return v;}
+function who(by){return by?(by===me?L("you"):names[by]||L("someone")):"";}
+function badge(it,k,by){if(k){it.setAttribute("data-eb",L(k)+(shared&&by?" · "+who(by):""));}else{it.removeAttribute("data-eb");}}
+function render(){var tds=[];for(var k in home){if(!home.hasOwnProperty(k))continue;var it=items[k],h=home[k];
+if(it.parentNode!==h.td){h.td.insertBefore(it,q(".edit-add",h.td));if(tds.indexOf(h.td)<0)tds.push(h.td);}
+q(".t",it).textContent=h.t;it.classList.remove("edited");it.classList.remove("removed");badge(it,"");}
+tds.forEach(function(td){qa(":scope > .item[data-row]",td).sort(function(a,b){return a._ord-b._ord;}).forEach(function(it){
+td.insertBefore(it,q(".edit-add",td));});});
+qa(".item.added").forEach(function(d){d.remove();});
+for(var j in ed){if(!ed.hasOwnProperty(j)||!items[j])continue;var e=ed[j],it2=items[j],v=now(j),w=wrapOf(it2);
+if(e.hasOwnProperty("text")||e.hasOwnProperty("target"))q(".t",it2).textContent=(v.target?FLAG:"")+v.text;
+if(e.hasOwnProperty("stage")||e.hasOwnProperty("lane"))place(it2,tdOf(w,v.stage,v.lane));
+it2.classList.toggle("edited",!e.remove);it2.classList.toggle("removed",!!e.remove);badge(it2,e.remove?"b-gone":"b-edit",(meta[j]||{}).by);}
+Object.keys(adds).sort().forEach(function(id){var a=adds[id],w2=wrapByMap(a.map);if(!w2)return;var d=document.createElement("div");
+d.className="item added";d.setAttribute("data-add",id);d.setAttribute("tabindex","0");badge(d,"b-new",a.by);
+var t=document.createElement("div");t.className="t";t.textContent=(a.target?FLAG:"")+a.text;d.appendChild(t);place(d,tdOf(w2,a.stage,a.lane));});
+count2();}
+function count2(){var n=Object.keys(adds).length+Object.keys(ed).length;
+cnt.textContent=L("count").replace("%d",n);cnt.classList.toggle("some",n>0);document.body.classList.toggle("has-edits",n>0);dirty=!shared&&n>0;}
+function docId(s){return s.replace(/[^A-Za-z0-9_\-.:@+]/g,function(c){return"~"+c.charCodeAt(0).toString(16)+"~";}).slice(0,190);}
+function stamp(){return{by:me||"",at:new Date().toISOString()};}
+function commitRow(k,e){var has=false;for(var y in e){if(e.hasOwnProperty(y))has=true;}
+if(has){ed[k]=e;meta[k]=stamp();}else{delete ed[k];delete meta[k];}render();
+if(shared){var p=k.split(SEP),w=wrapByMap(p[0]),ref=shared.collection("edits").doc(docId("r~"+p[0]+"~"+p[1]));
+(has?ref.set({kind:"row",map:p[0],row:p[1],digest:A(w,"digest"),edit:e,by:me||"",at:meta[k].at}):ref.delete()).catch(fail);}}
+function commitAdd(id,a){if(a){a.by=me||"";adds[id]=a;}else{delete adds[id];}render();
+if(shared){var w=a?wrapByMap(a.map):null,ref=shared.collection("edits").doc(id);
+(a?ref.set({kind:"add",map:a.map,digest:A(w,"digest"),add:{stage:a.stage,lane:a.lane,text:a.text,parent:a.parent,code:a.code,
+target:!!a.target},by:me||"",at:new Date().toISOString()}):ref.delete()).catch(fail);}}
+function fail(){say("syncfail",1);}
 function opt(sel,value,label,pick){var o=document.createElement("option");o.value=value;o.textContent=label;if(pick)o.selected=true;
 sel.appendChild(o);}
 function fillSel(sel,list,value){sel.innerHTML="";list.forEach(function(x){opt(sel,x.id,x.name,x.id===value);});}
@@ -865,44 +908,30 @@ f.stage.addEventListener("change",lanes);f.lane.addEventListener("change",lanes)
 function open(c){cur=c;var v=c.v;c.ss=stagesOf(c.w);c.ls=lanesOf(c.w);f.text.value=v.text;fillSel(f.stage,c.ss,v.stage);fillSel(f.lane,c.ls,v.lane);
 fillParents(c.w,v.stage,v.lane,v.parent,c.row||"");f.code.value=v.code;f.target.checked=!!v.target;
 f.title.textContent=c.row?L("t-row"):L("t-new");f.remove.textContent=c.row&&v.remove?L("restore"):L("remove");
+var by=c.row?(meta[c.k]||{}).by:c.add!=null?adds[c.add].by:"";f.who.textContent=shared&&by?L("by").replace("%s",who(by)):"";
 box(f.remove,!!c.row||c.add!=null);box(f.reset,!!c.row&&!!ed[c.k]);lanes();form.hidden=false;document.body.classList.add("panel");
 qa(".item.current").forEach(function(x){x.classList.remove("current");});if(c.it)c.it.classList.add("current");f.text.focus();}
-function close(){form.hidden=true;document.body.classList.remove("panel");if(cur&&cur.it)cur.it.classList.remove("current");cur=null;}
-function openRow(it){var w=wrapOf(it);open({w:w,it:it,row:A(it,"row"),k:key(w,A(it,"row")),v:now(it)});}
-function openAdd(td,i,it){var w=wrapOf(td);var a=i!=null?adds[i]:{map:A(w,"map"),stage:A(td,"stage"),lane:A(td,"lane"),text:"",parent:"",code:"",target:false};
-open({w:w,td:td,add:i,it:it||null,v:{text:a.text,stage:a.stage,lane:a.lane,parent:a.parent,code:a.code,target:a.target,remove:false}});}
-function setRow(it,v){var h=base(it),w=wrapOf(it),k=key(w,A(it,"row")),o=h.o,e={};
-["text","stage","lane","parent","code","target"].forEach(function(x){if(v[x]!==o[x])e[x]=v[x];});if(v.remove)e={remove:true};
-var has=false;for(var y in e){if(e.hasOwnProperty(y))has=true;}if(has){ed[k]=e;}else{delete ed[k];}
-q(".t",it).textContent=e.hasOwnProperty("text")||e.hasOwnProperty("target")?(v.target?FLAG:"")+v.text:h.t;
-var c=cellOf(it);if(c.stage!==v.stage||c.lane!==v.lane){if(v.stage===o.stage&&v.lane===o.lane){h.td.insertBefore(it,h.next&&h.next.parentNode===h.td?h.next:q(".edit-add",h.td));}
-else{place(it,tdOf(w,v.stage,v.lane));}}
-it.classList.toggle("edited",has&&!v.remove);it.classList.toggle("removed",!!v.remove);badge(it,v.remove?"b-gone":has?"b-edit":"");count2();}
-function setAdd(i,v,w){var a=adds[i];a.stage=v.stage;a.lane=v.lane;a.text=v.text;a.parent=v.parent;a.code=v.code;a.target=v.target;
-var d=q('[data-add="'+i+'"]');if(d){q(".t",d).textContent=(v.target?FLAG:"")+v.text;place(d,tdOf(w,v.stage,v.lane));}count2();}
-function vals(){var st=f.stage.value,ln=f.lane.value,o=cur.row?base(cur.it).o:{parent:"",code:"",target:false};
+function close(){form.hidden=true;document.body.classList.remove("panel");qa(".item.current").forEach(function(x){x.classList.remove("current");});cur=null;}
+function openRow(it){var w=wrapOf(it),k=key(w,A(it,"row"));open({w:w,it:it,row:A(it,"row"),k:k,v:now(k)});}
+function openAdd(td,id,it){var w=wrapOf(td);var a=id!=null?adds[id]:{map:A(w,"map"),stage:A(td,"stage"),lane:A(td,"lane"),text:"",parent:"",code:"",target:false};
+open({w:w,td:td,add:id,it:it||null,v:{text:a.text,stage:a.stage,lane:a.lane,parent:a.parent,code:a.code,target:a.target,remove:false}});}
+function diff(k,v){var o=home[k].o,e={};["text","stage","lane","parent","code","target"].forEach(function(x){if(v[x]!==o[x])e[x]=v[x];});
+return v.remove?{remove:true}:e;}
+function vals(){var st=f.stage.value,ln=f.lane.value,o=cur.row?home[cur.k].o:{parent:"",code:"",target:false};
 return{text:f.text.value.replace(/\s+/g," ").trim(),stage:st,lane:ln,parent:P[ln]?f.parent.value:o.parent,
 code:CODE[ln]?f.code.value.trim():o.code,target:ln==="opportunity"?f.target.checked:o.target,remove:false};}
+function newId(){nadd++;return"a~"+(me?docId(me).slice(-12):"local")+"~"+Date.now().toString(36)+nadd;}
 function apply(){if(!cur)return;var v=vals();if(!v.text){f.text.focus();return;}
-if(cur.row){setRow(cur.it,v);}
-else if(cur.add!=null){setAdd(cur.add,v,cur.w);}
-else{var i=adds.length;adds.push({map:A(cur.w,"map"),stage:v.stage,lane:v.lane,text:v.text,parent:v.parent,code:v.code,target:v.target});
-var d=document.createElement("div");d.className="item added";d.setAttribute("data-add",String(i));d.setAttribute("tabindex","0");badge(d,"b-new");
-var t=document.createElement("div");t.className="t";t.textContent=(v.target?FLAG:"")+v.text;d.appendChild(t);place(d,tdOf(cur.w,v.stage,v.lane));count2();}
+if(cur.row){commitRow(cur.k,diff(cur.k,v));}
+else{commitAdd(cur.add!=null?cur.add:newId(),{map:A(cur.w,"map"),stage:v.stage,lane:v.lane,text:v.text,parent:v.parent,code:v.code,target:v.target});}
 close();}
-function remove(){if(!cur)return;if(cur.row){var v=now(cur.it);v.remove=!v.remove;setRow(cur.it,v);}
-else if(cur.add!=null){adds[cur.add]=null;var d=q('[data-add="'+cur.add+'"]');if(d)d.remove();count2();}close();}
-function reset(){if(!cur||!cur.row)return;var h=base(cur.it);delete ed[cur.k];q(".t",cur.it).textContent=h.t;
-h.td.insertBefore(cur.it,h.next&&h.next.parentNode===h.td?h.next:q(".edit-add",h.td));cur.it.classList.remove("edited");
-cur.it.classList.remove("removed");badge(cur.it,"");count2();close();}
-function count2(){var n=adds.filter(function(a){return a;}).length;for(var k in ed){if(ed.hasOwnProperty(k))n++;}
-cnt.textContent=L("count").replace("%d",n);cnt.classList.toggle("some",n>0);document.body.classList.toggle("has-edits",n>0);dirty=n>0;}
+function remove(){if(!cur)return;if(cur.row){var v=now(cur.k);v.remove=!v.remove;commitRow(cur.k,diff(cur.k,v));}
+else if(cur.add!=null){commitAdd(cur.add,null);}close();}
+function reset(){if(!cur||!cur.row)return;commitRow(cur.k,{});close();}
 q(".f-apply",form).addEventListener("click",apply);q(".f-cancel",form).addEventListener("click",close);q(".f-close",form).addEventListener("click",close);
 f.remove.addEventListener("click",remove);f.reset.addEventListener("click",reset);
 form.addEventListener("keydown",function(e){if(e.key==="Escape"){e.preventDefault();close();}
 else if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();apply();}});
-qa("td[data-stage]").forEach(function(td){if(LOCK[A(td,"lane")])return;var b=document.createElement("button");
-b.type="button";b.className="edit-add";b.textContent=L("add");td.appendChild(b);});
 function target(x,y){var el=document.elementFromPoint(x,y),td=el&&el.closest("td[data-stage]");
 return td&&drag&&wrapOf(td)===drag.w&&!LOCK[A(td,"lane")]?td:null;}
 function lit(td){qa("td.drop-ok").forEach(function(t){if(t!==td)t.classList.remove("drop-ok");});if(td)td.classList.add("drop-ok");}
@@ -911,22 +940,23 @@ if(!it||it.closest(".edit-bar")||A(it,"locked")||it.classList.contains("chip"))r
 var rb=it.getBoundingClientRect();drag={it:it,x:ev.clientX,y:ev.clientY,ox:ev.clientX-rb.left,oy:ev.clientY-rb.top,go:false,w:wrapOf(it),g:null,cx:0,cy:0};},true);
 document.addEventListener("pointermove",function(ev){if(!drag)return;var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;
 if(!drag.go){if(Math.abs(dx)+Math.abs(dy)<6)return;drag.go=true;var g=drag.it.cloneNode(true);g.className+=" drag-ghost";
-g.style.width=drag.it.offsetWidth+"px";g.style.left="0px";g.style.top="0px";document.body.appendChild(g);drag.g=g;var z=g.getBoundingClientRect();drag.cx=z.left;drag.cy=z.top;drag.it.classList.add("dragging");document.body.classList.add("drag-on");}
+g.style.width=drag.it.offsetWidth+"px";g.style.left="0px";g.style.top="0px";document.body.appendChild(g);drag.g=g;var z=g.getBoundingClientRect();drag.cx=z.left;drag.cy=z.top;
+drag.it.classList.add("dragging");document.body.classList.add("drag-on");}
 ev.preventDefault();drag.g.style.left=(ev.clientX-drag.ox-drag.cx)+"px";drag.g.style.top=(ev.clientY-drag.oy-drag.cy)+"px";
 var w=drag.w,r=w.getBoundingClientRect();if(ev.clientX>r.right-40)w.scrollLeft+=18;else if(ev.clientX<r.left+40)w.scrollLeft-=18;
 if(ev.clientY>window.innerHeight-40)window.scrollBy(0,18);else if(ev.clientY<40)window.scrollBy(0,-18);
 lit(target(ev.clientX,ev.clientY));},{passive:false});
 function drop(ev){if(!drag)return;var d=drag,td=d.go&&ev?target(ev.clientX,ev.clientY):null;drag=null;if(!d.go)return;dragged=true;
 setTimeout(function(){dragged=false;},0);lit(null);d.g.remove();d.it.classList.remove("dragging");document.body.classList.remove("drag-on");
-if(!td||td===d.it.parentNode)return;if(d.it.hasAttribute("data-row")){var v=now(d.it);v.stage=A(td,"stage");v.lane=A(td,"lane");
-if(!P[v.lane])v.parent=base(d.it).o.parent;setRow(d.it,v);}else{var i=+A(d.it,"add"),a=adds[i];
-setAdd(i,{text:a.text,stage:A(td,"stage"),lane:A(td,"lane"),parent:a.parent,code:a.code,target:a.target&&A(td,"lane")==="opportunity"},d.w);}
+if(!td||td===d.it.parentNode)return;if(d.it.hasAttribute("data-row")){var k=key(d.w,A(d.it,"row")),v=now(k);v.stage=A(td,"stage");v.lane=A(td,"lane");
+if(!P[v.lane])v.parent=home[k].o.parent;commitRow(k,diff(k,v));}else{var id=A(d.it,"add"),a=adds[id];
+commitAdd(id,{map:a.map,text:a.text,stage:A(td,"stage"),lane:A(td,"lane"),parent:a.parent,code:a.code,target:a.target&&A(td,"lane")==="opportunity"});}
 say("moved");}
 document.addEventListener("pointerup",drop);document.addEventListener("pointercancel",function(){drop(null);});
 document.addEventListener("click",function(ev){if(!on()||dragged)return;
 var t=ev.target;if(t.closest(".edit-form")||t.closest(".edit-bar"))return;var w=t.closest(".wrap");if(w&&w._moved)return;
 var b=t.closest(".edit-add");if(b){openAdd(b.closest("td"),null);return;}
-var a=t.closest(".item.added");if(a){openAdd(a.closest("td"),+A(a,"add"),a);return;}
+var a=t.closest(".item.added");if(a){openAdd(a.closest("td"),A(a,"add"),a);return;}
 var it=t.closest(".item[data-row]");if(!it)return;if(A(it,"locked")){say("locked");return;}say("");openRow(it);});
 document.addEventListener("keydown",function(ev){if(!on()||ev.key!=="Enter")return;var t=ev.target;
 if(t.matches&&t.matches(".item[data-row],.item.added")){ev.preventDefault();t.click();}});
@@ -934,9 +964,8 @@ tog.addEventListener("click",function(){var go=document.body.classList.toggle("e
 qa(".item[data-row]").forEach(function(it){if(go)it.setAttribute("tabindex","0");else if(!it.classList.contains("chip"))it.removeAttribute("tabindex");});
 if(!go)close();say("");});
 function build(){var day=new Date().toISOString().slice(0,10),maps={},n=0;
-function m(name){var w=qa(".wrap[data-map]").filter(function(x){return A(x,"map")===name;})[0];
-if(!maps[name])maps[name]={digest:A(w,"digest"),edits:[]};return maps[name].edits;}
-for(var k in ed){if(!ed.hasOwnProperty(k))continue;var p=k.split("\u0001"),e=ed[k],l=m(p[0]),r=p[1],o=home[k].o;
+function m(name){var w=wrapByMap(name);if(!maps[name])maps[name]={digest:A(w,"digest"),edits:[]};return maps[name].edits;}
+for(var k in ed){if(!ed.hasOwnProperty(k))continue;var p=k.split(SEP),e=ed[k],l=m(p[0]),r=p[1],o=home[k].o;
 if(e.remove){l.push({op:"remove",row:r});continue;}
 if(e.hasOwnProperty("text"))l.push({op:"text",row:r,text:e.text});
 if(e.hasOwnProperty("stage")||e.hasOwnProperty("lane"))l.push({op:"move",row:r,stage:e.hasOwnProperty("stage")?e.stage:o.stage,
@@ -944,7 +973,7 @@ lane:e.hasOwnProperty("lane")?e.lane:o.lane});
 if(e.hasOwnProperty("parent"))l.push({op:"parent",row:r,parent:e.parent});
 if(e.hasOwnProperty("code"))l.push({op:"code",row:r,code:e.code});
 if(e.hasOwnProperty("target"))l.push({op:"target",row:r,target:!!e.target});}
-adds.forEach(function(a){if(!a)return;n++;m(a.map).push({op:"add",id:"p"+n,stage:a.stage,lane:a.lane,text:a.text,
+Object.keys(adds).sort().forEach(function(id){var a=adds[id];n++;m(a.map).push({op:"add",id:"p"+n,stage:a.stage,lane:a.lane,text:a.text,
 parent:a.parent,code:a.code,target:!!a.target});});
 return JSON.stringify({kind:"journey-page-edits",version:1,product:A(bar,"product"),root:A(bar,"root"),made:day,maps:maps},null,1);}
 function put(){out.value=build();out.hidden=true;return out.value;}
@@ -956,6 +985,21 @@ q(".edit-copy",bar).addEventListener("click",function(){var s=put();function fb(
 if(document.execCommand("copy")){out.hidden=true;dirty=false;say("copied",1);}else say("copyfail",1);}catch(_){say("copyfail",1);}}
 try{navigator.clipboard.writeText(s).then(function(){dirty=false;say("copied",1);},fb);}catch(_){fb();}});
 window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue=L("unsaved");return L("unsaved");}});
+function names2(ids,u){ids=ids.filter(function(x){return x&&!names.hasOwnProperty(x)&&x!==me;});if(!ids.length||!u)return;
+u.profiles(ids).then(function(ps){ids.forEach(function(x){names[x]=(ps[x]&&ps[x].name)||"";});render();},function(){});}
+function live(db,u){shared=db;document.body.classList.add("shared");sync.textContent=L("s-wait");var t=setTimeout(function(){sync.textContent=L("s-slow");},10000);
+db.collection("edits").onSnapshot(function(s){if(!s.metadata.fromCache){clearTimeout(t);sync.textContent=L("s-on");}
+var e2={},m2={},a2={},by=[];stale=0;s.docs.forEach(function(d){var x=d.data()||{},w=wrapByMap(String(x.map||""));
+if(!w){return;}if(x.digest!==A(w,"digest")){stale++;return;}
+if(x.kind==="row"&&x.edit&&typeof x.edit==="object"){var k=key(w,String(x.row||""));if(!home[k])return;e2[k]=x.edit;m2[k]={by:x.by,at:x.at};}
+else if(x.kind==="add"&&x.add&&typeof x.add==="object"){var a=x.add;a2[d.id]={map:String(x.map),stage:String(a.stage||""),lane:String(a.lane||""),
+text:String(a.text||""),parent:String(a.parent||""),code:String(a.code||""),target:!!a.target,by:x.by};}
+else return;by.push(String(x.by||""));});
+ed=e2;meta=m2;adds=a2;render();names2(by,u);if(stale)sync.textContent=L("s-on")+" · "+L("s-stale").replace("%d",stale);},
+function(){clearTimeout(t);sync.textContent=L("s-off");});}
+var C=window.claude;if(C&&typeof C.use==="function"){Promise.all([C.use("db"),C.use("user")]).then(function(r){var db=r[0],u=r[1];if(!db)return;
+var ask=u?Promise.all([u.id(),u.canEdit()]):Promise.resolve([null,true]);ask.then(function(x){me=x[0];canWrite=x[1]!==false;
+if(!canWrite){document.body.classList.add("readonly");}live(db,u);});},function(){});}
 count2();})();'''
 
 
@@ -972,12 +1016,13 @@ def edit_bar(note, note_name, lang):
     E = EDIT_LABELS.get(lang, EDIT_LABELS["en"])
     words = "".join(' data-l-%s="%s"' % (k, esc(E[k])) for k in (
         "on", "off", "count", "copied", "copyfail", "saved", "savefail", "locked", "unsaved", "moved", "none", "ph", "pnone",
-        "c-init", "c-exp", "t-row", "t-new", "remove", "restore", "add", "b-edit", "b-new", "b-gone"))
+        "c-init", "c-exp", "t-row", "t-new", "remove", "restore", "add", "b-edit", "b-new", "b-gone", "you", "someone", "by",
+        "syncfail", "s-wait", "s-slow", "s-on", "s-off", "s-stale"))
     return ('<div class="edit-bar"%s%s><button type="button" class="edit-toggle">%s</button><span class="edit-count"></span>'
             '<button type="button" class="edit-copy">%s</button><button type="button" class="edit-save">%s</button>'
-            '<span class="edit-msg" role="status"></span><p class="edit-help">%s</p>'
+            '<span class="edit-sync"></span><span class="edit-msg" role="status"></span><p class="edit-help">%s</p><p class="edit-help edit-help-shared">%s</p>'
             '<div class="edit-form" hidden role="dialog"><div class="f-head"><b class="f-title"></b>'
-            '<button type="button" class="f-close" aria-label="%s">\u00d7</button></div><p class="f-where"></p>'
+            '<button type="button" class="f-close" aria-label="%s">\u00d7</button></div><p class="f-where"></p><p class="f-who"></p>'
             '<label>%s<textarea class="f-text"></textarea></label>'
             '<div class="f-two"><label>%s<select class="f-stage"></select></label><label>%s<select class="f-lane"></select></label></div>'
             '<label class="f-box">%s<select class="f-parent"></select><small class="f-phint"></small></label>'
@@ -987,7 +1032,7 @@ def edit_bar(note, note_name, lang):
             '<div class="f-more"><button type="button" class="f-reset">%s</button><button type="button" class="f-remove">%s</button></div></div>'
             '<textarea class="edit-out" readonly hidden></textarea></div>') % (
         edit_attrs(product=nt.safe(note["product"]), root=nt.safe(os.path.splitext(note_name)[0])), words,
-        esc(E["on"]), esc(E["copy"]), esc(E["save"]), esc(E["help"]), esc(E["close"]), esc(E["text"]), esc(E["stage"]),
+        esc(E["on"]), esc(E["copy"]), esc(E["save"]), esc(E["help"]), esc(E["help-shared"]), esc(E["close"]), esc(E["text"]), esc(E["stage"]),
         esc(E["lane"]), esc(E["parent"]), esc(E["target"]), esc(E["apply"]), esc(E["cancel"]), esc(E["reset"]), esc(E["remove"]))
 
 
@@ -3203,6 +3248,71 @@ def read_edits(path):
     return data
 
 
+SHARED_MAX_DOCS = 5000
+
+
+def read_shared(path):
+    """The page's shared edits (since v4.11.0, the user's decision of 2026-11-25): a folder of the artifact's `edits`
+    documents, one JSON file each, as the host's database tool saves them. Another person's input: each document is read
+    on its own, a file too large, unreadable or not an object skipped. Returns [(doc id, body)]."""
+    docs = []
+    names = sorted(x for x in os.listdir(path) if x.endswith(".json"))[:SHARED_MAX_DOCS]
+    for fn in names:
+        fp = os.path.join(path, fn)
+        try:
+            if os.path.getsize(fp) > EDIT_MAX_BYTES:
+                continue
+            with open(fp, encoding="utf-8") as fh:
+                body = json.load(fh)
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if isinstance(body, dict):
+            docs.append((unicodedata.normalize("NFC", fn[:-5]), body))
+    return docs
+
+
+def shared_edits(docs, sigs):
+    """The shared documents as a file of edits (§9): a row's document becomes its ops, an added row's an `add`; a document
+    made on an older version of its map (its digest) or of an unknown map is named, never read. `sigs`: {name_key: (name,
+    digest)}. Returns (data, docs by row key and by add, skipped)."""
+    maps, rows, skipped, n = {}, {}, [], 0
+    for did, b in docs:
+        m = _s(b.get("map")) or ""
+        hit = sigs.get(name_key(m))
+        if hit is None:
+            skipped.append({"why": "unknown_map", "map": nt.safe(m), "row": None, "doc": nt.safe(did),
+                            "detail": "no map of this page is named so — the document is not read"})
+            continue
+        real, digest = hit
+        if b.get("digest") != digest:
+            skipped.append({"why": "stale", "map": nt.safe(real), "row": nt.safe(str(b.get("row"))) if b.get("row") else None,
+                            "doc": nt.safe(did), "detail": "made on an older version of the map — edit its fresh page again"})
+            continue
+        ops = maps.setdefault(real, {"digest": digest, "edits": []})["edits"]
+        if b.get("kind") == "row" and isinstance(b.get("edit"), dict) and _s(b.get("row")):
+            r, e = _s(b.get("row")), b["edit"]
+            rows.setdefault((real, r), []).append(did)
+            if e.get("remove") is True:
+                ops.append({"op": "remove", "row": r})
+                continue
+            for k in ("text", "parent", "code"):
+                if k in e:
+                    ops.append({"op": k, "row": r, k: e[k]})
+            if "stage" in e or "lane" in e:
+                ops.append({"op": "move", "row": r, "stage": e.get("stage"), "lane": e.get("lane")})
+            if "target" in e:
+                ops.append({"op": "target", "row": r, "target": e["target"] is True})
+        elif b.get("kind") == "add" and isinstance(b.get("add"), dict):
+            n += 1
+            a = b["add"]
+            ops.append({"op": "add", "id": "p%d" % n, "stage": a.get("stage"), "lane": a.get("lane"), "text": a.get("text"),
+                        "parent": a.get("parent"), "code": a.get("code"), "target": a.get("target") is True, "doc": did})
+        else:
+            skipped.append({"why": "bad_edit", "map": nt.safe(real), "row": None, "doc": nt.safe(did),
+                            "detail": "a document that is no row's edit and no added row"})
+    return {"kind": EDIT_KIND, "version": EDIT_VERSION, "maps": maps}, rows, skipped
+
+
 def _s(v):
     """A value of the file as a short string, or None when it is not one (another person's input)."""
     if isinstance(v, bool) or v is None:
@@ -3284,6 +3394,8 @@ def page_diff(note, name, nest, data, lang):
                     ent["code"] = nt.safe(code)
                 if e.get("target") is True:
                     ent["target"] = True
+                if _s(e.get("doc")):
+                    ent["doc"] = nt.safe(_s(e.get("doc")))
                 out["added"].append(ent)
                 continue
             rid = _s(e.get("row"))
@@ -3302,7 +3414,7 @@ def page_diff(note, name, nest, data, lang):
                                                                                        cell(r["stage"], r["lane"])))
                 out["hc_edits" if hc else "changed"].append(dict(ent, change="text") if hc else dict(ent, team=False))
             elif op == "move":
-                st, ln = _s(e.get("stage")), lane_of(_s(e.get("lane")) or "")
+                st, ln = _s(e.get("stage")) or r["stage"], lane_of(_s(e.get("lane")) or r["lane"])
                 if (st, ln) == (r["stage"], r["lane"]):
                     continue
                 to = (S(st), ln) if st in declared and ln else None
@@ -3337,22 +3449,42 @@ def page_diff(note, name, nest, data, lang):
 def cmd_page_diff(args):
     note = load(args.note)
     name = unicodedata.normalize("NFC", os.path.splitext(os.path.basename(args.note))[0])
-    data = read_edits(args.edits)
+    lang = args.lang or note["lang"]
+    nest = page_nest(note, args.map, args.dir, lang)
+    nested = nest is not None and bool(nest["tree"]["children"])
+    shared, pre_skipped = None, []
+    if os.path.isdir(args.edits):                   # the shared edits of a published page (§9): the artifact's documents
+        sigs = {name_key(name): (name, table_sig(note)["table"])}
+        for k in (tree_blocks(nest) if nested else []):
+            sigs[name_key(k["note"])] = (k["note"], table_sig(nest["maps"][k["note"]])["table"])
+        data, shared, pre_skipped = shared_edits(read_shared(args.edits), sigs)
+    else:
+        data = read_edits(args.edits)
     root = _s(data.get("root")) or ""
     if root and name_key(root) != name_key(name):
         raise Bad("the edits are of the page of %s — run page-diff with --note %s.md" % (nt.safe(root), nt.safe(root)))
     prod = _s(data.get("product"))
     if prod is not None and _product_key(prod) != _product_key(nt.safe(note["product"])):
         raise Bad("the edits are of another product's map — never taken into this one")
-    lang = args.lang or note["lang"]
-    nest = page_nest(note, args.map, args.dir, lang)
-    nested = nest is not None and bool(nest["tree"]["children"])
     diff, skipped = page_diff(note, name, nest if nested else None, data, lang)
+    skipped = pre_skipped + skipped
     made = _s(data.get("made"))
     payload = dict(ok=True, state="diff", surface="page", made=made if made and day(made) else None, **diff)
     payload.update(note=table_sig(note), skipped=skipped, map=nt.safe(name))
     if nested:
         payload["tree"] = tree_sigs(nest)            # a take into a child checks its own note (§14)
+    if shared is not None:                           # which documents each element came from: cleared after a written take
+        docs = {}
+        for cat in DIFF_CATEGORIES:
+            for e in diff.get(cat, []):
+                if e.get("doc"):
+                    docs.setdefault(e["id"], []).append(e["doc"])
+                elif e.get("row"):
+                    mp, _, rid = e["row"].rpartition("#")
+                    for did in shared.get((mp or name, rid), []):
+                        if did not in docs.setdefault(e["id"], []):
+                            docs[e["id"]].append(nt.safe(did))
+        payload["docs"] = docs
     if args.out:
         try:
             payload["out"] = _write_json(args.out, payload)
@@ -3447,7 +3579,7 @@ def main(argv=None):
     p.add_argument("--dry-run", action="store_true", help="the preview: nothing written")
     p = sub.add_parser("page-diff")
     p.add_argument("--note", required=True, help="the map whose page the edits were made on — its root on a tree page")
-    p.add_argument("--edits", required=True, help="the file of edits the page saved, or a text file holding the copied edits")
+    p.add_argument("--edits", required=True, help="the file of edits the page saved, a text file holding the copied edits, or a folder of the published page's shared edits (one JSON document each)")
     p.add_argument("--out", help="keep the diff for board-take")
     p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
     p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")

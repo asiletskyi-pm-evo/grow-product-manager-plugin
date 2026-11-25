@@ -105,6 +105,8 @@ def rows_of(path):
     return {r["id"]: r for r in jm.load(path)["rows"] if r["id"]}
 
 
+MOCK_JS = '\n(function(){var store={},ls=[];\nfunction snap(){return{docs:Object.keys(store).sort().map(function(id){return{id:id,exists:true,data:function(){return store[id];},metadata:{fromCache:false,hasPendingWrites:false}};}),metadata:{fromCache:false,hasPendingWrites:false}};}\nfunction emit(){var s=snap();ls.forEach(function(f){setTimeout(function(){f(s);},0);});}\nvar db={collection:function(c){return{doc:function(id){return{set:function(d){store[id]=JSON.parse(JSON.stringify(d));emit();return Promise.resolve();},delete:function(){delete store[id];emit();return Promise.resolve();}};},onSnapshot:function(n){ls.push(n);setTimeout(function(){n(snap());},0);return function(){};}};}};\nvar user={id:function(){return Promise.resolve("u_me");},canEdit:function(){return Promise.resolve(window.__canEdit!==false);},profiles:function(ids){var r={};ids.forEach(function(i){r[i]={name:"Оля"};});return Promise.resolve(r);}};\nwindow.__mock={store:store,put:function(id,d){store[id]=d;emit();}};\nwindow.claude={use:function(n){return Promise.resolve(n==="db"?db:n==="user"?user:null);}};})();'
+
 d = tempfile.mkdtemp(prefix="journey-page-test-")
 try:
     main_src = os.path.join(FIX, "journey-first-order.md")
@@ -500,6 +502,62 @@ const { chromium } = require('playwright');
               and not {"metric", "anomaly"} & set(b7.get("panel", {}).get("lanes", [])), b7.get("panel"))
         check("7.9 «Відмінити правки рядка» puts the card back and the count to zero", b7.get("back") == "s3"
               and b7.get("count") == "Правок: 0", (b7.get("back"), b7.get("count")))
+
+    # 8. shared edits — the host's own artifact page (the user's decision of 2026-11-25)
+    NF = os.path.join(FIX, "nest")
+    sd = os.path.join(d, "shared", "edits")
+    os.makedirs(sd)
+    rsig, csig = jm.table_sig(jm.load(os.path.join(NF, "journey-first-order.md")))["table"], jm.table_sig(jm.load(os.path.join(NF, "journey-payment.md")))["table"]
+    for k, v in {"r~p2": {"kind": "row", "map": "journey-first-order", "row": "p2", "digest": rsig, "edit": {"stage": "s4", "text": "Нова назва"}, "by": "u_a"},
+                 "r~pc2": {"kind": "row", "map": "journey-payment", "row": "pc2", "digest": csig, "edit": {"text": "Банк відхилив"}, "by": "u_b"},
+                 "a~1": {"kind": "add", "map": "journey-first-order", "digest": rsig, "add": {"stage": "s2", "lane": "solution", "text": "Рішення", "parent": "o1"}},
+                 "r~old": {"kind": "row", "map": "journey-first-order", "row": "p1", "digest": "old", "edit": {"text": "x"}},
+                 "junk": {"kind": "weird", "map": "journey-first-order", "digest": rsig}}.items():
+        write(os.path.join(sd, k + ".json"), json.dumps(v, ensure_ascii=False))
+    write(os.path.join(sd, "broken.json"), "{not json")
+    rc, out, res = run("page-diff", "--note", os.path.join(NF, "journey-first-order.md"), "--edits", sd)
+    check("8.1 the shared documents as a diff: a root row moved and changed, a child's row, an added row — each element's documents named",
+          rc == 0 and sorted(e["row"] for e in res.get("changed", [])) == ["journey-payment#pc2", "p2"]
+          and [e["row"] for e in res.get("moved", [])] == ["p2"] and [e.get("parent") for e in res.get("added", [])] == ["o1"]
+          and sorted(map(tuple, res.get("docs", {}).values())) == [("a~1",), ("r~p2",), ("r~pc2",)], out[-500:])
+    check("8.2 a document of an older version of the map is stale, one of no row's kind bad_edit, an unreadable file skipped — none read",
+          sorted((x["why"], x.get("doc")) for x in res.get("skipped", [])) == [("bad_edit", "junk"), ("stale", "r~old")], res.get("skipped"))
+    if have_pw:
+        jsm = os.path.join(d, "pwm.js")
+        write(jsm, "const MOCK = `" + MOCK_JS + "`;\n" + r"""
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const p = await b.newPage({viewport: {width: 1400, height: 900}}); const errs = [];
+  p.on('pageerror', e => errs.push(String(e))); await p.addInitScript(MOCK);
+  await p.goto('file://' + process.argv[2]); await p.waitForTimeout(200); await p.click('.edit-toggle');
+  await p.$eval('.item[data-row="p2"]', e => e.scrollIntoView({block: 'center'}));
+  const sb = await (await p.$('.item[data-row="p2"]')).boundingBox(), db = await (await p.$('td[data-stage="s4"][data-lane="pain"]')).boundingBox();
+  await p.mouse.move(sb.x + 20, sb.y + 10); await p.mouse.down(); await p.mouse.move(db.x + 40, db.y + 20, {steps: 12}); await p.mouse.up();
+  const dig = await p.$eval('.wrap[data-map="journey-first-order"]', w => w.getAttribute('data-digest'));
+  await p.evaluate(d => window.__mock.put("a~x", {kind: "add", map: "journey-first-order", digest: d, add: {stage: "s3", lane: "solution", text: "Від колеги", parent: "o2"}, by: "u_olya"}), dig);
+  await p.evaluate(() => window.__mock.put("r~old", {kind: "row", map: "journey-first-order", row: "p1", digest: "old", edit: {text: "стара"}, by: "u_olya"}));
+  await p.waitForTimeout(150);
+  const store = await p.evaluate(() => JSON.parse(JSON.stringify(window.__mock.store)));
+  const added = await p.$$eval('.item.added', x => x.map(e => [e.textContent, e.getAttribute('data-eb')]));
+  const p1 = await p.$eval('.item[data-row="p1"] .t', e => e.textContent);
+  const copy = await p.isVisible('.edit-copy');
+  const r = await b.newPage(); await r.addInitScript(MOCK + 'window.__canEdit=false;'); await r.goto('file://' + process.argv[2]); await r.waitForTimeout(200);
+  console.log(JSON.stringify({errs, store, added, p1, copy, sync: await p.textContent('.edit-sync'), ro: await r.isVisible('.edit-toggle')})); await b.close();
+})();""")
+        prm = subprocess.run(["node", jsm, pg], capture_output=True, text=True, timeout=120,
+                             env=dict(os.environ, NODE_PATH=subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()))
+        try:
+            bm = json.loads(prm.stdout.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            bm = {}
+        mine = [v for v in bm.get("store", {}).values() if v.get("by") == "u_me"]
+        check("8.3 on the host the drag is written to the store at once: one row document, its digest, the viewer's id, nothing else",
+              len(mine) == 1 and mine[0].get("kind") == "row" and mine[0].get("edit") == {"stage": "s4"} and mine[0].get("digest")
+              and not bm.get("errs"), (bm.get("store"), prm.stderr[-300:]))
+        check("8.4 a colleague's row appears live with their name; a document of an older map is not shown",
+              bm.get("added") == [["Від колеги", "новий · Оля"]] and "стара" not in (bm.get("p1") or "стара")
+              and "старих правок не показано" in (bm.get("sync") or ""), (bm.get("added"), bm.get("sync")))
+        check("8.5 shared: no file to save or copy; a viewer who may not edit has no switch", bm.get("copy") is False and bm.get("ro") is False, bm)
 
     # mutations
     for name, old, new, args, test in (
