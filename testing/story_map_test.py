@@ -705,6 +705,34 @@ try:
     rc, out, res = run("board-state", "--surface", "figjam", "--read", wl, "--note", note, "--out", os.path.join(d, "x.json"))
     check("12.15 an unknown surface is refused by the command line", rc == 2 and not os.path.exists(os.path.join(d, "x.json")), out)
 
+    # review of v4.11.2: a person's note whose text is a card's or a step's stays the team's; a read sharing nothing with
+    # the state is partial, never «everything removed»; a folder as `--last` is the host's; a surface that is not the state's
+    nn = os.path.join(d, "wb-note-twin")
+    shutil.copytree(wn, nn)
+    os.remove(os.path.join(nn, "elements", "wb-c1.json"))
+    nj = os.path.join(nn, "elements", "mwkxzorg-n1.json")
+    nd = json.loads(read(nj).decode("utf-8"))
+    nd["text"] = "Поштомат як спосіб доставки в кошику\nPROJ-1234.1"
+    write(nj, json.dumps(nd, ensure_ascii=False))
+    nk = os.path.join(nn, "elements", "mwkxzorg-n2.json")
+    write(nk, json.dumps({"type": "note", "x": 900, "y": 360, "w": 180, "h": 180, "text": "Оплатити онлайн"}, ensure_ascii=False))
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", nn, "--note", note, "--out", os.path.join(d, "twin.artifact.board.json"))
+    check("12.17 a person's note with a card's text never becomes that card in the state", rc == 0
+          and res.get("cards", {}).get("c1") != "mwkxzorg-n1" and "c1" in res.get("unmapped_cards", []), out)
+    rc, out, res = run("board-diff", "--last", wst, "--now", nn, "--note", note)
+    check("12.18 a person's note with a step's text is `added`, never `unrecorded`",
+          "mwkxzorg-n2" in [a["id"] for a in res.get("added", [])] and res.get("unrecorded") == [], (res.get("added"), res.get("unrecorded")))
+    lone = os.path.join(d, "wb-lone.json")
+    write(lone, json.dumps([{"id": "mwkxzorg-z9", "data": {"type": "note", "x": 0, "y": 0, "text": "нова нотатка"}}], ensure_ascii=False))
+    rc, out, res = run("board-diff", "--last", wst, "--now", lone, "--note", note)
+    check("12.19 a host read that shares no element with the state is `partial`, never «everything removed»",
+          res.get("state") == "partial" and "removed" not in res, out)
+    rc, out, res = run("board-diff", "--last", os.path.join(d, "wb-now"), "--now", wn, "--note", note)
+    check("12.20 a host folder as `--last` without `--surface` is read as the host's list", rc == 0 and res.get("state") == "diff"
+          and res.get("surface") == "whiteboard", out)
+    rc, out, res = run("board-diff", "--last", wst, "--surface", "miro", "--now", os.path.join(d, "board-now.svg"), "--note", note)
+    check("12.21 a host state compared on another surface is refused with its reason", rc == 2 and "surface" in res.get("error", ""), out)
+
     # mutations of §12
     def mrun(script, *args):
         return run(*args, script=script)
@@ -728,12 +756,18 @@ try:
     else:
         n, bad = replay(mm, "wbdefault")
         check("12.M3 a default of `whiteboard` turns the Miro replay red (11.1)", bool(bad), bad)
-    mm = mutant(d, "wbstate", 'return data["elements"], data.get("surface") or "miro"', 'return data["elements"], "miro"')
+    mm = mutant(d, "wbstate", 'return data["elements"], own', 'return data["elements"], "miro"')
     if mm is None:
         check("12.M4 mutation site present (the state's surface on --last)", False, "pattern not in story_map.py")
     else:
         rc, out, res = mrun(mm, "board-diff", "--last", wst, "--now", os.path.join(d, "wb-now", "elements"), "--note", note)
         check("12.M4 the state's surface ignored on `--last` is caught (12.11)", not (rc == 0 and res.get("surface") == "whiteboard"), out)
+    mm = mutant(d, "wbnote", '        if it.get("type") == "note":', '        if False:')
+    if mm is None:
+        check("12.M5 mutation site present (a person's note stays theirs)", False, "pattern not in story_map.py")
+    else:
+        rc, out, res = mrun(mm, "board-state", "--surface", "whiteboard", "--read", nn, "--note", note, "--out", os.path.join(d, "mn.json"))
+        check("12.M5 a note taken as the plugin's card is caught (12.17)", res.get("cards", {}).get("c1") == "mwkxzorg-n1", out)
     n, bad = replay(SCRIPT, "after12")
     check("12.16 after the host's board the Miro replay is still byte for byte (%d cases)" % n, n >= 14 and not bad, bad)
 finally:

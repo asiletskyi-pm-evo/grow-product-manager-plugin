@@ -435,10 +435,8 @@ def read_boards(paths, surface="miro"):
 
 
 def missing_backbone(last, now, p=None):
-    """The slice sections and backbone blocks of the last state a host read lacks — what the note still has; [] when the
-    read shares no element with the state (a new board, its first state)."""
-    if not set(last) & set(now):
-        return []
+    """The slice sections and backbone blocks of the last state a host read lacks — what the note still has. A read that
+    shares no element with the state (another board, a page of new notes only) lacks them all."""
     slices = {s["slice"] for s in p["slices"]} if p else None
     names = ({a["name"] for a in p["activities"]} | {s for a in p["activities"] for s in a["steps"]}) if p else None
     out = []
@@ -503,6 +501,9 @@ def assign_roles(items, p):
         if it["kind"] != "sticky":
             it["role"] = "other"
             continue
+        if it.get("type") == "note":               # a person's note on the host's board: theirs, never the plugin's
+            it["role"] = "sticky"
+            continue
         parent = items.get(it.get("frame") or "")
         in_band = parent is not None and parent.get("role") in ("slice", "backlog")
         if not ((as_card(it) or as_backbone(it)) if in_band else (as_backbone(it) or as_card(it))):
@@ -527,7 +528,12 @@ def load_state(path, p, surface=None):
     read — a Miro SVG, or with `--surface whiteboard` the host's list — whose roles are read against the note now."""
     data = _state(path)
     if data is not None:
-        return data["elements"], data.get("surface") or "miro"
+        own = data.get("surface") or "miro"
+        if surface is not None and surface != own:
+            raise Bad("the board's state is of the %s surface, not %s — compare it with a read of its own board" % (own, surface))
+        return data["elements"], own
+    if surface is None and os.path.isdir(path):
+        surface = "whiteboard"                      # a folder is always the host's list, never a Miro SVG
     if (surface or "miro") == "miro":
         if path.lower().endswith(".json"):          # the Miro path as at v4.6.0: a .json is a state or nothing
             try:
@@ -773,7 +779,8 @@ def cmd_board_state(args):
     if args.last and _there(args.last, args.surface):   # a card the note dropped keeps its sticky as the plugin's own
         in_note = {c["id"] for c in p["cards"]}
         last, _ = load_state(args.last, p, args.surface)
-        lost = missing_backbone(last, items, p) if args.surface != "miro" else []
+        lost = missing_backbone(last, items, p) if args.surface != "miro" and set(last) & set(items) else []   # a new
+        # board shares nothing with the old state: its first state
         if lost:
             raise Bad("the read lacks %d slice section(s) or backbone block(s) the last state holds (%s) — read the board "
                       "again, every page, into a fresh folder; a state is never kept from a partial read"
@@ -813,7 +820,7 @@ def _card_ids(items):
 
 def _there(path, surface):
     """A last state or read to compare with: a file — or, on the host's board, a folder of its elements too."""
-    return os.path.isfile(path) or (surface not in (None, "miro") and os.path.isdir(path))
+    return os.path.isfile(path) or (surface != "miro" and os.path.isdir(path))
 
 
 def cmd_board_diff(args):
