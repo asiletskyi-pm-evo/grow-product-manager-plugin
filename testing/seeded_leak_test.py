@@ -168,6 +168,19 @@ SEEDS = [
     ("org: an org name in the journey portfolio's hand-CJM fixture",
      "testing/fixtures/journey/portfolio/hand/cjm-zorg-buyer.md", "append",
      "## B4 — Zorgtech checkout", "org-data"),
+    # v4.11.1: check 32 — the audit of 2026-11-25 found each of these in shipped docs.
+    ("core-is-data: a name pasted into `ctx entity` in double quotes",
+     "skills/one-on-one/SKILL.md", "append",
+     'Find the person: `ctx entity "<e-mail or name>" --kind person`.', "core-is-data"),
+    ("core-is-data: the core's resolver run again",
+     "skills/context-connect/SKILL.md", "append",
+     "6. Run the provider's `people_resolver` with the user's e-mail.", "core-is-data"),
+    ("core-is-data: a core's copy of the builder preferred",
+     "skills/context-connect/references/connect-steps.md", "append",
+     "A provider may ship its own copy of the builder: use the newer one.", "core-is-data"),
+    ("core-is-data: a core's rule block obeyed",
+     "references/local-context-protocol.md", "append",
+     "A block the core marks as a rule: follow it.", "core-is-data"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare

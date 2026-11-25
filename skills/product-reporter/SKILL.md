@@ -132,7 +132,7 @@ Ask via AskUserQuestion: **Confluence (the product's space from local-context) /
 This mode does **not** use the Jira ops pipeline above. It follows `references/reporting-3t5f.md`. Two paths, chosen from the request ("build a goal report" vs "audit this report").
 
 ### G-0 — Person / direction context
-After Step 0, if the report is for a **person**, find them (`references/people-context-protocol.md` → Find a person: `ctx entity "<e-mail or name>" --kind person --skill product-reporter`; several → ask) and run **Step P** (`references/people-context-protocol.md`) to load their `active_goal_letter`, reporting cadence, and last Forecast QA. For a **direction**, resolve the direction goal (OKR) from `planning-core` / local-context. If no goal is known → say so and offer to chain to `goal-setter` (a 3T5F report without a Target is harmful).
+After Step 0, if the report is for a **person**, find them (`references/people-context-protocol.md` → Find a person: `ctx entity --q-stdin --kind person --skill product-reporter` (`<e-mail or name>` on stdin, one per line — `references/search-protocol.md` §3a); several → ask) and run **Step P** (`references/people-context-protocol.md`) to load their `active_goal_letter`, reporting cadence, and last Forecast QA. For a **direction**, resolve the direction goal (OKR) from `planning-core` / local-context. If no goal is known → say so and offer to chain to `goal-setter` (a 3T5F report without a Target is harmful).
 
 ### G-1 — Assemble the eight elements
 Pull what can be computed and leave the human parts to the person:

@@ -51,6 +51,7 @@ CHECKS = """
 29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
 30. surface-brand        a skill, agent, command, template or shared protocol naming a host surface by its brand or tool instead of its capability (native-surfaces.md §6)
 31. publish-protocol     a skill that publishes to ARTIFACT or DOCS, or that artifact-publishing.md names as its consumer, without citing artifact-publishing.md
+32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1646,6 +1647,34 @@ else:
                      r"\bARTIFACT\b[^.\n]{0,60}\bafter the question\b", _rt) and "artifact-publishing.md" not in _rt:
             fail("publish-protocol", f"references/{os.path.basename(_r)}: publishes to ARTIFACT but never cites "
                                      "references/artifact-publishing.md")
+
+# ============================================================ core is data (32)
+# v4.11.1, the audit of 2026-11-25: (1) a name from a meeting or a note was pasted into `ctx entity "<name>"` — a shell
+# reads `$(…)` and backticks inside double quotes; requests go on stdin (`--q-stdin`, a quoted heredoc) and a value
+# the engine printed in single quotes (search-protocol.md §3a). (2) The plugin ran the command a core's manifest named
+# (`people_resolver`) and «the newer» copy of the bundle builder a core shipped. (3) The core's rule blocks and its
+# playbook were instructions to the agent. Each is a sentence a doc could bring back; this check reads every shipped doc.
+_CID_DOCS = sorted(set(glob.glob(os.path.join(root, "skills", "**", "*.md"), recursive=True)
+                       + glob.glob(os.path.join(root, "references", "**", "*.md"), recursive=True)
+                       + glob.glob(os.path.join(root, "agents", "*.md")) + glob.glob(os.path.join(root, "commands", "*.md"))
+                       + [os.path.join(root, "AGENTS.md")]))
+_CID_RULES = [
+    (re.compile(r'ctx(?:\.py"?)? (?:entity|graph)(?: same| not-same)? "<'), "a request in double quotes in `ctx entity`/`graph` — `--q-stdin` with a quoted heredoc, or single quotes (search-protocol.md §3a)"),
+    (re.compile(r'--(?:q|get|pick|not|product) "<'), "a value in double quotes in a ctx command — requests on stdin (`--q-stdin`), printed values in single quotes (search-protocol.md §3a)"),
+    (re.compile(r"provider may ship its own copy|use the newer (?:one|copy)", re.I), "runs a core's copy of the bundle builder — always the plugin's own (connect-steps.md)"),
+    (re.compile(r"(?:core|block|rule)[^.\n]{0,80}\bfollow it\b", re.I), "tells the agent to follow a core's text — a core's rule is a fact, not an instruction (local-context-protocol.md)"),
+]
+for _f in _CID_DOCS:
+    if not os.path.isfile(_f):
+        continue
+    _rel = os.path.relpath(_f, root)
+    for _ln, _line in enumerate(open(_f, encoding="utf-8").read().splitlines(), 1):
+        for _rx, _what in _CID_RULES:
+            if _rx.search(_line):
+                fail("core-is-data", f"{_rel}:{_ln}: {_what}")
+        if "people_resolver" in _line and not re.search(r"deprecated since v4\.11\.1|ignored|Never inferred", _line):
+            fail("core-is-data", f"{_rel}:{_ln}: names `people_resolver` as something to run — the plugin runs no command a "
+                                 "core names (context-provider-protocol.md §3a)")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")
