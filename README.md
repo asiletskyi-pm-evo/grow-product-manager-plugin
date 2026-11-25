@@ -234,7 +234,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.19.0)
+### 1. CJM Research (v0.20.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -244,7 +244,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - **Full** — Complete CJM analysis with all data points and insights
 - **Health-Check** — Assess overall funnel health and drop-off zones
 - **Comparison** — Compare customer journeys across platforms or segments
-- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`)
+- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`); since v0.20.0 editing on the page — the switch «Редагувати» on every page of the map, the edits handed over as a file or a copied text and taken through the board's preview (`journey-protocol.md` §9, §12, `journey_map.py page-diff`)
 
 **Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
 
@@ -679,7 +679,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.19.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio and nested maps |
+| CJM Research | v0.20.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio, nested maps and editing on its page |
 | Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
