@@ -31,11 +31,13 @@ answers come from one place:
    rule still awaits your decision (`awaiting`), as it would from a current copy
 2. more than one block the repository removed in a pass (a "−", or a "⚠" / "?" whose repository text is None) is held,
    none of them goes through; a rejected row is held already and is not counted
-3. "⚠" takes the repository's text when it is a core rule (`ctx_blocks.is_rule`, read from the begin marker of the
-   repository's text), else keeps yours — and keeps yours when the repository removed the block
-4. "?" takes a rule, else waits: not in `choose`, so `apply` leaves it pending and the base does not move
-5. "+" is added
-6. "=", "~", "✎", a lone "−", "✂", "·": nothing — `apply` acts by itself
+3. since v4.11.1 a core rule (`ctx_blocks.is_rule`, read from the begin marker of the repository's text) whose row is
+   "⚠", "?" or "~" is held and awaits your answer — never taken unattended: a core's text is data, not an instruction
+   (`took_rule` stays in the result's keys, always empty); "⚠" of any other block keeps yours — and keeps yours when the
+   repository removed the block
+4. "?" waits: not in `choose`, so `apply` leaves it pending and the base does not move
+5. "+" — since v4.11.1 held and awaiting too: a block new in the core comes in only on your yes (`ctx provider apply`)
+6. "=", "~" of a block that is no rule, "✎", a lone "−", "✂", "·": nothing — `apply` acts by itself
 
 The outcome of a repository's pass (§4.3, §6):
 - "changed"          the pass wrote: a snapshot and a journal line
@@ -118,21 +120,20 @@ def decide(plan, theirs):
         elif bid in guarded:
             out["hold"].append(bid)
             out["held_removals"].append(bid)
+        elif sign in ("⚠", "?", "~") and cb.is_rule(text):
+            # since v4.11.1 (the audit of 2026-11-25): a core's rule is the core's text, never an order to your context —
+            # a new or changed rule waits for your answer (`ctx provider plan|apply`), your text stays meanwhile
+            out["hold"].append(bid)
+            out["awaiting"].append(bid)
         elif sign == "⚠":
-            if cb.is_rule(text):
-                out["choose"][bid] = THEIRS
-                out["took_rule"].append(bid)
-            else:
-                out["choose"][bid] = MINE
-                out["kept_yours"].append(bid)
+            out["choose"][bid] = MINE
+            out["kept_yours"].append(bid)
         elif sign == "?":
-            if cb.is_rule(text):
-                out["choose"][bid] = THEIRS
-                out["took_rule"].append(bid)
-            else:
-                out["awaiting"].append(bid)
+            out["awaiting"].append(bid)
         elif sign == "+":
-            out["add"].append(bid)
+            # since v4.11.1: a block new in the core is not added unattended — it waits for your yes like a question
+            out["hold"].append(bid)
+            out["awaiting"].append(bid)
     return out
 
 

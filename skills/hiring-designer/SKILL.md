@@ -1,6 +1,6 @@
 ---
 name: hiring-designer
-version: 0.2.2
+version: 0.2.3
 description: Design a role and vacancy — goal letter first, then profile, killer questions, screening criteria, candidate evaluation, offer draft. Not feature requirements (requirements-creator). UA — «відкрити вакансію», «профіль вакансії», «оцінити кандидатів». EN — "open a vacancy", "hiring".
 ---
 

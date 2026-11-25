@@ -1,6 +1,6 @@
 ---
 name: performance-review
-version: 0.2.2
+version: 0.2.3
 description: Structured performance review of a team member — goals, GTD index, situational leadership, growth plan. Not Jira throughput (product-reporter member-review), not a 1-1 (one-on-one). UA — «перформанс-ревʼю», «піврічне/річне ревʼю», «план розвитку для…». EN — "performance review".
 ---
 

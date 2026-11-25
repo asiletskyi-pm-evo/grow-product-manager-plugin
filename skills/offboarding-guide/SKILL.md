@@ -1,6 +1,6 @@
 ---
 name: offboarding-guide
-version: 0.2.3
+version: 0.2.4
 description: Guide a manager through parting with an underperformer — evidence check, "can't" vs "won't", four-meeting algorithm, ARCV follow-ups. Not a routine review (performance-review). UA — «допоможи звільнити», «офбординг», «чи час прощатися». EN — "help me let someone go", "offboarding".
 ---
 

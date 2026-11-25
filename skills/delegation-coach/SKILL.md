@@ -1,6 +1,6 @@
 ---
 name: delegation-coach
-version: 0.2.2
+version: 0.2.3
 description: Audit a manager's operational load on the 7 delegation levels and plan the hand-off (S1→S4). Not daily focus (focus-advisor), not task creation (task-creator). UA — «аудит делегування», «що можна делегувати», «перевантажений операційкою». EN — "what can I delegate".
 ---
 

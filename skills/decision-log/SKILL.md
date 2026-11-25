@@ -1,6 +1,6 @@
 ---
 name: decision-log
-version: 0.5.2
+version: 0.5.3
 description: Log and retrieve product decisions as ADR records — context, options, rationale, consequences. Not meeting notes (meeting-processor), not experiment state (experiment-tracker). UA — «зафіксуй рішення», «чому ми вирішили…», «перегляньмо це рішення». EN — "log this decision", "revisit a decision".
 ---
 

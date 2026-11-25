@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.12.1
+version: 0.12.2
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a plan-vs-actual retro (quarterly-planning). UA — «звіт по спринту», «результати кварталу», «звіт по релізах», «які фічі виїхали в реліз», «QBR». EN — "board update".
 ---
 
@@ -167,7 +167,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.12.1", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.12.2", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
    - `goal-report` and `member-review` notes are not publication records: they name a person (`data-policy.md`).

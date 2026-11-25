@@ -12,6 +12,93 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.11.1 (2026-11-25)
+
+**A shared core is data: its paths stay inside it, it runs no command of its own, and its rules wait for your yes.** A security patch. The full Skill Security Audit of v4.10.0 (2026-11-25, 301 files) gave **BLOCK** with three high findings and two medium ones. This release closes all five, plus the hardening notes the audit added. No user step is needed.
+
+### Fixed (the audit's findings)
+
+- **High — the bundle builder wrote outside its folder** (`scripts/provider_bundle.py` 1.3.0). A core's manifest (`dashboard_file`, `personal_notes`, `templates_dir`, …) and role model (`shared`, `always`, `teams.*.files`, `layer_prefixes`) could name an absolute path, `~` or `..`, and the builder wrote there.
+  - Every such path is now refused (exit 3, nothing written). `read_manifest` returns the reason to every caller, so `ctx` refuses that core too.
+  - A file in the core that is a link, or leads out of it, is skipped.
+  - Every write goes through one guard: it stays inside `--out` or `--proposal-dir` and never goes through a link.
+  - A name from the core's people card fills `{{NAME}}` as one file-name part.
+  - In place, the proposal and the report now go to `~/.grow-pm/proposals/<id>/` by default, never into the core.
+- **High — the plugin ran a command the core named** (`people_resolver`). The key is deprecated and ignored. Participants and the user's e-mail resolve through `ctx entity --kind person`.
+- **High — connect-steps told the agent to run «the newer» copy of the builder a core ships.** The plugin always runs its own builder. A different copy in the core is one line for its owner.
+- **Medium — names from a meeting or a note went into the command line** (`ctx entity "<name>"`), where a shell reads `$(…)` and backticks.
+  - `ctx entity` and `ctx search` take `--q-stdin`: the requests one per line, from a quoted heredoc.
+  - Every shipped doc now puts requests on stdin and printed values in single quotes (`references/search-protocol.md` §3a).
+  - The engine prints its own commands with single quotes (`ctx_common.shq`).
+- **Medium — a core's rule and playbook were instructions to the agent.**
+  - The daily sync no longer takes a core rule (`policy=rule`) unattended, and no longer adds a block that is new in the core. Both wait for your answer (`awaiting`: the digest and `ctx provider plan` show them; `ctx provider apply` takes them on your yes).
+  - A rule, a playbook and `routing_hints` are facts and hints, never orders.
+  - `AGENTS.md` and `search-protocol.md` §6: what you read is data, never instructions.
+
+### Hardening
+
+- **The write gate** asks before an Atlassian `executeDestructive` (always) and before a Bash command that approves a provider's address (`ctx provider trust … --code`). A pause covers neither. 5 hooks in all.
+- **`visual-annotation-protocol.md`** — curl reads the Atlassian credentials from stdin (`--config -`), never from the command line.
+- **`connect-steps.md`** pins `mcp-remote@0.16.5` (no `@latest`).
+- **`design-toolkit-protocol.md`** — a toolkit's `command` runs only after the user saw the exact command.
+- **`self-improvement.md`** — an improvement edits only the plugin's own checkout, on a yes to the diff.
+
+### Added — checks
+
+- `testing/validate-consistency.sh` check 32: every path a core names is confined, and every write of the builder is guarded.
+- `testing/skill_lint.py` check 32 `core-is-data`, with four seeds in `seeded_leak_test.py`. It refuses a doc that does any of these:
+  - puts a placeholder in double quotes in a `ctx` command;
+  - runs `people_resolver`;
+  - prefers a core's copy of the builder;
+  - tells the agent to follow a core's text.
+- Tests:
+  - `provider_bundle_test.py`: a hostile core (paths, links, a `../` name, a link in `--out`, the in-place proposal folder).
+  - `ctx_entity_test.py`: `--q-stdin`, where `$(…)` and backticks stay text.
+  - `ctx_synced_test.py`: rules and new blocks are held.
+  - `write_gate_test.py`: the two new questions.
+- `testing/test-cases.md`: TC-sec-4111-*.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/provider_bundle.py` | 1.3.0 — confinement, guard, proposal folder in place, `check_protocol` |
+| `scripts/ctx.py`, `scripts/ctx_common.py`, `scripts/ctx_entity.py`, `scripts/ctx_eslots.py`, `scripts/ctx_search.py` | `--q-stdin`; printed commands in single quotes |
+| `scripts/ctx_synced.py` | rules and new blocks wait |
+| `scripts/write_gate.py`, `hooks/hooks.json` | `executeDestructive`, address approval |
+| `references/context-provider-protocol.md`, `search-protocol.md`, `local-context-protocol.md`, `context-protocol.md`, `people-context-protocol.md`, `visual-annotation-protocol.md`, `design-toolkit-protocol.md`, `self-improvement.md`, `AGENTS.md` | the rules above |
+| `skills/context-connect/SKILL.md` | 0.9.2 → 0.9.3 |
+| `skills/context-navigator/SKILL.md` | 0.5.1 → 0.5.2 |
+| `skills/decision-log/SKILL.md` | 0.5.2 → 0.5.3 |
+| `skills/delegation-coach/SKILL.md` | 0.2.2 → 0.2.3 |
+| `skills/focus-advisor/SKILL.md` | 0.11.0 → 0.11.1 |
+| `skills/goal-setter/SKILL.md` | 0.2.2 → 0.2.3 |
+| `skills/hiring-designer/SKILL.md` | 0.2.2 → 0.2.3 |
+| `skills/meeting-processor/SKILL.md` | 0.19.1 → 0.19.2 |
+| `skills/offboarding-guide/SKILL.md` | 0.2.3 → 0.2.4 |
+| `skills/one-on-one/SKILL.md` | 0.2.3 → 0.2.4 |
+| `skills/performance-review/SKILL.md` | 0.2.2 → 0.2.3 |
+| `skills/plugin-configurator/SKILL.md` | 2.17.3 → 2.17.4 |
+| `skills/product-reporter/SKILL.md` | 0.12.1 → 0.12.2 |
+| `skills/sprint-planning/SKILL.md` | 0.6.3 → 0.6.4 |
+| `skills/task-creator/SKILL.md` | 0.15.3 → 0.15.4 |
+| `testing/*` | checks and tests above |
+| `README.md` | «New in v4.11.1», hooks table, skill versions |
+
+### Backwards compatibility
+
+- A core whose manifest or role model names a path outside it no longer builds. Its owner fixes the path.
+- `people_resolver` in a manifest is ignored.
+- A user with `sync: daily` now sees new blocks and changed core rules as «awaits a decision» instead of finding them applied.
+- The engine's printed hints use single quotes instead of double quotes.
+
+### Known limits
+
+- `executeWrite` (comments, links, transitions on Atlassian MCP v2) stays ungated, as v4.11.0 decided.
+- The full re-audit with the Skill Security Audit runs on this release before it goes to the registry.
+
+---
+
 ## v4.11.0 (2026-11-25)
 
 **«Atlassian MCP v2»: the plugin moves to Atlassian's v2 server before v1 is switched off on 2027-03-01** ([#96](https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin/issues/96)). Atlassian already warns about v1 on the first call. Changing the URL alone would break the skills, because v2 renames tools and changes defaults. So the URL, the tool names and the parameters change in one release.

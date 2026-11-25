@@ -927,7 +927,7 @@ def render(res):
     if res.get("several", len(ents)) > 1:
         lines.append("кілька сутностей «%s»:" % res["query"])
         for e in ents:
-            lines.append("%s · %s — ctx entity \"%s\"" % (e["label"], e["kind"], e["id"]))
+            lines.append("%s · %s — ctx entity %s" % (e["label"], e["kind"], cc.shq(e["id"])))
         if res["several"] > len(ents):
             lines.append("ще %d — уточни запит або --kind" % (res["several"] - len(ents)))
         return "\n".join(lines) + "\n"

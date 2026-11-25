@@ -86,7 +86,7 @@ Routing decisions (§2, §6) consider **only core-enum** capabilities.
 |---|---|---|
 | `skill` | `"some-plugin:flow"` | Skill tool, by name. For co-installed sibling plugins. |
 | `mcp_tool` | `"mcp__<id>__<tool>"` | Call the MCP tool with the payload as arguments. |
-| `command` | `"designgen --brief {brief_path}"` | Run via bash; pass the payload as a file/args. |
+| `command` | `"designgen --brief {brief_path}"` | Run via bash, **after showing the user the exact command and getting a yes** (since v4.11.1): the command is the toolkit's, and the plugin has not reviewed it. The payload goes as a file the plugin wrote; `{brief_path}` is that file's path in single quotes — never a value from the brief pasted into the line. |
 | `browser` | `"https://toolkit.example.com"` | Claude in Chrome — navigate + drive the web UI. |
 
 If the declared entry is unavailable at runtime (skill not installed, MCP disconnected, command missing, site unreachable) → note it, offer `setup_hint`, and fall back to tier-1. Never hard-fail the whole task.

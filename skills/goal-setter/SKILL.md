@@ -1,6 +1,6 @@
 ---
 name: goal-setter
-version: 0.2.2
+version: 0.2.3
 description: Set and audit goals — SMARTCBP for a person, OKR for a product or direction; goal letters, cascades. Not progress reports (product-reporter), not a performance review (performance-review). UA — «постав ціль», «OKR на квартал», «аудит цілі», «лист цілей». EN — "set a goal", "cascade goals".
 ---
 

@@ -489,6 +489,11 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 - **TC-gate-260-create** | `createConfluencePage` | `permissionDecision: ask` with the 3-point reason | **pass**
 - **TC-gate-4110-create-v2** | `createConfluenceContent` / `updateConfluenceContent` (Atlassian MCP v2, the declared server since v4.11.0) | `ask` as for the v1 names; `updateConfluenceContent` with `dryRun: true` passes | **pass** (`testing/write_gate_test.py`)
 - **TC-atl-4110** | `testing/atlassian_v2_test.py` | `.mcp.json` declares v2; no skill or agent names a v1-only tool; every `getConfluenceContent` a skill names asks for `detail: "full"`; the gate covers both name sets | **pass**
+- **TC-sec-4111-paths** | a hostile core: manifest/role-model paths with `/`, `~`, `..`; links in the core and in `--out`; a `../` name | refused before any write; links skipped; nothing outside `--out` | **pass** (`testing/provider_bundle_test.py`)
+- **TC-sec-4111-stdin** | `ctx entity --q-stdin` / `ctx search --q-stdin` with `$(…)` and backticks | text of the request, nothing runs; empty stdin is exit 3 | **pass** (`testing/ctx_entity_test.py`)
+- **TC-sec-4111-rules** | the daily sync on `+`, and on `~` / `⚠` / `?` of a `policy=rule` block | held, `awaiting`; `took_rule` stays empty | **pass** (`testing/ctx_synced_test.py`)
+- **TC-sec-4111-gate** | `executeDestructive`; Bash `ctx provider trust … --code` | `ask`, a pause covers neither; `trust <id>` alone passes | **pass** (`testing/write_gate_test.py`)
+- **TC-sec-4111-lint** | lint 32 `core-is-data`, validator check 32 | four seeds caught; the builder's writes guarded | **pass** (`testing/seeded_leak_test.py`, `testing/validate-consistency.sh`)
 - **TC-gate-260-meta** | `editJiraIssue` with labels only | no output (allow) | **pass**
 - **TC-gate-260-content** | `editJiraIssue` with a 300-char description | `ask` | **pass**
 - **TC-gate-260-off** | `setup.py --write-gate off` then `createJiraIssue` | no output; `--write-gate on` restores | **pass**

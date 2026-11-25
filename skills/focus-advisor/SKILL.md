@@ -1,6 +1,6 @@
 ---
 name: focus-advisor
-version: 0.11.0
+version: 0.11.1
 description: What to focus on today, this sprint or quarter — scans mail, calendar, Jira, metrics; recommends and chains. Not sprint planning (sprint-planning), not analysis (product-analysis). UA — «на чому сфокусуватись», «ранковий бриф», «розбери мою пошту», «чи все ок з метриками», «де великі можливості». EN — "what should I focus on".
 ---
 
