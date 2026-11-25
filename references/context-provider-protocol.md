@@ -134,6 +134,8 @@ ttl_days:
 | `personal_notes` | — | Where the user's focus and to-do notes go (`now`, `todo`; `{{NAME}}` allowed); defaults `<plugin_folder>/Now.md` and `<plugin_folder>/TODO — {{NAME}}.md`. |
 | `role_enum_map`, `jira_write_labels` | — | Role profile → the plugin's role enum for a new context; the wording of the three write scopes. |
 
+**Paths stay inside the core** (since v4.11.1). The core is someone else's folder, so its manifest and role model are data, never a say over your disk. Every path they name — `plugin_folder`, `bundles_file`, `blocks_file`, `team_card_dir`, `people_dir`, `missions_dir`, `pages_dir`, `templates_dir`, `dashboard_file`, `personal_notes`, and the role model's `shared`, `always`, `teams.*.files` and `layer_prefixes` — is relative to the core root: an absolute path, `~` or a `..` part is refused (exit 3, nothing written; `read_manifest` returns the reason to every caller, so `ctx` refuses such a core too). A file in the core that is a link, or resolves outside it, is skipped. Everything the builder writes lands inside `--out` or `--proposal-dir`; a link already there is never written through. A name from the core's people card fills `{{NAME}}` as one file-name part. `tools_file` keeps its own rule (ignored when it leaves the core). Check 32 of `testing/validate-consistency.sh` holds the builder to this.
+
 Templates in `templates_dir` (all optional, the plugin ships English defaults): `now.md`, `todo.md`, `person-card.md` (whole notes), `bundle-manifest.md` (the body; the frontmatter the digest reads is always written by the builder), `team-block.md`, `context-section.md`, `context-skeleton.md`. Placeholders are `{{UPPER_CASE}}` names; the defaults show every one.
 
 ### 3b. Registration (kept by the user)

@@ -585,5 +585,80 @@ m_out, _ = pbm.read_manifest(core, path=outside)
 check("…read_manifest gives an outside manifest no `_path`", m_out is not None and not m_out.get("_path"), m_out and m_out.get("_path"))
 shutil.rmtree(d)
 
+# ---- since v4.11.1: a hostile core — every path it names stays inside the core, every write inside --out
+def evil(edit_manifest=None, edit_model=None):
+    d, core, out = fresh()
+    mp = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+    jp = os.path.join(core, "Core", "_System", "access-bundles.json")
+    if edit_manifest:
+        t = open(mp, encoding="utf-8").read(); open(mp, "w", encoding="utf-8").write(edit_manifest(t))
+    if edit_model:
+        J = json.load(open(jp, encoding="utf-8")); edit_model(J); json.dump(J, open(jp, "w", encoding="utf-8"))
+    return d, core, out
+
+def outside_of(d, out):
+    """Files the run left in the temp folder outside core/ and out/."""
+    return [f for f in files_under(d) if not f.startswith("core" + os.sep) and not f.startswith("out" + os.sep)]
+
+for label, edit in (("dashboard_file `../`", lambda t: t.replace("dashboard_file: Core/Dashboard.md", "dashboard_file: ../evil.md")),
+                    ("dashboard_file absolute", lambda t: t.replace("dashboard_file: Core/Dashboard.md", "dashboard_file: /tmp/evil-dash.md")),
+                    ("personal_notes.todo `../`", lambda t: t + 'personal_notes:\n  todo: "../../pwn-{{NAME}}.md"\n'),
+                    ("personal_notes.now `~`", lambda t: t + 'personal_notes:\n  now: "~/.bashrc"\n'),
+                    ("templates_dir `..`", lambda t: t + "templates_dir: ../tpl\n"),
+                    ("blocks_file absolute", lambda t: t.replace("blocks_file: Core/_System/context-blocks.md", "blocks_file: /etc/passwd"))):
+    d, core, out = evil(edit)
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+    check("evil_core: %s is refused before anything is written" % label,
+          rc == 3 and "leaves the core" in o and not os.path.exists(out) and outside_of(d, out) == [], (rc, o[-300:], outside_of(d, out)))
+    shutil.rmtree(d)
+
+for label, edit in (("shared", lambda J: J["shared"].append("../../outside.md")),
+                    ("always", lambda J: J["always"].append("/etc")),
+                    ("teams.files", lambda J: J["teams"]["alpha"]["files"].append("Core/../../x.md")),
+                    ("layer_prefixes", lambda J: J["layer_prefixes"].setdefault(sorted(J["layer_prefixes"])[0], []).append("../"))):
+    d, core, out = evil(edit_model=edit)
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+    check("evil_core: role model %s outside the core is refused" % label,
+          rc == 3 and "a path leaves the core" in o and not os.path.exists(out), (rc, o[-300:]))
+    shutil.rmtree(d)
+
+d, core, out = fresh()                                   # a name from the core's people card is one file-name part
+card = os.path.join(core, "Core", "People", "a-one.md")
+ctext = open(card, encoding="utf-8").read().replace('name: "Alex One"', 'name: "../../../pwn"')
+open(card, "w", encoding="utf-8").write(ctext)
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+check("evil_core: a `../` name in the people card stays a file name inside --out",
+      rc == 0 and outside_of(d, out) == [] and any(f.startswith(os.path.join("out", "Core", "TODO")) and "pwn" in f for f in files_under(d)),
+      (rc, o[-300:], outside_of(d, out)))
+shutil.rmtree(d)
+
+d, core, out = fresh()                                   # a link in the core is never followed out of it
+secret = os.path.join(d, "secret.txt"); open(secret, "w").write("TOP-SECRET-KEY")
+os.symlink(secret, os.path.join(core, "Core", "Playbook", "02 Leak.md"))
+os.makedirs(os.path.join(core, "Core", "_System", "tpl"))
+os.symlink(secret, os.path.join(core, "Core", "_System", "tpl", "now.md"))
+mp = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+open(mp, "a", encoding="utf-8").write("templates_dir: Core/_System/tpl\n")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+leaked = [f for f in files_under(out) if "TOP-SECRET-KEY" in open(os.path.join(out, f), encoding="utf-8", errors="replace").read()]
+check("evil_core: a link in the core (a playbook note, a template) brings nothing from outside into the bundle",
+      rc == 0 and leaked == [] and not os.path.exists(os.path.join(out, "Core", "Playbook", "02 Leak.md")), (rc, o[-300:], leaked))
+shutil.rmtree(d)
+
+d, core, out = fresh()                                   # a link already in --out is never written through
+target = os.path.join(d, "victim.md"); open(target, "w").write("untouched")
+os.makedirs(os.path.join(out, "Core"))
+os.symlink(target, os.path.join(out, "Core", "Dashboard.md"))
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--force")
+check("evil_core: a link in --out (Dashboard.md → outside) is refused, its target untouched",
+      rc == 3 and "is a link" in o and open(target).read() == "untouched", (rc, o[-300:], open(target).read()))
+shutil.rmtree(d)
+
+d, core, out = evil(lambda t: t.replace("people_dir: Core/People", "people_dir: ../../home"))
+m_bad, why = pbm.read_manifest(core)
+check("evil_core: read_manifest fails closed for every caller (ctx_repos, the daily sync)",
+      m_bad is None and "people_dir" in (why or ""), why)
+shutil.rmtree(d)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
