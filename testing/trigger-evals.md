@@ -376,6 +376,8 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | X10 | зроби дошку в Miro для ретро команди | none or diagram-prototyper or brainstorm-features — NOT roadmap-architect |
 | X11 | намалюй шлях покупця від кошика до отримання посилки | cjm-research or diagram-prototyper — NOT roadmap-architect |
 | X12 | що з мапи історій беремо в план на Q1 з урахуванням місткості команди | quarterly-planning — NOT roadmap-architect |
+| X13 | опублікуй мапу історій на дошку Claude (added v4.11.2) | roadmap-architect |
+| X14 | мапа історій без Miro — у нас немає платного акаунта (added v4.11.2) | roadmap-architect |
 
 ### Group Y — Journey map vs neighbours (added 2026-11-16, v4.7.0)
 
