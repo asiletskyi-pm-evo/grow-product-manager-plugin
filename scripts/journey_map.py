@@ -804,7 +804,8 @@ EDIT = ('(function(){var bar=document.querySelector(".edit-bar");if(!bar)return;
         'qa(".item[data-row]",w).forEach(function(it){var c=cellOf(it);if(it.closest(".wrap")!==w||c.stage!==stage||'
         'ok.indexOf(c.lane)<0||A(it,"row")===self)return;var o=document.createElement("option");o.value=A(it,"row");'
         'o.textContent=A(it,"row")+" \\u2014 "+txt(it).slice(0,48);if(o.value===value)o.selected=true;f.parent.appendChild(o);});'
-        'show(f.parent,!!P[lane]);}'
+        'if(value&&f.parent.value!==value){var k=document.createElement("option");k.value=value;k.textContent=value;'
+        'k.selected=true;f.parent.appendChild(k);}show(f.parent,!!P[lane]);}'
         'function sel(){var v=f.cell.value.split("\\u0001");return{stage:v[0]||"",lane:v[1]||""};}'
         'function lanes(){var c=sel();show(f.code,!!CODE[c.lane]);show(f.target,c.lane==="opportunity");'
         'fillParents(cur.w,c.stage,c.lane,f.parent.value||cur.v.parent,cur.row||"");}'
@@ -1987,7 +1988,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
             ask.append({"element": i, "row": rid, "lane": lane, "text": text, "classes": list(LANE_CLASSES[lane]) + [""]})
         return cls
 
-    edits, moves, news, drops, links, new_targets = {}, {}, [], set(), [], []
+    edits, moves, news, drops, links, new_targets, new_pars = {}, {}, [], set(), [], [], []
     used = {r["id"] for r in note["rows"]}
     new_ids = {}                                     # a new row's id by the diff's order — the preview's and the take's agree
     for cat in ("added", "changed", "moved"):
@@ -2096,16 +2097,10 @@ def take_note(note, diff, take, picked, parents, drop, when):
             refuse(i, "unknown", "no new row for %s in the diff" % i)
             continue
         cls = klass(i, nid, ln, t)
+        if e0.get("via") == "page" and ln in HC_LANES:   # the page adds no metric or anomaly row (R25), as a board's move cannot
+            refuse(i, "metric_lane", "a new row in the metric and anomaly lanes is never taken — the health-check writes them")
+            continue
         par = pick(parents, i, nid) or (_norm(e0.get("parent")) if e0.get("via") == "page" else "")
-        if par:
-            pr = by_id.get(par)
-            if pr is None or ln not in PARENTS or pr["lane"] not in PARENTS[ln] or pr["stage"] != st:
-                named.append({"element": i, "row": nid, "why": "bad_parent", "detail": "%s cannot hang under %s" % (ln, par)})
-                par = ""
-        if not par and ln in NEEDS_PARENT:
-            cands = [r["id"] for r in live if r["stage"] == st and r["lane"] in PARENTS[ln]]
-            named.append({"element": i, "row": nid, "why": "orphan", "detail": "%s needs its parent" % _a(ln)})
-            prop.append({"element": i, "row": nid, "lane": ln, "candidates": cands})
         if ln == "initiative" and not code:
             named.append({"element": i, "row": nid, "why": "bad_code", "detail": "no epic or feature code on the sticky's own second line"})
         values = {"id": nid, "stage": st, "lane": lane_cell(ln), "text": t, "parent": par, "code": code, "source": source_of(e0),
@@ -2118,10 +2113,21 @@ def take_note(note, diff, take, picked, parents, drop, when):
         news.append((st, values))
         applied.append({"element": i, "row": nid, "action": "add", "cell": cell_title(st, ln, lang), "text": t, "class": cls,
                         "source": source_of(e0), "parent": par, "code": code})
+        new_pars.append((i, nid, st, ln, par, values, applied[-1]))
     yes = "так" if lang == "uk" else "yes"
 
     def stage_lane(r):
         return moves.get(r["id"], (r["stage"], r["lane"])) if by_id.get(r["id"]) is r else (r["stage"], r["lane"])
+    for i, nid, st, ln, par, values, a in new_pars:  # a new row's parent: where the parent stands once the moves are taken
+        if par:
+            pr = by_id.get(par)
+            if pr is None or ln not in PARENTS or stage_lane(pr)[1] not in PARENTS[ln] or stage_lane(pr)[0] != st:
+                named.append({"element": i, "row": nid, "why": "bad_parent", "detail": "%s cannot hang under %s" % (ln, nt.safe(par))})
+                par = values["parent"] = a["parent"] = ""
+        if not par and ln in NEEDS_PARENT:
+            cands = [r["id"] for r in live if stage_lane(r)[0] == st and stage_lane(r)[1] in PARENTS[ln]]
+            named.append({"element": i, "row": nid, "why": "orphan", "detail": "%s needs its parent" % _a(ln)})
+            prop.append({"element": i, "row": nid, "lane": ln, "candidates": cands})
     target_now = {r["id"]: r["target"].strip().lower() in YES for r in live}
     for i, rid, cat, e in links:                     # the page's links (v4.11.0): §5's rules, as check names them
         r = by_id[rid]
@@ -2129,13 +2135,13 @@ def take_note(note, diff, take, picked, parents, drop, when):
         if cat == "relinked":
             v = _norm(e.get("parent_now"))
             pr = by_id.get(v) if v else None
-            if v and (pr is None or ln not in PARENTS or pr["lane"] not in PARENTS[ln] or stage_lane(pr)[0] != st or v == rid):
+            if v and (pr is None or ln not in PARENTS or stage_lane(pr)[1] not in PARENTS[ln] or stage_lane(pr)[0] != st or v == rid):
                 named.append({"element": i, "row": rid, "why": "bad_parent", "detail": "%s cannot hang under %s (§5)" % (ln, nt.safe(v))})
                 continue
             if not v and ln in NEEDS_PARENT:
                 named.append({"element": i, "row": rid, "why": "orphan", "detail": "%s needs its parent — not cleared" % _a(ln)})
                 prop.append({"element": i, "row": rid, "lane": ln, "candidates": [x["id"] for x in live if stage_lane(x)[0] == st
-                                                                                   and x["lane"] in PARENTS[ln]]})
+                                                                                   and stage_lane(x)[1] in PARENTS[ln]]})
                 continue
             edits[rid] = dict(edits.get(rid, {}), parent=v)
             applied.append({"element": i, "row": rid, "action": "parent", "before": r["parent"], "after": v})
@@ -2165,6 +2171,13 @@ def take_note(note, diff, take, picked, parents, drop, when):
                 named.append({"element": a["element"], "row": a["row"], "why": "bad_target",
                               "detail": "a second target on %s — one target opportunity per stage" % st})
                 target_now[a["row"]] = False
+        on = [x for x in on if target_now.get(x)]
+        if len(on) > 1:                              # still two: a move brought a target onto a stage that has one
+            for rid in [x for x in on if x in moves and moves[x][0] != by_id[x]["stage"]]:
+                edits[rid] = dict(edits.get(rid, {}), target="")
+                named.append({"element": rid, "row": rid, "why": "bad_target",
+                              "detail": "moved onto %s, which has its target — the moved row's target is cleared" % st})
+                target_now[rid] = False
     for i, nid, st, values in new_targets:
         if any(target_now.get(r["id"]) and stage_lane(r)[0] == st for r in live) or any(
                 x[2] == st and x[3].get("target") for x in new_targets if x[1] != nid):
@@ -3121,7 +3134,7 @@ def page_diff(note, name, nest, data, lang):
     for k in (tree_blocks(nest) if nest else []):
         maps[name_key(k["note"])] = (k["note"], nest["maps"][k["note"]], k["note"])
     out = {k: [] for k in DIFF_CATEGORIES}
-    skipped, seq = [], [0]
+    skipped, seq, seen = [], [0], set()
 
     def skip(why, mp, detail, row=None):
         skipped.append({"why": why, "map": nt.safe(str(mp)), "row": nt.safe(str(row)) if row is not None else None, "detail": detail})
@@ -3133,6 +3146,11 @@ def page_diff(note, name, nest, data, lang):
             skip("unknown_map", mname, "no map of this page is named so — its edits are not read")
             continue
         real, n, pre = hit
+        if sum(1 for x in data["maps"] if name_key(str(x)) == name_key(str(mname))) > 1:   # one map named twice: neither read
+            if name_key(str(mname)) not in seen:
+                skip("bad_edit", real, "the map is named twice in the file — none of its edits is read")
+            seen.add(name_key(str(mname)))
+            continue
         if not isinstance(block, dict) or not isinstance(block.get("edits"), list):
             skip("bad_edit", real, "the map's entry holds no list of edits")
             continue
@@ -3140,7 +3158,7 @@ def page_diff(note, name, nest, data, lang):
             skip("stale", real, "the page was made from an older version of the map — edit its fresh page again")
             continue
         declared = [st["id"] for st in n["stages"]]
-        rows = {r["id"]: r for r in n["rows"] if not r["gap"] and r["id"]}
+        rows = {r["id"]: r for r in n["rows"] if not r["gap"] and r["id"] and page_worthy(r, declared)}   # the page's rows only
         el = {}
 
         def K(rid):
@@ -3182,7 +3200,7 @@ def page_diff(note, name, nest, data, lang):
             rid = _s(e.get("row"))
             r = rows.get(rid) if rid else None
             if r is None:
-                skip("unknown_row", real, "the map has no row %s" % nt.safe(str(rid)), rid)
+                skip("unknown_row", real, "the page shows no row %s of the map" % nt.safe(str(rid)), rid)
                 continue
             mid, base = elem(rid), {"row": K(rid), "via": "page"}
             hc = _is_hc(r)

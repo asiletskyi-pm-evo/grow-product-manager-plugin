@@ -274,6 +274,54 @@ try:
     check("4.5 the target moved in one take: o2 no longer, the new opportunity is", rc == 0 and r2["o2"]["target"] == ""
           and len(nb) == 1 and nb[0]["target"] == "так", (r2["o2"]["target"], [x["target"] for x in nb]))
 
+    def take_all(nf, ops, tag, dry=True, note_text=None):
+        write(nf, note_text or before)
+        dfx = os.path.join(d, "d-%s.json" % tag)
+        run("page-diff", "--note", nf, "--edits", put(d, "e-%s.json" % tag, edits(nf, ops)), "--out", dfx)
+        dx = json.loads(text(dfx)) if os.path.exists(dfx) else {}
+        ids = sorted({e["id"] for k in jm.DIFF_CATEGORIES for e in dx.get(k, [])})
+        return run("board-take", "--note", nf, "--diff", dfx, "--take", *ids, *(("--dry-run",) if dry else ("--date", "2026-12-01")))[2]
+
+    n4 = os.path.join(d, "n4", "journey-first-order.md")
+    res = take_all(n4, [{"op": "move", "row": "p3", "stage": "s3", "lane": "opportunity"},
+                        {"op": "parent", "row": "h2", "parent": "p3"},
+                        {"op": "move", "row": "o1", "stage": "s3", "lane": "opportunity"},
+                        {"op": "parent", "row": "p2", "parent": "o1"}], "mv")
+    nm = {(n["row"], n["why"]) for n in res.get("named", [])}
+    ap = {(a["row"], a["action"]) for a in res.get("applied", [])}
+    check("4.6 a parent is checked where it stands after the take's moves: lane and stage", ("h2", "parent") in ap
+          and ("p2", "parent") in ap and ("h2", "bad_parent") not in nm and ("p2", "bad_parent") not in nm, (nm, ap))
+    res = take_all(n4, [{"op": "move", "row": "o2", "stage": "s4", "lane": "opportunity"},
+                        {"op": "add", "id": "p1", "stage": "s3", "lane": "solution", "text": "Рішення під o2", "parent": "o2"}], "mvadd")
+    nw = [n for n in res.get("named", []) if n["why"] in ("bad_parent", "orphan") and (n["row"] or "").startswith("b")]
+    check("4.7 a new row under a parent the same take moves away: bad_parent, then orphan — its parent not written",
+          sorted(n["why"] for n in nw) == ["bad_parent", "orphan"] and all(
+              a.get("parent") == "" for a in res.get("applied", []) if a["action"] == "add"), (nw, res.get("applied")))
+    res = take_all(n4, [{"op": "add", "id": "p1", "stage": "s2", "lane": "metric", "text": "search -> cart: 99%"},
+                        {"op": "add", "id": "p2", "stage": "s2", "lane": "anomaly", "text": "вигадана аномалія"}], "hc")
+    check("4.8 the page adds no metric or anomaly row: metric_lane, nothing applied",
+          sorted(r["why"] for r in res.get("refused", [])) == ["metric_lane", "metric_lane"] and not res.get("applied"), res.get("refused"))
+    tgt = before.replace("| o1 | s2 | | opportunity | Не губити вибір покупця між кроками | | |",
+                         "| o1 | s2 | | opportunity | Не губити вибір покупця між кроками | | так |")
+    res = take_all(n4, [{"op": "move", "row": "o1", "stage": "s3", "lane": "opportunity"}], "tmv", dry=False, note_text=tgt)
+    r4 = rows_of(n4)
+    check("4.9 a move that brings a target onto a stage with its target: the moved row's target cleared, named bad_target",
+          tgt != before and r4["o1"]["stage"] == "s3" and r4["o1"]["target"] == "" and r4["o2"]["target"] == "так"
+          and any(n["why"] == "bad_target" and n["row"] == "o1" for n in res.get("named", [])), (r4["o1"], res.get("named")))
+    n5 = os.path.join(d, "n5", "journey-first-order.md")
+    write(n5, before.replace("| Строк доставки на картці товару | | | o2 | | Hypotheses/hypothesis-delivery-date-on-card |",
+                             "| Строк доставки на картці товару | | | o2 | | |"))
+    dg = jm.table_sig(jm.load(n5))["table"]
+    two = {"journey-first-order": {"digest": dg, "edits": [{"op": "text", "row": "p2", "text": "Перша версія"}]},
+           "Journey-First-Order": {"digest": dg, "edits": [{"op": "text", "row": "p2", "text": "Друга версія"}]}}
+    rc, out, res = run("page-diff", "--note", n5, "--edits", put(d, "e-two.json", edits(n5, [], maps=two)))
+    check("4.10 one map named twice in a file: neither entry is read (bad_edit, once)",
+          not res.get("changed") and [s["why"] for s in res.get("skipped", [])] == ["bad_edit"],
+          (res.get("changed"), res.get("skipped")))
+    rc, out, res = run("page-diff", "--note", n5, "--edits", put(d, "e-hid.json", edits(n5, [{"op": "text", "row": "h3", "text": "Не з цієї сторінки"}])))
+    check("4.11 a row the page does not show is no row of the page (unknown_row)", not res.get("changed")
+          and [s["why"] for s in res.get("skipped", [])] == ["unknown_row"], res.get("skipped"))
+
     # 5. the tree page (§14)
     t = os.path.join(d, "tree")
     shutil.copytree(os.path.join(FIX, "nest"), t)
@@ -393,6 +441,28 @@ const { chromium } = require('playwright');
         check("7.5 what the page copied is what page-diff reads: a text changed, a solution added under o2", rc == 0
               and [e["row"] for e in res.get("changed", [])] == ["p2"]
               and [(e["lane"], e.get("parent")) for e in res.get("added", [])] == [("solution", "o2")] and not res.get("skipped"), out[-400:])
+
+        n6 = os.path.join(d, "n6", "journey-first-order.md")
+        write(n6, before.replace("| Строк доставки на картці товару | | | o2 |", "| Строк доставки на картці товару | | | o1 |"))
+        pg6 = os.path.join(d, "n6", "page.html")
+        run("render-html", "--note", n6, "--out", pg6, "--lang", "uk")
+        js6 = os.path.join(d, "pw6.js")
+        write(js6, r"""
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const p = await b.newPage();
+  await p.goto('file://' + process.argv[2]); await p.click('.edit-toggle');
+  await p.click('.item[data-row="h3"]'); await p.fill('.f-text', 'Строк доставки видно на картці'); await p.click('.f-apply');
+  await p.click('.edit-copy'); await p.waitForTimeout(200);
+  console.log(JSON.stringify({out: await p.inputValue('.edit-out')})); await b.close();
+})();""")
+        pr6 = subprocess.run(["node", js6, pg6], capture_output=True, text=True, timeout=120,
+                             env=dict(os.environ, NODE_PATH=subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()))
+        try:
+            ops6 = [e["op"] for m in json.loads(json.loads(pr6.stdout.strip().splitlines()[-1])["out"])["maps"].values() for e in m["edits"]]
+        except (ValueError, IndexError, KeyError, TypeError):
+            ops6 = None
+        check("7.6 a text edit keeps a parent the list does not offer — only the text goes into the file", ops6 == ["text"], (ops6, pr6.stderr[-300:]))
 
     # mutations
     for name, old, new, args, test in (
