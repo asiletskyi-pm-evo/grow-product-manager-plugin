@@ -882,7 +882,7 @@ var t=document.createElement("div");t.className="t";t.textContent=(a.target?FLAG
 count2();}
 function count2(){var n=Object.keys(adds).length+Object.keys(ed).length;
 cnt.textContent=L("count").replace("%d",n);cnt.classList.toggle("some",n>0);document.body.classList.toggle("has-edits",n>0);dirty=!shared&&n>0;}
-function docId(s){return s.replace(/[^A-Za-z0-9_\-.:@+]/g,function(c){return"~"+c.charCodeAt(0).toString(16)+"~";}).slice(0,190);}
+function docId(s){return s.replace(/[^A-Za-z0-9_\-.:+]/g,function(c){return"~"+c.charCodeAt(0).toString(16)+"~";}).slice(0,190);}
 function stamp(){return{by:me||"",at:new Date().toISOString()};}
 function commitRow(k,e){var has=false;for(var y in e){if(e.hasOwnProperty(y))has=true;}
 if(has){ed[k]=e;meta[k]=stamp();}else{delete ed[k];delete meta[k];}render();
@@ -3267,7 +3267,8 @@ def read_shared(path):
         except (OSError, ValueError, UnicodeDecodeError):
             continue
         if isinstance(body, dict):
-            docs.append((unicodedata.normalize("NFC", fn[:-5]), body))
+            # the host's database tool spells an id's "~" as "@" in the file name; the page's ids never hold an "@" (docId)
+            docs.append((unicodedata.normalize("NFC", fn[:-5]).replace("@", "~"), body))
     return docs
 
 

@@ -522,6 +522,12 @@ const { chromium } = require('playwright');
           and sorted(map(tuple, res.get("docs", {}).values())) == [("a~1",), ("r~p2",), ("r~pc2",)], out[-500:])
     check("8.2 a document of an older version of the map is stale, one of no row's kind bad_edit, an unreadable file skipped — none read",
           sorted((x["why"], x.get("doc")) for x in res.get("skipped", [])) == [("bad_edit", "junk"), ("stale", "r~old")], res.get("skipped"))
+    hd = os.path.join(d, "shared-host", "edits")
+    os.makedirs(hd)
+    write(os.path.join(hd, "r@7e@journey-first-order@7e@p2.json"), json.dumps({"kind": "row", "map": "journey-first-order", "row": "p2", "digest": rsig, "edit": {"text": "Інша назва"}}, ensure_ascii=False))
+    rc, out, res = run("page-diff", "--note", os.path.join(NF, "journey-first-order.md"), "--edits", hd)
+    check("8.6 a file named as the host's database tool saves it (\"~\" spelled \"@\") gives back the page's own doc id, so the taken document can be deleted",
+          rc == 0 and list(res.get("docs", {}).values()) == [["r~7e~journey-first-order~7e~p2"]], res.get("docs"))
     if have_pw:
         jsm = os.path.join(d, "pwm.js")
         write(jsm, "const MOCK = `" + MOCK_JS + "`;\n" + r"""
