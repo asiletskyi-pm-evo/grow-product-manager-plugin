@@ -748,132 +748,215 @@ EDIT_ATTRS = ("map", "digest", "stage", "lane", "title", "row", "parent", "code"
 PAGE_SOURCE = {"uk": "сторінка команди", "en": "team page"}
 EDIT_LABELS = {
     "uk": {"on": "Редагувати", "off": "Готово", "save": "Зберегти правки", "copy": "Скопіювати правки",
-           "count": "Правок: %d", "copied": "Скопійовано — встав правки в чат із PM.",
+           "count": "Правок: %d", "copied": "Скопійовано. Встав правки в чат із PM: вони потраплять у карту після його перегляду.",
            "copyfail": "Копіювання заблоковане — виділи текст у полі нижче й скопіюй його.",
            "saved": "Файл правок збережено — надішли його PM.",
            "savefail": "Збереження заблоковане — скористайся «Скопіювати правки».",
            "locked": "Цей рядок не редагується тут: метрики й рядки health-check оновлює сам health-check.",
-           "unsaved": "Є незбережені правки.",
-           "help": "Клацни рядок, щоб змінити його; «+» у клітинці додає рядок. Сторінка нічого не надсилає: правки "
-                   "потрапляють у карту лише після перегляду PM («забери правки зі сторінки карти шляху»).",
-           "text": "Текст", "cell": "Клітинка", "parent": "Під рядком (parent)", "code": "Код", "target": "Ціль етапу",
-           "remove": "Прибрати рядок", "apply": "Застосувати", "cancel": "Скасувати", "none": "—"},
+           "unsaved": "Є незбережені правки.", "moved": "Рядок перенесено. Щоб повернути, відкрий його й натисни «Відмінити правки рядка».",
+           "help": "Перетягни картку в іншу клітинку, щоб перенести її. Клацни картку, щоб змінити текст і звʼязки. «+ Додати» "
+                   "в клітинці створює новий рядок. Сторінка нічого не надсилає: коли закінчиш, натисни «Скопіювати правки» "
+                   "й передай їх PM — у карту вони потраплять лише після його перегляду («забери правки зі сторінки карти шляху»).",
+           "t-row": "Редагування рядка", "t-new": "Новий рядок", "text": "Текст", "stage": "Етап", "lane": "Доріжка",
+           "parent": "Належить до (parent)", "ph": "Рядок цього етапу, з якого виростає цей: біль і рішення — з можливості, "
+           "експеримент — з рішення, ініціатива — з болю, можливості чи рішення.",
+           "pnone": "На цьому етапі ще немає рядка, до якого можна привʼязати цей. Спершу додай його.",
+           "c-init": "Код епіка чи фічі в Jira, наприклад PROJ-123", "c-exp": "Id експерименту з реєстру, наприклад exp-назва-20261020",
+           "target": "Цільова можливість етапу (лише одна на етап)", "remove": "Прибрати рядок з карти",
+           "restore": "Повернути рядок", "reset": "Відмінити правки рядка", "close": "Закрити",
+           "apply": "Застосувати", "cancel": "Скасувати", "none": "— не вказано —", "add": "+ Додати",
+           "b-edit": "змінено", "b-new": "новий", "b-gone": "прибрано"},
     "en": {"on": "Edit", "off": "Done", "save": "Save edits", "copy": "Copy edits",
-           "count": "Edits: %d", "copied": "Copied — paste the edits into a chat with the PM.",
+           "count": "Edits: %d", "copied": "Copied. Paste the edits into a chat with the PM: they reach the map after the PM's preview.",
            "copyfail": "Copying is blocked — select the text in the field below and copy it.",
            "saved": "The file of edits is saved — send it to the PM.",
            "savefail": "Saving is blocked — use «Copy edits».",
            "locked": "This row is not edited here: the health-check updates metrics and its own rows.",
-           "unsaved": "There are unsaved edits.",
-           "help": "Click a row to change it; «+» in a cell adds a row. The page sends nothing: the edits reach the map only "
-                   "after the PM's preview («take the edits from the journey map's page»).",
-           "text": "Text", "cell": "Cell", "parent": "Under the row (parent)", "code": "Code", "target": "The stage's target",
-           "remove": "Remove the row", "apply": "Apply", "cancel": "Cancel", "none": "—"},
+           "unsaved": "There are unsaved edits.", "moved": "The row is moved. To undo, open it and press «Undo this row's edits».",
+           "help": "Drag a card into another cell to move it. Click a card to change its text and links. «+ Add» in a cell "
+                   "creates a row. The page sends nothing: when you are done, press «Copy edits» and give them to the PM — "
+                   "they reach the map only after the PM's preview («take the edits from the journey map's page»).",
+           "t-row": "Edit the row", "t-new": "New row", "text": "Text", "stage": "Stage", "lane": "Lane",
+           "parent": "Belongs to (parent)", "ph": "A row of this stage it grows from: a pain or a solution from an opportunity, "
+           "an experiment from a solution, an initiative from a pain, an opportunity or a solution.",
+           "pnone": "This stage has no row this one can belong to yet. Add it first.",
+           "c-init": "The epic's or feature's Jira code, e.g. PROJ-123", "c-exp": "The experiment's registry id, e.g. exp-name-20261020",
+           "target": "The stage's target opportunity (one per stage)", "remove": "Remove the row from the map",
+           "restore": "Bring the row back", "reset": "Undo this row's edits", "close": "Close",
+           "apply": "Apply", "cancel": "Cancel", "none": "— not set —", "add": "+ Add",
+           "b-edit": "edited", "b-new": "new", "b-gone": "removed"},
 }
-CSS_EDIT = """
-.edit-bar{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.edit-bar button{font:inherit;padding:4px 10px;border:1px solid #adb5bd;border-radius:6px;background:#fff;cursor:pointer}
-.edit-bar .edit-toggle{border-color:#1c7ed6;color:#1c7ed6}.edit-bar .edit-msg{color:#57606a}.edit-bar .edit-help{flex-basis:100%;margin:0;color:#57606a;font-size:12px}
-.edit-bar .edit-save,.edit-bar .edit-copy,.edit-bar .edit-count,.edit-bar .edit-help{display:none}body.editing .edit-bar .edit-save,body.editing .edit-bar .edit-copy,body.editing .edit-bar .edit-count,body.editing .edit-bar .edit-help{display:inline-block}
-.edit-out{flex-basis:100%;min-height:90px;font:12px monospace}.edit-add{display:none;font:inherit;border:1px dashed #adb5bd;border-radius:6px;background:transparent;color:#57606a;cursor:pointer;padding:0 8px}
-body.editing .edit-add{display:inline-block}body.editing .item[data-row]{cursor:pointer}body.editing .item[data-locked]{cursor:not-allowed;opacity:.7}
-.item.edited{outline:2px solid #f08c00}.item.removed{opacity:.45;text-decoration:line-through}.item.added{border-left-color:#f08c00;background:#fff9db;cursor:pointer}
-.edit-form{position:fixed;right:16px;bottom:16px;z-index:9;width:min(340px,calc(100vw - 32px));background:#fff;border:1px solid #adb5bd;border-radius:8px;padding:10px;box-shadow:0 4px 16px rgba(0,0,0,.15);display:flex;flex-direction:column;gap:6px}
-.edit-form[hidden]{display:none}.edit-form label{display:flex;flex-direction:column;font-size:12px;color:#57606a;gap:2px}.edit-form label.chk{flex-direction:row;align-items:center;gap:6px}
-.edit-form textarea{min-height:60px;font:inherit}.edit-form select,.edit-form input{font:inherit}"""
+CSS_EDIT = r"""
+.edit-bar{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.edit-bar button,.edit-form button{font:inherit;padding:6px 12px;border:1px solid #adb5bd;border-radius:6px;background:#fff;color:#1f2328;cursor:pointer}
+.edit-bar button:hover,.edit-form button:hover{background:#f1f3f5}.edit-bar .edit-toggle{border-color:#1c7ed6;color:#1c7ed6;font-weight:600}.edit-bar .edit-toggle::before{content:"\270E  "}
+body.editing .edit-bar{position:sticky;top:0;z-index:20;background:#fff;border:1px solid #d0d7de;border-radius:10px;padding:10px 12px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+body.editing .edit-bar .edit-toggle{background:#1c7ed6;color:#fff}body.editing .edit-bar .edit-toggle::before{content:"\2713  "}
+.edit-bar .edit-copy{border-color:#2b8a3e;color:#2b8a3e;font-weight:600}.edit-count{padding:3px 10px;border-radius:999px;background:#f1f3f5;color:#57606a;font-size:13px}.edit-count.some{background:#fff3bf;color:#7c5800;font-weight:600}
+.edit-msg{display:none;flex-basis:100%;padding:8px 10px;border-radius:6px;background:#e7f5ff;color:#1864ab;font-size:13px}.edit-msg.shown{display:block}
+.edit-bar .edit-help{flex-basis:100%;margin:0;color:#57606a;font-size:13px;line-height:1.5}
+.edit-bar .edit-save,.edit-bar .edit-copy,.edit-bar .edit-count,.edit-bar .edit-help{display:none}body.editing .edit-bar .edit-save,body.editing .edit-bar .edit-copy,body.editing .edit-bar .edit-count{display:inline-block}body.editing .edit-bar .edit-help{display:block}
+.edit-out{flex-basis:100%;min-height:70px;max-height:140px;font:12px monospace}body.has-edits .edit-bar .edit-help{display:none}
+@media (min-width:900px){body.panel{padding-right:396px}}
+.edit-add{display:none;width:100%;margin-top:4px;font:inherit;font-size:12px;border:1px dashed #ced4da;border-radius:6px;background:transparent;color:#868e96;cursor:pointer;padding:3px 6px;text-align:left}
+body.editing .edit-add{display:block;opacity:.3}body.editing td:hover>.edit-add,body.editing .edit-add:focus{opacity:1}@media (hover:none){body.editing .edit-add{opacity:1}}.edit-add:hover{border-color:#1c7ed6;color:#1c7ed6;background:#e7f5ff}
+body.editing .item[data-row],body.editing .item.added{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;position:relative}body.editing .item[data-row]:hover,body.editing .item.added:hover{box-shadow:0 0 0 2px #74c0fc}
+body.editing .item[data-locked]{cursor:not-allowed;opacity:.65;touch-action:auto}body.editing .item[data-locked]:hover{box-shadow:none}body.drag-on,body.drag-on *{cursor:grabbing!important}
+.item.dragging{opacity:.35}.drag-ghost{position:fixed;z-index:50;pointer-events:none;transform:rotate(1.5deg);box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:.95}
+td.drop-ok{background:#e7f5ff!important;outline:2px dashed #1c7ed6;outline-offset:-3px}
+.item.edited{box-shadow:0 0 0 2px #f08c00}.item.removed{opacity:.45;text-decoration:line-through}.item.added{border-left-color:#f08c00;background:#fff9db}.item.current{box-shadow:0 0 0 3px #1c7ed6!important}
+.item[data-eb]::after{content:attr(data-eb);position:absolute;top:-8px;right:6px;padding:0 6px;border-radius:999px;background:#f08c00;color:#fff;font-size:10px;line-height:16px;text-decoration:none}
+.edit-form{position:fixed;top:0;right:0;bottom:0;z-index:30;width:min(380px,100vw);background:#fff;border-left:1px solid #d0d7de;box-shadow:-8px 0 24px rgba(0,0,0,.12);padding:16px;display:flex;flex-direction:column;gap:12px;overflow:auto;box-sizing:border-box}
+.edit-form[hidden],.edit-form [hidden]{display:none}.f-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.f-title{font-size:16px}.edit-form .f-close{border:0;font-size:20px;padding:0 6px;line-height:1}
+.f-where{margin:-6px 0 0;color:#57606a;font-size:13px}.edit-form label{display:flex;flex-direction:column;font-size:13px;font-weight:600;color:#343a40;gap:4px}.edit-form label.chk{flex-direction:row;align-items:center;gap:8px;font-weight:400}
+.edit-form small{font-weight:400;color:#868e96;line-height:1.4}.f-two{display:flex;gap:8px}.f-two label{flex:1;min-width:0}
+.edit-form textarea{min-height:80px;font:inherit;font-weight:400;padding:6px;border:1px solid #ced4da;border-radius:6px}.edit-form select,.edit-form input:not([type]){font:inherit;font-weight:400;padding:5px;border:1px solid #ced4da;border-radius:6px;min-width:0}
+.f-acts{display:flex;gap:8px}.edit-form .f-apply{background:#1c7ed6;border-color:#1c7ed6;color:#fff;font-weight:600}.edit-form .f-apply:hover{background:#1971c2}
+.f-more{margin-top:auto;padding-top:12px;border-top:1px solid #e9ecef;display:flex;flex-direction:column;gap:6px;align-items:flex-start}.edit-form .f-more button{border:0;padding:4px 0;background:none;color:#57606a}.edit-form .f-remove{color:#c92a2a!important}
+@media (max-width:640px){.edit-form{top:auto;left:0;width:100%;max-height:85vh;border-left:0;border-top:1px solid #d0d7de;border-radius:12px 12px 0 0}}"""
 # Fixed bytes — no data of a note in it — and no request: the page's edits, a file or a copied text, nothing sent.
-EDIT = ('(function(){var bar=document.querySelector(".edit-bar");if(!bar)return;'
-        'function q(s,r){return(r||document).querySelector(s);}function qa(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}'
-        'function A(e,k){return(e&&e.getAttribute("data-"+k))||"";}function L(k){return A(bar,"l-"+k);}'
-        'var P={pain:["opportunity"],solution:["opportunity"],experiment:["solution"],initiative:["pain","opportunity","solution"]};'
-        'var CODE={initiative:1,experiment:1},LOCK={metric:1,anomaly:1};'
-        'var ed={},adds=[],nadd=0,cur=null,dirty=false;'
-        'var form=q(".edit-form",bar),out=q(".edit-out",bar),cnt=q(".edit-count",bar),msg=q(".edit-msg",bar),tog=q(".edit-toggle",bar);'
-        'var f={text:q(".f-text",form),cell:q(".f-cell",form),parent:q(".f-parent",form),code:q(".f-code",form),'
-        'target:q(".f-target",form),remove:q(".f-remove",form)};'
-        'function say(k){msg.textContent=k?L(k):"";}'
-        'function txt(it){var t=q(".t",it).textContent;return A(it,"target")==="1"&&t.indexOf("\\ud83c\\udfaf ")===0?t.slice(3):t;}'
-        'function cellOf(it){var td=it.closest("td");return{stage:A(td,"stage"),lane:A(td,"lane")};}'
-        'function wrapOf(e){return e.closest(".wrap");}'
-        'function show(el,on){el.closest("label").hidden=!on;}'
-        'function fillCells(w,stage,lane){f.cell.innerHTML="";qa("td[data-stage]",w).forEach(function(td){'
-        'if(LOCK[A(td,"lane")]&&A(td,"lane")!==lane)return;var o=document.createElement("option");'
-        'o.value=A(td,"stage")+"\\u0001"+A(td,"lane");o.textContent=A(td,"title");'
-        'if(A(td,"stage")===stage&&A(td,"lane")===lane)o.selected=true;f.cell.appendChild(o);});}'
-        'function fillParents(w,stage,lane,value,self){f.parent.innerHTML="";var z=document.createElement("option");'
-        'z.value="";z.textContent=L("none");f.parent.appendChild(z);var ok=P[lane]||[];'
-        'qa(".item[data-row]",w).forEach(function(it){var c=cellOf(it);if(it.closest(".wrap")!==w||c.stage!==stage||'
-        'ok.indexOf(c.lane)<0||A(it,"row")===self)return;var o=document.createElement("option");o.value=A(it,"row");'
-        'o.textContent=A(it,"row")+" \\u2014 "+txt(it).slice(0,48);if(o.value===value)o.selected=true;f.parent.appendChild(o);});'
-        'if(value&&f.parent.value!==value){var k=document.createElement("option");k.value=value;k.textContent=value;'
-        'k.selected=true;f.parent.appendChild(k);}show(f.parent,!!P[lane]);}'
-        'function sel(){var v=f.cell.value.split("\\u0001");return{stage:v[0]||"",lane:v[1]||""};}'
-        'function lanes(){var c=sel();show(f.code,!!CODE[c.lane]);show(f.target,c.lane==="opportunity");'
-        'fillParents(cur.w,c.stage,c.lane,f.parent.value||cur.v.parent,cur.row||"");}'
-        'f.cell.addEventListener("change",lanes);'
-        'function open(c){cur=c;var v=c.v;f.text.value=v.text;fillCells(c.w,v.stage,v.lane);'
-        'fillParents(c.w,v.stage,v.lane,v.parent,c.row||"");f.code.value=v.code;f.target.checked=!!v.target;'
-        'f.remove.checked=!!v.remove;show(f.remove,!!c.row||c.add!=null);lanes();form.hidden=false;f.text.focus();}'
-        'function orig(it){var c=cellOf(it);return{text:txt(it),stage:c.stage,lane:c.lane,parent:A(it,"parent"),'
-        'code:A(it,"code"),target:A(it,"target")==="1",remove:false};}'
-        'function key(w,row){return A(w,"map")+"\\u0001"+row;}'
-        'function openRow(it){var w=wrapOf(it),k=key(w,A(it,"row")),o=orig(it),e=ed[k]||{},v={};'
-        'for(var x in o){v[x]=e.hasOwnProperty(x)?e[x]:o[x];}open({w:w,it:it,row:A(it,"row"),k:k,o:o,v:v});}'
-        'function openAdd(td,i){var w=wrapOf(td);var a=i!=null?adds[i]:{map:A(w,"map"),stage:A(td,"stage"),lane:A(td,"lane"),'
-        'text:"",parent:"",code:"",target:false};open({w:w,td:td,add:i,v:{text:a.text,stage:a.stage,lane:a.lane,'
-        'parent:a.parent,code:a.code,target:a.target,remove:false}});}'
-        'function apply(){if(!cur)return;var c=sel(),v={text:f.text.value.replace(/\\s+/g," ").trim(),stage:c.stage,lane:c.lane,'
-        'parent:P[c.lane]?f.parent.value:"",code:CODE[c.lane]?f.code.value.trim():"",'
-        'target:c.lane==="opportunity"&&f.target.checked,remove:f.remove.checked};'
-        'if(cur.row){var e={};for(var x in cur.o){if(x!=="remove"&&v[x]!==cur.o[x])e[x]=v[x];}'
-        'if(v.remove)e={remove:true};var has=false;for(var y in e){if(e.hasOwnProperty(y))has=true;}'
-        'if(has)ed[cur.k]=e;else delete ed[cur.k];cur.it.classList.toggle("edited",has&&!v.remove);'
-        'cur.it.classList.toggle("removed",!!v.remove);}'
-        'else{var i=cur.add;if(v.remove||!v.text){if(i!=null){adds[i]=null;var gone=q(\'[data-add="\'+i+\'"]\');if(gone)gone.remove();}}'
-        'else{var a={map:A(cur.w,"map"),stage:v.stage,lane:v.lane,text:v.text,parent:v.parent,code:v.code,target:v.target};'
-        'if(i==null){i=adds.length;adds.push(a);}else{adds[i]=a;var old=q(\'[data-add="\'+i+\'"]\');if(old)old.remove();}'
-        'var td=qa("td[data-stage]",cur.w).filter(function(t){return A(t,"stage")===v.stage&&A(t,"lane")===v.lane;})[0];'
-        'var d=document.createElement("div");d.className="item added";d.setAttribute("data-add",String(i));'
-        'var t=document.createElement("div");t.className="t";t.textContent=v.text;d.appendChild(t);'
-        'if(td)td.insertBefore(d,q(".edit-add",td));}}'
-        'form.hidden=true;cur=null;count2();}'
-        'function count2(){var n=adds.filter(function(a){return a;}).length;for(var k in ed){if(ed.hasOwnProperty(k))n++;}'
-        'cnt.textContent=L("count").replace("%d",n);dirty=n>0;}'
-        'q(".f-apply",form).addEventListener("click",apply);'
-        'q(".f-cancel",form).addEventListener("click",function(){form.hidden=true;cur=null;});'
-        'qa("td[data-stage]").forEach(function(td){if(LOCK[A(td,"lane")])return;var b=document.createElement("button");'
-        'b.type="button";b.className="edit-add";b.textContent="+";td.appendChild(b);});'
-        'document.addEventListener("click",function(ev){if(!document.body.classList.contains("editing"))return;'
-        'var t=ev.target;if(t.closest(".edit-form")||t.closest(".edit-bar"))return;var w=t.closest(".wrap");if(w&&w._moved)return;'
-        'var b=t.closest(".edit-add");if(b){openAdd(b.closest("td"),null);return;}'
-        'var a=t.closest(".item.added");if(a){openAdd(a.closest("td"),+A(a,"add"));return;}'
-        'var it=t.closest(".item[data-row]");if(!it)return;if(A(it,"locked")){say("locked");return;}say("");openRow(it);});'
-        'tog.addEventListener("click",function(){var on=document.body.classList.toggle("editing");'
-        'tog.textContent=on?L("off"):L("on");if(!on){form.hidden=true;cur=null;}});'
-        'function build(){var day=new Date().toISOString().slice(0,10),maps={},n=0;'
-        'function m(name){var w=qa(".wrap[data-map]").filter(function(x){return A(x,"map")===name;})[0];'
-        'if(!maps[name])maps[name]={digest:A(w,"digest"),edits:[]};return maps[name].edits;}'
-        'for(var k in ed){if(!ed.hasOwnProperty(k))continue;var p=k.split("\\u0001"),e=ed[k],l=m(p[0]),r=p[1];'
-        'if(e.remove){l.push({op:"remove",row:r});continue;}'
-        'if(e.hasOwnProperty("text"))l.push({op:"text",row:r,text:e.text});'
-        'if(e.hasOwnProperty("stage")||e.hasOwnProperty("lane")){var it=qa(".wrap[data-map] .item[data-row]").filter(function(x){'
-        'return A(wrapOf(x),"map")===p[0]&&A(x,"row")===r;})[0],o=orig(it);'
-        'l.push({op:"move",row:r,stage:e.hasOwnProperty("stage")?e.stage:o.stage,lane:e.hasOwnProperty("lane")?e.lane:o.lane});}'
-        'if(e.hasOwnProperty("parent"))l.push({op:"parent",row:r,parent:e.parent});'
-        'if(e.hasOwnProperty("code"))l.push({op:"code",row:r,code:e.code});'
-        'if(e.hasOwnProperty("target"))l.push({op:"target",row:r,target:!!e.target});}'
-        'adds.forEach(function(a){if(!a)return;n++;m(a.map).push({op:"add",id:"p"+n,stage:a.stage,lane:a.lane,text:a.text,'
-        'parent:a.parent,code:a.code,target:!!a.target});});'
-        'return JSON.stringify({kind:"journey-page-edits",version:1,product:A(bar,"product"),root:A(bar,"root"),made:day,maps:maps},null,1);}'
-        'function put(){out.value=build();out.hidden=false;return out.value;}'
-        'q(".edit-save",bar).addEventListener("click",function(){var s=put();try{var u=URL.createObjectURL(new Blob([s],'
-        '{type:"application/json"}));var a=document.createElement("a");a.href=u;a.download=A(bar,"root")+".page-edits.json";'
-        'document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u);},1000);dirty=false;say("saved");}'
-        'catch(_){say("savefail");}});'
-        'q(".edit-copy",bar).addEventListener("click",function(){var s=put();function fb(){try{out.focus();out.select();'
-        'if(document.execCommand("copy")){dirty=false;say("copied");}else say("copyfail");}catch(_){say("copyfail");}}'
-        'try{navigator.clipboard.writeText(s).then(function(){dirty=false;say("copied");},fb);}catch(_){fb();}});'
-        'window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue=L("unsaved");return L("unsaved");}});'
-        'count2();})();')
+EDIT = r'''(function(){var bar=document.querySelector(".edit-bar");if(!bar)return;
+function q(s,r){return(r||document).querySelector(s);}
+function qa(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+function A(e,k){return(e&&e.getAttribute("data-"+k))||"";}
+function L(k){return A(bar,"l-"+k);}
+var P={pain:["opportunity"],solution:["opportunity"],experiment:["solution"],initiative:["pain","opportunity","solution"]};
+var CODE={initiative:"c-init",experiment:"c-exp"},LOCK={metric:1,anomaly:1},FLAG="🎯 ";
+var ed={},home={},adds=[],cur=null,dirty=false,drag=null,dragged=false;
+var form=q(".edit-form",bar),out=q(".edit-out",bar),cnt=q(".edit-count",bar),msg=q(".edit-msg",bar),tog=q(".edit-toggle",bar);
+var f={title:q(".f-title",form),where:q(".f-where",form),text:q(".f-text",form),stage:q(".f-stage",form),lane:q(".f-lane",form),
+parent:q(".f-parent",form),phint:q(".f-phint",form),code:q(".f-code",form),clabel:q(".f-clabel",form),target:q(".f-target",form),
+remove:q(".f-remove",form),reset:q(".f-reset",form)};
+function on(){return document.body.classList.contains("editing");}
+function say(k,keep){msg.textContent=k?L(k):"";msg.className="edit-msg"+(k?" shown":"");clearTimeout(say.t);
+if(k&&!keep)say.t=setTimeout(function(){say("");},6000);}
+function box(el,show){(el.closest(".f-box")||el).hidden=!show;}
+function wrapOf(e){return e.closest(".wrap");}
+function own(list,w){return list.filter(function(e){return e.closest(".wrap")===w;});}
+function key(w,row){return A(w,"map")+"\u0001"+row;}
+function txt(it){var t=q(".t",it).textContent;return t.indexOf(FLAG)===0?t.slice(FLAG.length):t;}
+function cellOf(it){var td=it.closest("td");return{stage:A(td,"stage"),lane:A(td,"lane")};}
+function stagesOf(w){var tr=own(qa("tbody tr",w),w)[0],ths=own(qa("thead th.stage",w),w);if(!tr)return[];
+return own(qa("td[data-stage]",tr),w).map(function(td,i){var th=ths[i],n=th&&th.firstChild&&th.firstChild.nodeType===3?th.firstChild.nodeValue:A(td,"stage");
+return{id:A(td,"stage"),name:n};});}
+function lanesOf(w){return own(qa("tbody tr",w),w).map(function(tr){var td=q("td[data-lane]",tr),th=q("th",tr);
+return td?{id:A(td,"lane"),name:th?th.textContent:A(td,"lane")}:null;}).filter(function(x){return x&&!LOCK[x.id];});}
+function nameOf(list,id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i].name;}return id;}
+function tdOf(w,stage,lane){return own(qa("td[data-stage]",w),w).filter(function(t){return A(t,"stage")===stage&&A(t,"lane")===lane;})[0];}
+function place(it,td){if(td&&it.parentNode!==td)td.insertBefore(it,q(".edit-add",td));}
+function orig(it){var c=cellOf(it);return{text:txt(it),stage:c.stage,lane:c.lane,parent:A(it,"parent"),code:A(it,"code"),
+target:A(it,"target")==="1"};}
+function base(it){var w=wrapOf(it),k=key(w,A(it,"row"));if(!home[k])home[k]={o:orig(it),td:it.parentNode,next:it.nextSibling,t:q(".t",it).textContent};
+return home[k];}
+function now(it){var h=base(it),e=ed[key(wrapOf(it),A(it,"row"))]||{},v={};for(var x in h.o){v[x]=e.hasOwnProperty(x)?e[x]:h.o[x];}
+v.remove=!!e.remove;return v;}
+function badge(it,k){if(k){it.setAttribute("data-eb",L(k));}else{it.removeAttribute("data-eb");}}
+function opt(sel,value,label,pick){var o=document.createElement("option");o.value=value;o.textContent=label;if(pick)o.selected=true;
+sel.appendChild(o);}
+function fillSel(sel,list,value){sel.innerHTML="";list.forEach(function(x){opt(sel,x.id,x.name,x.id===value);});}
+function fillParents(w,stage,lane,value,self){f.parent.innerHTML="";opt(f.parent,"",L("none"),!value);var ok=P[lane]||[],n=0,ls=lanesOf(w);
+own(qa(".item[data-row]",w),w).forEach(function(it){var c=cellOf(it);if(c.stage!==stage||ok.indexOf(c.lane)<0||A(it,"row")===self||
+it.classList.contains("removed"))return;n++;var t=txt(it);opt(f.parent,A(it,"row"),nameOf(ls,c.lane)+": "+(t.length>60?t.slice(0,58)+"…":t),
+A(it,"row")===value);});if(value&&f.parent.value!==value)opt(f.parent,value,value,true);
+f.phint.textContent=n?L("ph"):L("pnone");box(f.parent,!!P[lane]);}
+function lanes(){if(!cur)return;var st=f.stage.value,ln=f.lane.value;box(f.code,!!CODE[ln]);f.clabel.textContent=CODE[ln]?L(CODE[ln]):"";
+box(f.target,ln==="opportunity");fillParents(cur.w,st,ln,f.parent.value||cur.v.parent,cur.row||"");
+f.where.textContent=nameOf(cur.ss,st)+" · "+nameOf(cur.ls,ln);}
+f.stage.addEventListener("change",lanes);f.lane.addEventListener("change",lanes);
+function open(c){cur=c;var v=c.v;c.ss=stagesOf(c.w);c.ls=lanesOf(c.w);f.text.value=v.text;fillSel(f.stage,c.ss,v.stage);fillSel(f.lane,c.ls,v.lane);
+fillParents(c.w,v.stage,v.lane,v.parent,c.row||"");f.code.value=v.code;f.target.checked=!!v.target;
+f.title.textContent=c.row?L("t-row"):L("t-new");f.remove.textContent=c.row&&v.remove?L("restore"):L("remove");
+box(f.remove,!!c.row||c.add!=null);box(f.reset,!!c.row&&!!ed[c.k]);lanes();form.hidden=false;document.body.classList.add("panel");
+qa(".item.current").forEach(function(x){x.classList.remove("current");});if(c.it)c.it.classList.add("current");f.text.focus();}
+function close(){form.hidden=true;document.body.classList.remove("panel");if(cur&&cur.it)cur.it.classList.remove("current");cur=null;}
+function openRow(it){var w=wrapOf(it);open({w:w,it:it,row:A(it,"row"),k:key(w,A(it,"row")),v:now(it)});}
+function openAdd(td,i,it){var w=wrapOf(td);var a=i!=null?adds[i]:{map:A(w,"map"),stage:A(td,"stage"),lane:A(td,"lane"),text:"",parent:"",code:"",target:false};
+open({w:w,td:td,add:i,it:it||null,v:{text:a.text,stage:a.stage,lane:a.lane,parent:a.parent,code:a.code,target:a.target,remove:false}});}
+function setRow(it,v){var h=base(it),w=wrapOf(it),k=key(w,A(it,"row")),o=h.o,e={};
+["text","stage","lane","parent","code","target"].forEach(function(x){if(v[x]!==o[x])e[x]=v[x];});if(v.remove)e={remove:true};
+var has=false;for(var y in e){if(e.hasOwnProperty(y))has=true;}if(has){ed[k]=e;}else{delete ed[k];}
+q(".t",it).textContent=e.hasOwnProperty("text")||e.hasOwnProperty("target")?(v.target?FLAG:"")+v.text:h.t;
+var c=cellOf(it);if(c.stage!==v.stage||c.lane!==v.lane){if(v.stage===o.stage&&v.lane===o.lane){h.td.insertBefore(it,h.next&&h.next.parentNode===h.td?h.next:q(".edit-add",h.td));}
+else{place(it,tdOf(w,v.stage,v.lane));}}
+it.classList.toggle("edited",has&&!v.remove);it.classList.toggle("removed",!!v.remove);badge(it,v.remove?"b-gone":has?"b-edit":"");count2();}
+function setAdd(i,v,w){var a=adds[i];a.stage=v.stage;a.lane=v.lane;a.text=v.text;a.parent=v.parent;a.code=v.code;a.target=v.target;
+var d=q('[data-add="'+i+'"]');if(d){q(".t",d).textContent=(v.target?FLAG:"")+v.text;place(d,tdOf(w,v.stage,v.lane));}count2();}
+function vals(){var st=f.stage.value,ln=f.lane.value,o=cur.row?base(cur.it).o:{parent:"",code:"",target:false};
+return{text:f.text.value.replace(/\s+/g," ").trim(),stage:st,lane:ln,parent:P[ln]?f.parent.value:o.parent,
+code:CODE[ln]?f.code.value.trim():o.code,target:ln==="opportunity"?f.target.checked:o.target,remove:false};}
+function apply(){if(!cur)return;var v=vals();if(!v.text){f.text.focus();return;}
+if(cur.row){setRow(cur.it,v);}
+else if(cur.add!=null){setAdd(cur.add,v,cur.w);}
+else{var i=adds.length;adds.push({map:A(cur.w,"map"),stage:v.stage,lane:v.lane,text:v.text,parent:v.parent,code:v.code,target:v.target});
+var d=document.createElement("div");d.className="item added";d.setAttribute("data-add",String(i));d.setAttribute("tabindex","0");badge(d,"b-new");
+var t=document.createElement("div");t.className="t";t.textContent=(v.target?FLAG:"")+v.text;d.appendChild(t);place(d,tdOf(cur.w,v.stage,v.lane));count2();}
+close();}
+function remove(){if(!cur)return;if(cur.row){var v=now(cur.it);v.remove=!v.remove;setRow(cur.it,v);}
+else if(cur.add!=null){adds[cur.add]=null;var d=q('[data-add="'+cur.add+'"]');if(d)d.remove();count2();}close();}
+function reset(){if(!cur||!cur.row)return;var h=base(cur.it);delete ed[cur.k];q(".t",cur.it).textContent=h.t;
+h.td.insertBefore(cur.it,h.next&&h.next.parentNode===h.td?h.next:q(".edit-add",h.td));cur.it.classList.remove("edited");
+cur.it.classList.remove("removed");badge(cur.it,"");count2();close();}
+function count2(){var n=adds.filter(function(a){return a;}).length;for(var k in ed){if(ed.hasOwnProperty(k))n++;}
+cnt.textContent=L("count").replace("%d",n);cnt.classList.toggle("some",n>0);document.body.classList.toggle("has-edits",n>0);dirty=n>0;}
+q(".f-apply",form).addEventListener("click",apply);q(".f-cancel",form).addEventListener("click",close);q(".f-close",form).addEventListener("click",close);
+f.remove.addEventListener("click",remove);f.reset.addEventListener("click",reset);
+form.addEventListener("keydown",function(e){if(e.key==="Escape"){e.preventDefault();close();}
+else if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();apply();}});
+qa("td[data-stage]").forEach(function(td){if(LOCK[A(td,"lane")])return;var b=document.createElement("button");
+b.type="button";b.className="edit-add";b.textContent=L("add");td.appendChild(b);});
+function target(x,y){var el=document.elementFromPoint(x,y),td=el&&el.closest("td[data-stage]");
+return td&&drag&&wrapOf(td)===drag.w&&!LOCK[A(td,"lane")]?td:null;}
+function lit(td){qa("td.drop-ok").forEach(function(t){if(t!==td)t.classList.remove("drop-ok");});if(td)td.classList.add("drop-ok");}
+document.addEventListener("pointerdown",function(ev){if(!on()||ev.button!==0)return;var it=ev.target.closest(".item[data-row],.item.added");
+if(!it||it.closest(".edit-bar")||A(it,"locked")||it.classList.contains("chip"))return;ev.stopPropagation();
+drag={it:it,x:ev.clientX,y:ev.clientY,go:false,w:wrapOf(it),g:null};},true);
+document.addEventListener("pointermove",function(ev){if(!drag)return;var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;
+if(!drag.go){if(Math.abs(dx)+Math.abs(dy)<6)return;drag.go=true;var g=drag.it.cloneNode(true);g.className+=" drag-ghost";
+g.style.width=drag.it.offsetWidth+"px";document.body.appendChild(g);drag.g=g;drag.it.classList.add("dragging");document.body.classList.add("drag-on");}
+ev.preventDefault();drag.g.style.left=(ev.clientX+10)+"px";drag.g.style.top=(ev.clientY+10)+"px";
+var w=drag.w,r=w.getBoundingClientRect();if(ev.clientX>r.right-40)w.scrollLeft+=18;else if(ev.clientX<r.left+40)w.scrollLeft-=18;
+if(ev.clientY>window.innerHeight-40)window.scrollBy(0,18);else if(ev.clientY<40)window.scrollBy(0,-18);
+lit(target(ev.clientX,ev.clientY));},{passive:false});
+function drop(ev){if(!drag)return;var d=drag,td=d.go&&ev?target(ev.clientX,ev.clientY):null;drag=null;if(!d.go)return;dragged=true;
+setTimeout(function(){dragged=false;},0);lit(null);d.g.remove();d.it.classList.remove("dragging");document.body.classList.remove("drag-on");
+if(!td||td===d.it.parentNode)return;if(d.it.hasAttribute("data-row")){var v=now(d.it);v.stage=A(td,"stage");v.lane=A(td,"lane");
+if(!P[v.lane])v.parent=base(d.it).o.parent;setRow(d.it,v);}else{var i=+A(d.it,"add"),a=adds[i];
+setAdd(i,{text:a.text,stage:A(td,"stage"),lane:A(td,"lane"),parent:a.parent,code:a.code,target:a.target&&A(td,"lane")==="opportunity"},d.w);}
+say("moved");}
+document.addEventListener("pointerup",drop);document.addEventListener("pointercancel",function(){drop(null);});
+document.addEventListener("click",function(ev){if(!on()||dragged)return;
+var t=ev.target;if(t.closest(".edit-form")||t.closest(".edit-bar"))return;var w=t.closest(".wrap");if(w&&w._moved)return;
+var b=t.closest(".edit-add");if(b){openAdd(b.closest("td"),null);return;}
+var a=t.closest(".item.added");if(a){openAdd(a.closest("td"),+A(a,"add"),a);return;}
+var it=t.closest(".item[data-row]");if(!it)return;if(A(it,"locked")){say("locked");return;}say("");openRow(it);});
+document.addEventListener("keydown",function(ev){if(!on()||ev.key!=="Enter")return;var t=ev.target;
+if(t.matches&&t.matches(".item[data-row],.item.added")){ev.preventDefault();t.click();}});
+tog.addEventListener("click",function(){var go=document.body.classList.toggle("editing");tog.textContent=go?L("off"):L("on");
+qa(".item[data-row]").forEach(function(it){if(go)it.setAttribute("tabindex","0");else if(!it.classList.contains("chip"))it.removeAttribute("tabindex");});
+if(!go)close();say("");});
+function build(){var day=new Date().toISOString().slice(0,10),maps={},n=0;
+function m(name){var w=qa(".wrap[data-map]").filter(function(x){return A(x,"map")===name;})[0];
+if(!maps[name])maps[name]={digest:A(w,"digest"),edits:[]};return maps[name].edits;}
+for(var k in ed){if(!ed.hasOwnProperty(k))continue;var p=k.split("\u0001"),e=ed[k],l=m(p[0]),r=p[1],o=home[k].o;
+if(e.remove){l.push({op:"remove",row:r});continue;}
+if(e.hasOwnProperty("text"))l.push({op:"text",row:r,text:e.text});
+if(e.hasOwnProperty("stage")||e.hasOwnProperty("lane"))l.push({op:"move",row:r,stage:e.hasOwnProperty("stage")?e.stage:o.stage,
+lane:e.hasOwnProperty("lane")?e.lane:o.lane});
+if(e.hasOwnProperty("parent"))l.push({op:"parent",row:r,parent:e.parent});
+if(e.hasOwnProperty("code"))l.push({op:"code",row:r,code:e.code});
+if(e.hasOwnProperty("target"))l.push({op:"target",row:r,target:!!e.target});}
+adds.forEach(function(a){if(!a)return;n++;m(a.map).push({op:"add",id:"p"+n,stage:a.stage,lane:a.lane,text:a.text,
+parent:a.parent,code:a.code,target:!!a.target});});
+return JSON.stringify({kind:"journey-page-edits",version:1,product:A(bar,"product"),root:A(bar,"root"),made:day,maps:maps},null,1);}
+function put(){out.value=build();out.hidden=true;return out.value;}
+q(".edit-save",bar).addEventListener("click",function(){var s=put();try{var u=URL.createObjectURL(new Blob([s],
+{type:"application/json"}));var a=document.createElement("a");a.href=u;a.download=A(bar,"root")+".page-edits.json";
+document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u);},1000);dirty=false;say("saved",1);}
+catch(_){out.hidden=false;say("savefail",1);}});
+q(".edit-copy",bar).addEventListener("click",function(){var s=put();function fb(){out.hidden=false;try{out.focus();out.select();
+if(document.execCommand("copy")){out.hidden=true;dirty=false;say("copied",1);}else say("copyfail",1);}catch(_){say("copyfail",1);}}
+try{navigator.clipboard.writeText(s).then(function(){dirty=false;say("copied",1);},fb);}catch(_){fb();}});
+window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue=L("unsaved");return L("unsaved");}});
+count2();})();'''
 
 
 def edit_attrs(**kw):
@@ -884,22 +967,28 @@ def edit_attrs(**kw):
 
 def edit_bar(note, note_name, lang):
     """The switch «Редагувати» and what it shows (§9): one line of markup, its words in the page's language — the
-    script reads them from the bar's attributes, never carries them."""
+    script reads them from the bar's attributes, never carries them. Since the user's review of 2026-11-25: cards are
+    dragged between cells, a side panel with labelled fields edits a row, «+ Додати» adds one."""
     E = EDIT_LABELS.get(lang, EDIT_LABELS["en"])
-    words = "".join(' data-l-%s="%s"' % (k, esc(E[k])) for k in ("on", "off", "count", "copied", "copyfail", "saved",
-                                                                    "savefail", "locked", "unsaved", "none"))
+    words = "".join(' data-l-%s="%s"' % (k, esc(E[k])) for k in (
+        "on", "off", "count", "copied", "copyfail", "saved", "savefail", "locked", "unsaved", "moved", "none", "ph", "pnone",
+        "c-init", "c-exp", "t-row", "t-new", "remove", "restore", "add", "b-edit", "b-new", "b-gone"))
     return ('<div class="edit-bar"%s%s><button type="button" class="edit-toggle">%s</button><span class="edit-count"></span>'
-            '<button type="button" class="edit-save">%s</button><button type="button" class="edit-copy">%s</button>'
+            '<button type="button" class="edit-copy">%s</button><button type="button" class="edit-save">%s</button>'
             '<span class="edit-msg" role="status"></span><p class="edit-help">%s</p>'
-            '<div class="edit-form" hidden><label>%s<textarea class="f-text"></textarea></label>'
-            '<label>%s<select class="f-cell"></select></label><label>%s<select class="f-parent"></select></label>'
-            '<label>%s<input class="f-code"></label><label class="chk"><input type="checkbox" class="f-target">%s</label>'
-            '<label class="chk"><input type="checkbox" class="f-remove">%s</label>'
-            '<button type="button" class="f-apply">%s</button><button type="button" class="f-cancel">%s</button></div>'
+            '<div class="edit-form" hidden role="dialog"><div class="f-head"><b class="f-title"></b>'
+            '<button type="button" class="f-close" aria-label="%s">\u00d7</button></div><p class="f-where"></p>'
+            '<label>%s<textarea class="f-text"></textarea></label>'
+            '<div class="f-two"><label>%s<select class="f-stage"></select></label><label>%s<select class="f-lane"></select></label></div>'
+            '<label class="f-box">%s<select class="f-parent"></select><small class="f-phint"></small></label>'
+            '<label class="f-box"><span class="f-clabel"></span><input class="f-code"></label>'
+            '<label class="chk f-box"><input type="checkbox" class="f-target">%s</label>'
+            '<div class="f-acts"><button type="button" class="f-apply">%s</button><button type="button" class="f-cancel">%s</button></div>'
+            '<div class="f-more"><button type="button" class="f-reset">%s</button><button type="button" class="f-remove">%s</button></div></div>'
             '<textarea class="edit-out" readonly hidden></textarea></div>') % (
         edit_attrs(product=nt.safe(note["product"]), root=nt.safe(os.path.splitext(note_name)[0])), words,
-        esc(E["on"]), esc(E["save"]), esc(E["copy"]), esc(E["help"]), esc(E["text"]), esc(E["cell"]), esc(E["parent"]),
-        esc(E["code"]), esc(E["target"]), esc(E["remove"]), esc(E["apply"]), esc(E["cancel"]))
+        esc(E["on"]), esc(E["copy"]), esc(E["save"]), esc(E["help"]), esc(E["close"]), esc(E["text"]), esc(E["stage"]),
+        esc(E["lane"]), esc(E["parent"]), esc(E["target"]), esc(E["apply"]), esc(E["cancel"]), esc(E["reset"]), esc(E["remove"]))
 
 
 EDIT_ATTR_RE = re.compile(r' data-(?:%s)="[^"]*"' % "|".join(EDIT_ATTRS))

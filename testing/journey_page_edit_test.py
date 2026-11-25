@@ -464,6 +464,43 @@ const { chromium } = require('playwright');
             ops6 = None
         check("7.6 a text edit keeps a parent the list does not offer — only the text goes into the file", ops6 == ["text"], (ops6, pr6.stderr[-300:]))
 
+        js7 = os.path.join(d, "pw7.js")
+        write(js7, r"""
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const p = await b.newPage({viewport: {width: 1400, height: 900}}); const errs = [];
+  p.on('pageerror', e => errs.push(String(e)));
+  await p.goto('file://' + process.argv[2]); await p.click('.edit-toggle');
+  await p.$eval('.item[data-row="p2"]', e => e.scrollIntoView({block: 'center'}));
+  const sb = await (await p.$('.item[data-row="p2"]')).boundingBox(), db = await (await p.$('td[data-stage="s4"][data-lane="pain"]')).boundingBox();
+  await p.mouse.move(sb.x + 20, sb.y + 10); await p.mouse.down(); await p.mouse.move(db.x + 40, db.y + 20, {steps: 12}); await p.mouse.up();
+  const moved = await p.$eval('.item[data-row="p2"]', e => [e.closest('td').getAttribute('data-stage'), e.getAttribute('data-eb')]);
+  await p.click('.item[data-row="p3"]');
+  const panel = {title: await p.textContent('.f-title'), where: await p.textContent('.f-where'),
+    stages: await p.$$eval('.f-stage option', o => o.map(x => x.textContent)), lanes: await p.$$eval('.f-lane option', o => o.map(x => x.value))};
+  await p.click('.f-cancel');
+  await p.click('.edit-copy'); await p.waitForTimeout(200);
+  const one = await p.inputValue('.edit-out');
+  await p.click('.item[data-row="p2"]'); await p.click('.f-reset');
+  const back = await p.$eval('.item[data-row="p2"]', e => e.closest('td').getAttribute('data-stage'));
+  console.log(JSON.stringify({moved, panel, one, back, count: await p.textContent('.edit-count'), errs})); await b.close();
+})();""")
+        pr7 = subprocess.run(["node", js7, pg], capture_output=True, text=True, timeout=120,
+                             env=dict(os.environ, NODE_PATH=subprocess.run(["npm", "root", "-g"], capture_output=True, text=True).stdout.strip()))
+        try:
+            b7 = json.loads(pr7.stdout.strip().splitlines()[-1])
+            ops7 = [e for m in json.loads(b7["one"])["maps"].values() for e in m["edits"]]
+        except (ValueError, IndexError, KeyError, TypeError):
+            b7, ops7 = {}, None
+        check("7.7 a card dragged into another cell is a move, marked on the page; no error", b7.get("moved") == ["s4", "змінено"]
+              and ops7 == [{"op": "move", "row": "p2", "stage": "s4", "lane": "pain"}] and not b7.get("errs"), (b7, pr7.stderr[-300:]))
+        check("7.8 the panel names the row by the stage's and lane's own names; no metric or anomaly lane to pick",
+              b7.get("panel", {}).get("title") == "Редагування рядка" and "Кошик" in (b7.get("panel", {}).get("where") or "")
+              and any("Кошик" in x for x in b7.get("panel", {}).get("stages", []))
+              and not {"metric", "anomaly"} & set(b7.get("panel", {}).get("lanes", [])), b7.get("panel"))
+        check("7.9 «Відмінити правки рядка» puts the card back and the count to zero", b7.get("back") == "s3"
+              and b7.get("count") == "Правок: 0", (b7.get("back"), b7.get("count")))
+
     # mutations
     for name, old, new, args, test in (
             ("no-digest", 'if block.get("digest") != table_sig(n)["table"]:', "if False:",
