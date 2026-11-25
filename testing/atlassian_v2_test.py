@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC-atl-4120 — the plugin speaks Atlassian MCP v2 (issue #96, since v4.12.0).
+"""TC-atl-4110 — the plugin speaks Atlassian MCP v2 (issue #96, since v4.11.0).
 
 Atlassian switches v1 (https://mcp.atlassian.com/v1/mcp) off on 2027-03-01. This test
 keeps the migration from drifting back:

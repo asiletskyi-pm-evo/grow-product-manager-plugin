@@ -3,7 +3,7 @@
 
 Runs before createJiraIssue / editJiraIssue / createConfluenceContent /
 updateConfluenceContent on any connector — the Atlassian MCP v2 names, which
-.mcp.json declares since v4.12.0 — and before createConfluencePage /
+.mcp.json declares since v4.11.0 — and before createConfluencePage /
 updateConfluencePage, the v1 Confluence names, kept until Atlassian switches v1
 off on 2027-03-01 (references/integration-strategy.md 1c; Jira keeps its names). It does NOT
 judge the artifact — a hook

@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.10.0
+**Version:** 4.11.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.11.0** — **«Atlassian MCP v2»: the plugin moves to Atlassian's v2 server before v1 is switched off on 2027-03-01** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `.mcp.json` declares `https://mcp.atlassian.com/v2/mcp`, and every skill, agent and reference names the v2 tools with the parameters that change the result without an error: a page is read with `detail: "full"` (the default is an excerpt), an update carries a fresh `snapshotToken`, a page is created with `contentType: "page"` in a space by its numeric id, and `listJiraProjects`, `listConfluenceSpaces`, `listJiraProjectIssueTypesMetadata` run through `executeRead`. `references/integration-strategy.md` §1c now describes v2 as the declared server, with the v1 names in one column until 2027-03-01; the write gate covers both name sets until then. **After updating, reconnect Atlassian once** in the plugin's Connectors tab: the host matches a declared server by its URL, so a v1 connection is not picked up. Touched: `task-creator`, `requirements-creator`, `write-concept`, `product-research`, `product-reporter`, `product-analysis`, `meeting-processor`, `knowledge-library`, `design-bridge`, `brainstorm-features`, `plugin-configurator` (patch each). New test `testing/atlassian_v2_test.py`.
 
 **New in v4.10.0** — **«Вкладені карти»: a step of a journey map opens a child map, and the whole tree is seen on one page and one board** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks).
 
@@ -1130,5 +1132,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.10.0  
+**Version:** 4.11.0  
 **Last Updated:** November 2026

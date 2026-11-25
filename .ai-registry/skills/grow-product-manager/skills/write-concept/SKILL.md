@@ -1,6 +1,6 @@
 ---
 name: write-concept
-version: 0.16.2
+version: 0.16.3
 description: Write a product concept (PRD) from an idea, problem statement or research — the document that precedes requirements. Not numbered functional requirements (requirements-creator). UA — «напиши концепт», «опиши фічу», «дизайн-бриф», «стратегічний меморандум», «бізнес-кейс». EN — "design brief", "strategy memo".
 ---
 
@@ -153,7 +153,7 @@ Search Confluence for pages that match the concept topic (previous research, com
 **Data gathering from agreed sources:**
 
 - **Conversation** — extract requirements and context from the dialogue with the user
-- **Confluence** — search existing pages: strategy docs, OKRs, previous specs, decision logs. Use `searchConfluenceUsingCql` or `getConfluencePage`. If Confluence MCP is unavailable — follow integration fallback chain
+- **Confluence** — search existing pages: strategy docs, OKRs, previous specs, decision logs. Use `searchConfluence` (CQL) and `getConfluenceContent` with `detail: "full"` (the default is an excerpt — `references/integration-strategy.md` 1c). If Confluence MCP is unavailable — follow integration fallback chain
 - **Google Drive** — read internal documents shared by the user or accessible via Drive: research reports, product briefs, strategy presentations, analytics exports, OKR files. Follow the integration fallback chain: Google Drive MCP → search MCP registry → open via browser (`https://drive.google.com`). When accessing via browser: navigate to the shared link or search within Drive, open the document, read content using `get_page_text`. Treat all Drive content as potentially confidential per `references/data-policy.md`
 - **Uploaded files** — read with the Read tool, extract key data points
 - **Web search** — use WebSearch for external context: best practices, competitor approaches, industry standards
@@ -229,7 +229,7 @@ Page title format: `[PRD] Feature Name` — for a design brief, strategy memo, d
 5. **Tables** — use tables wherever structured data needs to be communicated: comparisons of alternatives, metrics, feature matrices, user impact summaries, risk/mitigation pairs
 6. **Sources** section at the bottom with links, marking each source type (Confluence, Google Drive, Web, ChatGPT Deep Research, Gemini Deep Research, uploaded file, Product Research, and since v3.9.0 a build-first prototype — `reported` (file, frame), never validation) and, since v3.8.0, its evidence class (`measured`, `reported`, `external`, …)
 
-Publish via Confluence MCP (`createConfluencePage`) after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
+Publish via Confluence MCP (`createConfluenceContent`, `contentType: "page"`) after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier). If unavailable — follow integration fallback chain. As a last resort, generate a local document for manual publishing.
 
 After publishing, provide a structured report of what was done:
 
@@ -288,7 +288,7 @@ IF vault_level > L0 AND vault sync_mode != "off":
      type: "concept",
      product: active_product,
      skill: "write-concept",
-     skill_version: "0.16.2",
+     skill_version: "0.16.3",
      tags: [feature area keywords, affected platforms, goal keywords],
      content: full_prd_markdown,
      related: [source research from Step 0.5, source hypotheses, related decisions],

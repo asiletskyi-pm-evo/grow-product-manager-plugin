@@ -25,7 +25,7 @@ If the user typed a toggle after the command name — `--show`, `--write-gate on
 
 | Setting | Value | Meaning |
 |---|---|---|
-| Write gate | on / off | `on` = the host asks for confirmation before `createJiraIssue` / `createConfluencePage` and content-bearing `editJiraIssue` / `updateConfluencePage` (`hooks/hooks.json` → PreToolUse). `off` = silent. |
+| Write gate | on / off | `on` = the host asks for confirmation before `createJiraIssue` / `createConfluenceContent` and content-bearing `editJiraIssue` / `updateConfluenceContent` (`hooks/hooks.json` → PreToolUse; the v1 names `createConfluencePage` / `updateConfluencePage` too, until 2027-03-01). `off` = silent. |
 | Pause | until HH:MM UTC (N min left) / ended / not valid / — | `--write-gate pause <minutes>` (1–240): the Jira / Confluence question is skipped until then and comes back on its own; the provider-boundary and generated-region questions stay on. `--write-gate on` ends it early. |
 | Config path | … | where the toggle is stored (plugin data dir; never `local-context.md`) |
 | Hooks env | CLAUDE_PLUGIN_DATA / CLAUDE_ENV_FILE / GROW_PM_CONTEXT_PATH | whether the SessionStart hook ran in this session and found the context |

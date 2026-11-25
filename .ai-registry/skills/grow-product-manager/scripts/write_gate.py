@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Grow PM — PreToolUse write gate (since v2.6.0).
 
-Runs before createJiraIssue / editJiraIssue / createConfluencePage /
-updateConfluencePage on any connector, and before createConfluenceContent /
-updateConfluenceContent — the Confluence writes' names on Atlassian MCP v2
-(references/integration-strategy.md 1c; Jira keeps its names there). It does NOT
+Runs before createJiraIssue / editJiraIssue / createConfluenceContent /
+updateConfluenceContent on any connector — the Atlassian MCP v2 names, which
+.mcp.json declares since v4.11.0 — and before createConfluencePage /
+updateConfluencePage, the v1 Confluence names, kept until Atlassian switches v1
+off on 2027-03-01 (references/integration-strategy.md 1c; Jira keeps its names). It does NOT
 judge the artifact — a hook
 sees only the tool call, never the conversation (hooks reference: prompt/command
 hooks receive the hook input JSON). What it can do deterministically is put a
@@ -58,7 +59,7 @@ CONTENT_KEYS = ("description", "body", "content", "bodyContent", "value", "text"
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 MIN_CONTENT = 200  # characters — below this an edit is metadata, not an artifact
 GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage",
-             "createConfluenceContent", "updateConfluenceContent")  # v1 names, then the v2 Confluence names
+             "createConfluenceContent", "updateConfluenceContent")  # Jira, the v1 Confluence names (until 2027-03-01), the v2 ones
 UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
 DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
 PAUSE_KEY = "write_gate_pause_until"

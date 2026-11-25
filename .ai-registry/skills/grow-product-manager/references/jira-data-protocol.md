@@ -94,7 +94,7 @@ Aggregate counts and SP by the chosen granularity (day/week/sprint/month/quarter
 
 ## Confluence publishing
 
-- `createConfluencePage`, `contentFormat:"html"`, `spaceId` (from local-context → product.confluence_space), `parentId` = a **page or folder** id (folder works).
+- `createConfluenceContent` (`contentType: "page"`, `body: {format: "html", value}`), `parent: {spaceId}` — the numeric id of local-context → product.confluence_space (a key → `listConfluenceSpaces` with `keys`, `integration-strategy.md` 1c), and `parentContentId` = a **page or folder** id (folder works).
 - Tables: `<th>` header cells, **no "№" column**, header block in `<div data-type="panel-info">`, link Jira keys/epics and the board.
 - Escape `&` → `&amp;` in cell text (e.g. "Q&amp;A", "UI&amp;UX").
 

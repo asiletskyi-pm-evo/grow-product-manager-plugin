@@ -487,8 +487,8 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 - **TC-hook-260-notfound** | no file anywhere | 3-line NOT VISIBLE digest naming searched locations; exit 0 | **pass**
 - **TC-hook-260-failopen** | garbage on stdin | exit 0, still emits a digest | **pass**
 - **TC-gate-260-create** | `createConfluencePage` | `permissionDecision: ask` with the 3-point reason | **pass**
-- **TC-gate-4120-create-v2** | `createConfluenceContent` / `updateConfluenceContent` (Atlassian MCP v2, the declared server since v4.12.0) | `ask` as for the v1 names; `updateConfluenceContent` with `dryRun: true` passes | **pass** (`testing/write_gate_test.py`)
-- **TC-atl-4120** | `testing/atlassian_v2_test.py` | `.mcp.json` declares v2; no skill or agent names a v1-only tool; every `getConfluenceContent` a skill names asks for `detail: "full"`; the gate covers both name sets | **pass**
+- **TC-gate-4110-create-v2** | `createConfluenceContent` / `updateConfluenceContent` (Atlassian MCP v2, the declared server since v4.11.0) | `ask` as for the v1 names; `updateConfluenceContent` with `dryRun: true` passes | **pass** (`testing/write_gate_test.py`)
+- **TC-atl-4110** | `testing/atlassian_v2_test.py` | `.mcp.json` declares v2; no skill or agent names a v1-only tool; every `getConfluenceContent` a skill names asks for `detail: "full"`; the gate covers both name sets | **pass**
 - **TC-gate-260-meta** | `editJiraIssue` with labels only | no output (allow) | **pass**
 - **TC-gate-260-content** | `editJiraIssue` with a 300-char description | `ask` | **pass**
 - **TC-gate-260-off** | `setup.py --write-gate off` then `createJiraIssue` | no output; `--write-gate on` restores | **pass**
