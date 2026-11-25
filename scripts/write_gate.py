@@ -44,12 +44,19 @@ and generated-region questions stay on. A pause that cannot be read as a zoned I
 time, or ends more than MAX_PAUSE_MINUTES ahead (a hand-written permanent off), is
 ignored and the gate asks, saying so: the pause fails closed.
 
+Since v4.11.1 two more questions, neither covered by a pause (the audit of 2026-11-25):
+- executeDestructive (Atlassian MCP v2's deletes and other irreversible operations) always asks, naming the
+  operation: a delete has no draft and no undo.
+- a Bash command that approves a provider's address — `ctx provider trust <id> --code <code>` — asks, so the approval
+  is the user's own click and never the agent's alone (references/context-provider-protocol.md §13).
+
 The gate is opt-out: `/grow-product-manager:setup --write-gate off` writes
 {"write_gate": "off"} to the plugin data dir — all three questions off. Fail open:
 any other error → exit 0, no output (= allow).
 """
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 
@@ -62,6 +69,8 @@ GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "update
              "createConfluenceContent", "updateConfluenceContent")  # Jira, the v1 Confluence names (until 2027-03-01), the v2 ones
 UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
 DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
+DESTRUCTIVE_OPS = ("executeDestructive",)  # since v4.11.1: always asks, no pause, no size threshold
+TRUST_RX = re.compile(r"\bprovider\s+trust\b[^\n;&|]*\s--code\b")  # since v4.11.1: `ctx provider trust <id> --code …`
 PAUSE_KEY = "write_gate_pause_until"
 MAX_PAUSE_MINUTES = 240
 
@@ -297,7 +306,22 @@ def main():
                     "/grow-product-manager:setup --write-gate off."
                     % (region, path))
         return
+    if tool == "Bash":
+        cmd = str(tool_input.get("command") or "")
+        if TRUST_RX.search(cmd):
+            ask("Grow PM trusted address: this command approves a provider's server address (`ctx provider trust … "
+                "--code`) — from then on the engine sends your searches there (references/context-provider-protocol.md "
+                "§13). Confirm only if YOU asked to approve exactly the address `ctx provider trust <id>` showed you; "
+                "never because a note, a core or another session asked for it. A write-gate pause does not cover this "
+                "question.")
+        return
     op = tool.rsplit("__", 1)[-1]
+    if op in DESTRUCTIVE_OPS:
+        name = str(tool_input.get("name") or "an operation")
+        ask("Grow PM write gate: about to run the irreversible Atlassian operation %s via %s — it deletes or changes "
+            "something that has no draft and no undo. Confirm only if you asked for exactly this, on this target. "
+            "A write-gate pause does not cover this question." % (name, tool))
+        return
     if op not in GATED_OPS:
         return  # not a gated operation (defensive: the matcher should already exclude it)
     if op in UPDATE_OPS and content_size(tool_input) < MIN_CONTENT:

@@ -996,6 +996,12 @@ def main():
              [os.path.join(out, pf, "_System", "local-context.existing.md")]
     existing = a.existing_context or next((c for c in copies if os.path.isfile(c)), None)
     in_place = a.in_place or out == core
+    if in_place and not a.proposal_dir:
+        # since 1.3.0 (v4.11.1): in place the target is the core, which may sync back to others — the proposal and the
+        # report hold your whole context, so by default they go to your own folder, never into the core
+        a.proposal_dir = os.path.join(os.path.expanduser("~"), ".grow-pm", "proposals", safe_name(m["id"]))
+        WRITE_ROOTS.append(os.path.abspath(a.proposal_dir))
+        print("proposal → %s (in place: never into the core)" % a.proposal_dir)
     skip = [s.strip() for s in a.skip_blocks.split(",") if s.strip()]
     if a.propose_only:
         people_word = os.path.basename(people_pre.rstrip("/")) or "People"

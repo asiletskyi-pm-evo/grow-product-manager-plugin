@@ -13,8 +13,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "testing", "fixtures", "context-connect")
 SCRIPT = os.path.join(ROOT, "scripts", "provider_bundle.py")
 
+HOME = tempfile.mkdtemp()                     # since v4.11.1 an in-place run writes its proposal under ~/.grow-pm/proposals/
+
 def run(*args):
-    p = subprocess.run([sys.executable, SCRIPT] + list(args), capture_output=True, text=True, timeout=60)
+    p = subprocess.run([sys.executable, SCRIPT] + list(args), capture_output=True, text=True, timeout=60,
+                       env=dict(os.environ, HOME=HOME))
     return p.returncode, p.stdout + p.stderr
 
 def report(out, tag):
@@ -253,6 +256,11 @@ rc, o = run("--core", core, "--out", core, "--email", "b.two@zorg.example", "--i
 check("in-place analyst run copies nothing and writes no overlay", rc == 0 and "role analyst" in o
       and not os.path.exists(os.path.join(core, "Core", "Now.md"))
       and os.path.isfile(os.path.join(core, "Core", "_System", "bundle-manifest.md")), (rc, o))
+pdir = os.path.join(HOME, ".grow-pm", "proposals", "zorg-core")
+check("v4.11.1 in place without --proposal-dir: the proposal and the report go to ~/.grow-pm/proposals/<id>/, never into the core",
+      os.path.isfile(os.path.join(pdir, "local-context.proposed.md")) and os.path.isfile(os.path.join(pdir, "context-merge-report.md"))
+      and not os.path.exists(os.path.join(core, "Core", "_System", "local-context.proposed.md"))
+      and not os.path.exists(os.path.join(core, "Core", "_System", "context-merge-report.md")), (o[-300:], os.listdir(os.path.join(core, "Core", "_System"))))
 shutil.rmtree(d)
 
 # 2g — v3.10.1: a refresh keeps the user's own note on the Updated line

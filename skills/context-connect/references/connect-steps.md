@@ -54,7 +54,7 @@ python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<targe
 
 Pass `--skip-blocks <id,id>` with the blocks the user declined (a refresh reads them from the registration's `skip_blocks`): they are never proposed, the report lists them, and the proposed registration keeps the list. Run `--dry-run` first when the user has a context: it already writes the merge report and the proposal, so duplicates and discrepancies show before anything is copied. Use `--no-personal-overlay` when building an archive for others (focus and to-do notes are created on the user's machine instead). `--force` rewrites the user's notes in the bundle — only on request.
 
-**Where the proposal goes.** The proposal and the report hold the user's whole context. By default they land in `<target>/<plugin_folder>/_System/`, which is right for a target the user owns. When the target is the core itself (in-place) and the core folder syncs back to others — a shared drive, a team repository, a sync job — pass `--proposal-dir` with a folder only the user sees: `{vault}/{plugin_folder}/_System/` in their own vault, else `~/.grow-pm/proposals/<provider id>/`.
+**Where the proposal goes.** The proposal and the report hold the user's whole context. By default they land in `<target>/<plugin_folder>/_System/`, which is right for a target the user owns. When the target is the core itself (in-place) — a folder that may sync back to others: a shared drive, a team repository, a sync job — the builder since v4.11.1 writes them to `~/.grow-pm/proposals/<provider id>/` by itself (it prints the folder); pass `--proposal-dir` for another folder only the user sees, such as `{vault}/{plugin_folder}/_System/` in their own vault.
 
 What the builder does:
 - copies the role-filtered part of the core (shared files, the team's files by the role's layers, the manifest), never the owner's personal layer (`exclude`, `personal_overlay`), registry cards with registry fields only;
@@ -117,7 +117,7 @@ The proposal replaces the file:
 ```
 mkdir -p ~/.grow-pm/backups/pre-<provider id>-<YYYY-MM-DD>
 cp ~/.grow-pm/local-context.md ~/.grow-pm/backups/pre-<provider id>-<YYYY-MM-DD>/
-cp "<target>/<plugin_folder>/_System/local-context.proposed.md" ~/.grow-pm/local-context.md
+cp "<the proposal folder>/local-context.proposed.md" ~/.grow-pm/local-context.md   # <target>/<plugin_folder>/_System/, or the folder the builder printed
 ```
 Keep the last 5 backups (`references/persistent-storage.md`). Refresh the vault mirror (`{vault}/{plugin_folder}/_System/local-context.md`) when the user keeps one, and compare it with `cmp`.
 
@@ -191,7 +191,7 @@ For a folder that is a provider kit (`references/context-provider-protocol.md` �
 
 A provider reachable only as a server (no folder on the user's machine):
 1. Read its manifest when it serves one (`vault_get_note` on `_System/provider-manifest.yaml`), else ask for the id and title.
-2. Show the host configuration entry the user adds themselves — a remote server behind a VPN is usually bridged locally, for example `npx -y mcp-remote@latest <url> --transport http-only`. Never edit the host configuration file.
+2. Show the host configuration entry the user adds themselves — a remote server behind a VPN is usually bridged locally, for example `npx -y mcp-remote@0.16.5 <url> --transport http-only` — a pinned version, never `@latest` (since v4.11.1: `@latest` runs whatever was published last, on the user's machine; raise the pin in a release, after a look at what changed). Never edit the host configuration file.
 3. After the user restarts the session, probe with `brain_status` or `vault_list_by_folder("")` (3 s); say plainly when it does not answer (VPN off, server down).
 4. Register it (`kind: mcp`, no `paths`) and add the `### Vault Search MCP` bullet through the same backup-and-changelog apply as §4 — its address approved in the same question (§6 item 1, since v4.9.1: «записати реєстрацію … і схвалити адресу …?», then `ctx provider trust <id>` and `--code`); an https address, or http only to this computer. With no `blocks_file` (and no core folder) the registration is search-only: `ctx provider plan|apply` leave it out with one line `лише пошук: <id>` and are not stopped by it. When its manifest names a `blocks_file`, put it in the registration with `endpoint.url` and `endpoint.root`, so `ctx provider` merges its blocks (§4a).
 5. **The plugin's own copy** (since v3.24.0, with SHELL; `references/context-provider-protocol.md` §12.12). Right after registering a server with a `blocks_file`, offer once, in one line, with the count `vault_list_by_folder(endpoint.root)` gave: «Зробити власну копію ядра? ~N нотаток, ~1 хв, `~/.grow-pm/cores/<id>` — блоки, команда й пошук працюватимуть без VPN». On «так» → `ctx repo copy <id>`, then its one summary line. With `sync: daily` (Step 6 item 2) the copy is brought up to date by the daily sync in the background; without it say `ctx repo copy <id>` updates it. On a refresh of an MCP-only registration that has no copy, offer again — at most once in 30 days: a «ні» is kept in `{store}/.state/copy-offers.json` (`context-copy-offers/1`: `{"schema", "declined": {<id>: "YYYY-MM-DD"}}`; a key this build does not know is refused, never dropped; a file that cannot be read is never reset — then do not offer), never in the registration.

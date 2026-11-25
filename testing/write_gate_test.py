@@ -296,5 +296,30 @@ with tempfile.TemporaryDirectory() as d:
           and st.get("write_gate_pause_state") == "expired", st)
     os.unlink(cfg_path)
 
+# ---- since v4.11.1: executeDestructive always asks; a Bash approval of a provider's address asks; a pause covers neither
+with tempfile.TemporaryDirectory() as d:
+    home = os.path.join(d, "home"); os.makedirs(home)
+    pdata = os.path.join(d, "plugin-data"); os.makedirs(pdata)
+    env = {"HOME": home, "PATH": os.environ.get("PATH", ""), "GROW_PM_CONTEXT_PATH": os.path.join(d, "none.md"), "CLAUDE_PLUGIN_DATA": pdata}
+    v2 = "mcp__claude_ai_Atlassian_MCP__"
+    out = run(env, {"tool_name": v2 + "executeDestructive", "tool_input": {"name": "deleteConfluencePage", "cloudId": "x", "inputs": {"id": "1"}}})
+    check("v4.11.1 executeDestructive asks, naming the operation", '"permissionDecision": "ask"' in out and "deleteConfluencePage" in out, out)
+    out = run(env, {"tool_name": "Bash", "tool_input": {"command": 'python3 "/p/scripts/ctx.py" provider trust zorg-core --code 4f2a'}})
+    check("v4.11.1 a Bash `provider trust … --code` asks", '"permissionDecision": "ask"' in out and "trust" in out, out)
+    out = run(env, {"tool_name": "Bash", "tool_input": {"command": 'python3 "/p/scripts/ctx.py" provider trust zorg-core'}})
+    check("…`provider trust <id>` without --code (it only reads) passes silently", out == "", out)
+    out = run(env, {"tool_name": "Bash", "tool_input": {"command": "ls -la && git status"}})
+    check("…any other command passes silently", out == "", out)
+    until = (__import__("datetime").datetime.now(__import__("datetime").timezone.utc) + __import__("datetime").timedelta(minutes=30)).isoformat()
+    open(os.path.join(pdata, "config.json"), "w").write(json.dumps({"write_gate": "on", "write_gate_pause_until": until}))
+    out = run(env, {"tool_name": v2 + "executeDestructive", "tool_input": {"name": "deleteJiraIssue"}})
+    out2 = run(env, {"tool_name": "Bash", "tool_input": {"command": "ctx provider trust a --code 1"}})
+    check("…a write-gate pause covers neither", '"permissionDecision": "ask"' in out and '"permissionDecision": "ask"' in out2, (out, out2))
+    import re as _re
+    hooks = json.load(open(os.path.join(ROOT, "hooks", "hooks.json")))["hooks"]["PreToolUse"]
+    ms = [h["matcher"] for h in hooks]
+    check("…hooks.json wires both: a matcher for executeDestructive and one for Bash",
+          any(_re.search(m, v2 + "executeDestructive") for m in ms) and any(_re.search(m, "Bash") for m in ms), ms)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
