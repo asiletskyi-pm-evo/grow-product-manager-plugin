@@ -116,8 +116,8 @@
   provider sync [REPO] [--if-due] [--now ISO]
                                 the daily sync (since v3.14.0): the repositories whose registration says `sync: daily`
                                 (REPO names one of them; another is exit 3), each brought up to date with no question —
-                                yours kept on a ⚠ unless the core marks the block a rule, + added, more than one − held,
-                                ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
+                                yours kept on a ⚠, a core rule (⚠ ? ~) and a + held for your yes (since v4.11.1), more
+                                than one − held, ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
                                 repositories due — a day after their last successful check, an hour after a failed
                                 attempt — reading their block state alone (no lock, no network); none → only CTX_RESULT.
                                 The lock held by another session: nothing, at once (skipped: busy; a lock that cannot be
@@ -3066,7 +3066,9 @@ def cmd_provider_apply(a, c):
             c.import_first()
             for repo, f in fetched:
                 at = now()
-                hold = cb.held_rejected(cb.plan(c.store, c.copies, repo, f, at), choose, add)   # spec v3.14 §5.4: not again
+                p_ = cb.plan(c.store, c.copies, repo, f, at)
+                hold = cb.held_rejected(p_, choose, add)   # spec v3.14 §5.4: not again
+                hold += [b for b in cb.held_rules(p_, choose) if b not in hold]     # since v4.11.1: a changed rule on a yes
                 results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, at, hold=hold))
             card_note = _refresh_card(c)
     for k, res in enumerate(results):
@@ -3529,7 +3531,7 @@ def cmd_identity(a, c):
     if a.field not in cid.FIELDS:
         raise Usage("the field is team or role")
     if a.action == "take" and a.field == "team":
-        raise Usage("команду змінює context-connect: перезбери пакет з --team %s (connect-steps.md §3) — тут лише keep" % bundle["team"])
+        raise Usage("команду змінює context-connect: перезбери пакет з --team %s (connect-steps.md §3) — тут лише keep" % cc.shq(bundle["team"]))
     t = now()
     with co.lock(c.home):
         c.guard()
@@ -3711,9 +3713,14 @@ NO_STORE_INBOX = "немає сховища — скринька живе у с�
 
 
 def _deltas(a):
-    """The deltas of `propose`: each --delta (an object or a list), then --file's (the same)."""
+    """The deltas of `propose`: each --delta (an object or a list), then --file's (the same). `--file -` reads them from
+    stdin (since v4.11.1): a delta carries text from notes, pages and meetings, which never goes into a shell command line."""
     out = []
-    for raw in list(a.delta or []) + ([co._read(a.file)] if a.file else []):
+    if a.file == "-":
+        raw_in = sys.stdin.read()
+        if not raw_in.strip():
+            raise Usage("propose --file - reads the deltas from stdin, and stdin is empty")
+    for raw in list(a.delta or []) + ([raw_in if a.file == "-" else co._read(a.file)] if a.file else []):
         try:
             v = json.loads(raw)
         except ValueError as e:

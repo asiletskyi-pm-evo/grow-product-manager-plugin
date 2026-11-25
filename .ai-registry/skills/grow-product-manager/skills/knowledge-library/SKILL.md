@@ -1,6 +1,6 @@
 ---
 name: knowledge-library
-version: 0.10.2
+version: 0.10.3
 description: Curated source library and tools registry — «які джерела маємо», «які інструменти в мене є» — trust scores, glossary, style. Not templates (template-library), competitor research (product-research), competitor apps (product-landscape). UA — «додай у бібліотеку», «знайди інструмент для…», «збери глосарій», «як ми називаємо…».
 ---
 

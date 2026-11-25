@@ -453,7 +453,7 @@ def team_entity(reg, title):
         if ids:
             ids = sorted(ids)
             return None, "кілька карток: " + ", ".join(ids[:5]) + (
-                " — це одна команда? ctx entity same \"%s\" \"%s\"" % (ids[0], ids[1]) if len(ids) == 2 else "")
+                " — це одна команда? ctx entity same %s %s" % (cc.shq(ids[0]), cc.shq(ids[1])) if len(ids) == 2 else "")
     return None, "картки такої команди немає"
 
 

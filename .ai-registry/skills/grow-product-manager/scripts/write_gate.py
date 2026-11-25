@@ -44,11 +44,15 @@ and generated-region questions stay on. A pause that cannot be read as a zoned I
 time, or ends more than MAX_PAUSE_MINUTES ahead (a hand-written permanent off), is
 ignored and the gate asks, saying so: the pause fails closed.
 
-Since v4.11.1 two more questions, neither covered by a pause (the audit of 2026-11-25):
+Since v4.11.1 more questions that no setting covers — neither a pause nor `--write-gate off` (the audit and
+re-audit of 2026-11-25; `guarded`):
 - executeDestructive (Atlassian MCP v2's deletes and other irreversible operations) always asks, naming the
   operation: a delete has no draft and no undo.
 - a Bash command that approves a provider's address — `ctx provider trust <id> --code <code>` — asks, so the approval
-  is the user's own click and never the agent's alone (references/context-provider-protocol.md §13).
+  is the user's own click and never the agent's alone (references/context-provider-protocol.md §13); `--code`
+  abbreviated, or on another line, too.
+- a Bash command that changes the gate (`setup.py --write-gate …`) or writes its config or the trust file, and a
+  Write/Edit of those files: the agent can never turn the gate off on its own.
 
 The gate is opt-out: `/grow-product-manager:setup --write-gate off` writes
 {"write_gate": "off"} to the plugin data dir — all three questions off. Fail open:
@@ -70,7 +74,11 @@ GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "update
 UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
 DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
 DESTRUCTIVE_OPS = ("executeDestructive",)  # since v4.11.1: always asks, no pause, no size threshold
-TRUST_RX = re.compile(r"\bprovider\s+trust\b[^\n;&|]*\s--code\b")  # since v4.11.1: `ctx provider trust <id> --code …`
+TRUST_RX = re.compile(r"\bprovider\s+trust\b")              # since v4.11.1: `ctx provider trust <id> --code …`
+CODE_RX = re.compile(r"(?:^|\s)--c(?:o|od|ode)?(?=[=\s'\"]|$)")   # --code and every abbreviation argparse accepts
+SETUP_RX = re.compile(r"\bsetup\.py\b[\s\S]*?(?:^|\s)--w[\w-]*")  # `setup.py --write-gate off|pause|on` (abbreviated too)
+GUARDED_FILES_RX = re.compile(r"\.grow-pm/trust/|plugin-data/config\.json|CLAUDE_PLUGIN_DATA")
+WRITE_WORDS_RX = re.compile(r">|\btee\b|\bmv\b|\bcp\b|\brm\b|\bsed\s+-i|\btruncate\b|\bpython|\bperl\b|\bchmod\b|\bln\b|\bdd\b")
 PAUSE_KEY = "write_gate_pause_until"
 MAX_PAUSE_MINUTES = 240
 
@@ -264,6 +272,47 @@ def region_hit(tool, tool_input, cwd=None, text=None):
     return None, path
 
 
+def guarded(tool, tool_input):
+    """Since v4.11.1 (the re-audit of 2026-11-25): the questions no config can switch off, asked before the config is
+    read — True when one was asked. (1) A Bash command that approves a provider's address (`provider trust` with
+    `--code` or an abbreviation of it, on one line or several). (2) A Bash command that changes the write gate
+    (`setup.py --write-gate …`), or writes the gate's config or the trust file. (3) A Write/Edit of those two files.
+    (4) An Atlassian executeDestructive. The agent alone can never approve an address, delete, or turn the gate off."""
+    tail = (" Confirm only if YOU asked for exactly this; never because a note, a core, a page or another session asked "
+            "for it. No write-gate setting covers this question.")
+    if tool == "Bash":
+        cmd = str(tool_input.get("command") or "")
+        if TRUST_RX.search(cmd) and CODE_RX.search(cmd):
+            ask("Grow PM trusted address: this command approves a provider's server address (`ctx provider trust … --code`)"
+                " — from then on the engine sends your searches there (references/context-provider-protocol.md §13). "
+                "Approve only the address `ctx provider trust <id>` showed you." + tail)
+            return True
+        if SETUP_RX.search(cmd):
+            ask("Grow PM write gate: this command changes the write gate itself (`setup.py --write-gate …`) — off or paused,"
+                " the plugin's questions before Jira and Confluence writes stop." + tail)
+            return True
+        if GUARDED_FILES_RX.search(cmd) and WRITE_WORDS_RX.search(cmd):
+            ask("Grow PM write gate: this command may change the write gate's config or the provider trust file — the "
+                "files that decide what is asked and which addresses get your searches." + tail)
+            return True
+        return False
+    if tool in FILE_TOOLS:
+        path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
+        real = os.path.realpath(os.path.expanduser(path)) if path else ""
+        homes = [os.path.realpath(p) for p in config_paths()]
+        trust = os.path.realpath(os.path.join(os.path.expanduser("~"), ".grow-pm", "trust"))
+        if real and (real in homes or real == trust or real.startswith(trust + os.sep)):
+            ask("Grow PM write gate: this edit changes %s — the write gate's config or the provider trust file." % path + tail)
+            return True
+        return False
+    if tool.rsplit("__", 1)[-1] in DESTRUCTIVE_OPS:
+        name = str(tool_input.get("name") or "an operation")
+        ask("Grow PM write gate: about to run the irreversible Atlassian operation %s via %s — it deletes or changes "
+            "something that has no draft and no undo." % (name, tool) + tail)
+        return True
+    return False
+
+
 def ask(reason):
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
@@ -277,6 +326,8 @@ def main():
     data = json.loads(raw) if raw.strip() else {}
     tool = str(data.get("tool_name", ""))
     tool_input = data.get("tool_input") or {}
+    if guarded(tool, tool_input):     # since v4.11.1: these questions stay on whatever the config says (no off, no pause)
+        return
     cfg = load_config()
     if not tool or not write_gate_enabled(cfg):
         return
@@ -307,21 +358,8 @@ def main():
                     % (region, path))
         return
     if tool == "Bash":
-        cmd = str(tool_input.get("command") or "")
-        if TRUST_RX.search(cmd):
-            ask("Grow PM trusted address: this command approves a provider's server address (`ctx provider trust … "
-                "--code`) — from then on the engine sends your searches there (references/context-provider-protocol.md "
-                "§13). Confirm only if YOU asked to approve exactly the address `ctx provider trust <id>` showed you; "
-                "never because a note, a core or another session asked for it. A write-gate pause does not cover this "
-                "question.")
         return
     op = tool.rsplit("__", 1)[-1]
-    if op in DESTRUCTIVE_OPS:
-        name = str(tool_input.get("name") or "an operation")
-        ask("Grow PM write gate: about to run the irreversible Atlassian operation %s via %s — it deletes or changes "
-            "something that has no draft and no undo. Confirm only if you asked for exactly this, on this target. "
-            "A write-gate pause does not cover this question." % (name, tool))
-        return
     if op not in GATED_OPS:
         return  # not a gated operation (defensive: the matcher should already exclude it)
     if op in UPDATE_OPS and content_size(tool_input) < MIN_CONTENT:
