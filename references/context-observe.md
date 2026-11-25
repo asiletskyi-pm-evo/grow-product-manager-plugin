@@ -4,7 +4,7 @@
 
 ## 1. Rules for the skill
 
-- **Read only.** Only tools that read: `atlassianUserInfo`, `getAccessibleAtlassianResources`, `getVisibleJiraProjects`, `searchJiraIssuesUsingJql`, `getConfluenceSpaces`, `searchConfluenceUsingCql`, `lookupJiraAccountId`, `list_calendars`, `list_events`, `fireflies_get_transcripts`, Tableau `list-workbooks` / `search-content`. Never a tool that creates, edits, moves, shares or deletes. Tool names differ between connector builds — detect them by pattern (`integration-strategy.md` 1b).
+- **Read only.** Only tools that read: `atlassianUserInfo`, `getAccessibleAtlassianResources`, `listJiraProjects`, `searchJiraIssuesUsingJql`, `listConfluenceSpaces`, `getConfluencePersonalSpace`, `searchConfluence`, `lookupJiraAccountId` (on Atlassian MCP v2 the `list*` / `get*Space` / `lookup*` ones run through `executeRead` — `integration-strategy.md` 1c), `list_calendars`, `list_events`, `fireflies_get_transcripts`, Tableau `list-workbooks` / `search-content`. Never a tool that creates, edits, moves, shares or deletes. Tool names differ between connector builds — detect them by pattern (`integration-strategy.md` 1b).
 - **Nothing of a meeting or a letter.** From a calendar or Fireflies the skill takes only who took part and how often; from mail only the domain of your address. It does not put an event's title, description, attendees' answers, a transcript, a subject or a body into the file. `ctx` drops `ref` and `evidence` of every `calendar:*`, `fireflies:*` and `mail:*` fact anyway and words the count itself.
 - **The file lives in the session's scratchpad**, never in the store or the vault, and is deleted after `ctx bootstrap --apply` or the recheck. Internal data stays in the session (`data-policy.md`).
 - **Say what did not answer.** Every connector the run tried is in `connectors` with `ok`, `absent` (not connected) or `error: <why>`. A fact from a connector that is not `ok` is refused; the recheck never reads «absent» as «gone».
@@ -47,9 +47,9 @@ The confidence is `ctx`'s, by where the fact came from:
 | `local-context` | your `local-context.md` as it is | any field it already has | high |
 | `user` | your answer to a question of the configurator | any field | high |
 | `jira:active` | `searchJiraIssuesUsingJql`: `(assignee = currentUser() OR reporter = currentUser() OR comment ~ currentUser()) AND updated >= -90d`, grouped by project | a product with its `Jira Project Key` | medium |
-| `confluence:active` | `searchConfluenceUsingCql`: `contributor = currentUser() AND lastmodified >= now("-90d")`, grouped by space | the product's `Confluence Space` | medium |
-| `jira:visible` | `getVisibleJiraProjects` without your activity | a product you can see, with its `Jira Project Key` | low |
-| `confluence:visible` | `getConfluenceSpaces` without your activity | a product's `Confluence Space` you can see | low |
+| `confluence:active` | `searchConfluence`: `contributor = currentUser() AND lastmodified >= now("-90d")`, grouped by space | the product's `Confluence Space` | medium |
+| `jira:visible` | `listJiraProjects` without your activity | a product you can see, with its `Jira Project Key` | low |
+| `confluence:visible` | `listConfluenceSpaces` without your activity | a product's `Confluence Space` you can see | low |
 | `calendar:co-attendee` | `list_events` of the last 30 days — only the attendees | a name for the team's `Members` list | low |
 | `fireflies:participant` | `fireflies_get_transcripts` of the last 30 days — only the participants | a name for the team's `Members` list | low |
 | `tableau:owned` | Tableau `list-workbooks` / `search-content` owned by you | a line for the product's `Dashboards` list: «name — link» | low |
@@ -67,8 +67,8 @@ The confidence is `ctx`'s, by where the fact came from:
 
 | Check | Call | In `checks` |
 |---|---|---|
-| a product's Jira key is still there | `getVisibleJiraProjects` with `action: "browse"` (its default `create` hides the projects you only read), every page | `jira:visible` — `[{key, name}]` |
-| a product's Confluence space is still there | `getConfluenceSpaces` (global and your personal spaces), every page | `confluence:visible` — `[{key, name}]` or keys |
+| a product's Jira key is still there | `listJiraProjects` with `action: "browse"` (it defaults to `view`; `create` would hide the projects you only read), every page | `jira:visible` — `[{key, name}]` |
+| a product's Confluence space is still there | `listConfluenceSpaces` (`type: "global"`) and `getConfluencePersonalSpace`, every page (`cursor`) | `confluence:visible` — `[{key, name}]` or keys |
 | a team's members are still active people of the site | `lookupJiraAccountId` for each name of `Members` | `atlassian:people` — `active`; `inactive` only for an account found and **deactivated**; `unknown` for a name the lookup found no one for (another spelling, a nickname — never evidence); a name in `active` too (a namesake, an old account) is active; `complete: true` when every member was looked up |
 | the role a provider gives you | the provider's access bundle | a `provider:identity` fact with `field: Role` |
 

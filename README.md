@@ -254,7 +254,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 2. Product Analysis (v0.19.0)
+### 2. Product Analysis (v0.19.1)
 
 **Description:** Analyze product data with interactive dashboards, metrics, and reports to find trends and growth opportunities.
 
@@ -269,7 +269,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 3. Product Research (v0.17.0)
+### 3. Product Research (v0.17.1)
 
 **Description:** Conduct competitive analysis, user research, market research, and UX benchmarking with Knowledge Library integration for data-backed insights.
 
@@ -283,7 +283,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 4. Brainstorm Features (v0.15.2)
+### 4. Brainstorm Features (v0.15.3)
 
 **Description:** Interactive brainstorming for product features and growth opportunities with ICE scoring and CJM hypothesis generation. Hosts Debate mode — a role-based adversarial discussion over an evidence pack (`references/debate-protocol.md`).
 
@@ -298,7 +298,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 5. Write Concept (v0.16.2)
+### 5. Write Concept (v0.16.3)
 
 **Description:** Write detailed product concept documents (PRDs) from ideas, problem statements, or research findings.
 
@@ -308,7 +308,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 6. Requirements Creator (v0.17.3)
+### 6. Requirements Creator (v0.17.4)
 
 **Description:** Create structured feature requirements or analyze and improve existing requirement documents using business analyst expertise.
 
@@ -322,7 +322,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 7. Task Creator (v0.15.2)
+### 7. Task Creator (v0.15.3)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -367,7 +367,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 9. Meeting Processor (v0.19.0)
+### 9. Meeting Processor (v0.19.1)
 
 **Description:** Process meetings from any source to extract action items, decisions, and structured meeting reports with calendar context.
 
@@ -401,7 +401,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 10. Plugin Configurator (v2.17.2)
+### 10. Plugin Configurator (v2.17.3)
 
 **Description:** Configure the Grow Product Manager plugin for your organization, including products, teams, data sources, storage location, and user preferences.
 
@@ -419,7 +419,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 11. Knowledge Library (v0.10.1)
+### 11. Knowledge Library (v0.10.2)
 
 **Description:** Manage a local, curated library of knowledge sources including articles, benchmarks, research, and competitive intelligence with trust scoring and categorization.
 
@@ -458,7 +458,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 13. Design Bridge (v0.10.0) — brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.10.1) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -483,7 +483,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 14. Product Reporter (v0.12.0) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.12.1) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -680,21 +680,21 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Skill | Version | Description |
 |-------|---------|-------------|
 | CJM Research | v0.19.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio and nested maps |
-| Product Analysis | v0.19.0 | Analyze metrics, dashboards, and A/B test results |
-| Product Research | v0.17.0 | Competitive analysis, user research, market trends, UX benchmarking |
-| Brainstorm Features | v0.15.2 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
-| Write Concept | v0.16.2 | Write product concept documents (PRDs) |
-| Requirements Creator | v0.17.3 | Create and analyze feature requirements |
-| Task Creator | v0.15.2 | Create Jira tasks from requirements |
+| Product Analysis | v0.19.1 | Analyze metrics, dashboards, and A/B test results |
+| Product Research | v0.17.1 | Competitive analysis, user research, market trends, UX benchmarking |
+| Brainstorm Features | v0.15.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
+| Write Concept | v0.16.3 | Write product concept documents (PRDs) |
+| Requirements Creator | v0.17.4 | Create and analyze feature requirements |
+| Task Creator | v0.15.3 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.16.1 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
-| Meeting Processor | v0.19.0 | Process meetings and extract action items |
-| Plugin Configurator | v2.17.2 | Configure plugin for your organization |
-| Knowledge Library | v0.10.1 | Manage curated knowledge sources and the tools registry |
+| Meeting Processor | v0.19.1 | Process meetings and extract action items |
+| Plugin Configurator | v2.17.3 | Configure plugin for your organization |
+| Knowledge Library | v0.10.2 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.10.0 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.12.0 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Design Bridge | v0.10.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Product Reporter | v0.12.1 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.7.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
 | Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
@@ -961,7 +961,7 @@ Every protocol keeps a fallback chain that never widens an agent's tools (named 
 | Hook | Event | Does |
 |---|---|---|
 | Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. |
-| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluencePage`, `updateConfluencePage` (on Atlassian MCP v2 the Confluence two are `createConfluenceContent`, `updateConfluenceContent`) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits and an `updateConfluenceContent` dry run (`dryRun: true`) pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. For one bulk job (a docs sync, a batch of tasks): `/grow-product-manager:setup --write-gate pause <minutes>` skips this question for up to 240 minutes and it comes back on its own; the provider-boundary and generated-region questions stay on. Opt-out: `/grow-product-manager:setup --write-gate off`. |
+| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluenceContent`, `updateConfluenceContent` (Atlassian MCP v2; the v1 names `createConfluencePage`, `updateConfluencePage` stay gated until v1 is switched off on 2027-03-01) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits and an `updateConfluenceContent` dry run (`dryRun: true`) pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. For one bulk job (a docs sync, a batch of tasks): `/grow-product-manager:setup --write-gate pause <minutes>` skips this question for up to 240 minutes and it comes back on its own; the provider-boundary and generated-region questions stay on. Opt-out: `/grow-product-manager:setup --write-gate off`. |
 | Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate; a write-gate pause does not cover it. |
 
 

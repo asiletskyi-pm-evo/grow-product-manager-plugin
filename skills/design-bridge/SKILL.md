@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.10.0
+version: 0.10.1
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку», «опублікуй деку», «hi-fi прототип/екран», «через мій дизайн-тулкіт», «дизайн-рев'ю макета у Figma». EN — "create a deck", "design review".
 ---
 
@@ -322,7 +322,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.10.0",
+  skill_version: "0.10.1",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],

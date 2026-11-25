@@ -1,6 +1,6 @@
 ---
 name: product-research
-version: 0.17.0
+version: 0.17.1
 description: Competitive, market, user and UX-benchmark research — interview synthesis, research plans, SWOT, TAM/SAM/SOM, PESTEL. Not a library lookup (knowledge-library), not dashboard analysis (product-analysis). UA — «досліди конкурентів», «як конкурент зробив…», «синтезуй інтервʼю», «порівняй з бенчмарками». EN — "research plan".
 ---
 
@@ -172,7 +172,7 @@ Pull information from every source agreed upon in Step 1. For each external prod
 **Confluence** — search existing Confluence pages for internal knowledge:
 - Previous research, decision logs, meeting notes
 - Product specs, OKRs, strategy docs
-- Use `searchConfluenceUsingCql` or `getConfluencePage` to find relevant pages
+- Use `searchConfluence` (CQL) to find relevant pages and `getConfluenceContent` with `detail: "full"` to read them (the default is an excerpt — `references/integration-strategy.md` 1c)
 - If Confluence MCP is unavailable, follow integration-strategy.md fallback chain
 
 **Google Drive** — search and read internal documents stored in Google Drive:
@@ -237,7 +237,7 @@ Apply the appropriate framework(s) based on research type. See `references/frame
 - Suggest a logical location based on the research type (e.g., "Research" or "Competitive Analysis" section)
 - Show the proposed page title for confirmation: `[Research Type] — [Subject] — [Date]`
 
-Once confirmed, create the Confluence page using `createConfluencePage` with:
+Once confirmed, create the Confluence page using `createConfluenceContent` (`contentType: "page"`, the space's numeric `spaceId` — `references/integration-strategy.md` 1c) with:
 
 - The confirmed title and location
 - Structured sections matching the framework used
@@ -340,7 +340,7 @@ Fallback: if `design-bridge` is not installed — display: "Install `grow-produc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.17.0", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
+1. `vault_save({ type: <per research type: "competitive-analysis" | "market-research" | "ux-benchmark">, product: active_product, skill: "product-research", skill_version: "0.17.1", tags: [research topic, competitors, market segment], content: final research document, related: [knowledge-library sources used, prior research on topic], extra_frontmatter: { confluence_url (if published), source_validation: passed } })`
    (User-research synthesis → save as `market-research` with tag `user-research` until a dedicated type is added; since v3.6.0 a research plan, discussion guide, insight report or insight memo saves the same way, tagged with its subtype.)
 2. Display: "Saved to Vault: Research/{product}/…"
 

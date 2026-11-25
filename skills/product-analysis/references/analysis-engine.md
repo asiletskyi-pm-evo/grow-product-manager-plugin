@@ -49,7 +49,7 @@ When using browser: navigate to the dashboard URL, take screenshots using `compu
 - User shares numbers, observations, or context directly in dialogue
 
 **Confluence:**
-- Search for previous Product Analysis reports on the same topic using `searchConfluenceUsingCql`
+- Search for previous Product Analysis reports on the same topic using `searchConfluence` (CQL)
 - If found — inform the user and ask: use as baseline for comparison? This enables historical trend analysis
 - Also search for relevant context: OKRs, strategy docs, previous decisions
 
