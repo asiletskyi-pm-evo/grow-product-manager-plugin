@@ -346,5 +346,20 @@ r_new = ci_.propose(mem2, [d0], "focus-advisor", recs, "2026-10-27")[0]["status"
 check("5.1 a rejection older than 180 days is forgotten; a recent one holds", r_old == "added" and r_new == "rejected-before",
       (r_old, r_new))
 
+# since v4.11.1: `propose --file -` — the deltas on stdin, a quote and a `$(…)` in them kept as text (no shell saw them)
+d = tempfile.mkdtemp(prefix="ctx-inbox-stdin-")
+try:
+    env = Env(d)
+    env.run("migrate", "--apply")
+    env.run("compile")
+    odd = "- O'Brien's funnel $(touch never) — https://tableau.zorg.example/obrien"
+    rc, out, res = env.run("propose", "--skill", "product-analysis", "--file", "-", stdin=delta("ADD", "product.zorg-app", text=odd))
+    check("6.1 --file - reads the deltas from stdin: added as №1, the text as it was",
+          rc == 0 and res["added"] == [1] and odd in json.dumps(inbox(env), ensure_ascii=False), (rc, out[-400:]))
+    rc, out, _ = env.run("propose", "--skill", "product-analysis", "--file", "-", stdin="")
+    check("6.2 --file - with nothing on stdin: exit 3, said so", rc == 3 and "stdin is empty" in out, (rc, out[-300:]))
+finally:
+    shutil.rmtree(d, ignore_errors=True)
+
 print("\n%s — %d failure(s)" % ("GREEN" if not fails else "RED", fails))
 sys.exit(1 if fails else 0)

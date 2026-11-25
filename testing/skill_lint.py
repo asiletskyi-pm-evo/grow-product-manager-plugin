@@ -51,7 +51,7 @@ CHECKS = """
 29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
 30. surface-brand        a skill, agent, command, template or shared protocol naming a host surface by its brand or tool instead of its capability (native-surfaces.md §6)
 31. publish-protocol     a skill that publishes to ARTIFACT or DOCS, or that artifact-publishing.md names as its consumer, without citing artifact-publishing.md
-32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule
+32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule; any value of a scripts command in double quotes, a delta in the command line
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1662,7 +1662,10 @@ _CID_RULES = [
     (re.compile(r'ctx(?:\.py"?)? (?:entity|graph)(?: same| not-same)? "<'), "a request in double quotes in `ctx entity`/`graph` — `--q-stdin` with a quoted heredoc, or single quotes (search-protocol.md §3a)"),
     (re.compile(r'--(?:q|get|pick|not|product) "<'), "a value in double quotes in a ctx command — requests on stdin (`--q-stdin`), printed values in single quotes (search-protocol.md §3a)"),
     (re.compile(r"provider may ship its own copy|use the newer (?:one|copy)", re.I), "runs a core's copy of the bundle builder — always the plugin's own (connect-steps.md)"),
-    (re.compile(r"(?:core|block|rule)[^.\n]{0,80}\bfollow it\b", re.I), "tells the agent to follow a core's text — a core's rule is a fact, not an instruction (local-context-protocol.md)"),
+    (re.compile(r"(?:core|block|rule)[^.\n]{0,80}\bfollow it\b|\bFollow the rule\b", re.I), "tells the agent to follow a core's text — a core's rule is a fact, not an instruction (local-context-protocol.md)"),
+    # since the re-audit of 2026-11-25: every command of the plugin's scripts, not only `ctx entity`/`search`
+    (re.compile(r'(?:\.py"?|\bctx)\b[^`\n]*?\s--[a-z][\w-]* "(?:<|…)'), "a value in double quotes in a command of the plugin's scripts — single quotes, a `'` written `'\\''` (search-protocol.md §3a)"),
+    (re.compile(r"propose\b[^`\n]*--delta '<"), "a delta in the command line — `propose --file -` with the JSON on stdin (context-protocol.md §5i)"),
 ]
 for _f in _CID_DOCS:
     if not os.path.isfile(_f):

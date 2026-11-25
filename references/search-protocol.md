@@ -68,7 +68,8 @@ A request is the user's words, and a name, a title or a phrase that came from a 
   ```
 
   A line equal to `EOF` would end the heredoc: then pick another delimiter (`<<'CTX_Q_END'`). Nothing on stdin is exit 3.
-- **A value the engine printed** — an id, a path, a note's name for `--get`, `--pick`, `--not`, `--product`, `entity same`, `graph` — goes in single quotes, a `'` in it written `'\''`; the engine prints its own commands that way (`ctx entity '<шлях>'`). Never in double quotes, never bare.
+- **A value the engine printed** — an id, a path, a note's name for `--get`, `--pick`, `--not`, `--product`, `entity same`, `graph` — goes in single quotes, a `'` in it written `'\''`; the engine prints its own commands that way (`ctx entity '<шлях>'`). So does a text you write into a command — `--reason`, `--name`, `--product`, a job's name. Never in double quotes, never bare.
+- **A delta goes on stdin** (since v4.11.1): `ctx propose --skill <skill> --file -` with the JSON in a quoted heredoc, never `--delta '<json>'` — a delta quotes notes and pages.
 - Never build a command by pasting a name into it in another way; `testing/skill_lint.py` check 32 refuses a shipped doc that puts a placeholder in double quotes in a `ctx` command.
 
 ## 4. Rating the candidates

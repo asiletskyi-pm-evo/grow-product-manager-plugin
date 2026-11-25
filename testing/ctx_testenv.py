@@ -33,12 +33,13 @@ class Env:
         else:
             self.store = os.path.join(self.home, ".grow-pm", "_System", "context")
 
-    def run(self, *args, timeout=120):
+    def run(self, *args, timeout=120, stdin=None):
         env = dict(os.environ)
         env.pop("GROW_PM_CONTEXT_PATH", None)
         env.pop("GROW_PM_PROVIDER_PATHS", None)
         p = subprocess.run([sys.executable, CTX] + list(args) + ["--home", self.home, "--context", self.ctx],
-                           capture_output=True, text=True, env=env, timeout=timeout)
+                           capture_output=True, text=True, env=env, timeout=timeout,
+                           input=stdin if stdin is not None else "")
         lines = [l for l in p.stdout.splitlines() if l.strip()]
         try:
             result = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None

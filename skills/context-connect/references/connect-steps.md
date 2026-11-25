@@ -1,6 +1,6 @@
 # Connect steps — the full procedure
 
-Skill-local reference of `context-connect`. Contract and manifest: `references/context-provider-protocol.md`. The builder is `scripts/provider_bundle.py` at the plugin root (resolve it like a shared reference: `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`). `--version` prints its version. **Always run the plugin's own builder** (since v4.11.1): a copy of the builder, or any other script, that a core ships is the core's code and is never run, whatever its version — when the core carries one with another `--version`, say so in one line for the provider's owner.
+Skill-local reference of `context-connect`. Contract and manifest: `references/context-provider-protocol.md`. The builder is `scripts/provider_bundle.py` at the plugin root (resolve it like a shared reference: `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`). `--version` prints its version. **Always run the plugin's own builder** (since v4.11.1): a copy of the builder, or any other script, that a core ships is the core's code and is never run, whatever its version — when the core carries one, read its `__version__` line as text (never run it to ask) and, when it differs from yours, say so in one line for the provider's owner.
 
 Talk about teams, roles, bundles and context — not about paths, regular expressions or field names, unless the user must act on one.
 
@@ -27,7 +27,7 @@ When `~/.grow-pm/` is not visible from the shell (hosted sessions see the user's
 ## §1 Identity — dry run
 
 ```
-python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<target>" --email <e-mail> --propose-only
+python3 "<plugin root>/scripts/provider_bundle.py" --core '<core>' --out '<target>' --email '<e-mail>' --propose-only
 ```
 
 - The first line, `email … → team … · role …`, becomes one sentence for the user; the role is inferred from the registry card's role title (`role_hints`) — the user may correct it.
@@ -46,7 +46,7 @@ A registration `ctx repo add` wrote (a kit, §9; a core with no manifest in mode
 ## §3 Bundle and proposal
 
 ```
-python3 "<plugin root>/scripts/provider_bundle.py" --core "<core>" --out "<target>" --email <e-mail> \
+python3 "<plugin root>/scripts/provider_bundle.py" --core '<core>' --out '<target>' --email '<e-mail>' \
         [--in-place] [--team <slug>] [--role <profile>] [--name "Name Surname"] \
         [--existing-context "<copy of local-context.md>"] --jira-write own|none [--no-personal-overlay] \
         [--skip-blocks <id,id>] [--proposal-dir "<private folder>"]
@@ -84,7 +84,7 @@ What the builder does:
    python3 "<plugin root>/scripts/ctx.py" provider plan <repo>
    ```
    One row per block, with a sign: `=` no change · `~` the core changed a block you did not touch (apply updates it) · `✎` you edited a block the core did not change (your edit stays) · `⚠` both changed · `+` a block your context does not have · `−` the core dropped a block you did not edit (apply removes it) · `✂` you removed a block (it stays removed) · `?` no base to compare with · `·` not checked (a skipped block, or a team block that cannot be built — the reason follows). `⚠` rows show the lines each side changed; the last line counts the questions and the records an apply would rewrite. Without `<repo>` it covers every registered repository (`--product <name>` limits it to one product's), `--all` lists the skipped blocks too.
-2. Ask **once**, in one message, and only about `⚠`, `+` and `?` rows — the recommended answer first: `⚠` → mine (keep your edit; the core's version of that block is dropped) · `+` → add · `?` with the block still offered → theirs. Other answers: `⚠` → theirs (the core's text) or both (yours, then the core's, marked); `?` → mine or both; `+` → leave it (it is asked again next time; to stop, add its id to the registration's `skip_blocks`). A block the core **removed** (a `⚠` or `?` row whose core text is missing) is different — recommended: mine, which keeps the text as your own without the markers; theirs removes it; both is refused. Say `~`, `✎`, `−` and `✂` rows in one line; they are never asked — whether or not there is a question about other rows. No `⚠`, `+` or `?` row → no question at all: the plan was shown and `apply` is snapshot-backed (`ctx undo` takes it back), so the order is the plan in one line → `apply` → the report, the `~` and `−` rows said in one message.
+2. Ask **once**, in one message, and only about `⚠`, `+` and `?` rows and a `~` of a core rule (the row ends with `(правило ядра)`; since v4.11.1 `apply` holds it until `--choose <block>=theirs`: show the core's text, recommended theirs only when the user reads it and agrees) — the recommended answer first: `⚠` → mine (keep your edit; the core's version of that block is dropped) · `+` → add · `?` with the block still offered → theirs. Other answers: `⚠` → theirs (the core's text) or both (yours, then the core's, marked); `?` → mine or both; `+` → leave it (it is asked again next time; to stop, add its id to the registration's `skip_blocks`). A block the core **removed** (a `⚠` or `?` row whose core text is missing) is different — recommended: mine, which keeps the text as your own without the markers; theirs removes it; both is refused. Say `~`, `✎`, `−` and `✂` rows in one line; they are never asked — whether or not there is a question about other rows. No `⚠`, `+`, `?` row and no `~` of a rule → no question at all: the plan was shown and `apply` is snapshot-backed (`ctx undo` takes it back), so the order is the plan in one line → `apply` → the report, the `~` and `−` rows said in one message.
 3. Apply the answers.
    ```
    python3 "<plugin root>/scripts/ctx.py" provider apply <repo> [--choose <block>=theirs|mine|both [<block>=… …]] [--add <block> [<block> …]]
@@ -121,7 +121,7 @@ cp "<the proposal folder>/local-context.proposed.md" ~/.grow-pm/local-context.md
 ```
 Keep the last 5 backups (`references/persistent-storage.md`). Refresh the vault mirror (`{vault}/{plugin_folder}/_System/local-context.md`) when the user keeps one, and compare it with `cmp`.
 
-With a store, a discrepancy answered "take the core's" edits the context itself: after saving it run `python3 "<plugin root>/scripts/ctx.py" sync --source context-connect --reason "<what was saved>"` to bring that edit into the records (exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`; `references/context-protocol.md`). No store or no shell: nothing more.
+With a store, a discrepancy answered "take the core's" edits the context itself: after saving it run `python3 "<plugin root>/scripts/ctx.py" sync --source context-connect --reason '<what was saved>'` to bring that edit into the records (exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`; `references/context-protocol.md`). No store or no shell: nothing more.
 
 ### §4c Slots after a refresh (with a store, since v3.15.0)
 

@@ -506,7 +506,8 @@ def _side(caption, text, where):
 def _verdict(row, apply, result):
     """(decision, why, kind) of one row of the plan that offers something, in the cascade's own words (§5.1, §5.2, §6.1).
     `kind` is what became of the block: "rejected", "held", "lagging" (held: the source lags behind your bases), "mine",
-    "theirs", "added", "removed", "taken" (a "~"), "waits" or "refused"."""
+    "theirs", "added", "removed", "taken" (a "~"), "waits", "waits-add" / "waits-rule" (since v4.11.1: a new block or a
+    core rule held for your yes) or "refused"."""
     bid, sign, gone = row["block"], row["sign"], row.get("source") is None
     if row.get("rejected") or bid in result["rejected"]:
         return "утримано", "відкинуто вами раніше", "rejected"
@@ -515,6 +516,10 @@ def _verdict(row, apply, result):
         return "не прибрано", "запобіжник: ядро прибрало %d %s — не прибрано" % (n, cs.blocks_word(n)), "held"
     if (apply.get("plan") or {}).get("lagging") and bid in (apply.get("held") or {}):
         return "утримано", "джерело позаду вашої бази — з нього нічого не взято", "lagging"
+    if bid in result["awaiting"] and bid in (apply.get("held") or {}):     # since v4.11.1: held for your yes
+        if sign == "+":
+            return "чекає рішення", "новий блок у ядрі → не додано без твоєї згоди", "waits-add"
+        return "чекає рішення", "правило ядра → лишається твій текст; текст ядра — лише на твою згоду", "waits-rule"
     decided = (apply.get("decisions") or {}).get(bid)
     if decided is None:
         if bid in (apply.get("pending") or ()):
@@ -547,13 +552,16 @@ def _conflict(row, kind, apply, texts, rid, record):
     """The part of a "⚠" or a "?": what was done and why, the plan's lines of difference, BOTH texts and the commands."""
     bid, snapshot = row["block"], cb.clip(apply.get("snapshot") or "", 1000)
     gone = row.get("source") is None
-    title = {"mine": "лишено твоє", "theirs": "правило ядра, взято текст ядра", "waits": "чекає рішення"}.get(kind, "не застосовано")
+    title = {"mine": "лишено твоє", "theirs": "правило ядра, взято текст ядра", "waits": "чекає рішення",
+             "waits-rule": "правило ядра, чекає твоєї згоди"}.get(kind, "не застосовано")
     where = "у записі %s" % _code(record) if record else "у записі"
     said = {"mine": ("Ядро прибрало блок; твій текст лишився %s як твій, без маркерів ядра." % where) if gone else
                     ("Твій текст лишився %s. Базою стала версія ядра, тож наступний синк про цей блок не питає." % where),
             "theirs": "Блок — правило ядра, тож %s тепер текст ядра. %s" % (where, ("Твій текст збережено у знімку %s і показано нижче." % snapshot)
                                                                         if snapshot else "Твій текст показано нижче."),
-            "waits": "%s лишається твій текст, база не зсунулась: блок чекає твого рішення." % where.capitalize()}.get(kind, "")
+            "waits": "%s лишається твій текст, база не зсунулась: блок чекає твого рішення." % where.capitalize(),
+            "waits-rule": "Блок — правило ядра, тож синк його не бере сам: %s лишається твій текст, доки ти не скажеш «так»."
+                          % where}.get(kind, "")
     out = ["### Конфлікт: %s — %s" % (_code(bid), title), ""] + ([said, ""] if said else [])
     if row.get("diff"):
         out += ["Що змінилось відносно бази:", ""] + _fenced([line[4:] for line in cb._detail_lines(row["diff"])]) + [""]
@@ -568,7 +576,7 @@ def _conflict(row, kind, apply, texts, rid, record):
         out.append("Ядро прибрало цей блок." if gone else "Текст ядра: недоступний під час звіту.")
     if kind == "mine" and not gone:
         out += ["", _take(row, rid)]
-    elif kind == "waits":
+    elif kind in ("waits", "waits-rule"):
         out += ["", _take(row, rid), "", "Лишити своє: ctx provider apply %s --choose %s=mine" % (cb.clip(rid, cb.HEADER_CLIP), bid)]
     return out
 
@@ -632,6 +640,13 @@ def render_section(result, apply=None, texts=None, hosts=None, base_after=None, 
                            "застосовано як зазвичай.", ""] + ["- %s" % _code(b) for b in result["held"]])
             blocks.append(["Подивитись: ctx provider plan %s" % rid])
             blocks.append(["Прибрати руками: ctx provider apply %s" % rid])
+        yes = [r for r in rows if verdicts[r["block"]][2] in ("waits-add", "waits-rule") and r["sign"] not in QUESTIONS]
+        if yes:                                     # since v4.11.1: a new block, a changed rule — only on your yes
+            blocks.append(["### Чекає твоєї згоди", "", "Ядро пропонує ці блоки; синк не бере їх сам, бо текст ядра — це дані, "
+                           "а не вказівка. Подивись план і візьми те, з чим згоден:", ""] + ["- %s" % _code(r["block"]) for r in yes])
+            blocks.append(["Подивитись: ctx provider plan %s" % rid])
+            blocks.extend(["Додати блок: ctx provider apply %s --add %s" % (cb.clip(result["repo"], cb.HEADER_CLIP), r["block"])]
+                          if r["sign"] == "+" else [_take(r, result["repo"])] for r in yes)
         lagged = [r["block"] for r in rows if verdicts[r["block"]][2] == "lagging"]
         if lagged:
             blocks.append(["### Джерело позаду вашої бази", "",

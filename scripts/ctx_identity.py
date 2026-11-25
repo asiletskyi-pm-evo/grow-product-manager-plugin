@@ -15,6 +15,7 @@ import json
 import os
 import re
 
+import ctx_common as cc
 import ctx_store as cs
 import provider_bundle as pb
 
@@ -160,7 +161,7 @@ def render(rows, repo_id, bundle="<файл JSON>"):
                       ("  відповісти: ctx identity keep %s %s --bundle %s · ctx identity take %s %s --bundle %s"
                        % (repo_id, r["field"], bundle, repo_id, r["field"], bundle)) if r["field"] == "role" else
                       ("  відповісти: ctx identity keep %s team --bundle %s · або перезібрати пакет з --team %s (context-connect)"
-                       % (repo_id, bundle, r["core"]))]
+                       % (repo_id, bundle, cc.shq(r["core"])))]
     return "\n".join(lines)
 
 

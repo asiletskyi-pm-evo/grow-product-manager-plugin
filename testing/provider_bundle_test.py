@@ -423,8 +423,8 @@ skill = read_root("skills", "context-connect", "SKILL.md")
 check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and "provider apply" in steps and "provider adopt --apply" in steps, "")
 check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
       "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
-check("the skill is 0.9.2 (since v4.9.1) and a refresh with a store never stamps Updated or appends a changelog",
-      "version: 0.9.2" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
+check("the skill is 0.9.3 (since v4.11.1) and a refresh with a store never stamps Updated or appends a changelog",
+      "version: 0.9.3" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
 # 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
 # (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
@@ -452,8 +452,9 @@ check("the 'never overwrite local-context.md without a yes' rule has the snapsho
       "without an explicit" in forbid and "ctx provider apply" in forbid and "snapshot" in forbid and "ctx undo" in forbid
       and "`~`" in forbid and "`−`" in forbid and "one message" in forbid, forbid)
 check("connect-steps says the same where it says there is no question: the plan was shown, the snapshot is the gate",
-      "No `⚠`, `+` or `?` row → no question" in steps_f and "snapshot" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400]
-      and "one message" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
+      "No `⚠`, `+`, `?` row and no `~` of a rule → no question" in steps_f
+      and "snapshot" in steps_f[steps_f.index("No `⚠`, `+`, `?` row"):][:400]
+      and "one message" in steps_f[steps_f.index("No `⚠`, `+`, `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
 
 # 12 — the docs pass (Task 12): the residual wording of the re-review of Task 11
 core_keys = ["`core_root`", "`namespace`", "`blocks_file`", "`paths`", "`endpoint.url`", "`endpoint.root`", "`rank`"]

@@ -540,7 +540,7 @@ with tempfile.TemporaryDirectory() as d:
     env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
     out = ce.render(ce.run(env.sctx, "eve@zorg.example"))
     check("v3.18.0 final I1: the «maybe the same» line names the two cards that paired, so its command closes the pair",
-          'ctx entity same|not-same "Notes/People/eve.md" "ZorgCore/People/eve-namesake.md"' in out, out)
+          "ctx entity same|not-same 'Notes/People/eve.md' 'ZorgCore/People/eve-namesake.md'" in out, out)
     env.cli("migrate", "--apply")
     env.cli("entity", "not-same", "Notes/People/eve.md", "ZorgCore/People/eve-namesake.md")
     rc, out2, _ = env.cli("entity", "eve@zorg.example")

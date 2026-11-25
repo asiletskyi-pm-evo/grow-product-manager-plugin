@@ -181,6 +181,13 @@ SEEDS = [
     ("core-is-data: a core's rule block obeyed",
      "references/local-context-protocol.md", "append",
      "A block the core marks as a rule: follow it.", "core-is-data"),
+    # the re-audit of 2026-11-25: any scripts command, and a delta in the command line
+    ("core-is-data: a user's name in double quotes in a scripts command",
+     "skills/knowledge-library/references/tools-workflows.md", "append",
+     '4. `python3 "<plugin root>/scripts/tools_scan.py" add --name "<name>" --kind site`.', "core-is-data"),
+    ("core-is-data: a delta in the command line",
+     "references/context-protocol.md", "append",
+     "Then `ctx propose --skill x --delta '<json>'`.", "core-is-data"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare

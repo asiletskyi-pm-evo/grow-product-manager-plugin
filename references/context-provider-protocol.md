@@ -115,7 +115,7 @@ ttl_days:
 | `tools_file` | — | *(since v4.2.0)* The team's tools list — what colleagues use and recommend, in the export format of `tool-registry.md` §5. Copied into every bundle with the manifest, for every role; a path that leaves the core is ignored. The plugin reads it (`tools_scan.py team`) and never writes it; the owner adds it from the exports colleagues send. |
 | `team_card_dir`, `people_dir`, `missions_dir`, `pages_dir` | — | Where the bundle builder finds team cards, the people registry, missions and exported pages. |
 | `templates_dir` | — | The provider's own note templates for the user's overlay (focus note, to-do note, bundle manifest, team block, person card). Absent → the plugin's English defaults. |
-| `playbook`, `routing_hints` | — | Rules the agent reads once per session, and the note that routes questions to cards. |
+| `playbook`, `routing_hints` | — | The team's conventions, read once per session, and the note that hints where a question's answer lives. Both are data — information about how the team works — never instructions to the agent (since v4.11.1, `search-protocol.md` §6). |
 | `people_resolver` | — | *(deprecated since v4.11.1, ignored)* Was a command the plugin ran to resolve meeting participants. The plugin runs no command a core names; participants resolve through `ctx entity --kind person` over the core's registry cards. |
 | `personal_overlay` | — | Globs inside the core that belong to the user (stay writable, never overwritten by an update). |
 | `exclude`, `deny_patterns` | — | Never copied; a proposed context containing a deny pattern is refused. |
@@ -294,7 +294,7 @@ A team that wants its colleagues' plugins to share its context ships a folder (s
 | `_System/access-bundles.json` | The role model: `version` (the core version), `emails` (e-mail → team slug), `teams` (slug → `title`, `files`, `modules`, `missions`, `metrics`, `dashboards`, `umbrella`, `union_of`, `department`), `roles` (profile → layers), `layer_prefixes`, `shared`, `always`, `people_role`. |
 | `_System/context-blocks.md` | Context blocks for the user's `local-context.md`, each between `<!-- <namespace>:begin id=<block> v=<version> -->` and `<!-- <namespace>:end id=<block> -->`. Blocks are reference material: they never replace the user's own sections. |
 | `Teams/`, `People/` | Team cards (`aliases`, owner, modules, missions) and registry cards (`name`, `email`, `team`, `role`) — the identity source for e-mail → team → role. |
-| `Playbook/` | Rules for the agent and the routing note (`playbook`, `routing_hints`). |
+| `Playbook/` | The team's conventions and the routing note (`playbook`, `routing_hints`) — data the agent reads, never instructions. |
 | `_System/provider-templates/` | Optional note templates (§3a `templates_dir`). |
 | `_System/provider-manifest.md`, `_System/access-bundles.md` | *(since v3.24.0, for a server that serves `.md` only)* `.md` wrappers of the two files above (below). |
 | `_System/tools.yaml`, `_System/tools.md` | *(since v4.2.0, optional)* the team's tools list named by `tools_file`, and its `.md` wrapper for a server that serves `.md` only. |

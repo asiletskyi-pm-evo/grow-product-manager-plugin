@@ -321,5 +321,43 @@ with tempfile.TemporaryDirectory() as d:
     check("…hooks.json wires both: a matcher for executeDestructive and one for Bash",
           any(_re.search(m, v2 + "executeDestructive") for m in ms) and any(_re.search(m, "Bash") for m in ms), ms)
 
+# ---- the re-audit of 2026-11-25: the agent can never turn the gate off on its own; `--code` abbreviated or on a new line
+with tempfile.TemporaryDirectory() as d:
+    home = os.path.join(d, "home"); os.makedirs(home)
+    pdata = os.path.join(d, "plugin-data"); os.makedirs(pdata)
+    env = {"HOME": home, "PATH": os.environ.get("PATH", ""), "GROW_PM_CONTEXT_PATH": os.path.join(d, "none.md"), "CLAUDE_PLUGIN_DATA": pdata}
+    v2 = "mcp__claude_ai_Atlassian_MCP__"
+    ASK = '"permissionDecision": "ask"'
+    def bash(cmd):
+        return run(env, {"tool_name": "Bash", "tool_input": {"command": cmd}})
+    for cmd, why in (("ctx provider trust a --cod 1", "--cod"), ("ctx provider trust a --co 1", "--co"),
+                     ("ctx provider trust a --c=1", "--c="), ("ctx provider trust a \\\n  --code 1", "a new line before --code")):
+        check("re-audit: `provider trust` asks with %s" % why, ASK in bash(cmd), cmd)
+    check("re-audit: `--context` after `provider trust` is no --code abbreviation (passes)", bash("ctx provider trust a --context x") == "")
+    for cmd in ('python3 "/p/scripts/setup.py" --write-gate off', 'python3 /p/scripts/setup.py --write-gate pause 240',
+                "python3 /p/scripts/setup.py --write-g off"):
+        check("re-audit: a Bash that changes the gate asks — " + cmd, ASK in bash(cmd) and "write gate" in bash(cmd), cmd)
+    check("re-audit: setup.py without --write-gate passes", bash("python3 /p/scripts/setup.py --status") == "")
+    for cmd in ("echo '{\"write_gate\":\"off\"}' > \"$CLAUDE_PLUGIN_DATA/config.json\"",
+                "python3 -c 'open(\"%s/.grow-pm/plugin-data/config.json\",\"w\")'" % home,
+                "cp x ~/.grow-pm/trust/addresses.json"):
+        check("re-audit: a Bash that writes the gate's config or the trust file asks — " + cmd[:40], ASK in bash(cmd), cmd)
+    check("re-audit: reading the config passes", bash("cat \"$CLAUDE_PLUGIN_DATA/config.json\"") == "")
+    for path in (os.path.join(pdata, "config.json"), os.path.join(home, ".grow-pm", "plugin-data", "config.json"),
+                 os.path.join(home, ".grow-pm", "trust", "addresses.json")):
+        out = run(env, {"tool_name": "Write", "tool_input": {"file_path": path, "content": "{}"}})
+        check("re-audit: a Write of %s asks" % os.path.relpath(path, d), ASK in out, out)
+    out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(d, "notes.md"), "content": "x"}})
+    check("re-audit: a Write elsewhere passes", out == "", out)
+    open(os.path.join(pdata, "config.json"), "w").write(json.dumps({"write_gate": "off"}))
+    check("re-audit: with the gate OFF, trust still asks", ASK in bash("ctx provider trust a --code 1"))
+    check("…and setup --write-gate on|off still asks", ASK in bash("python3 /p/scripts/setup.py --write-gate on"))
+    out = run(env, {"tool_name": v2 + "executeDestructive", "tool_input": {"name": "deleteJiraIssue"}})
+    check("…and executeDestructive still asks", ASK in out, out)
+    out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(pdata, "config.json"), "old_string": "off", "new_string": "on"}})
+    check("…and an Edit of the config still asks", ASK in out, out)
+    out = run(env, {"tool_name": v2 + "createJiraIssue", "tool_input": {"projectKey": "X"}})
+    check("…while the ordinary Jira question is off, as configured", out == "", out)
+
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)
 sys.exit(1 if fails else 0)
