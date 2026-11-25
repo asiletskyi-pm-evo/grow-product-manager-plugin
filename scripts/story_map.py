@@ -421,6 +421,7 @@ def render_baseline(entries, eol):
 # stickies and the diff stay here. Since v4.11.2 a story map's board is a Miro board (its SVG) or the host's own board
 # type (its element list, `--surface whiteboard`); the Miro path keeps its bytes — `surface` is named only for the host's.
 _plain, _scope = bs.plain, bs.scope
+HOST_FIRST = "the host's own board first, then a registry record's board"   # check 26: the user's rule (v4.11.2)
 BACKBONE = ("slice", "backlog", "activity", "step")   # the plugin never deletes these: one gone from a host read = partial
 
 
@@ -662,6 +663,30 @@ def check_protocol(root):
     row = re.search(r"^\| roadmap \|.*$", vs, re.M)
     if vs and not (row and "story map" in row.group(0)):
         errs.append("vault-schema.md: the `roadmap` type row does not name the story map")
+    for row in _table_after(s10, r"\| Command \| What \|"):     # the board commands name the surfaces the script reads
+        if _cmd(row[0]) in ("board-state", "board-diff"):
+            m = re.search(r"--surface ([a-z\\|]+)", row[0])
+            got = m.group(1).replace("\\", "").split("|") if m else []
+            if got != list(bs.SURFACES):
+                errs.append("story-map-protocol.md §10: `%s` does not name `--surface %s` (board_state.SURFACES)" % (
+                    _cmd(row[0]), "|".join(bs.SURFACES)))
+    try:
+        with open(os.path.join(root, "scripts", "story_map.py"), encoding="utf-8") as fh:
+            own = fh.read()
+    except OSError:
+        own = ""
+    if own and len(re.findall(r'"--surface", choices=bs\.SURFACES', own)) < 2:
+        errs.append("scripts/story_map.py: board-state and board-diff do not take `--surface` from board_state.SURFACES")
+    host = (("references/story-map-protocol.md", _section(proto, "7. Publication")),
+            ("references/artifact-publishing.md", _section(texts.get("references/artifact-publishing.md", ""), "3. The order")),
+            ("skills/roadmap-architect/SKILL.md", skill))
+    for rel, text in host:                          # the user's rule: the whole map on the host's own tools, a paid board
+        if rel in texts and HOST_FIRST not in text:  # tool never needed
+            errs.append("%s: the story map's boards are not offered with the host's own board first (%s)" % (rel, HOST_FIRST))
+    if "not the story map's" in _section(proto, "11. What never happens"):
+        errs.append("story-map-protocol.md §11 still excludes the host's own board from the story map")
+    if "only the journey map offers it" in _section(texts.get("references/artifact-publishing.md", ""), "2. The candidates"):
+        errs.append("artifact-publishing.md §2 still offers the host's own board to the journey map only")
     ap = _section(texts.get("references/artifact-publishing.md", ""), "5. Publish and record")
     if texts.get("references/artifact-publishing.md") and not re.search(r"^\|\s*`roadmap-architect`\s*\|\s*`roadmap-architect/", ap, re.M):
         errs.append("artifact-publishing.md §5: the key table has no `roadmap-architect` row")

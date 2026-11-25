@@ -2,7 +2,7 @@
 
 > Shared reference (since v4.3.0). How a skill turns a finished result into a link the user opens, updates and shares: which places it can go to, in which order, the one question before it leaves, the record of where it went, and a **new version of the same place** on the next run instead of a copy. The other skills that publish keep their own question of `native-surfaces.md` §3 and do not record versions yet.
 >
-> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard, the journey map's dashboard since v4.7.0 and its board since v4.8.0, the journey portfolio's dashboard since v4.9.0), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0).
+> **Consumers:** `design-bridge` (decks), `product-reporter` (a report as a document or a dashboard), `cjm-research` (the funnel report and its dashboard, the journey map's dashboard since v4.7.0 and its board since v4.8.0, the journey portfolio's dashboard since v4.9.0), `focus-advisor` (the live board), `roadmap-architect` (the story map's board and its progress dashboard, since v4.6.0; its board on the host's own board type since v4.11.2).
 >
 > **Rule of the file:** the same as `native-surfaces.md` — a host surface is named by its capability (ARTIFACT, DOCS), never by its brand (§6 there); Atlassian and Confluence are connectors and are named. Nothing leaves without the question of `native-surfaces.md` §3, a new version included, and a scheduled run never publishes (§4 there).
 
@@ -31,7 +31,7 @@ Four sources, read in this order, each only when present — a missing one is no
 - **Atlassian Artifacts** arrive through source 2 (the `atlassian` record publishes `deck` and `dashboard`) and only when their operations are reachable (§8). The same record's `page` is Confluence — source 3, `surface: confluence` — never a second candidate.
 - **A service reached both as a host surface and as a registry record** (a document service the host offers as DOCS `connector`) is one candidate, recorded under the host capability (`docs`).
 - **A board** is a candidate only when its record carries `board` in `publishes` and its tools in this session create frames and stickies and update them by element id (`story-map-protocol.md` §6) — an observed capability, never the record's word. A whiteboard tool that draws diagrams only is not one.
-- **The host's own board** (since v4.8.0) — ARTIFACT `typed` with a board kind is a board candidate too when its elements are written, updated by their id and listed back (`journey-protocol.md` §11, measured 2026-11-17) — the same observed capability, never a name. In this release only the journey map offers it; the story map's board stays a registry record's.
+- **The host's own board** (since v4.8.0) — ARTIFACT `typed` with a board kind is a board candidate too when its elements are written, updated by their id and listed back (`journey-protocol.md` §11, measured 2026-11-17) — the same observed capability, never a name. Both maps offer it: the journey map since v4.8.0, the story map since v4.11.2 (`story-map-protocol.md` §6) — and both offer it first (§3).
 
 ## 3. The order — by audience
 
@@ -43,7 +43,7 @@ The audience comes from the skill's own step — `design-bridge` Step 2, a repor
 | the user alone, or the audience is unknown | the host's surfaces in the user's account — the narrowest circle | corporate records |
 | people outside the company (`customer`) | «лише файл», marked as recommended | every other candidate, in the order above |
 
-**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — the host's own first, then a registry record's (since v4.10.0: the host's own tools need no account or paid plan of a board tool) — then «лише файл» (`journey-protocol.md` §11).
+**A primary kind** — when the skill names its result's primary kind (the story map: `board`, because the team edits the map there), that kind's candidates come first; the rest follow the table. The story map's boards: the host's own board first, then a registry record's board — one board per map, the two as alternatives (since v4.11.2, `story-map-protocol.md` §7). The journey map's primary kind is `dashboard`: its candidates by audience come first, then its boards — the host's own first, then a registry record's (since v4.10.0: the host's own tools need no account or paid plan of a board tool) — then «лише файл» (`journey-protocol.md` §11).
 
 **Already published** — the result's record (§5–§6) names a place → «нова версія» of that place comes first, before any new place.
 

@@ -578,6 +578,21 @@ try:
     drift("references/artifact-publishing.md", "| `roadmap-architect` | `roadmap-architect/", "| `roadmap` | `roadmap-architect/", "roadmap-architect", "7.8 artifact-publishing without the key row is named")
     drift("skills/roadmap-architect/SKILL.md", "story-map-protocol.md", "story-map.md", "cite", "7.9 a skill that stops citing the protocol is named", count=-1)
     drift("references/story-map-protocol.md", "| `board-diff --last", "| `board-compare --last", "board-diff", "7.10 a command the protocol stops naming is named")
+    # v4.11.2: the user's rule — the host's own board first, no board excluded from the story map, `--surface` named
+    drift("references/story-map-protocol.md", sm.HOST_FIRST, "a registry record's board, then the host's own", "host's own board first",
+          "7.12 the protocol's §7 without the host's own board first is named")
+    drift("skills/roadmap-architect/SKILL.md", sm.HOST_FIRST, "the board tool's", "host's own board first",
+          "7.12b the skill's 7d without the host's own board first is named")
+    drift("references/story-map-protocol.md", "- A map on FigJam;", "- A map on FigJam, or on the host's own board type (not the story map's in this release);",
+          "§11 still excludes", "7.13 a §11 that excludes the host's own board again is named")
+    drift("references/artifact-publishing.md", "Both maps offer it:", "In this release only the journey map offers it; Both maps offer it:",
+          "journey map only", "7.13b artifact-publishing §2 offering the host's board to the journey map only is named")
+    drift("references/story-map-protocol.md", "[--surface miro\\|whiteboard] [--last S]", "[--surface miro] [--last S]", "--surface",
+          "7.14 a §10 board command without both surfaces is named")
+    os.makedirs(os.path.join(r2, "scripts"), exist_ok=True)
+    shutil.copy(SCRIPT, os.path.join(r2, "scripts", "story_map.py"))
+    drift("scripts/story_map.py", '"--surface", choices=bs.SURFACES, default="miro"', '"--surface", choices=("miro",), default="miro"',
+          "board_state.SURFACES", "7.14b a board command whose surfaces are not board_state.SURFACES is named")
     os.remove(os.path.join(r2, "references", "story-map-protocol.md"))
     check("7.11 a missing protocol is an error, not silence", sm.check_protocol(r2) != [], sm.check_protocol(r2))
 
