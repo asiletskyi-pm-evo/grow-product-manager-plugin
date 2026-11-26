@@ -56,7 +56,7 @@ Every snapshot is a publication: one question before every write into the databa
 ### Changed
 
 - **`cjm-research` 0.21.0** — step J4a, the app: after a journey map's page one offer to build the app «CJM», the one question before the first build, everything local first, then one question and the writes. The mode table, the Step J header and the trigger note carry the new version. The description and `## Routing` are unchanged.
-- **`release-manager` 0.5.3** — the `SHELL_VERSION` guard (Step 3, pitfall P11). The description and `## Routing` are unchanged.
+- **`release-manager` 0.5.4** — the `SHELL_VERSION` guard (Step 3, pitfall P11); «the user decides, the agent runs»: a check that needs the release machine (leak scan, `host-smoke.sh`, `release_reach.py`, the mirror push) is run by the agent through what reaches that machine, never handed to the user as a command; the user keeps the yes and the host permission prompts. The description and `## Routing` are unchanged.
 - **`references/artifact-publishing.md`** — an app as a place and the `app` field of the record; **`references/journey-protocol.md`** — the two `app-data` commands; **`references/native-surfaces.md`** — what the probe measured; **`references/vault-schema.md`** — the record's field.
 
 ### Files
@@ -68,7 +68,7 @@ Every snapshot is a publication: one question before every write into the databa
 | `scripts/journey_map.py`, `scripts/journey_portfolio.py` | `app-data` |
 | `scripts/publications.py` | `record --app` |
 | `skills/cjm-research/SKILL.md` | 0.21.0 — step J4a |
-| `skills/release-manager/SKILL.md`, `skills/release-manager/references/release-pitfalls.md` | 0.5.3 — P11 |
+| `skills/release-manager/SKILL.md`, `skills/release-manager/references/release-pitfalls.md` | 0.5.4 — P11, the agent runs the release machine's checks |
 | `references/artifact-publishing.md`, `references/journey-protocol.md`, `references/native-surfaces.md`, `references/vault-schema.md` | the app in each |
 | `testing/app_shell_test.py`, `testing/journey_app_data_test.py`, `testing/publications_test.py`, `testing/fixtures/app/*` | new tests and fixtures |
 | `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 33 and its seeds |
