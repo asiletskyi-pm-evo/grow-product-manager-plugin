@@ -1,15 +1,23 @@
 {
- "items": [
-  {
-   "title": "Listing conversion is 12% under the baseline",
-   "note": "Funnel tracker, 2026-11-24",
-   "product": "zorg",
-   "attention": "warn"
-  },
-  {
-   "title": "Card payment success is stable",
-   "product": "zorg-pay",
-   "attention": "ok"
-  }
- ]
+  "items": [
+    {
+      "title": "Listing conversion is 12% under the baseline",
+      "note": "Funnel tracker, 2026-11-24",
+      "product": "zorg",
+      "attention": "warn",
+      "module": "metrics"
+    },
+    {
+      "title": "Checkout redesign: 2 tasks with no movement over 14 days",
+      "note": "Issue tracker, 09:55",
+      "product": "zorg",
+      "attention": "warn",
+      "module": "directions"
+    },
+    {
+      "title": "Card payment success is stable",
+      "product": "zorg-pay",
+      "attention": "ok"
+    }
+  ]
 }

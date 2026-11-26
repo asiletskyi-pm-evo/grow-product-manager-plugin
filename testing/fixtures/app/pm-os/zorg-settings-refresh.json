@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "title": "Update without asking",
+      "value": "consent given 26.11",
+      "note": "Only the pult's sections and its journal are written, only into this pult's database, and only while nobody else sees it."
+    },
+    {
+      "title": "Schedule",
+      "value": "not running yet",
+      "note": "Every hour from 9:00 to 19:00 on working days, on your own machine."
+    }
+  ]
+}

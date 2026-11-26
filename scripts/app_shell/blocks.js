@@ -46,7 +46,18 @@
       nowMeeting: "Зараз зустріч, до ",
       nextAt: "Далі за календарем о ",
       goal: "Ціль",
-      dataFrom: "Дані від "
+      dataFrom: "Дані від ",
+      inFirst: "у ",
+      inNext: ", у ",
+      inLast: " і в ",
+      more: "Докладніше",
+      backTo: "← ",
+      alwaysOn: "Завжди увімкнено",
+      turnedOn: " увімкнено",
+      ownerOnly: "Змінювати модулі може лише власник.",
+      notSaved: "Не вдалося зберегти. Спробуй ще раз.",
+      saidCopied: "Скопійовано: «%s». Встав це в чат із Claude.",
+      saidPlain: "Скажи Claude: «%s»."
     },
     en: {
       all: "All",
@@ -84,7 +95,18 @@
       nowMeeting: "A meeting now, until ",
       nextAt: "Next on the calendar at ",
       goal: "Goal",
-      dataFrom: "Data from "
+      dataFrom: "Data from ",
+      inFirst: "in ",
+      inNext: ", in ",
+      inLast: " and in ",
+      more: "More",
+      backTo: "← ",
+      alwaysOn: "Always on",
+      turnedOn: " on",
+      ownerOnly: "Only the owner can change the modules.",
+      notSaved: "Could not save. Try again.",
+      saidCopied: "Copied: “%s”. Paste it into the chat with Claude.",
+      saidPlain: "Say to Claude: “%s”."
     }
   });
 
@@ -372,6 +394,7 @@
         if (level && level !== "ok") { val.appendChild(el("span", "gpm-vh", labelOf(level) + ": ")); }
         val.appendChild(document.createTextNode(value));
         li.appendChild(val);
+        if (str(it.note, 300)) { li.appendChild(el("span", "gpm-note gpm-item-pair-note", it.note)); }
         ul.appendChild(li);
         return;
       }
@@ -410,6 +433,12 @@
     return s;
   }
 
+  // a number as it is read: from five digits on, the thousands stand apart (216 766)
+  function grouped(n) {
+    var m = /^(-?)(\d{5,})(\.\d+)?$/.exec(String(n));
+    if (!m) { return String(n); }
+    return m[1] + m[2].replace(/\B(?=(\d{3})+$)/g, S.lang === "en" ? "," : "\u00a0") + (m[3] || "");
+  }
   // one number; with a `title` it is a band that names a goal, and stands even while the goal has no value yet
   function number(data, view, info) {
     var value = num(data.value);
@@ -425,9 +454,10 @@
     if (title) { box.appendChild(el("p", "gpm-goal-title", title)); }
     if (value === null) {
       if (note) { box.appendChild(el("p", "gpm-num-note", note)); }
+      if (info && info.ask) { box.classList.add("gpm-goal-ask"); box.appendChild(info.ask); }
       return box;
     }
-    box.appendChild(el("span", "gpm-num-value", String(value)));
+    box.appendChild(el("span", "gpm-num-value", grouped(value)));
     if (str(data.unit, 24)) { box.appendChild(el("span", "gpm-num-unit", data.unit)); }
     if (str(data.label, 80)) { box.appendChild(el("span", "gpm-num-label", data.label)); }
     var delta = num(data.delta);
@@ -560,8 +590,9 @@
     });
     return waiting;
   }
-  // the rows of the first block of the home module's side column that ask for attention, or null when it has none
-  function signalCount(home, snap, view) {
+  // the rows of the first block of the home module's side column that ask for attention, or null when it has none.
+  // `where` (an option) collects the modules those rows name in `module`, in the order met; null in it marks a row that names none.
+  function signalCount(home, snap, view, where) {
     var blocks = home ? home.blocks.filter(function (b) { return !b.bad && b.aside && ROWS.indexOf(b.block) >= 0 && !SOURCES[b.source]; }).slice(0, 1) : [];
     if (!blocks.length) { return null; }
     var n = 0;
@@ -571,11 +602,27 @@
         (Array.isArray(rows) ? rows : []).slice(0, MAX_ROWS).forEach(function (r) {
           if (!isObj(r) || (str(r.product, 64) && !view.shows(r.product))) { return; }
           var level = attention(r.attention);
-          if (level === "warn" || level === "crit") { n++; }
+          if (level === "warn" || level === "crit") {
+            n++;
+            var at = typeof r.module === "string" && MODULE_ID.test(r.module) ? r.module : null;
+            if (where && where.indexOf(at) < 0) { where.push(at); }
+          }
         });
       });
     });
     return n;
+  }
+  // «у метриках і в напрямках»: the modules the signals stand in, each said by its own `where` of the profile; "" unless
+  // every signal names a module that is shown and has that word
+  function wherePhrase(ids, mods) {
+    var names = [], t = S.t;
+    for (var i = 0; i < ids.length; i++) {
+      var m = mods.filter(function (x) { return x.id === ids[i]; })[0];
+      if (!ids[i] || !m || !m.where) { return ""; }
+      names.push(m.where);
+    }
+    if (!names.length) { return ""; }
+    return names.map(function (w, j) { return (j === 0 ? t.inFirst : j === names.length - 1 ? t.inLast : t.inNext) + w; }).join("");
   }
   var CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/;
   function clockMin(v) { var m = typeof v === "string" ? CLOCK.exec(v) : null; return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
@@ -614,9 +661,11 @@
     if (waiting !== null) {
       parts.push(waiting === 0 ? t.nothingWaits : counted(waiting, t.small, t.waitsOne, t.waitsFew, t.waitsMany));
     }
-    var signals = signalCount(home, snap, view);
+    var named = [], signals = signalCount(home, snap, view, named);
     if (signals !== null) {
-      parts.push(signals === 0 ? t.noSignals : t.thereIs + counted(signals, t.smallSignal, t.signalsOne, t.signalsFew, t.signalsMany));
+      var said = signals === 0 ? t.noSignals : t.thereIs + counted(signals, t.smallSignal, t.signalsOne, t.signalsFew, t.signalsMany);
+      var places = signals === 0 ? "" : wherePhrase(named, mods);
+      parts.push(places ? said.replace(/\.$/, "") + ": " + places + "." : said);
     } else {
       mods.forEach(function (m) {
         if (m === home) { return; }
@@ -652,9 +701,19 @@
     var title = custom ? (b.title === undefined ? null : plainTitle(b.title, null))
       : (isObj(b.title) ? (str(b.title[lang], TITLE_MAX) || null) : null);
     var ok = BLOCK_NAMES.indexOf(b.block) >= 0 && !(custom && b.block === "map")
-      && typeof b.source === "string" && (SECTION.test(b.source) || b.source === "@edits" || b.source === "@summary");
+      && typeof b.source === "string" && (SECTION.test(b.source) || b.source === "@edits" || b.source === "@summary"
+        || (!custom && b.block === "list" && (b.source === "@modules" || b.source === "@theme")));
     return { block: ok ? b.block : null, source: ok ? b.source : null, title: title, bad: !ok, aside: ok && b.place === "aside",
-      group: ok && !custom && typeof b.group === "string" && GROUP_ID.test(b.group) ? b.group : null };
+      group: ok && !custom && typeof b.group === "string" && GROUP_ID.test(b.group) ? b.group : null,
+      ask: ok && !custom ? askOf(b.ask, lang) : null };
+  }
+  // a text of the profile in the language shown, or null
+  function words(o, lang, max) { return (isObj(o) && str(o[lang], max)) || null; }
+  // `ask` / `refresh` of the profile -> {label, say, empty}: a button that hands the person a phrase to say to Claude.
+  // Both texts are the profile's own, embedded in the page — never a document's.
+  function askOf(raw, lang) {
+    var label = isObj(raw) ? words(raw.label, lang, 40) : null, say = isObj(raw) ? words(raw.say, lang, 200) : null;
+    return label && say ? { label: label, say: say, empty: raw.when === "empty" } : null;
   }
 
   // One module -> {id, title, home, blocks: [...], composed} or null (no usable id). A module in neither form, in both
@@ -673,15 +732,20 @@
     } else if (short) { blocks = [normBlock(raw, custom, lang)]; }
     else { blocks = [normBlock(null)]; }
     // `counts`: the words the rail says after a module's count, one per plural form — «застиг», «застигли», «застигло»
-    var words = !custom && isObj(raw.counts) && Array.isArray(raw.counts[lang]) ? raw.counts[lang].filter(function (w) { return str(w, 24); }) : [];
+    var forms = !custom && isObj(raw.counts) && Array.isArray(raw.counts[lang]) ? raw.counts[lang].filter(function (w) { return str(w, 24); }) : [];
+    // not a tab: `foot` — the entry at the foot of the rail; `under` — a screen opened from its parent module
+    var foot = !custom && raw.foot === true && raw.home !== true;
+    var under = !custom && !foot && raw.home !== true && typeof raw.under === "string" && MODULE_ID.test(raw.under) ? raw.under : null;
     return { id: raw.id, title: title, home: !custom && raw.home === true, blocks: blocks, composed: composed && !(short && composed),
-      counts: words.length >= 2 && words.length <= 3 ? words : null };
+      counts: forms.length >= 2 && forms.length <= 3 ? forms : null, foot: foot, under: under,
+      where: custom ? null : words(raw.where, lang, 40), about: custom ? null : words(raw.about, lang, 120),
+      back: under ? words(raw.back, lang, 40) : null };
   }
 
   // the document as foreign input -> {modules: [{id, on, order}], custom: [module]} or null
   function cleanConfig(raw) {
     if (!isObj(raw) || (raw.v !== undefined && raw.v !== 1)) { return null; }
-    var cfg = { modules: [], custom: [] };
+    var cfg = { modules: [], custom: [], rawCustom: Array.isArray(raw.custom) ? raw.custom.slice(0, MAX_CUSTOM) : [] };
     (Array.isArray(raw.modules) ? raw.modules.slice(0, MAX_RULES) : []).forEach(function (r) {
       if (!isObj(r) || typeof r.id !== "string" || !MODULE_ID.test(r.id) || typeof r.on !== "boolean") { return; }
       var rule = { id: r.id, on: r.on, order: null };
@@ -746,7 +810,7 @@
     var out = [];
     all.forEach(function (m, i) {
       var r = Object.prototype.hasOwnProperty.call(rules, m.id) ? rules[m.id] : null;
-      if (r && r.on === false) { return; }
+      if (r && r.on === false && !m.foot) { return; }      // the foot module holds the switches: it is never turned off
       var ordered = !!(r && r.order !== null);
       m.pos = ordered ? r.order : i;
       m.ordered = ordered;
@@ -755,6 +819,11 @@
     });
     out.sort(function (a, b) {
       return a.pos - b.pos || (a.ordered === b.ordered ? 0 : a.ordered ? -1 : 1) || a.index - b.index;
+    });
+    // every module a person can turn on or off, whatever its state: the profile's and the owner's, in their base order
+    out.switches = all.filter(function (m) { return !m.foot && !m.under; }).map(function (m) {
+      var r = Object.prototype.hasOwnProperty.call(rules, m.id) ? rules[m.id] : null;
+      return { id: m.id, title: m.title, about: m.about, home: m.home, on: !(r && r.on === false) };
     });
     return out;
   }
@@ -921,12 +990,100 @@
     Object.keys(more || {}).forEach(function (k) { info[k] = more[k]; });
     return info;
   }
+  // A button that hands the person a phrase to say to Claude. A page cannot start Claude's run, so the click copies the
+  // phrase and says where it goes; without a clipboard it says the phrase. Both texts are the profile's own.
+  function sayButton(ask, cls) {
+    var box = el("div", "gpm-ask" + (cls ? " " + cls : ""));
+    var b = el("button", "gpm-btn gpm-ask-btn", ask.label);
+    b.type = "button";
+    var note = el("p", "gpm-ask-note");
+    note.hidden = true;
+    note.setAttribute("role", "status");
+    function tell(copied) {
+      note.textContent = (copied ? S.t.saidCopied : S.t.saidPlain).replace("%s", function () { return ask.say; });
+      note.hidden = false;
+    }
+    b.addEventListener("click", function () {
+      try { navigator.clipboard.writeText(ask.say).then(function () { tell(true); }, function () { tell(false); }); }
+      catch (e) { tell(false); }
+    });
+    box.appendChild(b);
+    box.appendChild(note);
+    return box;
+  }
+  S.sayButton = sayButton;
+  // true while none of the documents has a value or a row to show
+  function nothingIn(docs) {
+    return docs.every(function (d) {
+      var x = d.sec.data;
+      return num(x.value) === null && !(Array.isArray(x.items) && x.items.length) && !(Array.isArray(x.rows) && x.rows.length);
+    });
+  }
+  // The source `@modules`: a switch per module a person can turn on or off (the owner's config/app, written by the part
+  // through view.hooks); the home module is always on. -> {node, side}
+  function modulesList(view) {
+    var hooks = view.hooks || {}, list = el("ul", "gpm-list gpm-switches"), on = 0;
+    (view.switches || []).forEach(function (m) {
+      var li = el("li", "gpm-item gpm-switch-row");
+      var text = el("span", "gpm-switch-text");
+      var name = el("span", "gpm-item-title", m.title);
+      name.id = "gpm-switch-" + m.id;
+      text.appendChild(name);
+      if (m.about) { text.appendChild(el("span", "gpm-note", m.about)); }
+      li.appendChild(text);
+      if (m.on || m.home) { on++; }
+      if (m.home) { li.appendChild(el("span", "gpm-switch-fixed", S.t.alwaysOn)); }
+      else {
+        var sw = el("button", "gpm-switch");
+        sw.type = "button";
+        sw.setAttribute("role", "switch");
+        sw.setAttribute("aria-checked", m.on ? "true" : "false");
+        sw.setAttribute("aria-labelledby", name.id);
+        sw.setAttribute("data-module", m.id);
+        var knob = el("span", "gpm-switch-knob");
+        knob.setAttribute("aria-hidden", "true");
+        sw.appendChild(knob);
+        // never disabled for the time of a write: the switch keeps the focus, and a second click then is not heard
+        sw.disabled = hooks.canWrite === false || typeof hooks.setModule !== "function";
+        if (hooks.saving === true) { sw.setAttribute("aria-busy", "true"); }
+        sw.addEventListener("click", function () { hooks.setModule(m.id, !m.on); });
+        li.appendChild(sw);
+      }
+      list.appendChild(li);
+    });
+    var box = el("div", "gpm-block-body");
+    box.appendChild(list);
+    if (hooks.note) { var said = el("p", "gpm-ask-note", hooks.note); said.setAttribute("role", "status"); box.appendChild(said); }
+    return { node: box, side: on + S.t.turnedOn };
+  }
+  SOURCES["@modules"] = function (view) { return modulesList(view).node; };
+  // The source `@theme`: the shell's own theme switch, moved out of the header into this block (one element, never copied)
+  var themeEl = null;
+  function themeBox() {
+    if (!themeEl) { themeEl = document.querySelector(".gpm-theme"); }
+    var box = el("div", "gpm-block-body gpm-theme-box");
+    if (themeEl) { box.appendChild(themeEl); }
+    return box;
+  }
+  SOURCES["@theme"] = themeBox;
+  function hasThemeBlock(profile) {
+    return (Array.isArray(profile.modules) ? profile.modules : []).some(function (m) {
+      return isObj(m) && Array.isArray(m.blocks) && m.blocks.some(function (b) { return isObj(b) && b.source === "@theme"; });
+    });
+  }
+
   // One block -> its section, or none: a block whose documents show nothing and say nothing of why takes no room.
   function blockSections(b, snap, view, chips) {
     var cls = "gpm-block-" + (b.block || "none"), sec;
     if (b.bad) {
       sec = railSection(b.title, "", null, view, cls);
       sec.appendChild(el("p", "gpm-unsupported", S.t.unsupported));
+      return [sec];
+    }
+    if (b.source === "@modules") {
+      var sw = modulesList(view);
+      sec = railSection(b.title, sw.side, null, view, cls + " gpm-block-switches");
+      sec.appendChild(sw.node);
       return [sec];
     }
     if (SOURCES[b.source] || typeof RENDER[b.block].all === "function") {
@@ -962,11 +1119,16 @@
       }
       sec = railSection(title, side, null, view, cls);
       sec.appendChild(body);
+      if (b.ask && (!b.ask.empty || nothingIn(docs))) { sec.appendChild(sayButton(b.ask)); }
       return [sec];
     }
-    var cards = [];
+    var cards = [], wants = b.ask && (!b.ask.empty || nothingIn(docs)), inBand = false;
     docs.forEach(function (d) {
-      var node = RENDER[b.block](d.sec.data, view, infoOf(d, { band: !title, chip: chips && !title })), told = false;
+      // a goal's band with no value yet takes the ask beside its words
+      var beside = wants && !inBand && b.block === "number" && !title && num(d.sec.data.value) === null && str(d.sec.data.title, 200);
+      var extra = { band: !title, chip: chips && !title };
+      if (beside) { extra.ask = sayButton(b.ask, "gpm-ask-beside"); inBand = true; }
+      var node = RENDER[b.block](d.sec.data, view, infoOf(d, extra)), told = false;
       if (!node && str(d.sec.data.empty, 300)) { node = el("p", "gpm-empty", d.sec.data.empty); told = true; }
       if (node) { cards.push({ node: node, product: d.sec.product, told: told }); }
     });
@@ -985,6 +1147,7 @@
     // one card: the heading names its product — not over a day (it is the person's) or over words that only explain
     sec = railSection(title, side, chips && title && cards.length === 1 && b.block !== "day" && !cards[0].told ? cards[0].product : null, view, cls);
     sec.appendChild(body);
+    if (wants && !inBand) { sec.appendChild(sayButton(b.ask)); }
     return [sec];
   }
   // The blocks that share a `group` -> one section per product: its heading (the document's own `heading`, else the first
@@ -1031,7 +1194,7 @@
     return out;
   }
   function renderRail(m, snap, view) {
-    var panel = el("div", "gpm-module gpm-module-rail" + (m.home ? " gpm-module-home" : ""));
+    var panel = el("div", "gpm-module gpm-module-rail" + (m.home ? " gpm-module-home" : "") + (m.foot ? " gpm-module-foot" : "") + (m.under ? " gpm-module-under" : ""));
     var split = m.blocks.some(function (b) { return b.aside; });
     var main = split ? el("div", "gpm-col-main") : panel, aside = split ? el("aside", "gpm-col-aside") : null;
     var chips = snap.meta.products.length > 1 && view.filter === "";
@@ -1047,33 +1210,77 @@
       if (u.first && u.blocks[0].block === "lead" && nodes.length) { leads = true; }
     });
     if (!shown) { main.appendChild(el("p", "gpm-empty", S.t.empty)); }
+    // the screens that stand under this module: a row each, opened by a click
+    var hooks = view.hooks || {};
+    var kids = (view.modules || []).filter(function (x) { return x.under === m.id; });
+    if (kids.length && typeof hooks.open === "function") {
+      var more = railSection(S.t.more, "", null, view, "gpm-block-more");
+      var ul = el("ul", "gpm-list");
+      kids.forEach(function (k) {
+        var li = el("li", "gpm-item gpm-more-row");
+        var go = el("button", "gpm-more-link", screenHeading(k, snap, view) || k.title);
+        go.type = "button";
+        go.setAttribute("data-open", k.id);
+        go.addEventListener("click", function () { hooks.open(k.id); });
+        li.appendChild(go);
+        ul.appendChild(li);
+      });
+      more.appendChild(ul);
+      main.appendChild(more);
+    }
     if (split) {
       panel.classList.add("gpm-module-split");
       panel.appendChild(main);
       panel.appendChild(aside);
     }
     var box = el("div", "gpm-module-box");
-    box.appendChild(el("h2", "gpm-module-title" + (m.home && leads ? " gpm-vh" : ""), m.title));
+    if (m.under && typeof hooks.open === "function") {
+      var parent = (view.modules || []).filter(function (x) { return x.id === m.under; })[0];
+      var back = el("button", "gpm-back", m.back || S.t.backTo + (parent ? parent.title : ""));
+      back.type = "button";
+      back.setAttribute("data-open", m.under);
+      back.addEventListener("click", function () { hooks.open(m.under); });
+      box.appendChild(back);
+    }
+    box.appendChild(el("h2", "gpm-module-title" + (m.home && leads ? " gpm-vh" : ""), (m.under && screenHeading(m, snap, view)) || m.title));
     box.appendChild(panel);
     return box;
+  }
+  // what a screen under a module shows: the `heading` of the first document of its first block, when it has one
+  function screenHeading(m, snap, view) {
+    var b = m.blocks[0];
+    if (!b || b.bad || SOURCES[b.source]) { return ""; }
+    var docs = visibleDocs(snap, b.source, view);
+    for (var i = 0; i < docs.length; i++) { var h = str(docs[i].sec.data.heading, TITLE_MAX); if (h) { return h; } }
+    return "";
   }
 
   // renderModules(profile, config, data, product, active) -> {modules, active, tabs, panel}: the tabs and the panel of the
   // open module as elements; `product` is "" for «Усі» or one product id. Tab clicks are wired by the part below.
-  function renderModules(profile, config, data, product, active, lang) {
+  function renderModules(profile, config, data, product, active, lang, hooks) {
     var mods = moduleList(profile, config, lang);
     railMode = profile.layout === "rail";
+    // a tab: every module but the screens under another one and, in the rail, the module of its foot
+    var tabs = mods.filter(function (m) { return !m.under && !(railMode && m.foot); });
     var open = null;
     mods.forEach(function (m) { if (m.id === active) { open = m; } });
-    if (!open) { open = mods.filter(function (m) { return m.home; })[0] || mods[0] || null; }
+    // a screen under a module is reached only through that module (the rail draws the way)
+    if (open && open.under && !(railMode && tabs.some(function (m) { return m.id === open.under; }))) { open = null; }
+    if (!open) { open = tabs.filter(function (m) { return m.home; })[0] || tabs[0] || null; }
     var meta = data.meta;
-    var view = {
-      meta: meta, filter: product, modules: mods, snap: data,
-      chip: function (id) { return meta.products.length ? productChip(id, meta) : document.createTextNode(""); },
-      shows: function (id) { return product === "" || groupKey(meta, id) === product; }
-    };
-    return { modules: mods, active: open ? open.id : null, view: view,
-      panel: !open ? null : profile.layout === "rail" ? renderRail(open, data, view) : renderModule(open, data, view, false) };
+    function viewOf(filter) {
+      return {
+        meta: meta, filter: filter, modules: mods, snap: data, hooks: hooks || {}, switches: mods.switches,
+        chip: function (id) { return meta.products.length ? productChip(id, meta) : document.createTextNode(""); },
+        shows: function (id) { return filter === "" || groupKey(meta, id) === filter; }
+      };
+    }
+    var view = viewOf(product);
+    // the foot module is about the app, not about a product: it shows every product whatever the switch says
+    var shown = open && open.foot && railMode ? viewOf("") : view;
+    return { modules: mods, tabs: tabs, active: open ? open.id : null, selected: open ? open.under || open.id : null, view: view,
+      foot: railMode ? mods.filter(function (m) { return m.foot; })[0] || null : null,
+      panel: !open ? null : profile.layout === "rail" ? renderRail(open, data, shown) : renderModule(open, data, shown, false) };
   }
   S.renderModules = renderModules;
 
@@ -1085,7 +1292,43 @@
     var page = document.querySelector(".gpm-page");
     if (!root) { return; }
     var config = null, active = stored(STORE_TAB), product = null, switchEl = null;
-    var rail = profile.layout === "rail", navEl = null, dayEl = null;
+    var rail = profile.layout === "rail", navEl = null, dayEl = null, footEl = null, footLink = null;
+    var ownTheme = hasThemeBlock(profile), refresh = askOf(profile.refresh, ctx.lang);
+    var refreshNote = isObj(profile.refresh) && typeof profile.refresh.source === "string" && SECTION.test(profile.refresh.source) ? profile.refresh.source : null;
+    // the switches of the modules write the owner's config/app: {v, modules: [{id, on, order?}], custom} — the rules as
+    // they were with one of them changed, the custom modules as they were read
+    var dbRef = null, hooks = { canWrite: null, saving: false, note: "", setModule: setModule, open: openScreen };
+    function setModule(id, on) {
+      if (!dbRef || hooks.saving || hooks.canWrite === false || !MODULE_ID.test(id)) { return; }
+      var rules = [], found = false;
+      (config ? config.modules : []).forEach(function (r) {
+        var rule = { id: r.id, on: r.id === id ? on === true : r.on };
+        if (r.order !== null) { rule.order = r.order; }
+        if (r.id === id) { found = true; }
+        rules.push(rule);
+      });
+      if (!found) { rules.push({ id: id, on: on === true }); }
+      var doc = { v: 1, modules: rules.slice(0, MAX_RULES), custom: config ? config.rawCustom : [] };
+      hooks.saving = true;
+      hooks.note = "";
+      safePaint();
+      Promise.resolve().then(function () { return dbRef.collection("config").doc("app").set(doc); }).then(function () {
+        hooks.saving = false;
+        config = cleanConfig(doc) || config;
+        safePaint();
+      }, function (e) {
+        hooks.saving = false;
+        // the database refuses a write below the rule's level the same way as a malformed one: the switches turn read-only
+        if (e && e.code === "invalid_argument") { hooks.canWrite = false; hooks.note = ctx.t.ownerOnly; }
+        else { hooks.note = ctx.t.notSaved; }
+        safePaint();
+      });
+    }
+    function openScreen(id) {
+      pickTab(id);
+      var h = root.querySelector(".gpm-module-title");
+      if (h) { h.tabIndex = -1; try { h.focus(); } catch (e) { /* nothing to focus */ } }
+    }
 
     var shownTab = null;
     S.view = function () { return { product: product || "", tab: shownTab }; };
@@ -1096,6 +1339,11 @@
       document.documentElement.classList.remove(RAIL);
       if (navEl && navEl.parentNode) { navEl.parentNode.removeChild(navEl); }
       if (dayEl && dayEl.parentNode) { dayEl.parentNode.removeChild(dayEl); }
+      if (footEl && footEl.parentNode) {
+        var line = footEl.querySelector(".gpm-fresh");
+        if (line) { footEl.parentNode.insertBefore(line, footEl); }       // the date's line goes back where the shell put it
+        footEl.parentNode.removeChild(footEl);
+      }
       navEl = null;
       dayEl = null;
       shownTab = null;
@@ -1116,16 +1364,22 @@
       var focus = document.activeElement && root.contains(document.activeElement) || (switchEl && switchEl.contains(document.activeElement))
         || (navEl && navEl.contains(document.activeElement)) ? document.activeElement : null;
       var focusKey = focus ? (focus.getAttribute("data-tab") !== null ? "tab:" + focus.getAttribute("data-tab")
-        : focus.getAttribute("data-product") !== null ? "product:" + focus.getAttribute("data-product") : null) : null;
+        : focus.getAttribute("data-product") !== null ? "product:" + focus.getAttribute("data-product")
+        : focus.getAttribute("data-module") !== null ? "module:" + focus.getAttribute("data-module") : null) : null;
       if (product === null) { product = stored(STORE_PRODUCT) || ""; }
       if (product !== "" && productIndex(snap.meta, product) < 0) { product = ""; }
-      var r = renderModules(profile, config, snap, product, active, ctx.lang);
+      var r = renderModules(profile, config, snap, product, active, ctx.lang, hooks);
+      // the theme switch of a profile that shows it in a block (`@theme`) leaves the header: it stands in that block only
+      if (ownTheme) {
+        var inHeader = ctx.header.querySelector(".gpm-theme");
+        if (inHeader) { themeEl = inHeader; inHeader.parentNode.removeChild(inHeader); }
+      }
 
       var tabs = el("div", "gpm-tabs");
       tabs.setAttribute("role", "tablist");
       tabs.setAttribute("aria-label", ctx.t.modules);
       if (rail) { tabs.setAttribute("aria-orientation", "vertical"); }
-      r.modules.forEach(function (m) {
+      r.tabs.forEach(function (m) {
         var b = el("button", "gpm-tab", rail ? null : m.title);
         if (rail) {         // the rail's entry: the module, and how many of its rows ask for attention
           b.appendChild(el("span", "gpm-tab-title", m.title));
@@ -1152,15 +1406,15 @@
         b.id = "gpm-tab-" + m.id;
         b.setAttribute("role", "tab");
         b.setAttribute("data-tab", m.id);
-        b.setAttribute("aria-selected", m.id === r.active ? "true" : "false");
+        b.setAttribute("aria-selected", m.id === r.selected ? "true" : "false");
         b.setAttribute("aria-controls", "gpm-panel");
-        b.tabIndex = m.id === r.active ? 0 : -1;
+        b.tabIndex = m.id === r.selected || (r.foot && r.selected === r.foot.id && m === r.tabs[0]) ? 0 : -1;
         b.addEventListener("click", function () { pickTab(m.id); });
         tabs.appendChild(b);
       });
       tabs.addEventListener("keydown", function (e) {
-        var ids = r.modules.map(function (m) { return m.id; });
-        var at = ids.indexOf(r.active), to = -1;
+        var ids = r.tabs.map(function (m) { return m.id; });
+        var at = Math.max(ids.indexOf(r.selected), 0), to = -1;
         if (e.key === "ArrowRight" || (rail && e.key === "ArrowDown")) { to = (at + 1) % ids.length; }
         else if (e.key === "ArrowLeft" || (rail && e.key === "ArrowUp")) { to = (at - 1 + ids.length) % ids.length; }
         else if (e.key === "Home") { to = 0; }
@@ -1171,7 +1425,7 @@
       var body = el("div", "gpm-panel");
       body.id = "gpm-panel";
       body.setAttribute("role", "tabpanel");
-      if (r.active) { body.setAttribute("aria-labelledby", "gpm-tab-" + r.active); }
+      if (r.selected) { body.setAttribute("aria-labelledby", r.foot && r.selected === r.foot.id ? "gpm-foot-link" : "gpm-tab-" + r.selected); }
       body.appendChild(r.panel || el("p", "gpm-empty", ctx.t.noModules));
 
       while (root.firstChild) { root.removeChild(root.firstChild); }
@@ -1198,8 +1452,29 @@
         var day = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(snap.meta.made) ? new Date(snap.meta.made) : null;
         if (fresh && made && day && !isNaN(day.getTime())) {
           var clock = two(day.getHours()) + ":" + two(day.getMinutes());
-          fresh.textContent = ctx.t.dataFrom + (made === clock ? clock : made + ", " + clock) + ".";
+          // the run's own sentence on when the next data comes (the section the profile's `refresh` names), every product's
+          var next = refreshNote ? uniq(docsOf(snap, refreshNote).map(function (d) { return str(d.sec.data.text, 200); })).join(" ") : "";
+          fresh.textContent = ctx.t.dataFrom + (made === clock ? clock : made + ", " + clock) + "." + (next ? " " + next : "");
         }
+        // the foot of the rail: the ask for fresh data, then the foot module (the settings). Built once, so a line the
+        // button has said stays through a repaint.
+        if (!footEl) {
+          footEl = el("div", "gpm-foot");
+          if (refresh) { footEl.appendChild(sayButton(refresh, "gpm-ask-refresh")); }
+          footLink = el("button", "gpm-foot-link");
+          footLink.type = "button";
+          footLink.id = "gpm-foot-link";
+          footLink.addEventListener("click", function () { var to = footLink.getAttribute("data-tab"); if (to) { pickTab(to); } });
+          footEl.appendChild(footLink);
+        }
+        footLink.hidden = !r.foot;
+        if (r.foot) {
+          footLink.textContent = r.foot.title;
+          footLink.setAttribute("data-tab", r.foot.id);
+          if (r.selected === r.foot.id) { footLink.setAttribute("aria-current", "page"); } else { footLink.removeAttribute("aria-current"); }
+        }
+        if (footEl.parentNode !== ctx.header) { ctx.header.insertBefore(footEl, ctx.actions); }
+        if (fresh && fresh.parentNode !== footEl) { footEl.insertBefore(fresh, footEl.firstChild); }
       }
       root.hidden = false;
       if (page) { page.hidden = true; }
@@ -1210,8 +1485,9 @@
       viewChanged();
       function refocus() {
         if (!focusKey) { return; }
-        var sel = focusKey.indexOf("tab:") === 0 ? '[data-tab="' + focusKey.slice(4) + '"]' : '[data-product="' + focusKey.slice(8) + '"]';
-        var scope = focusKey.indexOf("tab:") === 0 ? (navEl || root) : switchEl;
+        var sel = focusKey.indexOf("tab:") === 0 ? '[data-tab="' + focusKey.slice(4) + '"]'
+          : focusKey.indexOf("module:") === 0 ? '[data-module="' + focusKey.slice(7) + '"]' : '[data-product="' + focusKey.slice(8) + '"]';
+        var scope = focusKey.indexOf("tab:") === 0 ? (navEl || root) : focusKey.indexOf("module:") === 0 ? root : switchEl;
         var node = scope ? scope.querySelector(sel) : null;
         if (node) { try { node.focus(); } catch (e) { /* nothing to focus */ } }
       }
@@ -1222,8 +1498,15 @@
     }
     ctx.onData(safePaint);
     safePaint();
+    // who may turn a module on or off: the owner. What the platform does not say stays open, and a refused write closes it.
+    Promise.resolve().then(function () {
+      return window.claude && typeof window.claude.use === "function" ? window.claude.use("user") : null;
+    }).then(function (u) { return u && typeof u.isOwner === "function" ? u.isOwner() : null; }).then(function (own) {
+      if (own === false) { hooks.canWrite = false; hooks.note = ctx.t.ownerOnly; safePaint(); }
+    }, function () { /* nothing known: the switches stay as they are */ });
     return ctx.db().then(function (db) {
-      return readConfig(db, function (c) { config = c; safePaint(); });
+      dbRef = db && typeof db.collection === "function" ? db : null;
+      return readConfig(db, function (c) { if (!hooks.saving) { config = c; safePaint(); } });
     }).then(function (c) { config = c; safePaint(); });
   });
 })();

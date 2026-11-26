@@ -1090,10 +1090,10 @@ const fakeDesktop = `
 PIN_PAGE = ('<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>App</title></head><body><p>Дані застосунку '
             'завантажуються з бази артефакту, коли його відкриває людина, що увійшла в обліковий запис.</p></body></html>')
 PIN = {
-    ("cjm", "uk"): "4bf3678684908b67252152490b13796151333760a05f07a5024008b98d5494aa",
-    ("cjm", "en"): "24f988414b448354a69b3051144808ef4c1ba26775888af69eed5e0563f3a2fc",
-    ("pm-os", "uk"): "70daf0dd6abacd05349575f92b3cf44a18b7ca2b73a113802e323475a9a03e03",
-    ("pm-os", "en"): "6ac2f41a9c5d4968cdce83a0712a3643904720b44125549f3460fad54b55c17f",
+    ("cjm", "uk"): "dbd4384eb659c27fc1a2849761786ff4dbe6c4566719222ad854ebac2d2437d5",
+    ("cjm", "en"): "3d36e05b25717c7ee657051b571ec16d3528dda5befe204dcd09b784a60b10c8",
+    ("pm-os", "uk"): "d62ee0263951e29c3f595c06788708b16f5e511a9a7c725e3b960d9fc25bd238",
+    ("pm-os", "en"): "7a8fa9794ca4f258a88f6ff4f12ad34c02c683ca9065443147feb28602e81ff1",
 }
 PIN_WHAT = ("the shell or the profile changed: raise `SHELL_VERSION` (every installed app is offered a new page and asks its "
             "permissions again) or, when no published app needs the new page, update this hash on purpose "
