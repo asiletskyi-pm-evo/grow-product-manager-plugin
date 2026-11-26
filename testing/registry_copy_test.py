@@ -44,6 +44,7 @@ with tempfile.TemporaryDirectory() as d:
     write(d, "scripts/run.sh", "#!/bin/sh\necho hi\n", exe=True)
     write(d, "docs/notes.md", "design notes\n")
     write(d, ".github/workflows/ci.yml", "on: push\n")
+    write(d, ".gitlab-ci.yml", "mirror-sync:\n  script: [\"true\"]\n")
     write(d, "README.md", "# Demo\n")
     write(d, "CLAUDE.md", "working on the repository\n")
     write(d, "REVIEW.md", "review instructions\n")
@@ -63,6 +64,7 @@ with tempfile.TemporaryDirectory() as d:
           and ".claude-plugin/marketplace.json" not in have, sorted(have))
     check("the root's CLAUDE.md and REVIEW.md stay out, a file of that name deeper is kept",
           "CLAUDE.md" not in have and "REVIEW.md" not in have and "skills/hello/REVIEW.md" in have, sorted(have))
+    check("the mirror's own CI file stays out", ".gitlab-ci.yml" not in have, sorted(have))
     cur = json.load(open(os.path.join(copy, ".cursor-plugin/plugin.json")))
     check("a Cursor manifest is derived from plugin.json",
           cur.get("name") == "demo" and cur.get("version") == "1.0.0" and cur.get("skills") == "./skills/", cur)
