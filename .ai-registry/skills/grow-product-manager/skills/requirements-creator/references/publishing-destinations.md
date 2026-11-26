@@ -46,7 +46,7 @@ Use Confluence-native elements:
 - **Panels** where appropriate
 - **Bold**, headings H1/H2/H3, tables
 
-Publish via Confluence MCP (`createConfluencePage`). If unavailable — follow integration fallback chain.
+Publish via Confluence MCP (`createConfluenceContent`, `contentType: "page"`, the space's numeric `spaceId` — `references/integration-strategy.md` 1c). If unavailable — follow integration fallback chain.
 
 **6e. Publishing to Notion:**
 

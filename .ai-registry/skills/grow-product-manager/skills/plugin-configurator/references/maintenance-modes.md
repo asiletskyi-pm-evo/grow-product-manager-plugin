@@ -202,7 +202,7 @@ Present current sections as options via AskUserQuestion:
 - Design Toolkits (external hi-fi/screen-generation providers)
 - Custom Sections
 - Add new custom section
-- Review stale records (since v3.12.0; shown when the digest's `context:` line counts stale records) — run `python3 "<plugin root>/scripts/ctx.py" status` for the list; for each stale record show its title and a two-line summary and ask: still true → `ctx verify <id>`; needs a change → edit it as in U-3, then `ctx sync`; no longer current → `ctx invalidate <id> --reason "…"`; history only → `ctx archive <id>`. `ctx verify --stale` confirms all at once when the user says everything is still true
+- Review stale records (since v3.12.0; shown when the digest's `context:` line counts stale records) — run `python3 "<plugin root>/scripts/ctx.py" status` for the list; for each stale record show its title and a two-line summary and ask: still true → `ctx verify <id>`; needs a change → edit it as in U-3, then `ctx sync`; no longer current → `ctx invalidate <id> --reason '…'`; history only → `ctx archive <id>`. `ctx verify --stale` confirms all at once when the user says everything is still true
 - Who reads custom sections (since v3.12.1; shown when the digest's `context:` line counts `custom unassigned`) — run `python3 "<plugin root>/scripts/ctx.py" status` for the list; for each unassigned record show its title and a two-line summary with a proposed assignment: `all` for rules that apply to any work (naming, disambiguation, data access), otherwise the 2–6 skills its content serves; one batch confirmation, then `ctx assign <id> all|<skill,skill>` for each. Each `all` adds the whole record to every skill's Step 0c — name the size when a record is large
 - Move my context to records (since v3.11.0; shown when SHELL is available and the digest has no `context:` line) — run `python3 "<plugin root>/scripts/ctx.py" migrate`, show its record list and the line `round trip: identical`, then on "yes" `ctx migrate --apply` (a snapshot comes first; `ctx undo` reverses it)
 
@@ -257,7 +257,7 @@ When user wants to manage Vault settings, offer these options via AskUserQuestio
 - Preserve all custom sections
 - Save to `~/.grow-pm/local-context.md` (always use persistent storage)
 - **Mirror to Obsidian Vault** (if configured): execute Vault Mirror Protocol (VM-1 through VM-3 from `references/persistent-storage.md`) — sync changed files to `{vault}/{plugin_folder}/_System/`
-- **Context store (since v3.11.0):** When the session digest shows a `context: records …` line — on a host without the digest (a Codex CLI whose plugin hooks are not trusted or not run): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` has written the vault mirror — skip the manual copy.
+- **Context store (since v3.11.0):** When the session digest shows a `context: records …` line — on a host without the digest (a Codex CLI whose plugin hooks are not trusted or not run): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason '<what was saved>'` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` has written the vault mirror — skip the manual copy.
 
 **Mandatory changelog — always present after ANY update:**
 
@@ -301,7 +301,7 @@ For each integration referenced in the context:
 | Integration | Test | Expected result |
 |-------------|------|-----------------|
 | **Jira** | `getJiraIssue` with a known project key | Project accessible |
-| **Confluence** | `getConfluenceSpaces` + check configured space exists | Space accessible |
+| **Confluence** | `listConfluenceSpaces` (`executeRead`, `keys`) + check configured space exists | Space accessible |
 | **Figma** | `whoami` | Account verified |
 | **Notion** | `notion-get-teams` | Workspace accessible |
 | **Tableau** | If Tableau MCP available: `search-content` (no terms, limit 1) returns metadata. Else navigate to dashboard URL via browser | Connector responds / page loads |
@@ -311,7 +311,7 @@ For each integration referenced in the context:
 
 For each product in the context:
 - Try to search Jira issues in the configured project: `searchJiraIssuesUsingJql` with `project = PROJECT_KEY ORDER BY created DESC` (limit 1)
-- Try to access the configured Confluence space: `getConfluenceSpaces` and verify the space key exists
+- Try to access the configured Confluence space: `listConfluenceSpaces` with `keys: [<the configured key>]` (`executeRead` on Atlassian MCP v2 — `references/integration-strategy.md` 1c) and verify the space key exists
 - If dashboard URLs are configured — try to navigate and take a screenshot to verify access
 - If CJM dashboards are configured — verify each stage dashboard is accessible
 

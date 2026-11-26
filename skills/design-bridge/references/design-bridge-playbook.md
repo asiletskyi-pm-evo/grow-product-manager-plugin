@@ -6,7 +6,7 @@
 
 Depending on **upstream**:
 
-**a. Confluence page** (`write-concept`, `requirements-creator`) — parse via `getConfluencePage`; extract:
+**a. Confluence page** (`write-concept`, `requirements-creator`) — parse via `getConfluenceContent` with `detail: "full"` (the default is an excerpt — `references/integration-strategy.md` 1c); extract:
 - `title`, `problem_statement`, `solution_summary`, `key_metrics`, `scope`, `phases`, `risks`, `ask`
 - any embedded diagram URLs → remap in Step 4c
 - `prototype_ref` (write-concept Step 8 after a build-first run, since v3.9.0): the Prototype IR is read from that prototype, and 5b edits it in place — no new prototype is drawn

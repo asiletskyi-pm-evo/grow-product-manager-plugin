@@ -256,6 +256,13 @@ def _q(s):
     return json.dumps(str(s), ensure_ascii=False)
 
 
+def _word(v, default):
+    """A manifest value written bare into a registration (since v4.11.1): one plain word — `vault/v1`, `org` — or the
+    default. A line break or a quote in a core's value would add keys of its own to your registration."""
+    v = str(v or "").strip()
+    return v if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9/._-]{0,63}", v) else default
+
+
 def registration(folder, m, model, ident, today, manifest_path="", search_only=False, exclude=None, connected_as=""):
     """The text of the registration of this kit (provider-registration/2): a local folder, `sync: off` (the daily sync
     is asked for once by context-connect), the owner's personal layer as `writable`. Since v4.4.0: `manifest_path` —
@@ -268,7 +275,7 @@ def registration(folder, m, model, ident, today, manifest_path="", search_only=F
     the title, `model` and `ident` are not read)."""
     folder = os.path.abspath(folder)
     lines = ["schema: provider-registration/2", "id: %s" % m.s("id"), "title: %s" % _q(m.s("title") or m.s("id")),
-             "kind: folder", "contract: %s" % (m.s("contract") or "vault/v1"), "authority: %s" % (m.s("authority") or "org"),
+             "kind: folder", "contract: %s" % _word(m.s("contract"), "vault/v1"), "authority: %s" % _word(m.s("authority"), "org"),
              "mode: snapshot", "access: local", "paths:", "  - %s" % _q(folder), "core_root: %s" % _q(folder)]
     if search_only:
         lines += ["blocks: none", "products: []", "writable: []"]

@@ -116,8 +116,8 @@
   provider sync [REPO] [--if-due] [--now ISO]
                                 the daily sync (since v3.14.0): the repositories whose registration says `sync: daily`
                                 (REPO names one of them; another is exit 3), each brought up to date with no question —
-                                yours kept on a ⚠ unless the core marks the block a rule, + added, more than one − held,
-                                ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
+                                yours kept on a ⚠, a core rule (⚠ ? ~) and a + held for your yes (since v4.11.1), more
+                                than one − held, ? left waiting, a text you rejected by undoing a pass held. --if-due first keeps only the
                                 repositories due — a day after their last successful check, an hour after a failed
                                 attempt — reading their block state alone (no lock, no network); none → only CTX_RESULT.
                                 The lock held by another session: nothing, at once (skipped: busy; a lock that cannot be
@@ -192,7 +192,8 @@
                                 skipped_dataless, download (with it, an index error too)
   search --q TEXT [--q TEXT …] [--skill S] [--product P] [--limit N] [--sources own,local,mcp] [--no-hints] [--json]
                                 (since v3.16.0; scripts/ctx_search.py) the first --q is the question, the others its
-                                variants: the section index (refreshed first, 30 s), the local indexes and the MCP of a
+                                variants (--q-stdin, since v4.11.1: more requests, one per line, from stdin — a name or a
+                                phrase from a note never stands in the command line): the section index (refreshed first, 30 s), the local indexes and the MCP of a
                                 repository with no folder on disk, every variant × source; RRF, the priors, one candidate per
                                 note (at most two sections), the best N (30). Lines: `Пошук: <n> варіант(и) · джерела: <ids> ·
                                 кандидатів <k>`, per candidate `N. <title> › <heading> · <sources> · <type> · <date>[ ·
@@ -234,8 +235,8 @@
                                 the line `секція коротка — додано наступні: <headings>`. Any form gives 20 000
                                 characters at most (since v3.16.1; --full: 60 000, for a note taken as «прямо»), then
                                 `нотатка довга — показано 20 000 знаків із <усього>; далі: <headings> — --get
-                                "<шлях>#<заголовок>" або --full (до 60 000)` (or `заголовків далі немає`; after --full
-                                the hint is `--get "<шлях>#<заголовок>" --full`); --full
+                                '<шлях>#<заголовок>' або --full (до 60 000)` (or `заголовків далі немає`; after --full
+                                the hint is `--get '<шлях>#<заголовок>' --full`); --full
                                 goes with --get alone (else exit 3). A file is read within the read
                                 budget, and one iCloud has not downloaded never: the text of a registered local index,
                                 after the line `файл не завантажено з iCloud — текст із локального індексу <id>`, else
@@ -272,7 +273,8 @@
                                 but the index. No golden set, one that does not read, nothing to search: exit 3. CTX_RESULT:
                                 n, recall50, recall50_q_only, mrr, by_class, empty_n, empty_top5_mean, rows, hints, golden
   entity <request…> [--kind K] [--skill S] [--slot SLOT …] [--json]    |    entity --q REQUEST [--q REQUEST …] …
-                                (since v3.18.0; scripts/ctx_entity.py) who someone or something is: the request is an
+                                (since v3.18.0; scripts/ctx_entity.py; --q-stdin since v4.11.1: the requests one per line
+                                from stdin, after any --q) who someone or something is: the request is an
                                 e-mail, a Jira key, a card's path or link, a name or an alias, else a card alike; --kind
                                 person|team|mission|module|metric|work keeps one kind; --q for a request that is a word of
                                 an action (`pairs`, `same`, `not-same`). The index refreshed first (30 s), then the
@@ -282,7 +284,7 @@
                                 to, the cards that may be the same, who links to it and the notes that carry a work
                                 entity's key (newest first, 20 at most) — a sensitive note as its title and path with
                                 ` · sensitive`, its field only for a People-contour --skill; never a note's text. Several:
-                                `<label> · <kind> — ctx entity "<path>"` (5 at most). A Jira key no card holds:
+                                `<label> · <kind> — ctx entity '<path>'` (5 at most; since v4.11.1 in single quotes). A Jira key no card holds:
                                 `<KEY> — картки немає, згадується в N нотатках:` when its prefix is one the cards name or
                                 a /browse/ link names it; else `Не знаю такої сутності: «…»` (`Поки не знаю «…» — індекс
                                 оновлюється: …` while the index has files to look at). Writes only the index. An unknown
@@ -2272,6 +2274,27 @@ def _search_type(a, c):
     return (0 if said else 5), res
 
 
+STDIN_Q_MAX = 64          # requests one --q-stdin reads at most
+
+
+def _stdin_q(a):
+    """`--q-stdin` (since v4.11.1): the requests, one per line, read from stdin and added after the --q given — a name, a
+    title or a phrase from a meeting or a note never has to stand in the command line, where a shell would read `$(…)`
+    or a backtick in it. Each line is a request as it is; empty lines are dropped. No stdin, or nothing on it: usage."""
+    if not getattr(a, "q_stdin", False):
+        return
+    try:
+        data = sys.stdin.read()
+    except (OSError, ValueError):
+        data = ""
+    lines = [ln.strip() for ln in data.splitlines() if ln.strip()]
+    if not lines:
+        raise Usage("--q-stdin reads the requests from stdin, one per line: nothing came")
+    if len(lines) > STDIN_Q_MAX:
+        raise Usage("--q-stdin takes %d requests at most (%d came)" % (STDIN_Q_MAX, len(lines)))
+    a.q = list(a.q or []) + lines
+
+
 def cmd_search(a, c):
     """`search`: the question and its variants through the section index, the local indexes and MCP
     (ctx_search.run), or `--get ID|PATH|NAME`: one section, or a whole note, with its line of provenance
@@ -2279,6 +2302,7 @@ def cmd_search(a, c):
     `<home>/.grow-pm/index/` (the index, last.json).
     `search remember|forget` (since v3.16.0) write the store's search memory (`_search_hint`); `search eval` measures
     the search on a golden set (`_search_eval`) and writes nothing but the index."""
+    _stdin_q(a)
     _search_options(a)
     if a.action in ("remember", "forget"):
         return _search_hint(a, c)
@@ -2386,6 +2410,7 @@ NO_STORE_APPLY = "немає сховища — мости не пишуться
 def cmd_entity(a, c):
     """`entity`: who someone or something is (ctx_entity.run), `entity pairs`, `entity same|not-same A B`
     (`_entity_answer`). Reads the index, a local index and `.state/entities.json`; no store lock but for an answer."""
+    _stdin_q(a)
     action, words = _entity_action(a)
     if a.kind and a.kind not in ce.KINDS:
         raise Usage("--kind takes %s" % ", ".join(ce.KINDS))
@@ -3041,7 +3066,9 @@ def cmd_provider_apply(a, c):
             c.import_first()
             for repo, f in fetched:
                 at = now()
-                hold = cb.held_rejected(cb.plan(c.store, c.copies, repo, f, at), choose, add)   # spec v3.14 §5.4: not again
+                p_ = cb.plan(c.store, c.copies, repo, f, at)
+                hold = cb.held_rejected(p_, choose, add)   # spec v3.14 §5.4: not again
+                hold += [b for b in cb.held_rules(p_, choose) if b not in hold]     # since v4.11.1: a changed rule on a yes
                 results.append(cb.apply(c.store, c.copies, c.home, repo, f, choose, add, at, hold=hold))
             card_note = _refresh_card(c)
     for k, res in enumerate(results):
@@ -3156,7 +3183,7 @@ def _no_slot(slot, cat=None):
         card = None
     if card:
         return ("%s is a slot of an entity's cards: the cascade of the cards decides it, not a record's binding or "
-                "preference — see it with: ctx entity \"<who>\" --slot %s" % (slot, slot))
+                "preference — see it with: ctx entity '<who>' --slot %s" % (slot, slot))
     return "no slot %r in the catalogue (references/context-slots.yaml)" % slot
 
 
@@ -3504,7 +3531,7 @@ def cmd_identity(a, c):
     if a.field not in cid.FIELDS:
         raise Usage("the field is team or role")
     if a.action == "take" and a.field == "team":
-        raise Usage("команду змінює context-connect: перезбери пакет з --team %s (connect-steps.md §3) — тут лише keep" % bundle["team"])
+        raise Usage("команду змінює context-connect: перезбери пакет з --team %s (connect-steps.md §3) — тут лише keep" % cc.shq(bundle["team"]))
     t = now()
     with co.lock(c.home):
         c.guard()
@@ -3686,9 +3713,14 @@ NO_STORE_INBOX = "немає сховища — скринька живе у с�
 
 
 def _deltas(a):
-    """The deltas of `propose`: each --delta (an object or a list), then --file's (the same)."""
+    """The deltas of `propose`: each --delta (an object or a list), then --file's (the same). `--file -` reads them from
+    stdin (since v4.11.1): a delta carries text from notes, pages and meetings, which never goes into a shell command line."""
     out = []
-    for raw in list(a.delta or []) + ([co._read(a.file)] if a.file else []):
+    if a.file == "-":
+        raw_in = sys.stdin.read()
+        if not raw_in.strip():
+            raise Usage("propose --file - reads the deltas from stdin, and stdin is empty")
+    for raw in list(a.delta or []) + ([raw_in if a.file == "-" else co._read(a.file)] if a.file else []):
         try:
             v = json.loads(raw)
         except ValueError as e:
@@ -4147,6 +4179,7 @@ def build_parser():
     ip.add_parser("rebuild", parents=[common]).add_argument("--download", action="store_true")
     sp = sub.add_parser("search", parents=[common]); sp.add_argument("action", nargs="?", choices=SEARCH_ACTIONS)
     sp.add_argument("--q", action="append"); sp.add_argument("--get"); sp.add_argument("--full", action="store_true")
+    sp.add_argument("--q-stdin", dest="q_stdin", action="store_true")
     sp.add_argument("--skill"); sp.add_argument("--product"); sp.add_argument("--limit", type=int)
     sp.add_argument("--sources"); sp.add_argument("--no-hints", action="store_true"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--pick", action="append", metavar="ID|PATH")
@@ -4154,6 +4187,7 @@ def build_parser():
     sp.add_argument("--golden", metavar="PATH")
     sp.add_argument("--type", dest="type_", action="append", metavar="TYPE")
     sp = sub.add_parser("entity", parents=[common]); sp.add_argument("words", nargs="*"); sp.add_argument("--q", action="append")
+    sp.add_argument("--q-stdin", dest="q_stdin", action="store_true")
     sp.add_argument("--slot", action="append")
     sp.add_argument("--kind"); sp.add_argument("--skill"); sp.add_argument("--json", action="store_true")
     sp.add_argument("--apply", action="store_true"); sp.add_argument("--code")

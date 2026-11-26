@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.15.2
+version: 0.15.4
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «розбий вимоги на задачі». EN — "break this spec into Jira tasks".
 ---
 
@@ -29,7 +29,7 @@ Key context used by this skill:
 - `product.jira_project_key` — for finding Epics and creating tasks
 - `user.jira_account_id` — for setting Reporter on tasks
 - `team.jira_team_id` — for setting Team field
-- `team.members` — for discovering assignees and roles: one line per person since v3.19.0 (`ctx read`; a named assignee is found by `references/people-context-protocol.md` → Find a person — `ctx entity "<e-mail or name>" --kind person --skill task-creator --slot person.role`; several → ask)
+- `team.members` — for discovering assignees and roles: one line per person since v3.19.0 (`ctx read`; a named assignee is found by `references/people-context-protocol.md` → Find a person — `ctx entity --q-stdin --kind person --skill task-creator --slot person.role` (`<e-mail or name>` on stdin, one per line — `references/search-protocol.md` §3a); several → ask)
 - `product.confluence_space` — for Confluence page links
 - `user.language` — for output language
 
@@ -71,7 +71,7 @@ If the user says "do not use a template" → skip Step T and use the skill's int
 
 When the user provides a Confluence link:
 
-1. Resolve the page — try `getConfluencePage`, or `search` / `searchConfluenceUsingCql` to find it
+1. Resolve the page — try `getConfluenceContent` with `detail: "full"` (the default is an excerpt — `references/integration-strategy.md` 1c), or `search` / `searchConfluence` to find it
 2. Extract from the page:
    - **Feature name** — from the page title (after the code prefix, e.g. "Feature Name Description" from "PROJ-1234.5 - Feature Name Description")
    - **Feature code** — the code in the page title (e.g. `PROJ-1234.5`). Pattern: `EPICKEY-NUMBER.NUMBER`
@@ -98,7 +98,7 @@ If Jira MCP is unavailable — follow integration fallback chain.
 
 Look up the user's Jira account. The user should be set as **Reporter** on all created tasks. Their `accountId` is needed. You can find it from:
 - The Epic's assignee (if it's the same user)
-- `lookupJiraAccountId` by their email
+- `lookupJiraAccountId` by their email (`executeRead` on Atlassian MCP v2)
 - Asking the user directly if needed
 
 ### Step 4: Ask Clarifying Questions
@@ -138,14 +138,14 @@ The Components field should match the Labels from the Confluence page. Since Con
 
 Before creating tasks, fetch project metadata to ensure correct field values:
 
-1. **Issue Types** — use `getJiraProjectIssueTypesMetadata` to find:
+1. **Issue Types** — use `listJiraProjectIssueTypesMetadata` (`executeRead` — `references/integration-strategy.md` 1c) to find:
    - Does the project have a "Design" issue type? If yes, use it for Design tasks
    - Does the project have an "Analytics" issue type? If yes, use it for Analytics tasks
    - Does the project have a "QA" issue type? If yes, use it for QA tasks (since v3.9.0)
    - Otherwise, use "Task" for everything
 
 2. **Team field** — find the custom field ID for Team (usually `customfield_10001`):
-   - Use `getJiraIssueTypeMetaWithFields` to find the field
+   - Use `getJiraIssueTypeMetaWithFields` (`executeRead`, the type's `issueTypeId`, `requiredFieldsOnly: false`) to find the field
    - Look at an existing task in the Epic to find the Team value/ID format
    - The Team field often requires a string ID (not an object) — a UUID with a numeric suffix, e.g. `"<team-uuid>-NN"`; take the value from local-context (`product.jira_team_id`) or from an existing task in the Epic
 
@@ -349,7 +349,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.2", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.4", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -370,6 +370,7 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 - The Team field format varies by Jira instance — check an existing task to find the correct format
 - Feature code goes into Labels, not into the task title prefix
 - Use `contentFormat: "markdown"` when creating tasks with description
+- On Atlassian MCP v2 `createJiraIssue` takes `issueType` (not `issueTypeName`) and `assignee` (not `assignee_account_id`); `editJiraIssue` replaces labels and components, so send the whole list; read the Team field of an existing task with `view: "evidence"` (`references/integration-strategy.md` 1c)
 
 ## Additional Resources
 

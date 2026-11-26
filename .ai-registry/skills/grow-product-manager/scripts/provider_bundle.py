@@ -3,7 +3,7 @@
 core and propose its context blocks for the user's local-context.md (since v3.10.0).
 
   python3 provider_bundle.py --core <core root> --out <target> --email <e-mail>
-          [--manifest <path>] [--team <slug>] [--role <profile>] [--name "Name"]
+          [--manifest <path>] [--team <slug>] [--role <profile>] [--name '<Name>']
           [--existing-context <copy of local-context.md>] [--jira-write own|none|ask]
           [--skip-blocks <id,id>] [--proposal-dir <private folder>]
           [--propose-only] [--force] [--in-place] [--no-personal-overlay]
@@ -44,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import ctx_common as cc  # noqa: E402
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 N = lambda s: unicodedata.normalize("NFC", s or "")
 BUILTIN_TEMPLATES = os.path.join(HERE, "provider_templates")
 BUILTIN_EXCLUDE = [r"\.zip$", r"\.plugin$", r"\.tgz$", r"\.tar\.gz$", r"(^|/)__pycache__/", r"\.pyc$",
@@ -83,8 +83,92 @@ def rd(p, read=None):
         return f.read()
 
 
+# since 1.3.0 (v4.11.1): every path the core names stays inside the core, and every file the builder writes stays
+# inside --out (or --proposal-dir). The core is someone else's folder; its manifest and role model are data.
+WRITE_ROOTS = []        # set by main(): the folders the builder may write in; empty = a library caller, no writes made here
+PATH_KEYS = ("plugin_folder", "bundles_file", "blocks_file", "team_card_dir", "people_dir", "missions_dir", "pages_dir",
+             "templates_dir", "dashboard_file")
+
+
+def bad_rel(rel):
+    """Why `rel` is not a plain path inside a folder (absolute, `~`, a `..` part, a NUL), or "" when it is."""
+    r = N(str(rel or "")).strip()
+    if not r:
+        return ""
+    if "\0" in r:
+        return "NUL in the path"
+    if os.path.isabs(r) or r.startswith("~") or re.match(r"^[A-Za-z]:", r) or r.startswith("\\"):
+        return "an absolute path"
+    if ".." in re.split(r"[/\\]+", r):
+        return "a `..` part"
+    return ""
+
+
+def inside(base, rel):
+    """`base`/`rel` when it resolves (links followed) inside `base`, else None."""
+    if bad_rel(rel):
+        return None
+    root = os.path.realpath(base)
+    real = os.path.realpath(os.path.join(base, rel))
+    return os.path.join(base, rel) if os.path.commonpath([root, real]) == root else None
+
+
+def path_problem(m):
+    """The first manifest path that leaves the core, as "key: value (why)", or ""."""
+    for k in PATH_KEYS:
+        why = bad_rel(m.get(k))
+        if why:
+            return "%s: %r (%s)" % (k, m.get(k), why)
+    notes = m.get("personal_notes") or {}
+    if not isinstance(notes, dict):
+        return "personal_notes: not a mapping"
+    for k, v in notes.items():
+        why = bad_rel(v)
+        if why:
+            return "personal_notes.%s: %r (%s)" % (k, v, why)
+    return ""
+
+
+def role_model_problem(J):
+    """The first file or prefix of the role model that leaves the core, or "" (shared, always, teams.*.files,
+    layer_prefixes)."""
+    if not isinstance(J, dict):
+        return "the role model is not an object"
+    lists = [("shared", J.get("shared") or []), ("always", J.get("always") or [])]
+    lists += [("teams.%s.files" % t, (tb or {}).get("files") or []) for t, tb in (J.get("teams") or {}).items()]
+    lists += [("layer_prefixes.%s" % l, v or []) for l, v in (J.get("layer_prefixes") or {}).items()]
+    for key, items in lists:
+        for f in items if isinstance(items, list) else [items]:
+            why = bad_rel(f)
+            if why:
+                return "%s: %r (%s)" % (key, f, why)
+    return ""
+
+
+def safe_name(s):
+    """A person's name as one file-name part: no path separators, no leading dots."""
+    return re.sub(r"[/\\\0]+", "-", N(str(s or ""))).lstrip(".").strip() or "user"
+
+
+def guard(p):
+    """Refuse a write outside WRITE_ROOTS, or through a link (exit 3). No roots set: nothing to check."""
+    if not WRITE_ROOTS:
+        return
+    ap = os.path.abspath(p)
+    if os.path.islink(ap):
+        sys.stdout.write("refused: %s is a link — the builder never writes through one\n" % ap); sys.exit(3)
+    real = os.path.realpath(os.path.dirname(ap))
+    for r in WRITE_ROOTS:
+        rr = os.path.realpath(r)
+        if os.path.commonpath([rr, real]) == rr:
+            return
+    sys.stdout.write("refused: %s is outside the bundle folder (--out / --proposal-dir)\n" % ap); sys.exit(3)
+
+
 def wr(p, text):
+    guard(p)
     os.makedirs(os.path.dirname(p), exist_ok=True)
+    guard(p)
     with open(p, "w", encoding="utf-8") as f:
         f.write(N(text))
 
@@ -177,6 +261,9 @@ def read_manifest(core, path=None, read=None):
             root, real = os.path.realpath(core), os.path.realpath(p)
             if os.path.commonpath([root, real]) == root:     # since 1.2.1 (v4.4.0): only a manifest inside the core
                 m["_path"] = os.path.relpath(real, root)      # is one of its files; an outside one is read, never copied
+            bad = path_problem(m)                             # since 1.3.0 (v4.11.1): fail closed for every caller
+            if bad:
+                return None, "provider manifest %s: a path leaves the core — %s" % (p, bad)
             return with_defaults(m), None
     return None, "no provider manifest under %s (expected _System/provider-manifest.yaml)" % core
 
@@ -210,7 +297,7 @@ def check_patterns(m):
 
 def template(m, core, name, values, read=None):
     tdir = m.s("templates_dir")
-    p = os.path.join(core, tdir, name) if tdir else ""
+    p = inside(core, os.path.join(tdir, name)) if tdir else ""        # since 1.3.0: a link out of the core is no template
     text = rd(p, read) if p and os.path.isfile(p) else rd(os.path.join(BUILTIN_TEMPLATES, name), read)
     for k, v in values.items():
         text = text.replace("{{%s}}" % k, str(v))
@@ -274,16 +361,21 @@ def fix_dashboard(text, have, m, rx):
     return "\n".join(out)
 
 
-def copy_one(src, dst, rel, m):
-    """People cards keep registry fields only; everything else is copied as is."""
+def copy_one(src, dst, rel, m, core=None):
+    """People cards keep registry fields only; everything else is copied as is. Since 1.3.0 (v4.11.1) a source that
+    is a link, or resolves outside the core, is skipped (False), and the target is checked by `guard`."""
+    if os.path.islink(src) or (core and not inside(core, rel)):
+        sys.stdout.write("skipped: %s is a link or leaves the core\n" % rel); return False
+    guard(dst)
     os.makedirs(os.path.dirname(dst), exist_ok=True)
+    guard(dst)
     people = m.s("people_dir").rstrip("/") + "/"
     if rel.startswith(people) and not os.path.basename(rel).startswith("_") and rel.endswith(".md"):
         s = rd(src)
         note = m.s("people_card_note", "> Registry card from the shared core: registry fields only. "
                                        "Notes and history stay with the %s." % m.s("owner_label", "core owner"))
         if note in s:
-            shutil.copy2(src, dst); return
+            shutil.copy2(src, dst); return True
         mo = re.match(r"^---\n.*?\n---\n", s, re.S)
         front, body = (mo.group(0), s[mo.end():]) if mo else ("", s)
         for k in m.get("people_private_fields") or []:
@@ -292,6 +384,7 @@ def copy_one(src, dst, rel, m):
         wr(dst, front + head + "\n\n" + note + "\n")
     else:
         shutil.copy2(src, dst)
+    return True
 
 
 # --------------------------------------------------------- identity helpers
@@ -567,7 +660,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
     R = ns_rx(ns)
     sysd = os.path.abspath(proposal_dir) if proposal_dir else os.path.join(out, pf, "_System")
     cv = J.get("version", "?")
-    bpath = os.path.join(core, m.s("blocks_file")) if m.s("blocks_file") else ""
+    bpath = (inside(core, m.s("blocks_file")) or "") if m.s("blocks_file") else ""
     corectx = rd(bpath) if bpath and os.path.isfile(bpath) else ""
     skip = [s for s in skip if s and s != "team"]
     blocks = [(blk if blk.endswith("\n") else blk + "\n", bid) for blk, bid in R["block"].findall(corectx) if bid not in skip]
@@ -692,7 +785,7 @@ def build_context(core, out, m, J, ident, existing_path, today, jira_write, skip
     if bpath and os.path.isfile(bpath):
         dst = os.path.join(out, m.s("blocks_file"))
         if os.path.abspath(dst) != os.path.abspath(bpath):
-            os.makedirs(os.path.dirname(dst), exist_ok=True); shutil.copy2(bpath, dst)
+            guard(dst); os.makedirs(os.path.dirname(dst), exist_ok=True); guard(dst); shutil.copy2(bpath, dst)
     wr(os.path.join(sysd, "local-context.proposed.md"), proposed)
     wr(os.path.join(sysd, "provider-registration.proposed.yaml"),
        registration(core, out, m, ident, jira_write, skip, cv, today, rd(existing_path) if existing_path else ""))
@@ -756,6 +849,39 @@ def select_files(core, J, m, tb, layers, excluded):
     return sorted(N(f) for f in files if not excluded(f) and os.path.isfile(os.path.join(core, f)))
 
 
+def check_protocol(root):
+    """Validate check 32 (since v4.11.1): [problems]. (1) Every write of this script goes through `wr`, `copy_one`
+    or a `guard`ed copy — no other `open(..., "w")` and no unguarded `shutil.copy*`. (2) Every manifest key the script
+    reads as a folder or a file (`*_dir`, `*_file`, `plugin_folder`) is in PATH_KEYS, or is `tools_file` (confined
+    by `tools_file()`). (3) main() sets WRITE_ROOTS and checks the role model. (4) context-provider-protocol.md §3a has
+    its «Paths stay inside the core» paragraph."""
+    errs = []
+    me = os.path.join(root, "scripts", "provider_bundle.py")
+    code = open(me, encoding="utf-8").read() if os.path.isfile(me) else ""
+    lines, fn, start = code.splitlines(), "", 0
+    for i, line in enumerate(lines):
+        mo = re.match(r"def (\w+)\(", line)
+        if mo:
+            fn, start = mo.group(1), i
+        if fn == "check_protocol":
+            continue
+        if re.search(r"\bopen\([^)]*,\s*[\"'][wa]", line) and not lines[i - 1].strip().startswith("guard(p)"):
+            errs.append("scripts/provider_bundle.py:%d writes a file outside wr()" % (i + 1))
+        if "shutil.copy" in line and "guard(" not in line and not any("guard(" in l for l in lines[start:i]):
+            errs.append("scripts/provider_bundle.py:%d copies a file with no guard() before it in %s()" % (i + 1, fn))
+    used = set(re.findall(r'\bm\.s\("([a-z_]*(?:_dir|_file|_folder))"', code))
+    for k in sorted(used - set(PATH_KEYS) - {"tools_file"}):
+        errs.append("scripts/provider_bundle.py reads the path key %s, which PATH_KEYS does not confine" % k)
+    body = code.split("\ndef main():", 1)[-1]
+    if "WRITE_ROOTS[:] =" not in body or "role_model_problem(J)" not in body:
+        errs.append("scripts/provider_bundle.py main() does not set WRITE_ROOTS or check the role model")
+    proto = os.path.join(root, "references", "context-provider-protocol.md")
+    ptxt = open(proto, encoding="utf-8").read() if os.path.isfile(proto) else ""
+    if "**Paths stay inside the core** (since v4.11.1)" not in ptxt:
+        errs.append("references/context-provider-protocol.md §3a has no «**Paths stay inside the core** (since v4.11.1)» paragraph")
+    return errs
+
+
 def main():
     ap = argparse.ArgumentParser(description="Bundle builder for a shared-context provider (references/context-provider-protocol.md)")
     ap.add_argument("--core", required=True); ap.add_argument("--out", required=True); ap.add_argument("--email")
@@ -780,6 +906,7 @@ def main():
     if not m.get("id"):
         sys.stdout.write("provider manifest has no id\n"); sys.exit(3)
     check_patterns(m)
+    WRITE_ROOTS[:] = [out] + ([os.path.abspath(a.proposal_dir)] if a.proposal_dir else [])
     jp = os.path.join(core, m.s("bundles_file") or os.path.join(m.s("plugin_folder", "."), "_System", "access-bundles.json"))
     if not os.path.isfile(jp):
         sys.stdout.write("role model not found: %s\n" % jp); sys.exit(3)
@@ -787,6 +914,9 @@ def main():
         J = json.load(open(jp, encoding="utf-8"))
     except (ValueError, OSError) as e:
         sys.stdout.write("role model %s: %s\n" % (jp, e)); sys.exit(3)
+    bad = role_model_problem(J)
+    if bad:
+        sys.stdout.write("role model %s: a path leaves the core — %s (the core's owner must fix it)\n" % (jp, bad)); sys.exit(3)
     exc = re.compile("|".join(BUILTIN_EXCLUDE + [x for x in (m.get("exclude") or []) if x]))
     overlay = m.get("personal_overlay") or []
     excluded = lambda f: bool(exc.search(f)) or cc._writable(f, overlay)
@@ -817,7 +947,7 @@ def main():
             dst = os.path.join(out, f)
             if os.path.exists(dst) and not a.force:
                 continue
-            copy_one(os.path.join(core, f), dst, f, m); n += 1
+            n += bool(copy_one(os.path.join(core, f), dst, f, m, core))
         for f in files:
             if f.startswith(pf.rstrip("/") + "/") and f.endswith(".md") and f != m.s("dashboard_file"):
                 fp = os.path.join(out, f); t = rd(fp); t2 = delink(t, m, rx)
@@ -866,6 +996,12 @@ def main():
              [os.path.join(out, pf, "_System", "local-context.existing.md")]
     existing = a.existing_context or next((c for c in copies if os.path.isfile(c)), None)
     in_place = a.in_place or out == core
+    if in_place and not a.proposal_dir:
+        # since 1.3.0 (v4.11.1): in place the target is the core, which may sync back to others — the proposal and the
+        # report hold your whole context, so by default they go to your own folder, never into the core
+        a.proposal_dir = os.path.join(os.path.expanduser("~"), ".grow-pm", "proposals", safe_name(m["id"]))
+        WRITE_ROOTS.append(os.path.abspath(a.proposal_dir))
+        print("proposal → %s (in place: never into the core)" % a.proposal_dir)
     skip = [s.strip() for s in a.skip_blocks.split(",") if s.strip()]
     if a.propose_only:
         people_word = os.path.basename(people_pre.rstrip("/")) or "People"
@@ -887,10 +1023,13 @@ def main():
             dst = os.path.join(out, f)
             if os.path.exists(dst) and not a.force:
                 n_skip += 1; continue
-            copy_one(os.path.join(core, f), dst, f, m); n_new += 1
+            n_new += bool(copy_one(os.path.join(core, f), dst, f, m, core))
     notes = m.get("personal_notes") or {}
     now_rel = notes.get("now") or os.path.join(pf, "Now.md")
-    todo_rel = (notes.get("todo") or os.path.join(pf, "TODO — {{NAME}}.md")).replace("{{NAME}}", name)
+    todo_rel = (notes.get("todo") or os.path.join(pf, "TODO — {{NAME}}.md")).replace("{{NAME}}", safe_name(name))
+    for rel in (now_rel, todo_rel):
+        if bad_rel(rel):
+            sys.stdout.write("personal_notes: %r leaves the bundle folder (%s)\n" % (rel, bad_rel(rel))); sys.exit(3)
     have = set()
     for f in files + [now_rel, todo_rel]:
         if f.endswith(".md"):
@@ -906,8 +1045,9 @@ def main():
         dp = os.path.join(out, m.s("dashboard_file")); wr(dp, fix_dashboard(rd(dp), have, m, rx))
     if not in_place:
         for f in (".obsidian/app.json", ".obsidian/appearance.json", ".obsidian/backlink.json", ".obsidian/core-plugins.json", ".obsidian/graph.json"):
-            if os.path.isfile(os.path.join(core, f)) and not os.path.exists(os.path.join(out, f)):
-                os.makedirs(os.path.join(out, ".obsidian"), exist_ok=True); shutil.copy2(os.path.join(core, f), os.path.join(out, f))
+            if os.path.isfile(os.path.join(core, f)) and not os.path.islink(os.path.join(core, f)) and not os.path.exists(os.path.join(out, f)):
+                guard(os.path.join(out, f)); os.makedirs(os.path.join(out, ".obsidian"), exist_ok=True)
+                guard(os.path.join(out, f)); shutil.copy2(os.path.join(core, f), os.path.join(out, f))
     report = build_context(core, out, m, J, ident, existing, today, a.jira_write, skip, a.proposal_dir)
     pbase = os.path.basename(m.s("people_dir").rstrip("/"))
     own = []

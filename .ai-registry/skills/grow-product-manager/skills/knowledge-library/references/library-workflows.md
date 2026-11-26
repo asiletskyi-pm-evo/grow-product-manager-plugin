@@ -112,7 +112,7 @@ If no results found:
 ### SC-1. Check Confluence MCP availability
 
 Follow `integration-strategy.md`:
-1. Check for Confluence MCP tools (`searchConfluenceUsingCql`, `getConfluencePage`)
+1. Check for Confluence MCP tools (`searchConfluence`, `getConfluenceContent` — read with `detail: "full"`)
 2. If not available → search MCP registry → suggest connector
 3. If still not available → browser fallback
 
@@ -137,7 +137,7 @@ If no spaces configured — search all accessible spaces, but warn user:
 
 ### SC-4. Extract insights
 
-For top results, read the page content (`getConfluencePage`) and extract:
+For top results, read the page content (`getConfluenceContent` with `detail: "full"` — the default is an excerpt, `references/integration-strategy.md` 1c) and extract:
 - Key findings relevant to the search query
 - Data points, metrics, experiment results
 - Dates (to assess freshness)

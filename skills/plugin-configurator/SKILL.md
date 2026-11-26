@@ -1,6 +1,6 @@
 ---
 name: plugin-configurator
-version: 2.17.2
+version: 2.17.4
 description: Configure the plugin and your Obsidian vault — organization, products, teams, data sources — validate or view the config. Not the typed /status or /config commands. UA — «налаштуй плагін», «підключи Obsidian-вейлт», «покажи мій конфіг», «статус плагіна», «змінити роль», «налаштуй тестові акаунти», «налаштуй карту конкурентів». EN — "set my role".
 ---
 
@@ -16,7 +16,7 @@ Supports multiple organizations, products, and projects simultaneously.
 
 | Reference | Contains |
 |-----------|----------|
-| `references/onboarding-steps.md` (skill-local) | Onboarding Steps 1–17 in full detail + Planning setup + Focus setup (Extended add-ons); since v3.19.0 a team's members and the People roster are proposed from `ctx entity "<team>" --slot team.members` and written only once you confirm them (`references/people-context-protocol.md` → Find a person) |
+| `references/onboarding-steps.md` (skill-local) | Onboarding Steps 1–17 in full detail + Planning setup + Focus setup (Extended add-ons); since v3.19.0 a team's members and the People roster are proposed from `ctx entity --q-stdin --slot team.members` (`<team>` on stdin, one per line — `references/search-protocol.md` §3a) and written only once you confirm them (`references/people-context-protocol.md` → Find a person) |
 | `references/maintenance-modes.md` (skill-local) | Reinstall/Migration (RM-0..RM-6), Update (U-1..U-4), Validate (V-1..V-6), View (VW-1..VW-4), Versioning Protocol |
 | `references/test-mode.md` (root) | Test sandbox procedure (TM-0..TM-5) |
 
@@ -127,7 +127,7 @@ This applies equally to:
 - Plugin Configurator modes (Onboarding, Update, View)
 - Context Enrichment by other skills (Product Research adding competitors, etc.)
 
-**Context store (since v3.11.0, `references/context-protocol.md`; freshness and the record lifecycle since v3.12.0 — Validate counts stale, invalid and archived records, the Update item "Review stale records" confirms them; since v3.12.1 `ctx assign` sets who reads a custom section — the Update item "Who reads custom sections"; since v3.15.0 Validate also shows the slot package — divergences between repositories and unconfirmed bindings, the same as `context-connect` on a refresh).** After every save of `local-context.md` in any mode: When the session digest shows a `context: records …` line — on a host without the digest (a Codex CLI whose plugin hooks are not trusted or not run): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason "<what was saved>"` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` writes the vault mirror itself — skip the manual mirror copy. Moving a single-file context into records is the Update item "Move my context to records" and the one-time offer at the end of onboarding (Step 16).
+**Context store (since v3.11.0, `references/context-protocol.md`; freshness and the record lifecycle since v3.12.0 — Validate counts stale, invalid and archived records, the Update item "Review stale records" confirms them; since v3.12.1 `ctx assign` sets who reads a custom section — the Update item "Who reads custom sections"; since v3.15.0 Validate also shows the slot package — divergences between repositories and unconfirmed bindings, the same as `context-connect` on a refresh).** After every save of `local-context.md` in any mode: When the session digest shows a `context: records …` line — on a host without the digest (a Codex CLI whose plugin hooks are not trusted or not run): when `{storage_root}/_System/context/.state/` exists — and SHELL is available, run `python3 "<plugin root>/scripts/ctx.py" sync --source configurator --reason '<what was saved>'` after saving `local-context.md`. Exit 2: show the two versions from `CTX_CONFLICT`, ask which to keep, re-run with `--resolve <id>=file|record`. No store or no shell: nothing more. With a store, `ctx` writes the vault mirror itself — skip the manual mirror copy. Moving a single-file context into records is the Update item "Move my context to records" and the one-time offer at the end of onboarding (Step 16).
 
 ---
 

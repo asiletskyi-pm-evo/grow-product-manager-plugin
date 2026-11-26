@@ -679,6 +679,20 @@ else
   ok "trusted endpoints: client_for is the one way to a client, the trust file outside every vault, §13 of context-provider-protocol.md is ctx_endpoints.py's"
 fi
 
+# --- 32. A core's paths stay inside the core (v4.11.1) ---------------------------
+# The audit of 2026-11-25: a core's manifest (dashboard_file, personal_notes) and role model named paths the bundle
+# builder wrote to outside --out. Since v4.11.1 every path key is confined (PATH_KEYS, role_model_problem), every write
+# goes through wr/copy_one/guard and main() sets WRITE_ROOTS; context-provider-protocol.md §3a says so. A new path key
+# read without confinement, or a write that skips the guard, would bring the finding back without a sound.
+PATHS_ERRS=$(python3 -c "import sys; sys.path.insert(0, 'scripts'); import provider_bundle; print('\n'.join(provider_bundle.check_protocol('.')))" 2>&1)
+if [ -n "$PATHS_ERRS" ]; then
+  while IFS= read -r line; do err "core paths: $line"; done <<EOF
+$PATHS_ERRS
+EOF
+else
+  ok "core paths: every path a core names stays inside it, every write of the bundle builder inside --out (§3a of context-provider-protocol.md)"
+fi
+
 # --- 10. Component counts in README ------------------------------------------
 # "33 skills, 3 agents, …" lives in README alone since v3.20.0: the manifests'
 # description is one sentence with no counts (check 1). Grep every count.

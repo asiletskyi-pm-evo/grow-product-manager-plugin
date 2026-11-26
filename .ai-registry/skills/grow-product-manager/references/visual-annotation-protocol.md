@@ -66,22 +66,22 @@ Annotated screenshots live **in the project repository/folder**, not in `~/.grow
 **1. Atlassian REST API via curl (primary).** Requires a configured API token — see Token setup below. The runtime (Claude Code / Cowork on the user's machine) has network access:
 
 ```bash
-# Confluence: attach to a page
-curl -sS -X POST \
-  -H "Authorization: Basic $(printf '%s:%s' "$ATLASSIAN_EMAIL" "$ATLASSIAN_API_TOKEN" | base64)" \
+# Confluence: attach to a page — the credentials go on stdin (`--config -`), never in the command line
+printf 'user = "%s:%s"\n' "$ATLASSIAN_EMAIL" "$ATLASSIAN_API_TOKEN" | curl -sS -X POST --config - \
   -H "X-Atlassian-Token: nocheck" \
   -F "file=@PROJ-1234.3-screen-1.png" \
   "https://{site}/wiki/rest/api/content/{pageId}/child/attachment"
 
-# Jira: attach to an issue
-curl -sS -X POST \
-  -H "Authorization: Basic $(printf '%s:%s' "$ATLASSIAN_EMAIL" "$ATLASSIAN_API_TOKEN" | base64)" \
+# Jira: attach to an issue — the credentials go on stdin (`--config -`), never in the command line
+printf 'user = "%s:%s"\n' "$ATLASSIAN_EMAIL" "$ATLASSIAN_API_TOKEN" | curl -sS -X POST --config - \
   -H "X-Atlassian-Token: nocheck" \
   -F "file=@PROJ-1234.3-screen-1.png" \
   "https://{site}/rest/api/3/issue/{issueKey}/attachments"
 ```
 
-After a successful Confluence upload, embed the image in the page body via `updateConfluencePage` using the attachment/media id **from the REST response** (media nodes only reference existing ids — never invent one). In Jira, reference the attachment by filename (`!PROJ-1234.3-screen-1.png!` in wiki-markup contexts) or leave it in the attachments panel with the legend in the description.
+Since v4.11.1 the token never stands in the command line, where the process list and the shell's history would show it: `curl --config -` reads `user = "email:token"` from stdin and sends it as Basic auth. A file name that came from a note goes through `-F "file=@<name>"` only when the plugin wrote that file itself in this run (`{feature-code}-screen-{N}.png`); any other value goes with `--form-string`.
+
+After a successful Confluence upload, embed the image in the page body via `updateConfluenceContent` (a fresh `snapshotToken` from `getConfluenceContent(draft: true, detail: "full")` — `integration-strategy.md` 1c) using the attachment/media id **from the REST response** (media nodes only reference existing ids — never invent one). In Jira, reference the attachment by filename (`!PROJ-1234.3-screen-1.png!` in wiki-markup contexts) or leave it in the attachments panel with the legend in the description.
 
 **2. Browser upload (fallback):** open the page/issue in the browser and attach through the UI.
 

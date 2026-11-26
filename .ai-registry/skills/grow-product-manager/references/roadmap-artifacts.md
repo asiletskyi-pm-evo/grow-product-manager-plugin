@@ -16,7 +16,7 @@ Sections (validated by a real quarterly run):
 7. **Pre-mortem & kill criteria** (since v3.9.0, §8) — the failure-causes table in a note panel, the kill-criteria table under it. After Carried over in both the `rollup` and the `slice` order (`planning-core.md` §7 moves only sections 2–5).
 8. **Method** — note panel.
 
-HTML via `updateConfluencePage`/`createConfluencePage` (`contentFormat: html`): status — `<span data-type="status" data-color="...">`, panels — `<div data-type="panel-info|success|note">`, `colspan` in tables works.
+HTML via `updateConfluenceContent`/`createConfluenceContent` (`body: {format: "html"}`; an update takes a fresh `snapshotToken` — `integration-strategy.md` 1c): status — `<span data-type="status" data-color="...">`, panels — `<div data-type="panel-info|success|note">`, `colspan` in tables works.
 
 > **Every artifact in this file** — the Confluence page (§1), the live dashboard (§2), the project roadmap (§3), the tree (§4), the story map (§9) — is published only after the question of `native-surfaces.md` §3 (what it holds, where, who can open it), and again before every update; a scheduled run publishes none of them (§4).
 

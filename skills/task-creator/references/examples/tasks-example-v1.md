@@ -30,7 +30,7 @@
 | Components | `orders` | Inferred — page label; matches existing tasks in PROJ-1234 → confirmed by the user |
 | Labels (all tasks) | `PROJ-1234.3` (feature code) + the work-type label below | Certain — page title |
 | Work-type labels | BE `backend` · FE `frontend` · iOS `iOS`, `app` · Android `Android`, `app` · Analytics `Analytics` · QA `qa` | Skill table (the QA row); the brief names `qa` too |
-| Issue type | Task for all six | Certain — the project has no Analytics or QA issue type (`getJiraProjectIssueTypesMetadata`) |
+| Issue type | Task for all six | Certain — the project has no Analytics or QA issue type (`listJiraProjectIssueTypesMetadata`) |
 | Assignee / "How" depth | Not set; moderate checklist in "How" | Assumption — no person profiles for the team, so no D-level tuning |
 | Estimate (story points) | Not set — the team estimates at grooming | The requirements carry no estimates; none invented (Gate 1) |
 | Template | `task-builtin-default` 1.0.0 — no product template for Product 1 | Step T (batch: resolved once) |
