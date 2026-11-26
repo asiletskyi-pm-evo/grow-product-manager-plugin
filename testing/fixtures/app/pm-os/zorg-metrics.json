@@ -8,12 +8,14 @@
   {
    "key": "value",
    "title": "Conversion, last 4 weeks",
-   "kind": "num"
+   "kind": "num",
+   "group": "Conversion"
   },
   {
    "key": "d4w",
    "title": "To the 4 weeks before",
-   "kind": "num"
+   "kind": "num",
+   "group": "Conversion"
   }
  ],
  "rows": [

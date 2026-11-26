@@ -2,13 +2,14 @@
  "items": [
   {
    "title": "Refund",
-   "note": "ZORG-77 on hold",
+   "value": "ZORG-77, on hold",
    "product": "zorg"
   },
   {
    "title": "Gift cards",
-   "note": "ZPAY-12 closed",
+   "value": "ZPAY-12, closed",
    "product": "zorg-pay"
   }
- ]
+ ],
+ "side": "2 directions"
 }

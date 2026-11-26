@@ -1,5 +1,6 @@
 {
  "kind": "columns",
+ "heading": "Release pace",
  "headline": "Two releases a week on average.",
  "sub": "Releases by week",
  "cols": [

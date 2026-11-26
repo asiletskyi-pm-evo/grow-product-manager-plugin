@@ -376,26 +376,54 @@ html.gpm-layout-rail .gpm-title { padding: 0 12px; font: 700 17px/1.3 var(--gpm-
 .gpm-logo { flex: none; display: block; width: 28px; height: 28px; border-radius: 7px; }
 html.gpm-layout-rail .gpm-shell { position: relative; }
 html.gpm-layout-rail .gpm-logo { position: absolute; left: 28px; top: 18px; width: 36px; height: 36px; border-radius: 9px; }
-html.gpm-layout-rail .gpm-logo ~ .gpm-title, html.gpm-layout-rail .gpm-logo ~ .gpm-today { padding-left: 60px; }
-html.gpm-layout-rail .gpm-products { flex-wrap: nowrap; margin: 20px 8px 0; }
+html.gpm-layout-rail .gpm-logo ~ .gpm-title, html.gpm-layout-rail .gpm-logo ~ .gpm-today { padding-left: 58px; padding-right: 0; }
+html.gpm-layout-rail .gpm-logo ~ .gpm-today { white-space: nowrap; }
+html.gpm-layout-rail .gpm-products { flex-wrap: wrap; margin: 20px 8px 0; }
 html.gpm-layout-rail .gpm-products button { min-height: 36px; padding: 0 10px; font-size: 13px; }
 html.gpm-layout-rail .gpm-theme button { padding: 0 8px; font-size: 12px; white-space: nowrap; }
 html.gpm-layout-rail .gpm-module-title { margin-bottom: 24px; }
-/* a product in the rail layout: a dot of its colour and its name, not a filled label */
-html.gpm-layout-rail .gpm-chip { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: transparent; color: var(--gpm-muted); font: 600 13px/1.4 var(--gpm-font); }
-html.gpm-layout-rail .gpm-chip::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gpm-chip-bg, var(--gpm-muted)); }
+/* a section of the rail layout: its heading, and at the right the product, the source and when it was read */
+.gpm-block-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 0 0 8px; border-bottom: 2px solid var(--gpm-text); }
+.gpm-block-head > .gpm-block-title { padding: 0; border: 0; }
+.gpm-block-side { display: inline-flex; align-items: center; gap: 8px; color: var(--gpm-muted); font-size: 13px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.gpm-module-rail > .gpm-block-lead:first-child, .gpm-module-rail > .gpm-col-main > .gpm-block-lead:first-child { margin-top: -16px; }
+.gpm-module-home.gpm-module-rail > .gpm-col-main > .gpm-block-lead:first-child, .gpm-module-home.gpm-module-rail > .gpm-block-lead:first-child { margin-top: 0; }
+.gpm-module-rail .gpm-block-lead .gpm-lead-text { font-size: 15px; line-height: 1.45; }
+.gpm-module-home.gpm-module-rail .gpm-block-lead .gpm-lead-text { font: 600 30px/1.25 var(--gpm-font); }
+/* blocks that share a group: side by side, a table under them */
+.gpm-group { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 48px; }
+.gpm-group-part { flex: 1 1 340px; min-width: 0; }
+.gpm-group-number { flex: 0 1 260px; }
+.gpm-group-table, .gpm-group-list, .gpm-group-feed { flex: 1 1 100%; }
+.gpm-group-part ~ .gpm-group-table { margin-top: 16px; padding-top: 8px; border-top: 1px solid var(--gpm-border); }
+.gpm-group .gpm-number { padding-top: 16px; }
+/* the columns of a table under a shared heading */
+.gpm-table .gpm-col-groups th, .gpm-table .gpm-col-groups td { padding-bottom: 0; border-bottom: 0; }
+.gpm-table thead .gpm-col-group { color: var(--gpm-text); font-size: 13px; font-weight: 600; text-align: left; }
+.gpm-table .gpm-col-start { padding-left: 32px; }
+/* a row that is a name and what it stands at */
+.gpm-item-pair { flex-wrap: nowrap; align-items: baseline; gap: 12px; }
+.gpm-item-pair > .gpm-item-title { order: 0; flex: 0 1 auto; font-weight: 400; }
+.gpm-item-pair > .gpm-chip { order: 1; flex: none; }
+.gpm-item-pair > .gpm-item-value { order: 2; flex: none; margin-left: auto; padding-left: 12px; color: var(--gpm-muted); font-size: 14px; line-height: 1.4; font-variant-numeric: tabular-nums; text-align: right; }
+.gpm-item-pair > .gpm-item-value.gpm-ink-warn { color: var(--gpm-warn); }
+.gpm-item-pair > .gpm-item-value.gpm-ink-crit { color: var(--gpm-crit); }
+.gpm-cell-lead-inline > .gpm-cell-main { flex: 0 1 auto; }
+.gpm-goal-head { flex: 1 1 100%; display: flex; align-items: center; gap: 8px; margin: 0; color: var(--gpm-muted); font-size: 13px; line-height: 1.4; }
 html.gpm-layout-rail .gpm-tabs { flex: none; flex-direction: row; gap: 2px; margin: 16px 0 0; border: 0; }
 html.gpm-layout-rail .gpm-tab { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--gpm-radius); color: var(--gpm-text); font: 400 15px/1.3 var(--gpm-font); text-align: left; }
 html.gpm-layout-rail .gpm-tab:hover { background: var(--gpm-sunken); }
 html.gpm-layout-rail .gpm-tab[aria-selected="true"] { background: var(--gpm-sunken); font-weight: 600; }
 .gpm-tab-count { display: inline-flex; align-items: center; gap: 6px; color: var(--gpm-warn); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .gpm-tab-count .gpm-mark { width: 8px; height: 8px; border-radius: 0; background: var(--gpm-warn); transform: rotate(45deg); }
+.gpm-tab-count { font-weight: 400; white-space: nowrap; }
+.gpm-tab-count-own { color: var(--gpm-text); font-weight: 600; }
 html.gpm-layout-rail .gpm-fresh { margin: 16px 12px 0; }
 html.gpm-layout-rail .gpm-actions { flex-direction: column; align-items: stretch; margin: 12px 8px 0; }
 html.gpm-layout-rail .gpm-actions .gpm-theme { align-self: flex-start; }
 html.gpm-layout-rail .gpm-modules { padding: 24px 16px 40px; }
 @media (min-width: 860px) {
-  html.gpm-layout-rail body { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-auto-rows: min-content; align-items: start; margin: 0; min-height: 100vh; }
+  html.gpm-layout-rail body { display: grid; grid-template-columns: 240px minmax(0, 1fr); grid-auto-rows: min-content; align-items: start; margin: 0; min-height: 100vh; }
   html.gpm-layout-rail body > * { grid-column: 2; }
   html.gpm-layout-rail .gpm-shell { grid-column: 1; grid-row: 1 / span 12; position: sticky; top: 0; box-sizing: border-box; height: 100vh; overflow-y: auto; padding: 24px 16px; border-bottom: 0; border-right: 1px solid var(--gpm-border); }
   html.gpm-layout-rail .gpm-logo { top: 26px; }

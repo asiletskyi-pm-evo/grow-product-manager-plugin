@@ -1,0 +1,17 @@
+{
+ "items": [
+  {
+   "title": "Calendar",
+   "value": "09:40"
+  },
+  {
+   "title": "Issue tracker",
+   "value": "09:55"
+  },
+  {
+   "title": "Funnel tracker",
+   "value": "16.11, 10 days ago",
+   "attention": "warn"
+  }
+ ]
+}

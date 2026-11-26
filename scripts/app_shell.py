@@ -39,8 +39,10 @@ LANGS = ("uk", "en")
 LATER_TEXT = "arrives in v4.13.1"
 PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "badge", "tray", "notify", "connectors",
                 "commands", "layout")
-MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks")
-BLOCK_ENTRY_KEYS = ("block", "source", "title", "place")
+MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks", "counts")
+BLOCK_ENTRY_KEYS = ("block", "source", "title", "place", "group")
+GROUP_ID = re.compile(r"[a-z][a-z0-9-]{0,31}")   # a block's `group`: the blocks that share it stand in one section (rail layout)
+COUNT_WORD_MAX = 24           # a word the rail says after a module's count: one per plural form, two or three of them
 SHELL_FILES = ("shell.js", "blocks.js", "charts.js", "map.js", "desk.js", "live.js")   # embedded in this order, each only if it exists (map.js: only with a map block)
 TITLE_MAX = 80                # a title in the owner's config/app, in characters
 MAX_BLOCKS = 8                # blocks in one composed module
@@ -284,6 +286,13 @@ def _check_forms(m, where, custom, errs):
         _check_block(b.get("block"), b.get("source"), bw, custom, errs)
         if "place" in b and b["place"] not in PLACES:
             errs.append("%s: unknown place '%s'" % (bw, b["place"]))
+        if "group" in b:
+            if custom:
+                errs.append("%s: a group is not allowed in a custom module" % bw)
+            elif not isinstance(b["group"], str) or not GROUP_ID.fullmatch(b["group"]):
+                errs.append("%s: group must match %s" % (bw, GROUP_ID.pattern))
+            elif b.get("block") == "map" or b.get("source") in AT_SOURCES:
+                errs.append("%s: a map or an @ source does not stand in a group" % bw)
         if "title" in b:
             if custom:
                 _plain_title(b["title"], bw, errs)
@@ -357,6 +366,13 @@ def check_profile(name, prof):
         if m.get("home"):
             homes += 1
         _title(m.get("title"), mw, errs)
+        if "counts" in m:
+            c = m["counts"]
+            if not isinstance(c, dict) or set(c) != set(LANGS) or not all(
+                    isinstance(c[l], list) and 2 <= len(c[l]) <= 3 and all(
+                        isinstance(x, str) and x.strip() and len(x) <= COUNT_WORD_MAX for x in c[l]) for l in c):
+                errs.append("%s: counts must be {%s}, each a list of 2-3 words of 1-%d characters" % (
+                    mw, ", ".join(LANGS), COUNT_WORD_MAX))
     if homes > 1:
         errs.append("%s: more than one home module (%d)" % (w, homes))
     menu = prof.get("menu") or []

@@ -28,6 +28,10 @@
       from: "від",
       to: "до",
       limit: "поріг",
+      goingOn: "Триває, лишилось ",
+      goingOnEnd: ".",
+      hoursShort: "год",
+      minutesShort: "хв",
       thousand: " тис."
     },
     en: {
@@ -46,6 +50,10 @@
       from: "from",
       to: "to",
       limit: "limit",
+      goingOn: "Going on, ",
+      goingOnEnd: " left.",
+      hoursShort: "h",
+      minutesShort: "min",
       thousand: "k"
     }
   });
@@ -69,6 +77,15 @@
     try { return n.toLocaleString(S.lang === "en" ? "en-US" : "uk-UA", { maximumFractionDigits: 2 }); } catch (e) { return String(n); }
   }
   function signed(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + fmt(Math.abs(n)); }
+  // a chart may fix how many digits stand after the point of its values (`digits`, 0-3): 5,40 beside 4,49
+  function digitsOf(data) { var d = num(data.digits); return d !== null && d >= 0 && d <= 3 && Math.floor(d) === d ? d : null; }
+  function fix(n, d) {
+    if (d === null) { return fmt(n); }
+    try { return n.toLocaleString(S.lang === "en" ? "en-US" : "uk-UA", { minimumFractionDigits: d, maximumFractionDigits: d }); } catch (e) { return n.toFixed(d); }
+  }
+  function signedFix(n, d) { return (n > 0 ? "+" : n < 0 ? "−" : "") + fix(Math.abs(n), d); }
+  // the fills of the neutral scale for n series: two series are the darkest and the quietest step
+  function fills(n) { return n === 2 ? ["", " gpm-c-fill-3"] : FILLS; }
   // a unit goes right after the number when it is a per cent sign, after a no-break space otherwise
   function withUnit(text, unit) { return unit ? text + (unit === "%" ? "" : " ") + unit : text; }
   function pct(x) { return (Math.round(Math.max(0, Math.min(100, x)) * 100) / 100) + "%"; }
@@ -198,9 +215,9 @@
       var plot = el("div", "gpm-c-bars-plot");
       r.values.forEach(function (v, i) {
         if (v === null) { return; }
-        var text = withUnit(fmt(v), unit);
+        var text = withUnit(fix(v, digitsOf(data)), unit);
         var row = el("div", "gpm-c-bar-row");
-        var bar = el("span", "gpm-c-hbar" + FILLS[i]);
+        var bar = el("span", "gpm-c-hbar" + fills(names.length)[i]);
         bar.style.width = pct(v / top * 76);
         row.appendChild(bar);
         row.appendChild(el("span", "gpm-c-bar-value", text));
@@ -209,10 +226,10 @@
       grid.appendChild(plot);
     });
     return frame(data, {
-      legend: names.length > 1 ? legend(names.map(function (n, i) { return { cls: FILLS[i], text: n }; })) : null,
+      legend: names.length > 1 ? legend(names.map(function (n, i) { return { cls: fills(names.length)[i], text: n }; })) : null,
       body: grid,
       twin: twin([""].concat(names.length ? names : [S.t.value]), rows.map(function (r) {
-        return [r.label].concat(r.values.map(function (v) { return v === null ? "" : withUnit(fmt(v), unit); }));
+        return [r.label].concat(r.values.map(function (v) { return v === null ? "" : withUnit(fix(v, digitsOf(data)), unit); }));
       }))
     });
   }
@@ -247,7 +264,7 @@
       if (g.title) { box.appendChild(el("p", "gpm-c-group-title", g.title)); }
       var grid = el("div", "gpm-c-delta");
       g.rows.forEach(function (r) {
-        var text = withUnit(signed(r.value), unit);
+        var text = withUnit(signedFix(r.value, digitsOf(data)), unit);
         var fill = r.level ? " gpm-c-fill-" + r.level : "";
         grid.appendChild(el("span", "gpm-c-delta-label", r.label));
         var row = el("div", "gpm-c-delta-row");
@@ -327,8 +344,15 @@
     });
   }
 
-  function bars(data) {
-    return data.kind === "delta" ? delta(data) : data.kind === "columns" ? columns(data) : data.kind === "compare" ? compare(data) : null;
+  // a chart that stands beside a table of the same numbers (info.twin === false) does not fold its own under itself
+  function untwinned(node, info) {
+    if (node && info && info.twin === false) {
+      Array.prototype.slice.call(node.querySelectorAll(".gpm-c-table")).forEach(function (d) { d.parentNode.removeChild(d); });
+    }
+    return node;
+  }
+  function bars(data, view, info) {
+    return untwinned(data.kind === "delta" ? delta(data) : data.kind === "columns" ? columns(data) : data.kind === "compare" ? compare(data) : null, info);
   }
 
   // ---- line: one to four series over time ---------------------------------------------------------------------------
@@ -540,17 +564,22 @@
       said = true;
     }
     items.forEach(function (it) {
-      if (now !== null && !said && it.from > now) { nowRow(); }
+      // the line of «now» stands over what goes on or comes next
+      if (now !== null && !said && it.to > now) { nowRow(); }
       var current = now !== null && it.from <= now && now < it.to;
       var li = el("li", "gpm-item gpm-c-day-row" + (current ? " gpm-c-day-current" : ""));
       li.appendChild(el("span", "gpm-at", clock(it.from) + "–" + clock(it.to)));
       var body = el("span", "gpm-c-day-body");
       body.appendChild(el("span", "gpm-item-title", it.title));
       if (it.note) { body.appendChild(el("span", "gpm-note", it.note)); }
+      if (current) {
+        var left = it.to - now, h = Math.floor(left / 60), m = left % 60;
+        body.appendChild(el("span", "gpm-note", S.t.goingOn + (h ? h + " " + S.t.hoursShort + (m ? " " : "") : "") + (m ? m + " " + S.t.minutesShort : "") + S.t.goingOnEnd));
+      }
       li.appendChild(body);
       list.appendChild(li);
-      if (current) { nowRow(); }
     });
+    if (now !== null && !said) { nowRow(); }
     var keys = [];
     if (hasMeeting) { keys.push({ cls: "", text: S.t.meeting }); }
     if (hasFocus) { keys.push({ cls: " gpm-c-fill-3", text: S.t.focusTime }); }
@@ -562,6 +591,13 @@
 
   // ---- marks inside a table cell ----------------------------------------------------------------------------------
   // a bar of up to four parts (a share of the whole each); the column names the parts for a screen reader and the legend
+  // the fill of part i of n: the neutral scale in order; a last part that means «wrong» (`last: warn`) takes that colour
+  function segFill(i, n, col) {
+    var warned = col.last === "warn";
+    if (warned && i === n - 1) { return " gpm-c-fill-warn"; }
+    var scale = fills(warned ? n - 1 : n);
+    return scale[i] !== undefined ? scale[i] : " gpm-c-fill-3";
+  }
   function segments(value, col) {
     var parts = (Array.isArray(value) ? value : []).slice(0, MAX_PARTS).map(function (v) { var x = num(v); return x !== null && x > 0 ? x : 0; });
     var total = parts.reduce(function (a, b) { return a + b; }, 0);
@@ -573,7 +609,7 @@
     var shown = [];
     parts.forEach(function (v, i) { if (v > 0) { shown.push(i); } });
     shown.forEach(function (i, at) {
-      var fill = i === parts.length - 1 && col.last === "warn" ? " gpm-c-fill-warn" : (FILLS[i] || " gpm-c-fill-3");
+      var fill = segFill(i, parts.length, col);
       var seg = el("span", "gpm-c-seg-part" + fill + (at === 0 ? " gpm-c-seg-first" : "") + (at === shown.length - 1 ? " gpm-c-seg-last" : ""));
       seg.style.flex = parts[i] + " 1 0";
       bar.appendChild(seg);
@@ -585,7 +621,7 @@
     var names = (Array.isArray(col.parts) ? col.parts : []).slice(0, MAX_PARTS);
     if (!names.length || names.some(function (n) { return !str(n, 40); })) { return null; }
     return legend(names.map(function (n, i) {
-      return { cls: i === names.length - 1 && col.last === "warn" ? " gpm-c-fill-warn" : (FILLS[i] || " gpm-c-fill-3"), text: n };
+      return { cls: segFill(i, names.length, col), text: n };
     }));
   }
   // a meter: the value on a scale with a limit mark; the level colours the fill, the cell's text names it
@@ -608,7 +644,7 @@
 
   S.blocks.lead = lead;
   S.blocks.bars = bars;
-  S.blocks.line = line;
+  S.blocks.line = function (data, view, info) { return untwinned(line(data, view, info), info); };
   S.blocks.day = day;
   S.cells = { segments: segments, meter: meter };
   S.cellLegend = { segments: segmentsLegend };

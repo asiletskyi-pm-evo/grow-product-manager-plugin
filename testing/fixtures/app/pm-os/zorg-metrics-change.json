@@ -34,5 +34,8 @@
    ]
   }
  ],
- "note": "Source: the funnel tracker, 2026-11-24."
+ "note": "Source: the funnel tracker, 2026-11-24.",
+ "digits": 1,
+ "heading": "Conversion to order",
+ "side": "the last 4 weeks"
 }

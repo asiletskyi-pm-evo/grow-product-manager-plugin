@@ -22,18 +22,31 @@
       mapPlaceholder: "Карта з'явиться тут",
       status: "Стан",
       attentionOk: "Усе гаразд",
+      onPlan: "За планом",
       attentionWarn: "Увага",
       attentionCrit: "Критично",
       baseline: "база",
       weakest: "Найслабше",
       trend: "Тренд",
       needAttention: "потребує уваги",
-      waitsOne: " справа чекає на тебе.",
-      waitsFew: " справи чекають на тебе.",
-      waitsMany: " справ чекає на тебе.",
+      waitsOne: " річ чекає на тебе.",
+      waitsFew: " речі чекають на тебе.",
+      waitsMany: " речей чекає на тебе.",
       nothingWaits: "На тебе нічого не чекає.",
       askAttention: "Уваги потребують: ",
-      nothingAsks: "Сигналів уваги немає."
+      nothingAsks: "Сигналів уваги немає.",
+      small: ["", "Одна", "Дві", "Три", "Чотири"],
+      smallSignal: ["", "один", "два", "три", "чотири"],
+      signalsOne: " сигнал.",
+      signalsFew: " сигнали.",
+      signalsMany: " сигналів.",
+      thereIs: "Є ",
+      noSignals: "Сигналів немає.",
+      nowFocus: "Зараз час фокусу, до ",
+      nowMeeting: "Зараз зустріч, до ",
+      nextAt: "Далі за календарем о ",
+      goal: "Ціль",
+      dataFrom: "Дані від "
     },
     en: {
       all: "All",
@@ -47,6 +60,7 @@
       mapPlaceholder: "The map will appear here",
       status: "Status",
       attentionOk: "OK",
+      onPlan: "On plan",
       attentionWarn: "Warning",
       attentionCrit: "Critical",
       baseline: "baseline",
@@ -58,7 +72,19 @@
       waitsMany: " things wait for you.",
       nothingWaits: "Nothing waits for you.",
       askAttention: "Asking for attention: ",
-      nothingAsks: "Nothing asks for attention."
+      nothingAsks: "Nothing asks for attention.",
+      small: [],
+      smallSignal: [],
+      signalsOne: " signal.",
+      signalsFew: " signals.",
+      signalsMany: " signals.",
+      thereIs: "",
+      noSignals: "No signals.",
+      nowFocus: "Focus time now, until ",
+      nowMeeting: "A meeting now, until ",
+      nextAt: "Next on the calendar at ",
+      goal: "Goal",
+      dataFrom: "Data from "
     }
   });
 
@@ -74,6 +100,8 @@
   var PALETTE = ["#2f6fde", "#1a7f37", "#b35900", "#8250df", "#0e7c86", "#c2255c", "#5c6b00", "#6c5ce7"];
   var NO_PRODUCT_COLOR = "#d0d7de";
   var ATTENTION = ["ok", "warn", "crit"];
+  var GROUP_ID = /^[a-z][a-z0-9-]{0,31}$/;        // a block's `group`: the blocks that share it stand in one section
+  var ROWS = ["table", "list", "feed"];           // blocks made of rows: in the rail layout the products share one of them
 
   // ---- storage: a convenience only, never trusted to be there --------------------------------------------------------
   function stored(key) {
@@ -101,9 +129,10 @@
     Object.keys(attrs || {}).forEach(function (k) { n.setAttribute(k, attrs[k]); });
     return n;
   }
+  var railMode = false;       // the side rail is the layout shown: a row on plan says so in the rail's words
   function labelOf(level) {
     var t = S.t;
-    return level === "ok" ? t.attentionOk : level === "warn" ? t.attentionWarn : t.attentionCrit;
+    return level === "ok" ? (railMode ? t.onPlan : t.attentionOk) : level === "warn" ? t.attentionWarn : t.attentionCrit;
   }
 
   // ---- products ---------------------------------------------------------------------------------------------------------
@@ -223,7 +252,7 @@
       // the card's own header already names the product: the row says it only when it is another one
       if (str(r.product, 64) && !(info && info.header && r.product === info.product)) { lead.appendChild(view.chip(r.product)); lead.appendChild(document.createTextNode(" ")); }
       lead.appendChild(el("span", "gpm-cell-main", value));
-      if (sub) { lead.appendChild(el("span", "gpm-cell-sub", sub)); }
+      if (sub) { lead.appendChild(el("span", "gpm-cell-sub", sub)); } else { lead.classList.add("gpm-cell-lead-inline"); }
       td.appendChild(lead);
       return;
     }
@@ -247,8 +276,29 @@
     var tbl = el("table", "gpm-table");
     var head = el("tr");
     if (withState) { var th0 = el("th", null, S.t.status); th0.scope = "col"; head.appendChild(th0); }
-    cols.forEach(function (c) { var th = el("th", c.kind === "num" ? "gpm-num" : null, str(c.title, 80) || c.key); th.scope = "col"; head.appendChild(th); });
+    // a column may name a `group`: the neighbours that share it stand under one heading
+    var groups = cols.map(function (c) { return str(c.group, 40) || ""; });
+    var starts = cols.map(function (c, i) { return !!groups[i] && groups[i] !== groups[i - 1]; });
+    cols.forEach(function (c, i) {
+      var th = el("th", c.kind === "num" ? "gpm-num" : null, str(c.title, 80) || c.key);
+      th.scope = "col";
+      if (starts[i]) { th.classList.add("gpm-col-start"); }
+      head.appendChild(th);
+    });
     var thead = el("thead");
+    if (groups.some(function (g) { return g; })) {
+      var over = el("tr", "gpm-col-groups");
+      if (withState) { over.appendChild(el("td")); }
+      for (var gi = 0; gi < cols.length;) {
+        var span = 1;
+        while (groups[gi] && groups[gi + span] === groups[gi]) { span++; }
+        var cellOver = el(groups[gi] ? "th" : "td", groups[gi] ? "gpm-col-group gpm-col-start" : null, groups[gi] || null);
+        if (groups[gi]) { cellOver.scope = "colgroup"; cellOver.colSpan = span; }
+        over.appendChild(cellOver);
+        gi += span;
+      }
+      thead.appendChild(over);
+    }
     thead.appendChild(head);
     tbl.appendChild(thead);
     var tbody = el("tbody");
@@ -263,6 +313,7 @@
       cols.forEach(function (c, i) {
         var td = el("td");
         cell(td, r, c, i === 0, view, info);
+        if (starts[i]) { td.classList.add("gpm-col-start"); }
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -293,6 +344,14 @@
       : two(d.getDate()) + "." + two(d.getMonth() + 1) + "." + d.getFullYear() + ", ") + time;
   }
 
+  function railWhen(at) {
+    var d = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(at) ? new Date(at) : null;
+    if (!d || isNaN(d.getTime())) { return when(at); }
+    function two2(n) { return ("0" + n).slice(-2); }
+    var n = new Date(), time = two2(d.getHours()) + ":" + two2(d.getMinutes());
+    if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()) { return time; }
+    return (S.lang === "en" ? two2(d.getMonth() + 1) + "-" + two2(d.getDate()) + " " : two2(d.getDate()) + "." + two2(d.getMonth() + 1) + ", ") + time;
+  }
   function items(data, view, withDate, info) {
     var list = (Array.isArray(data.items) ? data.items : []).filter(function (it) {
       return isObj(it) && str(it.title, 300) && (!str(it.product, 64) || view.shows(it.product));
@@ -302,12 +361,25 @@
     list.forEach(function (it) {
       var li = el("li", "gpm-item");
       var level = attention(it.attention);
+      // a row with a `value` is a pair: the name and, at the right, what it stands at; its attention colours the value
+      var value = str(it.value, 80);
+      if (value) {
+        li.classList.add("gpm-item-pair");
+        li.appendChild(el("span", "gpm-item-title", it.title));
+        if (str(it.product, 64) && !(info && info.header && it.product === info.product)) { li.appendChild(view.chip(it.product)); }
+        var val = el("span", "gpm-item-value" + (level && level !== "ok" ? " gpm-ink-" + level : ""));
+        if (level && level !== "ok") { val.appendChild(el("span", "gpm-vh", labelOf(level) + ": ")); }
+        val.appendChild(document.createTextNode(value));
+        li.appendChild(val);
+        ul.appendChild(li);
+        return;
+      }
       if (level) { li.appendChild(mark(level)); }
       // the card's own header already names the product: the row says it only when it is another one (or there is no header)
       if (str(it.product, 64) && !(info && info.header && it.product === info.product)) { li.appendChild(view.chip(it.product)); }
       if (withDate && str(it.at, 40)) {
         li.classList.add("gpm-item-timed");
-        li.appendChild(el("span", "gpm-at", when(it.at)));
+        li.appendChild(el("span", "gpm-at", info && info.rail ? railWhen(it.at) : when(it.at)));
       }
       li.appendChild(el("span", "gpm-item-title", it.title));
       if (str(it.note, 300)) { li.appendChild(el("span", "gpm-note", it.note)); }
@@ -338,11 +410,17 @@
   }
 
   // one number; with a `title` it is a band that names a goal, and stands even while the goal has no value yet
-  function number(data) {
+  function number(data, view, info) {
     var value = num(data.value);
     var title = str(data.title, 200), note = str(data.note, 300);
     if (value === null && !title) { return null; }
     var box = el("div", "gpm-number" + (title ? " gpm-goal" : ""));
+    if (title && info && info.band) {
+      var top = el("p", "gpm-goal-head");
+      if (info.chip && str(info.product, 64)) { top.appendChild(view.chip(info.product)); }
+      top.appendChild(el("span", "gpm-goal-label", S.t.goal));
+      box.appendChild(top);
+    }
     if (title) { box.appendChild(el("p", "gpm-goal-title", title)); }
     if (value === null) {
       if (note) { box.appendChild(el("p", "gpm-num-note", note)); }
@@ -447,39 +525,110 @@
     return n;
   }
 
+  function plural(n) {
+    try { return new Intl.PluralRules(S.lang === "en" ? "en" : "uk").select(n); } catch (e) { return n === 1 ? "one" : "other"; }
+  }
+  // «Одна річ чекає…», «Є два сигнали.», «7 речей чекає…»: a small number is said as a word where the language has one
+  function counted(n, small, one, few, many) {
+    var form = plural(n);
+    return (Array.isArray(small) && small[n] ? small[n] : String(n)) + (form === "one" ? one : form === "few" ? few : many);
+  }
+  // the documents of a source for the product shown, in the order of meta.products, «Без продукту» last
+  function visibleDocs(snap, source, view) {
+    var order = snap.meta.products.map(function (p) { return p.id; }).concat([NONE]);
+    return docsOf(snap, source).filter(function (d) {
+      return view.filter === "" || groupKey(snap.meta, d.sec.product) === view.filter;
+    }).sort(function (x, y) {
+      return order.indexOf(groupKey(snap.meta, x.sec.product)) - order.indexOf(groupKey(snap.meta, y.sec.product));
+    });
+  }
+  // How many rows wait in the home module's feed, or null when no document of it counts: a document that says in its
+  // own words why it is empty (`empty`, no rows) is not a count of zero.
+  function waitingCount(home, snap, view) {
+    var feedBlock = home ? home.blocks.filter(function (b) { return !b.bad && !b.aside && b.block === "feed" && !SOURCES[b.source]; })[0] : null;
+    if (!feedBlock) { return null; }
+    var docs = visibleDocs(snap, feedBlock.source, view).filter(function (d) {
+      return !(str(d.sec.data.empty, 300) && !(Array.isArray(d.sec.data.items) && d.sec.data.items.length));
+    });
+    if (!docs.length) { return null; }
+    var waiting = 0;
+    docs.forEach(function (d) {
+      (Array.isArray(d.sec.data.items) ? d.sec.data.items : []).slice(0, MAX_ITEMS).forEach(function (it) {
+        if (isObj(it) && str(it.title, 300) && (!str(it.product, 64) || view.shows(it.product))) { waiting++; }
+      });
+    });
+    return waiting;
+  }
+  // the rows of the first block of the home module's side column that ask for attention, or null when it has none
+  function signalCount(home, snap, view) {
+    var blocks = home ? home.blocks.filter(function (b) { return !b.bad && b.aside && ROWS.indexOf(b.block) >= 0 && !SOURCES[b.source]; }).slice(0, 1) : [];
+    if (!blocks.length) { return null; }
+    var n = 0;
+    blocks.forEach(function (b) {
+      visibleDocs(snap, b.source, view).forEach(function (d) {
+        var rows = b.block === "table" ? d.sec.data.rows : d.sec.data.items;
+        (Array.isArray(rows) ? rows : []).slice(0, MAX_ROWS).forEach(function (r) {
+          if (!isObj(r) || (str(r.product, 64) && !view.shows(r.product))) { return; }
+          var level = attention(r.attention);
+          if (level === "warn" || level === "crit") { n++; }
+        });
+      });
+    });
+    return n;
+  }
+  var CLOCK = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  function clockMin(v) { var m = typeof v === "string" ? CLOCK.exec(v) : null; return m ? parseInt(m[1], 10) * 60 + parseInt(m[2], 10) : null; }
+  function two(n) { return ("0" + n).slice(-2); }
+  // what the home module's day says of this minute: {focus, to} for what goes on, {from} for what comes next, or null.
+  // Only a day made for today counts, by this window's own clock; no title of a row is read.
+  function dayNow(home, snap, view) {
+    var block = home ? home.blocks.filter(function (b) { return !b.bad && b.block === "day" && !SOURCES[b.source]; })[0] : null;
+    if (!block) { return null; }
+    var d = new Date();
+    var today = d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()), now = d.getHours() * 60 + d.getMinutes();
+    var current = null, next = null;
+    visibleDocs(snap, block.source, view).forEach(function (doc) {
+      if (doc.sec.data.date !== today) { return; }
+      (Array.isArray(doc.sec.data.items) ? doc.sec.data.items : []).slice(0, MAX_ITEMS).forEach(function (it) {
+        if (!isObj(it) || (str(it.product, 64) && !view.shows(it.product))) { return; }
+        var from = clockMin(it.from), to = clockMin(it.to);
+        if (from === null || to === null || to <= from) { return; }
+        if (from <= now && now < to) { if (!current || to > current.to) { current = { focus: it.kind === "focus", to: to }; } }
+        else if (from > now && (!next || from < next.from)) { next = { from: from }; }
+      });
+    });
+    return current || next;
+  }
+
   // The source `@summary`: the app's state in a sentence, counted from what the modules show for the product picked —
-  // how many rows wait in the home module's feed (said only when that feed has a document), and which other modules
-  // have rows asking for attention. Nothing in it comes from a document's text.
+  // how many rows wait in the home module's feed (said only when that feed has a document that counts), how many rows
+  // of its side column ask for attention (without a side column: which other modules have such rows), and what its day
+  // says of this minute. Nothing in it comes from a document's text.
   function summary(view) {
     var mods = view.modules || [], snap = view.snap, t = S.t;
     if (!snap || !snap.meta) { return null; }
     var parts = [], asking = [];
     var home = mods.filter(function (m) { return m.home; })[0] || null;
-    var feedBlock = home ? home.blocks.filter(function (b) { return !b.bad && !b.aside && b.block === "feed" && !SOURCES[b.source]; })[0] : null;
-    if (feedBlock) {
-      // a document that says in its own words why it is empty (`empty`, no rows) is not a count of zero
-      var docs = docsOf(snap, feedBlock.source).filter(function (d) {
-        if (view.filter !== "" && groupKey(snap.meta, d.sec.product) !== view.filter) { return false; }
-        return !(str(d.sec.data.empty, 300) && !(Array.isArray(d.sec.data.items) && d.sec.data.items.length));
-      });
-      if (docs.length) {
-        var waiting = 0;
-        docs.forEach(function (d) {
-          (Array.isArray(d.sec.data.items) ? d.sec.data.items : []).slice(0, MAX_ITEMS).forEach(function (it) {
-            if (isObj(it) && str(it.title, 300) && (!str(it.product, 64) || view.shows(it.product))) { waiting++; }
-          });
-        });
-        var form = "other";
-        try { form = new Intl.PluralRules(S.lang === "en" ? "en" : "uk").select(waiting); } catch (e) { form = waiting === 1 ? "one" : "other"; }
-        parts.push(waiting === 0 ? t.nothingWaits : waiting + (form === "one" ? t.waitsOne : form === "few" ? t.waitsFew : t.waitsMany));
-      }
+    var waiting = waitingCount(home, snap, view);
+    if (waiting !== null) {
+      parts.push(waiting === 0 ? t.nothingWaits : counted(waiting, t.small, t.waitsOne, t.waitsFew, t.waitsMany));
     }
-    mods.forEach(function (m) {
-      if (m === home) { return; }
-      var n = attentionCount(m, snap, view);
-      if (n > 0) { asking.push(m.title + " (" + n + ")"); }
-    });
-    parts.push(asking.length ? t.askAttention + asking.join(", ") + "." : t.nothingAsks);
+    var signals = signalCount(home, snap, view);
+    if (signals !== null) {
+      parts.push(signals === 0 ? t.noSignals : t.thereIs + counted(signals, t.smallSignal, t.signalsOne, t.signalsFew, t.signalsMany));
+    } else {
+      mods.forEach(function (m) {
+        if (m === home) { return; }
+        var n = attentionCount(m, snap, view);
+        if (n > 0) { asking.push(m.title + " (" + n + ")"); }
+      });
+      parts.push(asking.length ? t.askAttention + asking.join(", ") + "." : t.nothingAsks);
+    }
+    var at = dayNow(home, snap, view);
+    if (at) {
+      parts.push(at.from === undefined ? (at.focus ? t.nowFocus : t.nowMeeting) + two(Math.floor(at.to / 60)) + ":" + two(at.to % 60) + "."
+        : t.nextAt + two(Math.floor(at.from / 60)) + ":" + two(at.from % 60) + ".");
+    }
     var box = el("div", "gpm-lead");
     box.appendChild(el("p", "gpm-lead-text", parts.join(" ")));
     return box;
@@ -503,7 +652,8 @@
       : (isObj(b.title) ? (str(b.title[lang], TITLE_MAX) || null) : null);
     var ok = BLOCK_NAMES.indexOf(b.block) >= 0 && !(custom && b.block === "map")
       && typeof b.source === "string" && (SECTION.test(b.source) || b.source === "@edits" || b.source === "@summary");
-    return { block: ok ? b.block : null, source: ok ? b.source : null, title: title, bad: !ok, aside: ok && b.place === "aside" };
+    return { block: ok ? b.block : null, source: ok ? b.source : null, title: title, bad: !ok, aside: ok && b.place === "aside",
+      group: ok && !custom && typeof b.group === "string" && GROUP_ID.test(b.group) ? b.group : null };
   }
 
   // One module -> {id, title, home, blocks: [...], composed} or null (no usable id). A module in neither form, in both
@@ -521,7 +671,10 @@
       else if (blocks.length > 1 && blocks.some(function (b) { return b.block === "map"; })) { blocks = [normBlock(null)]; }
     } else if (short) { blocks = [normBlock(raw, custom, lang)]; }
     else { blocks = [normBlock(null)]; }
-    return { id: raw.id, title: title, home: !custom && raw.home === true, blocks: blocks, composed: composed && !(short && composed) };
+    // `counts`: the words the rail says after a module's count, one per plural form — «застиг», «застигли», «застигло»
+    var words = !custom && isObj(raw.counts) && Array.isArray(raw.counts[lang]) ? raw.counts[lang].filter(function (w) { return str(w, 24); }) : [];
+    return { id: raw.id, title: title, home: !custom && raw.home === true, blocks: blocks, composed: composed && !(short && composed),
+      counts: words.length >= 2 && words.length <= 3 ? words : null };
   }
 
   // the document as foreign input -> {modules: [{id, on, order}], custom: [module]} or null
@@ -709,10 +862,206 @@
     return box;
   }
 
+  // ---- the side rail: a module as sections, the products together ----------------------------------------------------
+  // a moment said short: the time when it is today, the day and month otherwise
+  function shortWhen(at) {
+    var d = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(at || "") ? new Date(at) : null;
+    if (!d || isNaN(d.getTime())) { var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(at || ""); return m ? (S.lang === "en" ? m[2] + "-" + m[3] : m[3] + "." + m[2]) : ""; }
+    var n = new Date();
+    if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate()) { return two(d.getHours()) + ":" + two(d.getMinutes()); }
+    return S.lang === "en" ? two(d.getMonth() + 1) + "-" + two(d.getDate()) : two(d.getDate()) + "." + two(d.getMonth() + 1);
+  }
+  // what a section says at the right of its heading: the document's own `side`, or its `source` and when it was read
+  function sideOf(d, snap) {
+    var side = str(d.sec.data.side, 80);
+    if (side) { return side; }
+    var source = str(d.sec.data.source, 80);
+    if (!source) { return ""; }
+    var at = shortWhen(snap.meta.sections[d.id] || d.sec.made);
+    return at ? source + ", " + at : source;
+  }
+  function uniq(list) { return list.filter(function (v, i) { return v && list.indexOf(v) === i; }); }
+  // The documents of a block of rows as one: a list or a feed always, a table when its documents have the same columns
+  // (else null). A row shows the product it names itself; one that names none stands without a label.
+  function merged(b, docs) {
+    var note = uniq(docs.map(function (d) { return str(d.sec.data.note, 300); })).join(" ");
+    var rows = [];
+    if (b.block === "table") {
+      var keys = function (d) {
+        return JSON.stringify((Array.isArray(d.sec.data.columns) ? d.sec.data.columns : []).map(function (c) { return isObj(c) ? c.key : null; }));
+      };
+      if (docs.some(function (d) { return keys(d) !== keys(docs[0]); })) { return null; }
+      docs.forEach(function (d) {
+        (Array.isArray(d.sec.data.rows) ? d.sec.data.rows : []).forEach(function (r) { rows.push(r); });
+      });
+      return { columns: docs[0].sec.data.columns, rows: rows, note: note };
+    }
+    docs.forEach(function (d) {
+      (Array.isArray(d.sec.data.items) ? d.sec.data.items : []).forEach(function (r) { rows.push(r); });
+    });
+    return { items: rows, note: note };
+  }
+  function railSection(title, side, product, view, cls) {
+    var sec = el("section", "gpm-block " + cls);
+    if (!title) { return sec; }
+    var head = el("div", "gpm-block-head");
+    head.appendChild(el("h3", "gpm-block-title", title));
+    if (product || side) {
+      var right = el("span", "gpm-block-side");
+      if (product) { right.appendChild(view.chip(product)); }
+      if (side) { right.appendChild(el("span", "gpm-block-side-text", side)); }
+      head.appendChild(right);
+    }
+    sec.appendChild(head);
+    return sec;
+  }
+  function infoOf(d, more) {
+    var info = { id: d.id, product: d.sec.product, section: d.sec.section, made: d.sec.made, header: true, rail: true };
+    Object.keys(more || {}).forEach(function (k) { info[k] = more[k]; });
+    return info;
+  }
+  // One block -> its section, or none: a block whose documents show nothing and say nothing of why takes no room.
+  function blockSections(b, snap, view, chips) {
+    var cls = "gpm-block-" + (b.block || "none"), sec;
+    if (b.bad) {
+      sec = railSection(b.title, "", null, view, cls);
+      sec.appendChild(el("p", "gpm-unsupported", S.t.unsupported));
+      return [sec];
+    }
+    if (SOURCES[b.source] || typeof RENDER[b.block].all === "function") {
+      var r = renderBlock(b, snap, view);
+      if (!r.node) { return []; }
+      sec = railSection(b.title, "", null, view, cls);
+      sec.appendChild(r.node);
+      return [sec];
+    }
+    var docs = visibleDocs(snap, b.source, view);
+    if (!docs.length) { return []; }
+    if (b.block === "lead") {         // the sentences of the products shown, as one introduction
+      var texts = uniq(docs.map(function (d) { return str(d.sec.data.text, 400); }));
+      if (!texts.length) { return []; }
+      sec = el("section", "gpm-block " + cls);
+      var lead = el("div", "gpm-lead");
+      lead.appendChild(el("p", "gpm-lead-text", texts.join(" ")));
+      sec.appendChild(lead);
+      return [sec];
+    }
+    var sides = uniq(docs.map(function (d) { return sideOf(d, snap); }));
+    var side = sides.length === 1 && docs.every(function (d) { return sideOf(d, snap) === sides[0]; }) ? sides[0] : "";
+    var title = (docs.length === 1 && str(docs[0].sec.data.heading, TITLE_MAX)) || b.title;
+    var body = el("div", "gpm-block-body");
+    var data = ROWS.indexOf(b.block) >= 0 ? merged(b, docs) : null;
+    if (data) {
+      var whole = RENDER[b.block](data, view, { header: view.filter !== "", product: view.filter, rail: true });
+      if (whole) { body.appendChild(whole); }
+      else {
+        var why = uniq(docs.map(function (d) { return str(d.sec.data.empty, 300); }));
+        if (!why.length) { return []; }
+        why.forEach(function (w) { body.appendChild(el("p", "gpm-empty", w)); });
+      }
+      sec = railSection(title, side, null, view, cls);
+      sec.appendChild(body);
+      return [sec];
+    }
+    var cards = [];
+    docs.forEach(function (d) {
+      var node = RENDER[b.block](d.sec.data, view, infoOf(d, { band: !title, chip: chips && !title })), told = false;
+      if (!node && str(d.sec.data.empty, 300)) { node = el("p", "gpm-empty", d.sec.data.empty); told = true; }
+      if (node) { cards.push({ node: node, product: d.sec.product, told: told }); }
+    });
+    if (!cards.length) { return []; }
+    cards.forEach(function (c) {
+      var card = el("div", "gpm-card");
+      card.setAttribute("data-product", groupKey(snap.meta, c.product));
+      if (chips && title && cards.length > 1) {
+        var head = el("div", "gpm-card-head");
+        head.appendChild(view.chip(c.product));
+        card.appendChild(head);
+      }
+      card.appendChild(c.node);
+      body.appendChild(card);
+    });
+    // one card: the heading names its product — not over a day (it is the person's) or over words that only explain
+    sec = railSection(title, side, chips && title && cards.length === 1 && b.block !== "day" && !cards[0].told ? cards[0].product : null, view, cls);
+    sec.appendChild(body);
+    return [sec];
+  }
+  // The blocks that share a `group` -> one section per product: its heading (the document's own `heading`, else the first
+  // block's title), then the blocks side by side — a number and a chart beside each other, a table under them. A chart
+  // beside a table of the same numbers does not fold its own under itself.
+  function groupSections(u, snap, view, chips) {
+    var per = {};
+    u.blocks.forEach(function (b) {
+      if (b.bad || SOURCES[b.source] || typeof RENDER[b.block].all === "function") { return; }
+      visibleDocs(snap, b.source, view).forEach(function (d) {
+        var key = groupKey(snap.meta, d.sec.product);
+        if (!Object.prototype.hasOwnProperty.call(per, key)) { per[key] = []; }
+        per[key].push({ b: b, d: d });
+      });
+    });
+    var order = snap.meta.products.map(function (p) { return p.id; }).concat([NONE, ""]);
+    var out = [];
+    Object.keys(per).sort(function (x, y) { return order.indexOf(x) - order.indexOf(y); }).forEach(function (key) {
+      var entries = per[key];
+      var hasTable = entries.some(function (e) { return e.b.block === "table"; });
+      var parts = [];
+      entries.forEach(function (e) {
+        var node = RENDER[e.b.block](e.d.sec.data, view, infoOf(e.d, { twin: !hasTable }));
+        if (!node && str(e.d.sec.data.empty, 300)) { node = el("p", "gpm-empty", e.d.sec.data.empty); }
+        if (node) { parts.push({ node: node, e: e }); }
+      });
+      if (!parts.length) { return; }
+      var title = "", side = "";
+      parts.forEach(function (p) {
+        if (!title) { title = str(p.e.d.sec.data.heading, TITLE_MAX) || ""; }
+        if (!side) { side = sideOf(p.e.d, snap); }
+      });
+      if (!title) { u.blocks.forEach(function (b) { if (!title && b.title) { title = b.title; } }); }
+      var sec = railSection(title, side, chips && key !== "" ? parts[0].e.d.sec.product : null, view, "gpm-block-group");
+      var row = el("div", "gpm-group");
+      parts.forEach(function (p) {
+        var part = el("div", "gpm-group-part gpm-group-" + p.e.b.block);
+        part.appendChild(p.node);
+        row.appendChild(part);
+      });
+      sec.appendChild(row);
+      out.push(sec);
+    });
+    return out;
+  }
+  function renderRail(m, snap, view) {
+    var panel = el("div", "gpm-module gpm-module-rail" + (m.home ? " gpm-module-home" : ""));
+    var split = m.blocks.some(function (b) { return b.aside; });
+    var main = split ? el("div", "gpm-col-main") : panel, aside = split ? el("aside", "gpm-col-aside") : null;
+    var chips = snap.meta.products.length > 1 && view.filter === "";
+    var units = [], leads = false, shown = 0;
+    m.blocks.forEach(function (b, i) {
+      var last = units[units.length - 1];
+      if (b.group && last && last.group === b.group && last.aside === b.aside) { last.blocks.push(b); }
+      else { units.push({ group: b.group, aside: b.aside, blocks: [b], first: i === 0 }); }
+    });
+    units.forEach(function (u) {
+      var nodes = u.group ? groupSections(u, snap, view, chips) : blockSections(u.blocks[0], snap, view, chips);
+      nodes.forEach(function (n) { (u.aside ? aside : main).appendChild(n); shown++; });
+      if (u.first && u.blocks[0].block === "lead" && nodes.length) { leads = true; }
+    });
+    if (!shown) { main.appendChild(el("p", "gpm-empty", S.t.empty)); }
+    if (split) {
+      panel.classList.add("gpm-module-split");
+      panel.appendChild(main);
+      panel.appendChild(aside);
+    }
+    var box = el("div", "gpm-module-box");
+    box.appendChild(el("h2", "gpm-module-title" + (m.home && leads ? " gpm-vh" : ""), m.title));
+    box.appendChild(panel);
+    return box;
+  }
+
   // renderModules(profile, config, data, product, active) -> {modules, active, tabs, panel}: the tabs and the panel of the
   // open module as elements; `product` is "" for «Усі» or one product id. Tab clicks are wired by the part below.
   function renderModules(profile, config, data, product, active, lang) {
     var mods = moduleList(profile, config, lang);
+    railMode = profile.layout === "rail";
     var open = null;
     mods.forEach(function (m) { if (m.id === active) { open = m; } });
     if (!open) { open = mods.filter(function (m) { return m.home; })[0] || mods[0] || null; }
@@ -722,7 +1071,8 @@
       chip: function (id) { return meta.products.length ? productChip(id, meta) : document.createTextNode(""); },
       shows: function (id) { return product === "" || groupKey(meta, id) === product; }
     };
-    return { modules: mods, active: open ? open.id : null, panel: open ? renderModule(open, data, view, profile.layout === "rail") : null, view: view };
+    return { modules: mods, active: open ? open.id : null, view: view,
+      panel: !open ? null : profile.layout === "rail" ? renderRail(open, data, view) : renderModule(open, data, view, false) };
   }
   S.renderModules = renderModules;
 
@@ -778,14 +1128,22 @@
         var b = el("button", "gpm-tab", rail ? null : m.title);
         if (rail) {         // the rail's entry: the module, and how many of its rows ask for attention
           b.appendChild(el("span", "gpm-tab-title", m.title));
-          var asking = attentionCount(m, snap, r.view);
-          if (asking > 0) {
+          var waits = m.home ? waitingCount(m, snap, r.view) : null;
+          var asking = m.home ? 0 : attentionCount(m, snap, r.view);
+          if (waits) {              // the home module: how many rows wait, said plainly
+            b.appendChild(el("span", "gpm-tab-count gpm-tab-count-own", String(waits)));
+          } else if (asking > 0) {
             var count = el("span", "gpm-tab-count");
-            var dot = el("span", "gpm-mark");
-            dot.setAttribute("aria-hidden", "true");
-            count.appendChild(dot);
-            count.appendChild(document.createTextNode(String(asking)));
-            count.appendChild(el("span", "gpm-vh", " " + ctx.t.needAttention));
+            if (m.counts) {         // the module's own word for it: «1 застиг»
+              var form = plural(asking);
+              count.appendChild(document.createTextNode(asking + " " + (m.counts.length === 3 ? m.counts[form === "one" ? 0 : form === "few" ? 1 : 2] : m.counts[form === "one" ? 0 : 1])));
+            } else {
+              var dot = el("span", "gpm-mark");
+              dot.setAttribute("aria-hidden", "true");
+              count.appendChild(dot);
+              count.appendChild(document.createTextNode(String(asking)));
+              count.appendChild(el("span", "gpm-vh", " " + ctx.t.needAttention));
+            }
             b.appendChild(count);
           }
         }
@@ -834,6 +1192,14 @@
       if (switchEl) { ctx.header.insertBefore(switchEl, before); }
       if (rail) { navEl = tabs; ctx.header.insertBefore(tabs, switchEl ? switchEl.nextSibling : before); }
 
+      if (rail) {
+        var fresh = ctx.header.querySelector(".gpm-fresh"), made = shortWhen(snap.meta.made);
+        var day = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(snap.meta.made) ? new Date(snap.meta.made) : null;
+        if (fresh && made && day && !isNaN(day.getTime())) {
+          var clock = two(day.getHours()) + ":" + two(day.getMinutes());
+          fresh.textContent = ctx.t.dataFrom + (made === clock ? clock : made + ", " + clock) + ".";
+        }
+      }
       root.hidden = false;
       if (page) { page.hidden = true; }
       document.documentElement.classList.add(HAS_MODULES);
