@@ -487,6 +487,8 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 - **TC-hook-260-notfound** | no file anywhere | 3-line NOT VISIBLE digest naming searched locations; exit 0 | **pass**
 - **TC-hook-260-failopen** | garbage on stdin | exit 0, still emits a digest | **pass**
 - **TC-gate-260-create** | `createConfluencePage` | `permissionDecision: ask` with the 3-point reason | **pass**
+- **TC-gate-4110-create-v2** | `createConfluenceContent` / `updateConfluenceContent` (Atlassian MCP v2, the declared server since v4.11.0) | `ask` as for the v1 names; `updateConfluenceContent` with `dryRun: true` passes | **pass** (`testing/write_gate_test.py`)
+- **TC-atl-4110** | `testing/atlassian_v2_test.py` | `.mcp.json` declares v2; no skill or agent names a v1-only tool; every `getConfluenceContent` a skill names asks for `detail: "full"`; the gate covers both name sets | **pass**
 - **TC-gate-260-meta** | `editJiraIssue` with labels only | no output (allow) | **pass**
 - **TC-gate-260-content** | `editJiraIssue` with a 300-char description | `ask` | **pass**
 - **TC-gate-260-off** | `setup.py --write-gate off` then `createJiraIssue` | no output; `--write-gate on` restores | **pass**
@@ -524,7 +526,7 @@ Ids follow `TC-<area>-<release>-<slug>`; the JCRL specification's ids are given 
 ### Stage 3 — Host behavior (install the `.plugin` in Cowork desktop)
 - **TC-host-250-tabs** | plugin card | tabs show **Connectors · 6**, **Agents · 3**, **Commands · 4**; Skills stays 29 | expected: all four counts visible
 - **TC-host-250-connectors** | Connectors tab | `atlassian` and `figma` show as *Connected* against the user's existing connections (no second Atlassian / Figma entry appears in the org connector list); `gmail` / `google calendar` / `google drive` / `fireflies` resolve by name | expected: 6 rows, no duplicates
-- **TC-host-250-namespace** | a fresh session | tools of declared connectors appear under the connector's namespace (`mcp__Atlassian_Rovo__*`, `mcp__Figma__*`, …), never under a plugin-prefixed one | expected: matches the *Declared connectors* table
+- **TC-host-250-namespace** | a fresh session | tools of declared connectors appear under the connector's namespace (`mcp__Atlassian_MCP__*` for v2 — `mcp__Atlassian_Rovo__*` was v1 —, `mcp__Figma__*`, …), never under a plugin-prefixed one | expected: matches the *Declared connectors* table
 - **TC-host-250-notools** | `debater` | `Agent(subagent_type: "grow-product-manager:debater")` with an evidence pack: the agent answers in the Round-1 structure and, when asked to "check the vault first", reports it has no tools rather than trying | expected: no tool calls in its transcript. **If `tools: []` is ignored by the host** → switch to `disallowedTools` only (already present) and record it here
 - **TC-host-250-checker** | `artifact-checker` | spawned from requirements-creator Step 4.5 with lens=form on a draft with one prose-formatted requirement | expected: one Gate-2 finding with location + proposed_fix; no rewrite
 - **TC-host-250-cmd-hidden** | `/grow-product-manager:status` | "який статус плагіна" does NOT invoke it; typing the command does | expected: L1 and L8 pass live

@@ -81,7 +81,7 @@ curl -sS -X POST \
   "https://{site}/rest/api/3/issue/{issueKey}/attachments"
 ```
 
-After a successful Confluence upload, embed the image in the page body via `updateConfluencePage` using the attachment/media id **from the REST response** (media nodes only reference existing ids — never invent one). In Jira, reference the attachment by filename (`!PROJ-1234.3-screen-1.png!` in wiki-markup contexts) or leave it in the attachments panel with the legend in the description.
+After a successful Confluence upload, embed the image in the page body via `updateConfluenceContent` (a fresh `snapshotToken` from `getConfluenceContent(draft: true, detail: "full")` — `integration-strategy.md` 1c) using the attachment/media id **from the REST response** (media nodes only reference existing ids — never invent one). In Jira, reference the attachment by filename (`!PROJ-1234.3-screen-1.png!` in wiki-markup contexts) or leave it in the attachments panel with the legend in the description.
 
 **2. Browser upload (fallback):** open the page/issue in the browser and attach through the UI.
 
