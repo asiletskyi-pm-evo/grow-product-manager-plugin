@@ -432,6 +432,20 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | AA6 | намалюй ієрархію екранів оплати як діаграму | diagram-prototyper — NOT cjm-research |
 | AA7 | декомпозуй ціль кварталу на дочірні цілі команд | goal-setter or quarterly-planning — NOT cjm-research |
 
+### Group AB — Editing the journey map on its page vs neighbours (added 2026-11-25, v4.12.0)
+
+`cjm-research` mode `journey`, step J9, takes the edits made on the journey map's page — a file the page saved, or the text it copied — into the map through the board's preview; the board's edits alone are J6, a story map's edits are `roadmap-architect`'s, a page of a document or a ticket is not a journey map.
+
+| # | Prompt | Expected skill |
+|---|---|---|
+| AB1 | забери правки зі сторінки карти шляху — ось файл від колеги | cjm-research |
+| AB2 | колега відредагував карту шляху на сторінці й скинув мені текст правок, перенеси їх у карту | cjm-research |
+| AB3 | take the edits from the journey map's page into the map | cjm-research |
+| AB4 | ось правки зі сторінки карти «Перше замовлення»: {"kind": "journey-page-edits", …} | cjm-research |
+| AB5 | забери правки команди з дошки мапи історій | roadmap-architect — NOT cjm-research |
+| AB6 | відредагуй сторінку вимог у Confluence за цими правками | requirements-creator — NOT cjm-research |
+| AB7 | перенеси правки з макета сторінки оформлення у Figma | design-bridge — NOT cjm-research |
+
 ## Results log
 
 | Date | Runner | Group accuracies | Failures → action |

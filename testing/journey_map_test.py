@@ -61,7 +61,14 @@ def write(p, data):
 
 
 def text(p):
-    return read(p).decode("utf-8")
+    """A file's text; a page the script rendered without its editing (v4.12.0) — the bar, its CSS, its script and its
+    attributes, which testing/journey_page_edit_test.py checks — so the page's own assertions stay as they were."""
+    t = read(p).decode("utf-8")
+    if str(p).endswith(".html") and os.sep + "golden" + os.sep not in str(p):
+        sys.path.insert(0, os.path.dirname(SCRIPT))
+        import journey_map as jm_  # noqa: E402
+        t = jm_.strip_edit(t)
+    return t
 
 
 def mutant(d, name, old, new, target="journey_map.py"):

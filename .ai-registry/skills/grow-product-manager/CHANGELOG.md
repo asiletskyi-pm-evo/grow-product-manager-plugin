@@ -12,6 +12,57 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.12.0 (2026-11-26)
+
+**«Редагування на сторінці»: the journey map is edited on its page, and the edits come back through the board's preview.** v4.8.0–v4.10.0 let the team edit the map only on a board; the page was a snapshot. Now every page of the map — the published one too — carries the switch «Редагувати». A click on a row opens its editor, «+» in a cell adds a row, and the links a board cannot carry — a row's parent, an initiative's or an experiment's code, the stage's target — are edited too. The page sends nothing: the edits leave it as a file saved or a text copied, `page-diff` makes them a diff the board's take reads, and nothing is written before the PM's preview. On a tree page a child's row goes into the child's own note. The sixth release of the programme «Фреймворки».
+
+### Added
+
+- **The switch «Редагувати»** (`references/journey-protocol.md` §9 «Editing on the page») — on every page `render-html` writes. Off, the page is the v4.10.0 snapshot; on, a row's text, its cell, a new row, a removal, and three links: `parent`, `код`, `ціль`. A health-check, metric or anomaly row is locked (R25). «Зберегти правки» saves `journey-<slug>.page-edits.json`; «Скопіювати правки» copies the same text, for a host whose sandbox blocks the download.
+  - What the page edits is read from attributes of its markup — each grid's map and the digest of its rows, each cell's stage and lane, each row's id, parent, code, target and lock. Page-safe values only.
+  - A second fixed script, `EDIT`: no request, no data of a note.
+- **Shared edits on the host's own artifact page** (§9 «Shared edits», the user's decision of 2026-11-25) — whoever may edit the artifact edits the map together: each edit is a document in the artifact's own `edits` collection, everyone with the page open sees it live with who made it, a viewer who may only view sees the marks without the switch. The publication declares `db` (read `view`, write `admin`) and `user` (`profile`). The edits stay a draft: «забери правки зі сторінки карти шляху» lists the collection, `page-diff --edits <folder>` reads it (a document of an older map `stale`), and after a written take the taken elements' documents are deleted. Off the host the page saves or copies its edits as before.
+- **Editing made comfortable** (the user's review, 2026-11-25) — cards dragged between cells and held under the pointer, a side panel with labelled fields (the stage and lane by their names, «Належить до», the code's hint, the target), «+ Додати», marks «змінено», «новий», «прибрано», «Відмінити правки рядка», a bar that sticks while editing.
+- **`journey_map.py page-diff --note <the page's root> --edits <file> [--out] [--map …] [--dir …]`** — the file of edits, or a pasted text holding it, as a diff `board-take` reads.
+  - Another person's input: at most 2 MB, its kind, version, product and root checked; a map changed since the page is `stale`, nothing of it read; an unknown map, row or op named.
+  - Texts page-safe, as a board's are; a health-check row's edit is `hc_edits`.
+- **Three new diff categories, from the page only** (§12) — `relinked`, `recoded`, `retargeted`. `board-take` checks them as `check` would: `bad_parent`, `orphan`, `bad_code`, and the new named code `bad_target` (a target on a row that is no opportunity, or a second one on a stage). A link never changes a row's source or class.
+- **«сторінка команди <date>»** (`team page <date>`) — the source of a row the page changed or added; its class is the PM's pick in the preview, `simulated` never.
+- **The tree page edited** (§14) — a child's row keyed `<child>#<id>`; `board-take --note <child>` writes the child alone, another map's entries `other_note`; a row changed differently on a board and on the page, or on two pages, is a `conflict` — one version or none.
+- **Tests** — `testing/journey_page_edit_test.py`: the page, `page-diff`, the take, the links, the tree page, checks 28/29 drift, a Playwright browser pass, 6 mutations.
+
+### Changed
+
+- **`cjm-research` 0.20.0** — Step J9 «The page's edits»; J4's question says the page carries the switch; `## Routing` phrases (trigger Group AB). The description is unchanged.
+- **`references/journey-protocol.md`** — §9 «Editing on the page», `page-diff`; §12 the page as a source, the three categories, `bad_target`; §14 the tree page edited; §15 «A request from the page».
+- **Validator** — check 28 also guards §9's ops table, the file's kind, §15's request rule and Step J9; check 29 the page's source. No new check.
+- **`testing/journey_map_test.py`, `testing/journey_nest_test.py`** — a page is read without its editing (`strip_edit`); the board's diff keeps its categories and counts.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/journey_map.py` | the switch, `CSS_EDIT`, the fixed script `EDIT`, the page's attributes; `page-diff` (a file, a text or the shared folder); the three page categories and `bad_target` in `board-take`; checks 28/29 |
+| `references/journey-protocol.md` | §9 «Editing on the page», «Shared edits»; §12 the page as a source; §14 the tree page edited; §15 «A request from the page» |
+| `skills/cjm-research/SKILL.md` | 0.20.0 — J9, J4, Routing |
+| `AGENTS.md` | the page's script among the fixed bytes |
+| `testing/journey_page_edit_test.py` | new: the page, `page-diff`, the take, shared edits with a mocked database, a browser pass, mutations |
+| `testing/journey_map_test.py`, `testing/journey_nest_test.py` | a page read without its editing (`strip_edit`) |
+| `testing/trigger-evals.md`, `testing/test-cases.md`, `testing/output-evals.md`, `testing/host-matrix.md` | Group AB; v4.12.0 cases; the page-editing rubric; the `cjm-research` row |
+| `README.md` | «New in v4.12.0», CJM Research 0.20.0 |
+
+### Backwards compatibility
+
+The note, the board, the board's diff and counts, the portfolio and every result line are as in v4.10.0. The page changes visibly: the switch, its CSS, its script and the attributes it reads; without them (`strip_edit`) it is the v4.10.0 page byte for byte.
+
+### Known limits
+
+- Off the host's own artifact page the edits are handed over by hand — a file or a copied text. On it they sync, but only there.
+- A row's source in the note is «сторінка команди <date>»; who edited it is shown on the shared page only, never written to the note.
+- A host's sandbox may block the download; the copy, and the field it shows the text in, still work.
+
+---
+
 ## v4.11.2 (2026-11-26)
 
 **The story map's board without Miro, laid out by the plugin itself.** A team board for the user story map no longer needs a board tool's account: the host's own board type comes first, and the plugin lays it out on every version, so nobody moves a column by hand.

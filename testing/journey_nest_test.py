@@ -66,7 +66,14 @@ def write(p, data):
 
 
 def text(p):
-    return read(p).decode("utf-8")
+    """A file's text; a page the script rendered without its editing (v4.12.0) — the bar, its CSS, its script and its
+    attributes, which testing/journey_page_edit_test.py checks — so the page's own assertions stay as they were."""
+    t = read(p).decode("utf-8")
+    if str(p).endswith(".html") and os.sep + "golden" + os.sep not in str(p):
+        sys.path.insert(0, os.path.dirname(SCRIPT))
+        import journey_map as jm_  # noqa: E402
+        t = jm_.strip_edit(t)
+    return t
 
 
 def digest(folder):
@@ -895,7 +902,7 @@ try:
             ("no-prefix", '                    e["id"] = "%s:%s" % (d["_tag"], e["id"])', '                    pass  #',
              lambda m: run("board-take", "--note", PW["pay"], "--diff", PW["td"], PW["od"], "--take", ids[0], "--dry-run", script=m),
              lambda r: not any(rr["why"] == "unknown" for rr in r.get("refused", []))),
-            ("no-move-conflict", '    for cat, what in (("changed", "text"), ("moved", "cell")):', '    for cat, what in (("changed", "text"),):',
+            ("no-move-conflict", '(("changed", "text"), ("moved", "cell"), ("relinked", "parent")', '(("changed", "text"), ("relinked", "parent")',
              lambda m: run("board-take", "--note", PM["pay"], "--diff", PM["td"], PM["od"], "--dry-run", script=m),
              lambda r: not any(c.get("what") == "cell" for c in r.get("conflicts", []))),
             ("no-rerole", "        last, _, _ = load_board_state(args.last, note, args.surface)   # an older read: its roles by the tree", "        pass",
