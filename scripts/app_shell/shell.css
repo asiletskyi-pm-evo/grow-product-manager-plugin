@@ -154,3 +154,49 @@
 .gpm-bar-warn { fill: var(--gpm-warn); }
 .gpm-bar-crit { fill: var(--gpm-crit); }
 .gpm-bar-base { stroke: var(--gpm-text); stroke-width: 2; }
+/* ---- the journey map (map.js): the map page's grid, in the shell's colours ---- */
+.gpm-maps { min-width: 0; font-size: 14px; line-height: 1.4; }
+.gpm-map-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.gpm-map-pick[hidden], .gpm-map[hidden], .gpm-map-pick button[hidden] { display: none; }
+.gpm-map-pick button, .gpm-map-reload {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px;
+  border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); background: var(--gpm-surface); color: var(--gpm-text);
+  font: 400 13px/1.2 var(--gpm-font); cursor: pointer;
+}
+.gpm-map-pick button[aria-pressed="true"] { border-color: var(--gpm-accent); box-shadow: inset 0 -3px 0 var(--gpm-accent); font-weight: 600; }
+.gpm-map-pick button:focus-visible, .gpm-map-reload:focus-visible, .gpm-map .wrap:focus-visible { outline: 2px solid var(--gpm-accent); outline-offset: 2px; }
+.gpm-map-note { margin: 8px 0; padding: 8px 10px; border-left: 4px solid var(--gpm-warn); border-radius: var(--gpm-radius); background: var(--gpm-bg); color: var(--gpm-text); font-size: 13px; overflow-wrap: anywhere; }
+.gpm-map { min-width: 0; }
+.gpm-map h2 { margin: 8px 0 4px; font: 700 18px/1.3 var(--gpm-font); overflow-wrap: anywhere; }
+.gpm-map h3 { margin: 16px 0 6px; font: 700 15px/1.3 var(--gpm-font); }
+.gpm-map .meta { margin: 2px 0; color: var(--gpm-muted); overflow-wrap: anywhere; }
+.gpm-map .wrap { box-sizing: border-box; max-width: 100%; overflow: auto; margin-top: 12px; max-height: max(320px, 80vh); border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); background: var(--gpm-bg); cursor: grab; touch-action: pan-x pan-y; }
+.gpm-map .wrap.panning { cursor: grabbing; user-select: none; }
+.gpm-map table.grid { border-collapse: separate; border-spacing: 6px; }
+.gpm-map th, .gpm-map td { vertical-align: top; }
+.gpm-map th.stage { position: sticky; top: 0; z-index: 2; min-width: 190px; padding: 6px 8px; border-radius: 6px; background: var(--gpm-surface); color: var(--gpm-text); text-align: left; box-shadow: 0 -6px 0 var(--gpm-bg), inset 0 -3px 0 var(--gpm-accent); }
+.gpm-map th.stage .o { color: var(--gpm-muted); font-size: 12px; font-weight: 400; }
+.gpm-map th.lane { position: sticky; left: 0; z-index: 1; width: 140px; padding: 6px 8px; border-left: 4px solid var(--gpm-muted); border-radius: 4px; background: var(--gpm-surface); color: var(--gpm-text); text-align: left; font-weight: 600; box-shadow: -6px 0 0 var(--gpm-bg); }
+.gpm-map th.corner { position: sticky; top: 0; left: 0; z-index: 3; background: var(--gpm-bg); }
+.gpm-map .item { max-width: 240px; margin-bottom: 6px; padding: 6px 8px; border-left: 4px solid var(--gpm-border); border-radius: 6px; background: var(--gpm-surface); color: var(--gpm-text); overflow-wrap: anywhere; }
+.gpm-map .item .m { margin-top: 2px; color: var(--gpm-muted); font-size: 11px; }
+.gpm-map .item.gap { border: 1px dashed var(--gpm-warn); color: var(--gpm-warn); }
+.gpm-map .l-pain, .gpm-map .l-anomaly { border-left-color: var(--gpm-crit); }
+.gpm-map .l-metric, .gpm-map .l-experiment { border-left-color: var(--gpm-accent); }
+.gpm-map .l-opportunity { border-left-color: var(--gpm-warn); }
+.gpm-map .l-solution { border-left-color: var(--gpm-ok); }
+.gpm-map .l-initiative { border-left-color: var(--gpm-muted); }
+.gpm-map .target { font-weight: 700; }
+.gpm-map .item.chip { border-left-color: var(--gpm-accent); cursor: pointer; }
+.gpm-map .item.chip:focus-visible { outline: 2px solid var(--gpm-accent); }
+.gpm-map .item.ref { border-left-color: var(--gpm-muted); border-style: dashed; font-style: italic; }
+.gpm-map details.child { margin: 16px 0 0; padding-left: 12px; border-left: 3px solid var(--gpm-border); min-width: 0; }
+.gpm-map details.child > summary { margin: 4px 0; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
+.gpm-map details.child > summary .m { color: var(--gpm-muted); font-size: 12px; font-weight: 400; }
+.gpm-map svg.spark { max-width: 100%; border: 1px solid var(--gpm-border); border-radius: 4px; background: var(--gpm-surface); }
+.gpm-map svg.spark polyline { stroke: var(--gpm-accent); }
+.gpm-map svg.spark circle { fill: var(--gpm-accent); }
+.gpm-map table.pts { display: block; max-width: 100%; overflow-x: auto; margin-top: 6px; border-collapse: collapse; background: var(--gpm-surface); }
+.gpm-map table.pts td { padding: 2px 8px; border: 1px solid var(--gpm-border); }
+.gpm-map-locked .edit-add { display: none !important; }
+.gpm-map-locked .item:not(.chip) { pointer-events: none; }

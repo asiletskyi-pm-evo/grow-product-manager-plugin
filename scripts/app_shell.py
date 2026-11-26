@@ -491,6 +491,14 @@ def _has_map(prof):
     return False
 
 
+def _journey_map():
+    """journey_map.py — the map's page code (EDIT, CSS_EDIT, the edit bar) is its own, imported, never copied."""
+    if HERE not in sys.path:
+        sys.path.insert(0, HERE)
+    import journey_map
+    return journey_map
+
+
 def wrap_page(page, name, prof, lang):
     """The page as an app: manifest + meta + style in <head>, header + modules + the page's body in .gpm-page, the
     profile and the shell script at the end of <body>. Bad on anything it cannot wrap; the same input, the same bytes."""
@@ -515,6 +523,12 @@ def wrap_page(page, name, prof, lang):
         {"permissions": list(prof.get("permissions") or [])})
     meta = '<meta name="grow-pm-app" content="%s;shell=%d">' % (html.escape(name, quote=True), SHELL_VERSION)
     style = '<style id="gpm-style">\n%s</style>' % _read("shell.css")
+    edit = ""
+    if _has_map(prof):                     # the map's editing of v4.12.0, unchanged: map.js runs EDIT on the map it drew
+        jm = _journey_map()
+        style += '<style id="gpm-edit-style">%s</style>' % jm.CSS_EDIT
+        edit = ('\n<template id="gpm-edit-bar">%s</template>\n<script type="text/plain" id="gpm-edit-src">%s</script>'
+                % (jm.edit_bar({"product": ""}, "", lang), jm.EDIT))
     shown = dict(prof)
     shown["connectors"] = [{"role": c.get("role")} for c in prof.get("connectors") or []]
     shown.update(name=name, lang=lang, shell=SHELL_VERSION)
@@ -527,6 +541,8 @@ def wrap_page(page, name, prof, lang):
             continue
         if fname == "map.js" and not _has_map(prof):
             continue
+        if fname == "map.js":
+            tail += edit
         tail += '\n<script id="gpm-%s">\n%s</script>' % (fname[:-3], _read(fname))
     return (page[:head_end.start()] + manifest + meta + style + page[head_end.start():body_open.end()] + shell
             + page[body_open.end():body_end.start()] + tail + page[body_end.start():])

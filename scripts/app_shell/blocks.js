@@ -438,6 +438,18 @@
     var cards = [];
     if (SOURCES[b.source]) {
       cards.push({ key: "", node: SOURCES[b.source](view), product: "" });
+    } else if (typeof RENDER[b.block].all === "function") {
+      // a renderer that draws every document of its block at once (map.js: a picker, one map at a time)
+      var docs = docsOf(snap, b.source).filter(function (d) {
+        return view.filter === "" || groupKey(snap.meta, d.sec.product) === view.filter;
+      }).map(function (d) {
+        return { data: d.sec.data, info: { id: d.id, product: d.sec.product, section: d.sec.section, made: d.sec.made } };
+      });
+      var whole = docs.length ? RENDER[b.block].all(docs, view) : null;
+      if (whole) {
+        cards.push({ key: "", node: whole, product: "" });
+        docs.forEach(function (d) { dates.push(snap.meta.sections[d.info.id] || d.info.made); });
+      }
     } else {
       docsOf(snap, b.source).forEach(function (d) {
         var key = groupKey(snap.meta, d.sec.product);

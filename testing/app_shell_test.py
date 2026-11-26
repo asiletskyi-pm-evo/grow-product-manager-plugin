@@ -1027,9 +1027,9 @@ with tempfile.TemporaryDirectory() as d:
     check("13.2 every embedded file is one IIFE, never closes a script, no <script src>, map.js only with a map block",
           all(s.lstrip().startswith("(function") and "</script" not in s.lower() for s in srcs.values())
           and not re.search(r"<script\b[^>]*\bsrc\s*=", html5, re.I)
-          and ("map.js" not in srcs or "gpm-map" in html5), names)
+          and "map.js" in srcs and '<script id="gpm-map">' in html5, names)
     pm = wrap(d, ZORG, name="pm-os", out="pmos.html")
-    check("13.3 a profile without a map block does not get map.js", "gpm-map" not in body_of(pm[3]) and pm[0] == 0, pm[1])
+    check("13.3 a profile without a map block does not get map.js", '<script id="gpm-map">' not in body_of(pm[3]) and pm[0] == 0, pm[1])
     two = wrap(d, ZORG, out="t5b.html")
     check("13.4 two runs give the same bytes with every file", body_of(two[3]) == html5, "")
     check("13.5 shell.js exposes the registry window.__gpmShell and starts the parts on DOMContentLoaded",
@@ -1183,7 +1183,8 @@ if have_pw:
           and not br.get("t5_unknown_errs"), uz)
     check("14.22 a module with no data shows the empty state in words", g("t5_map_empty").get("empties") == ["Ще немає даних — Claude додасть їх після наступного прогону"], g("t5_map_empty"))
     mp = g("t5_map")
-    check("14.23 the block map shows its placeholder for each map section (map and map.*)", mp.get("placeholders") == ["Карта з'явиться тут"] * 2 and mp.get("empties") == [], mp)
+    check("14.23 the block map is map.js's (T6): sections map and map.* whose data is no map show the empty state, no placeholder",
+          mp.get("placeholders") == [] and mp.get("empties") == ["Ще немає даних — Claude додасть їх після наступного прогону"], mp)
     check("14.24 a module shows «дані від» with the oldest date of what it shows, and follows the product choice",
           "дані від 20.11.2026" in br.get("t5_fresh_all", "") and "дані від 26.11.2026" in br.get("t5_fresh_pay", ""), (br.get("t5_fresh_all"), br.get("t5_fresh_pay")))
     for key in ("t5_nosnap", "t5_nodb", "t5_throws", "t5_plain", "t5_pmos"):
