@@ -1,0 +1,6 @@
+{"stages": [
+  {"id": "visit", "title": "Visit", "value": 1000, "baseline": 1000, "unit": "sessions"},
+  {"id": "cart", "title": "Cart", "value": 700, "baseline": 800, "unit": "sessions"},
+  {"id": "pay", "title": "Payment", "value": 400, "baseline": 600, "unit": "sessions"},
+  {"id": "done", "title": "Done", "value": 380, "baseline": 400, "unit": "sessions"},
+  {"id": "new", "title": "New step", "value": 12, "baseline": null}]}

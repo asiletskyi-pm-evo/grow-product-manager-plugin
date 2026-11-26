@@ -1,8 +1,9 @@
 (function () {
   "use strict";
-  // The app shell: one script, fixed bytes, no data in it. The profile comes from #gpm-profile; the parts below are
-  // started independently, each in its own try/catch — a part that fails, is refused or never settles switches itself
-  // off (or waits) alone and holds no other part back.
+  // The app shell core: fixed bytes, no data in it. The profile comes from #gpm-profile; the parts are started
+  // independently, each in its own try/catch — a part that fails, is refused or never settles switches itself off (or
+  // waits) alone and holds no other part back. The core exposes one registry, window.__gpmShell; the files that follow
+  // it (blocks.js, ...) register their parts there first, and every part starts on DOMContentLoaded.
 
   var STRINGS = {
     uk: {
@@ -36,6 +37,7 @@
   };
   var PARTS = [];
   var t = STRINGS.uk;            // the words of the page's language, set in init()
+  var pageLang = "uk";
 
   function part(name, fn) { PARTS.push({ name: name, run: fn }); }
 
@@ -152,8 +154,9 @@
   function cleanSection(id, raw) {
     if (!SECTION_ID.test(id) || !isObj(raw) || !isObj(raw.data)) { return null; }
     var made = str(raw.made, 40);
-    if (!made || !str(raw.product, 64) || !str(raw.section, 64)) { return null; }
-    return { product: raw.product, section: raw.section, made: made, data: raw.data };
+    if (!made || !str(raw.section, 64)) { return null; }
+    // a document with no product (or an unreadable one) is kept with product "": the modules show it under «Без продукту»
+    return { product: str(raw.product, 64) || "", section: raw.section, made: made, data: raw.data };
   }
 
   function emptySnapshot() { return { meta: null, theme: null, sections: {} }; }
@@ -328,12 +331,28 @@
     ctx.onData(function (snap) { theme = snap && snap.theme ? snap.theme : null; applyTheme(theme); });
   });
 
+  // ---- the registry -----------------------------------------------------------------------------------------------
+  // What the files after this one need. `t` is a getter: the words of the page's language, set in init().
+  var REGISTRY = {
+    part: part, el: el, busy: busy, refusal: refusal, isObj: isObj, str: str, num: num, showDate: showDate, ratio: ratio,
+    COLOR: COLOR, LOAD_TIMEOUT: LOAD_TIMEOUT,
+    addStrings: function (extra) {
+      Object.keys(STRINGS).forEach(function (lang) {
+        if (isObj(extra) && isObj(extra[lang])) { Object.keys(extra[lang]).forEach(function (k) { STRINGS[lang][k] = extra[lang][k]; }); }
+      });
+    }
+  };
+  Object.defineProperty(REGISTRY, "t", { get: function () { return t; }, enumerable: true });
+  Object.defineProperty(REGISTRY, "lang", { get: function () { return pageLang; }, enumerable: true });
+  try { Object.defineProperty(window, "__gpmShell", { value: REGISTRY }); } catch (e) { /* the shell runs without a registry for later files */ }
+
   // ---- the start --------------------------------------------------------------------------------------------------
   function init() {
     var profile;
     try { profile = readProfile(); } catch (e) { return; }
     var lang = profile.lang === "en" ? "en" : "uk";
     t = STRINGS[lang];
+    pageLang = lang;
     var header = document.querySelector("header.gpm-shell");
     if (!header) { return; }
     var title = header.querySelector(".gpm-title");
@@ -374,5 +393,6 @@
     });
   }
 
-  try { init(); } catch (e) { /* the page stays as it is */ }
+  function start() { try { init(); } catch (e) { /* the page stays as it is */ } }
+  if (document.readyState === "loading") { document.addEventListener("DOMContentLoaded", start); } else { start(); }
 })();

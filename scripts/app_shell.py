@@ -32,7 +32,13 @@ LANGS = ("uk", "en")
 LATER_TEXT = "arrives in v4.13.1"
 PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "badge", "tray", "notify", "connectors",
                 "commands")
-MODULE_KEYS = ("id", "block", "source", "home", "title")
+MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks")
+BLOCK_ENTRY_KEYS = ("block", "source", "title")
+SHELL_FILES = ("shell.js", "blocks.js", "map.js", "desk.js")   # embedded in this order, each only if it exists (map.js: only with a map block)
+TITLE_MAX = 80                # a title in the owner's config/app, in characters
+MAX_BLOCKS = 8                # blocks in one composed module
+MAX_CUSTOM = 20               # custom modules in config/app
+MAX_MODULE_RULES = 64
 SECTION = re.compile(r"^[a-z0-9][a-z0-9.-]{0,63}$")
 PRODUCT = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -227,6 +233,60 @@ def _title(t, where, errs):
         errs.append("%s: title needs both uk and en" % where)
 
 
+def _check_block(block, source, where, custom, errs):
+    """One block and its source: the block from BLOCKS (a custom module never takes `map`), the source a section name
+    (SECTION) or `@edits` — never a URL or anything else."""
+    if block not in BLOCKS:
+        errs.append("%s: unknown block '%s'" % (where, block))
+    elif custom and block == "map":
+        errs.append("%s: the block map is not allowed in a custom module" % where)
+    if not isinstance(source, str) or not (SECTION.match(source) or source == "@edits"):
+        errs.append("%s: source must be a section name (%s) or @edits, got '%s'" % (
+            where, SECTION.pattern, source if isinstance(source, str) else type(source).__name__))
+
+
+def _check_forms(m, where, custom, errs):
+    """The two forms of a module (R9): short `{block, source}` or composed `{blocks: [{block, source, title?}]}`, never both;
+    `map` only as the single block of a composed module. `custom` = a module of config/app (titles are plain text there)."""
+    short, composed = ("block" in m or "source" in m), "blocks" in m
+    if short and composed:
+        errs.append("%s: both forms (block/source and blocks) in one module" % where)
+        return
+    if not short and not composed:
+        errs.append("%s: needs block and source, or a blocks list" % where)
+        return
+    if short:
+        _check_block(m.get("block"), m.get("source"), where, custom, errs)
+        return
+    blocks = m.get("blocks")
+    if not isinstance(blocks, list) or not blocks:
+        errs.append("%s: blocks must be a non-empty list" % where)
+        return
+    if len(blocks) > MAX_BLOCKS:
+        errs.append("%s: more than %d blocks" % (where, MAX_BLOCKS))
+    for j, b in enumerate(blocks):
+        bw = "%s block %d" % (where, j + 1)
+        if not isinstance(b, dict):
+            errs.append("%s: not a mapping" % bw)
+            continue
+        for k in b:
+            if k not in BLOCK_ENTRY_KEYS:
+                errs.append("%s: unknown key '%s'" % (bw, k))
+        _check_block(b.get("block"), b.get("source"), bw, custom, errs)
+        if "title" in b:
+            if custom:
+                _plain_title(b["title"], bw, errs)
+            else:
+                _title(b["title"], bw, errs)
+        if b.get("block") == "map" and len(blocks) > 1:
+            errs.append("%s: a map is the single block of a module" % bw)
+
+
+def _plain_title(t, where, errs):
+    if not isinstance(t, str) or not t.strip() or len(t) > TITLE_MAX:
+        errs.append("%s: title must be text of 1-%d characters" % (where, TITLE_MAX))
+
+
 def check_profile(name, prof):
     """The errors of one profile — [] when it is clean."""
     errs, w = [], "profile %s" % name
@@ -276,10 +336,7 @@ def check_profile(name, prof):
         elif mid in ids:
             errs.append("%s: duplicate module id '%s'" % (mw, mid))
         ids.add(mid)
-        if m.get("block") not in BLOCKS:
-            errs.append("%s: unknown block '%s'" % (mw, m.get("block")))
-        if not isinstance(m.get("source"), str) or not m.get("source"):
-            errs.append("%s: source is missing" % mw)
+        _check_forms(m, mw, False, errs)
         if m.get("home"):
             homes += 1
         _title(m.get("title"), mw, errs)
@@ -327,6 +384,58 @@ def check_doc(doc):
     return errs
 
 
+def check_config(doc):
+    """The errors of the owner's `config/app` document `{v: 1, modules: [{id, on, order}], custom: [...]}` — [] when it is
+    clean. The same rules as the page: a title is text (HTML is just text, not an error), a custom module has the short or
+    the composed form, its block is not `map` and its source is a section name or @edits. Unknown keys are ignored, as the
+    page ignores them."""
+    if not isinstance(doc, dict):
+        return ["config: not a mapping"]
+    errs = []
+    if "v" in doc and (doc["v"] != 1 or isinstance(doc["v"], bool)):
+        errs.append("config: v must be 1")
+    ident = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+    rules = doc.get("modules", [])
+    if not isinstance(rules, list):
+        errs.append("config: modules must be a list")
+        rules = []
+    if len(rules) > MAX_MODULE_RULES:
+        errs.append("config: more than %d modules entries" % MAX_MODULE_RULES)
+    for i, r in enumerate(rules):
+        w = "config modules[%d]" % i
+        if not isinstance(r, dict):
+            errs.append("%s: not a mapping" % w)
+            continue
+        if not isinstance(r.get("id"), str) or not ident.fullmatch(r["id"]):
+            errs.append("%s: bad id" % w)
+        if not isinstance(r.get("on"), bool):
+            errs.append("%s: on must be true or false" % w)
+        if "order" in r and (isinstance(r["order"], bool) or not isinstance(r["order"], int) or abs(r["order"]) > 1000):
+            errs.append("%s: order must be a whole number" % w)
+    custom = doc.get("custom", [])
+    if not isinstance(custom, list):
+        errs.append("config: custom must be a list")
+        custom = []
+    if len(custom) > MAX_CUSTOM:
+        errs.append("config: more than %d custom modules" % MAX_CUSTOM)
+    seen = set()
+    for i, m in enumerate(custom):
+        w = "config custom[%d]" % i
+        if not isinstance(m, dict):
+            errs.append("%s: not a mapping" % w)
+            continue
+        if not isinstance(m.get("id"), str) or not ident.fullmatch(m["id"]):
+            errs.append("%s: bad id" % w)
+        elif m["id"] in seen:
+            errs.append("%s: duplicate id '%s'" % (w, m["id"]))
+        seen.add(m.get("id"))
+        _plain_title(m.get("title"), w, errs)
+        _check_forms(m, w, True, errs)
+    if _size(doc) > DOC_MAX:
+        errs.append("config: the document is over %d KiB" % (DOC_MAX // 1024))
+    return errs
+
+
 # ---- wrap ---------------------------------------------------------------------------------------------------------
 
 DB_RULES = [{"path": "", "read": "view", "write": "admin"},
@@ -371,6 +480,17 @@ def _json_in_script(obj):
             .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
 
 
+def _has_map(prof):
+    """True when a module of the profile takes the block `map` (short or composed form)."""
+    for m in prof.get("modules") or []:
+        if not isinstance(m, dict):
+            continue
+        blocks = m.get("blocks") if isinstance(m.get("blocks"), list) else []
+        if m.get("block") == "map" or any(isinstance(b, dict) and b.get("block") == "map" for b in blocks):
+            return True
+    return False
+
+
 def wrap_page(page, name, prof, lang):
     """The page as an app: manifest + meta + style in <head>, header + modules + the page's body in .gpm-page, the
     profile and the shell script at the end of <body>. Bad on anything it cannot wrap; the same input, the same bytes."""
@@ -401,8 +521,13 @@ def wrap_page(page, name, prof, lang):
     title = html.escape((prof.get("title") or {}).get(lang, ""), quote=False)
     shell = ('<header class="gpm-shell"><span class="gpm-title">%s</span><div class="gpm-actions"></div></header>'
              '<main class="gpm-modules" hidden></main><div class="gpm-page">' % title)
-    tail = ('</div><script id="gpm-profile" type="application/json">%s</script>\n<script id="gpm-shell">\n%s</script>'
-            % (_json_in_script(shown), _read("shell.js")))
+    tail = '</div><script id="gpm-profile" type="application/json">%s</script>' % _json_in_script(shown)
+    for fname in SHELL_FILES:
+        if not os.path.exists(os.path.join(SHELL_DIR, fname)):
+            continue
+        if fname == "map.js" and not _has_map(prof):
+            continue
+        tail += '\n<script id="gpm-%s">\n%s</script>' % (fname[:-3], _read(fname))
     return (page[:head_end.start()] + manifest + meta + style + page[head_end.start():body_open.end()] + shell
             + page[body_open.end():body_end.start()] + tail + page[body_end.start():])
 
@@ -774,7 +899,10 @@ def cmd_schema(_a):
 
 
 def cmd_check(a):
-    errs = check_doc(load_profiles(a.profiles))
+    if a.config:
+        errs = check_config(_read_json(a.config, "config"))
+    else:
+        errs = check_doc(load_profiles(a.profiles))
     result(ok=not errs, errors=errs)
     return 1 if errs else 0
 
@@ -807,6 +935,7 @@ def main(argv=None):
     sub.add_parser("schema").set_defaults(fn=cmd_schema)
     c = sub.add_parser("check")
     c.add_argument("--profiles", default=None)
+    c.add_argument("--config", default=None, metavar="FILE", help="check an owner's config/app document instead")
     c.set_defaults(fn=cmd_check)
     w = sub.add_parser("wrap")
     w.add_argument("--page", required=True)

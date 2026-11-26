@@ -1,0 +1,7 @@
+{"v": 1,
+ "modules": [{"id": "funnel", "on": false, "order": 2}, {"id": "edits", "on": true, "order": 0}],
+ "custom": [
+  {"id": "score", "block": "number", "title": "Health score", "source": "score"},
+  {"id": "watch", "title": "Risks and news", "blocks": [
+    {"block": "list", "source": "risks", "title": "Risks"},
+    {"block": "feed", "source": "news", "title": "News"}]}]}

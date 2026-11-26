@@ -335,7 +335,7 @@ const fakeDesktop = `
     window.__gotEvent = 0; window.__push('portfolio--zorg', {v: 1, product: 'zorg', section: 'portfolio', made: '2026-12-01T09:00:00Z', data: {columns: [], rows: [{a: 9}]}});
     window.__push('meta', {v: 1, made: '2026-12-01T09:00:00Z', products: [], thresholds: {warning: 0.1, critical: 0.25}, sections: {'portfolio--zorg': '2026-12-01T09:00:00Z'}}); });
   await p.waitForTimeout(150);
-  out.live1 = await read(); out.liveErrs = errs; out.livePage = await p.isVisible('.gpm-page #keep'); await p.close();
+  out.live1 = await read(); out.liveErrs = errs; out.livePage = (await p.isVisible('.gpm-modules')) && (await p.isHidden('.gpm-page')); await p.close();   // R5: with a snapshot the modules replace the page
   [p, errs] = await open('window.__en = 1;' + fakeDesktop + fakeDb({'meta': META}, 'ok'));
   out.liveNoSec = await read(); await p.close();
   // foreign input: nothing is trusted, nothing is thrown
@@ -409,7 +409,7 @@ const fakeDesktop = `
   // a storage that throws: the page renders, the switch works for the session
   [p, errs] = await open("Object.defineProperty(window, 'localStorage', {get() { throw new Error('denied'); }});" + TH(GOOD));
   out.th_nostore0 = await vars(p); await p.click(sw('dark')); out.th_nostore1 = await vars(p);
-  out.th_nostore_page = await p.isVisible('.gpm-page #keep'); out.th_nostore_errs = errs; await p.close();
+  out.th_nostore_page = await p.isVisible('.gpm-modules'); out.th_nostore_errs = errs; await p.close();
   // English
   [p, errs] = await open(fakeDesktop, null, process.argv[4]);
   out.th_en = await p.evaluate(() => { const g = document.querySelector('.gpm-theme'); return {label: g.getAttribute('aria-label'), texts: Array.from(g.querySelectorAll('button')).map(x => x.textContent)}; }); await p.close();
@@ -417,9 +417,160 @@ const fakeDesktop = `
   [p, errs] = await open(TH(GOOD), {width: 360, height: 640});
   out.th_phone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth,
     right: document.querySelector('.gpm-theme').getBoundingClientRect().right, h: document.querySelector('.gpm-shell').getBoundingClientRect().height})); await p.close();
+
+  // ---- Task 5: modules, blocks, products, config
+  const fs = require('fs');
+  const fx = (n) => JSON.parse(fs.readFileSync(process.argv[5] + '/' + n, 'utf8'));
+  const PRODS = [{id: 'zorg', label: 'Zorg', color: '#2f6fde'}, {id: 'zorg-pay', label: 'Zorg Pay', color: null}];
+  const D5 = (section, product, data, made) => ({v: 1, product, section, made: made || '2026-11-26T10:00:00Z', data});
+  const payTable = {columns: [{key: 'journey', title: 'Journey'}, {key: 'health', title: 'Health'}], rows: [{journey: 'Top up', health: 70, attention: 'ok'}]};
+  function snapDocs(extra, products, thresholds) {
+    const docs = Object.assign({
+      'portfolio--zorg': D5('portfolio', 'zorg', fx('zorg-portfolio.json'), '2026-11-20T08:00:00Z'),
+      'portfolio--zorg-pay': D5('portfolio', 'zorg-pay', payTable),
+      'funnel--zorg': D5('funnel', 'zorg', fx('zorg-funnel.json')),
+      'funnel--zorg-pay': D5('funnel', 'zorg-pay', fx('zorg-funnel.json')),
+      'score--zorg': D5('score', 'zorg', fx('zorg-score.json')),
+      'risks--zorg': D5('risks', 'zorg', fx('zorg-risks.json')),
+      'news--zorg': D5('news', 'zorg', fx('zorg-feed.json'))}, extra || {});
+    const sections = {}; Object.keys(docs).forEach(id => { if (docs[id]) { sections[id] = docs[id].made; } else { delete docs[id]; } });
+    docs.meta = {v: 1, made: '2026-11-26T10:00:00Z', products: products || PRODS, thresholds: thresholds || {warning: 0.1, critical: 0.25}, sections};
+    return docs;
+  }
+  const fakeDb2 = (colls, mode) => `
+    window.__colls = ${JSON.stringify(colls)}; window.__subs2 = {};
+    const qs2 = (c) => { const m = window.__colls[c] || {}; return {docs: Object.keys(m).sort().map(id => ({id, exists: true, data: () => m[id]})), size: Object.keys(m).length, empty: false, docChanges: () => []}; };
+    window.__push2 = (c, id, data) => { window.__colls[c] = window.__colls[c] || {}; if (data === null) { delete window.__colls[c][id]; } else { window.__colls[c][id] = data; } (window.__subs2[c] || []).forEach(f => f(qs2(c))); };
+    const db2 = {collection: (c) => ({onSnapshot: (next, err) => {
+      if ('${mode}' === 'throws') { throw new Error('boom'); }
+      (window.__subs2[c] = window.__subs2[c] || []).push(next); setTimeout(() => next(qs2(c)), 0); return () => {}; }})};
+    const _use2 = window.claude.use; window.claude.use = async (n) => (n === 'db' ? ${mode === 'nodb' ? 'null' : 'db2'} : _use2(n));`;
+  const APP = (docs, cfg, mode) => fakeDesktop + fakeDb2({snapshot: docs, config: cfg ? {app: cfg} : {}}, mode || 'ok');
+  const mod = (pg) => pg.evaluate(() => {
+    const q = (s, r) => Array.from((r || document).querySelectorAll(s));
+    const txt = (e) => (e.textContent || '').trim();
+    const shown = (s) => { const e = document.querySelector(s); return !!e && !e.hidden && getComputedStyle(e).display !== 'none'; };
+    const ls = (k) => { try { return window.localStorage.getItem(k); } catch (e) { return 'ERR'; } };
+    const act = document.activeElement;
+    return {
+      tabs: q('.gpm-tabs [role=tab]').map(b => b.getAttribute('data-tab')), tabTexts: q('.gpm-tabs [role=tab]').map(txt),
+      selected: q('.gpm-tabs [aria-selected=true]').map(b => b.getAttribute('data-tab')),
+      modulesShown: shown('.gpm-modules'), pageShown: shown('.gpm-page'),
+      cards: q('.gpm-panel .gpm-card').map(c => ({product: c.getAttribute('data-product'), chip: (c.querySelector('.gpm-card-head .gpm-chip') || {}).textContent || null, text: txt(c)})),
+      chips: q('.gpm-panel .gpm-chip').map(txt), switchBtns: q('.gpm-products button').map(b => ({text: txt(b), pressed: b.getAttribute('aria-pressed'), product: b.getAttribute('data-product')})),
+      fresh: (document.querySelector('.gpm-fresh-module') || {}).textContent || '', empties: q('.gpm-empty').map(txt), unsupported: q('.gpm-unsupported').map(txt),
+      placeholders: q('.gpm-placeholder').map(txt), rows: q('.gpm-panel tbody tr').map(r => q('td', r).map(txt)), panel: (document.querySelector('.gpm-panel') || {textContent: ''}).textContent.trim(),
+      blockTitles: q('.gpm-block-title').map(txt), imgs: q('.gpm-modules img').length, pwned: !!window.__pwned,
+      tab: ls('gpm-tab'), prod: ls('gpm-product'), active: act ? (act.getAttribute('data-tab') || act.getAttribute('data-product') || act.tagName) : null,
+      headerSwitch: !!document.querySelector('.gpm-shell .gpm-products')};
+  });
+  const tab = async (pg, id) => { await pg.click('.gpm-tabs [data-tab="' + id + '"]'); await pg.waitForTimeout(60); };
+  // order and defaults
+  const CFG_ORDER = {v: 1, modules: [{id: 'funnel', on: false, order: 3}, {id: 'edits', on: true, order: 0}]};
+  [p, errs] = await open(APP(snapDocs(), null)); out.t5_default = await mod(p); out.t5_default_errs = errs;
+  await p.close();
+  [p, errs] = await open(APP(snapDocs(), CFG_ORDER)); out.t5_order = await mod(p); await tab(p, 'edits'); out.t5_edits = await mod(p); out.t5_order_errs = errs; await p.close();
+  // the fixture config: hides funnel, edits first, two custom modules
+  const FIXCFG = fx('zorg-config.json');
+  [p, errs] = await open(APP(snapDocs(), FIXCFG)); out.t5_fix = await mod(p);
+  await tab(p, 'score'); out.t5_score = await mod(p);
+  out.t5_score_dom = await p.evaluate(() => { const s = document.querySelector('.gpm-spark'); return {ns: s && s.namespaceURI, pts: s && s.querySelector('polyline') ? s.querySelector('polyline').getAttribute('points').split(' ').length : 0,
+    value: document.querySelector('.gpm-num-value').textContent, unit: document.querySelector('.gpm-num-unit').textContent, delta: document.querySelector('.gpm-num-delta').textContent}; });
+  await tab(p, 'watch'); out.t5_watch = await mod(p); out.t5_fix_errs = errs; await p.close();
+  // foreign config: bad entries are ignored or marked, text stays text
+  const EVILCFG = {v: 1, modules: ['junk', {id: 'portfolio', on: 'no'}, {id: 'funnel', on: false}, {id: 'map', on: true, order: 1.5}],
+    custom: [{id: 'm1', title: 'Map try', block: 'map', source: 'map'}, {id: 'u1', title: '<b>x</b>', block: 'number', source: 'https://evil.example/x'},
+      {id: 'h1', title: '<img src=x onerror=window.__pwned=1>', block: 'number', source: 'score'}, {id: 'long', title: 'x'.repeat(100), block: 'number', source: 'score'},
+      {id: 'both', title: 'B', block: 'list', source: 'risks', blocks: [{block: 'list', source: 'risks'}]}, {id: 'Bad Id', title: 'z', block: 'list', source: 'risks'}, 'junk',
+      {id: 'cm', title: 'CM', blocks: [{block: 'list', source: 'risks'}, {block: 'map', source: 'map'}]}, {id: 'cs', title: 'CS', block: 'list', source: '../x'},
+      {id: 'cb', title: 'CB', block: 'pie', source: 'risks'}, {id: 'portfolio', title: 'dup', block: 'list', source: 'risks'}, {id: 'num', title: 5, block: 'number', source: 'score'}]};
+  [p, errs] = await open(APP(snapDocs(), EVILCFG)); out.t5_evil = await mod(p); out.t5_evil_bits = {};
+  for (const id of ['m1', 'u1', 'both', 'cm', 'cs', 'cb']) { await tab(p, id); const r = await mod(p); out.t5_evil_bits[id] = r.unsupported; }
+  await tab(p, 'h1'); out.t5_evil_h1 = await mod(p); await tab(p, 'num'); out.t5_evil_num = await mod(p);
+  out.t5_evil_title = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-tab')).map(b => b.textContent));
+  out.t5_evil_errs = errs; await p.close();
+  // product switch and labels
+  [p, errs] = await open(APP(snapDocs(), null)); out.t5_all = await mod(p);
+  out.t5_chipstyle = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-card-head .gpm-chip')).map(c => { const s = getComputedStyle(c); return {t: c.textContent, bg: s.backgroundColor, fg: s.color}; }));
+  out.t5_btnpos = await p.evaluate(() => { const b = document.querySelector('.gpm-products').getBoundingClientRect(); return {inHeader: !!document.querySelector('.gpm-shell .gpm-products'), h: b.height}; });
+  await p.click('.gpm-products [data-product="zorg"]'); await p.waitForTimeout(60); out.t5_zorg = await mod(p);
+  await p.focus('.gpm-products [data-product="zorg-pay"]'); await p.keyboard.press('Enter'); await p.waitForTimeout(60); out.t5_pay_key = await mod(p);
+  await p.reload(); await p.waitForTimeout(300); out.t5_reload = await mod(p);
+  await p.click('.gpm-products [data-product=""]'); await p.waitForTimeout(60); out.t5_back_all = await mod(p); out.t5_all_errs = errs; await p.close();
+  [p, errs] = await open("window.localStorage.setItem('gpm-product', 'ghost');" + APP(snapDocs(), null)); out.t5_ghost_prod = await mod(p); await p.close();
+  [p, errs] = await open(APP(snapDocs({}, [PRODS[0]]), null)); out.t5_one = await mod(p); await p.close();
+  [p, errs] = await open(APP(snapDocs({}, [{id: 'zorg', label: 'Zorg', color: '#ffe08a'}, {id: 'zorg-pay', label: 'Zorg Pay', color: '#123456'}]), null));
+  out.t5_chipcontrast = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-card-head .gpm-chip')).map(c => { const s = getComputedStyle(c); return {t: c.textContent, bg: s.backgroundColor, fg: s.color}; })); await p.close();
+  // unknown product, and a document with no product
+  const ghost = {'risks--ghost': D5('risks', 'ghost', {items: [{title: 'Ghost risk'}]}), 'risks--lost': Object.assign(D5('risks', 'x', {items: [{title: 'Lost risk'}]}), {product: undefined})};
+  [p, errs] = await open(APP(snapDocs(ghost), FIXCFG)); await tab(p, 'watch'); out.t5_unknown = await mod(p);
+  await p.click('.gpm-products [data-product="zorg"]'); await p.waitForTimeout(60); out.t5_unknown_zorg = await mod(p); out.t5_unknown_errs = errs; await p.close();
+  // empty states, placeholders
+  [p, errs] = await open(APP(snapDocs(), null)); await tab(p, 'map'); out.t5_map_empty = await mod(p); await p.close();
+  [p, errs] = await open(APP(snapDocs({'map--zorg': D5('map', 'zorg', {x: 1}), 'map.checkout--zorg': D5('map.checkout', 'zorg', {x: 2})}), null)); await tab(p, 'map'); out.t5_map = await mod(p); await p.close();
+  // freshness: the oldest document shown
+  [p, errs] = await open(APP(snapDocs(), null)); out.t5_fresh_all = (await mod(p)).fresh;
+  await p.click('.gpm-products [data-product="zorg-pay"]'); await p.waitForTimeout(60); out.t5_fresh_pay = (await mod(p)).fresh; await p.close();
+  // no snapshot, no database, a database that throws, a profile without modules
+  [p, errs] = await open(APP({}, null)); out.t5_nosnap = await mod(p); out.t5_nosnap_errs = errs; await p.close();
+  [p, errs] = await open(APP(snapDocs(), null, 'nodb')); out.t5_nodb = await mod(p); out.t5_nodb_errs = errs; await p.close();
+  [p, errs] = await open(APP(snapDocs(), null, 'throws')); out.t5_throws = await mod(p); out.t5_throws_errs = errs; await p.close();
+  [p, errs] = await open(fakeDesktop); out.t5_plain = await mod(p); await p.close();
+  [p, errs] = await open(APP(snapDocs(), null), null, process.argv[6]); out.t5_pmos = await mod(p); out.t5_pmos_errs = errs; await p.close();
+  // storage: the last tab, a tab that is gone, storage that throws
+  [p, errs] = await open(APP(snapDocs(), null)); await tab(p, 'funnel'); out.t5_tab_click = await mod(p); await p.reload(); await p.waitForTimeout(300); out.t5_tab_reload = await mod(p); await p.close();
+  [p, errs] = await open("window.localStorage.setItem('gpm-tab', 'zzz');" + APP(snapDocs(), null)); out.t5_tab_gone = await mod(p); await p.close();
+  [p, errs] = await open("Object.defineProperty(window, 'localStorage', {get() { throw new Error('denied'); }});" + APP(snapDocs(), null));
+  out.t5_nostore0 = await mod(p); await tab(p, 'funnel'); out.t5_nostore1 = await mod(p); await p.click('.gpm-products [data-product="zorg"]'); await p.waitForTimeout(60); out.t5_nostore2 = await mod(p); out.t5_nostore_errs = errs; await p.close();
+  // keyboard: the arrows move between tabs
+  [p, errs] = await open(APP(snapDocs(), null)); await p.focus('.gpm-tabs [data-tab="portfolio"]'); await p.keyboard.press('ArrowRight'); await p.waitForTimeout(60); out.t5_arrow = await mod(p);
+  await p.keyboard.press('End'); await p.waitForTimeout(60); out.t5_end = await mod(p); await p.close();
+  // the chart
+  [p, errs] = await open(APP(snapDocs(), null)); await tab(p, 'funnel');
+  const stages = (pg) => pg.evaluate(() => Array.from(document.querySelectorAll('.gpm-card')[0].querySelectorAll('.gpm-stage')).map(s => ({cls: s.className, head: s.querySelector('.gpm-stage-head').textContent,
+    ns: s.querySelector('svg').namespaceURI, bar: parseFloat(s.querySelector('.gpm-bar').getAttribute('width')), barcls: s.querySelector('.gpm-bar').getAttribute('class'),
+    attn: (s.querySelector('.gpm-attn-text') || {}).textContent || null, tag: s.querySelector('.gpm-bar').tagName, base: !!s.querySelector('.gpm-bar-base')})));
+  out.t5_chart = await stages(p); out.t5_chart_all = await mod(p); await p.close();
+  [p, errs] = await open(APP(snapDocs({}, null, {warning: 0.2, critical: 0.5}), null)); await tab(p, 'funnel'); out.t5_chart_th = (await stages(p)).map(s => s.cls); await p.close();
+  const noth = snapDocs(); delete noth.meta.thresholds;
+  [p, errs] = await open(APP(noth, null)); await tab(p, 'funnel'); out.t5_chart_noth = (await stages(p)).map(s => s.cls); await p.close();
+  // table: status marks with a word, text from the data is only text, numbers only when finite
+  const evilTable = {'portfolio--zorg': D5('portfolio', 'zorg', {columns: [{key: 'journey', title: '<i>Journey</i>'}, {key: 'health', title: 'Health'}, {key: '__proto__', title: 'P'}],
+    rows: [{journey: '<img src=x onerror=window.__pwned=1>', health: 5, attention: 'crit'}, {journey: 'B', health: null, attention: 'weird'}, {journey: {a: 1}, health: [1], attention: 'warn'}, 'junk', {journey: 'C', health: 'x'.repeat(900), attention: 'ok', product: 'zorg'}]})};
+  [p, errs] = await open(APP(snapDocs(evilTable), null)); out.t5_table_evil = await mod(p);
+  out.t5_table_marks = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-table tbody tr')).map(r => ({cls: (r.querySelector('.gpm-attn') || {className: ''}).className, text: (r.querySelector('.gpm-attn-text') || {textContent: ''}).textContent,
+    cellLen: Array.from(r.querySelectorAll('td')).map(t => t.textContent.length)}))); out.t5_table_heads = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-table th')).map(t => t.textContent));
+  out.t5_table_errs = errs; await p.close();
+  [p, errs] = await open(APP(snapDocs(), null)); out.t5_marks = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-table tbody tr')).map(r => ({ok: !!r.querySelector('.gpm-attn-ok'), warn: !!r.querySelector('.gpm-attn-warn'), crit: !!r.querySelector('.gpm-attn-crit'),
+    text: (r.querySelector('.gpm-attn-text') || {textContent: ''}).textContent, shape: r.querySelector('.gpm-mark') ? getComputedStyle(r.querySelector('.gpm-mark')).backgroundColor : ''})));
+  out.t5_weakest = await p.evaluate(() => (document.querySelector('.gpm-weakest') || {textContent: ''}).textContent); await p.close();
+  // numbers
+  const nums = {'score--zorg': D5('score', 'zorg', {value: '74', unit: 'pts'}), 'risks--zorg': D5('risks', 'zorg', {items: 'x'})};
+  [p, errs] = await open(APP(snapDocs(nums), FIXCFG)); await tab(p, 'score'); out.t5_num_bad = await mod(p); await tab(p, 'watch'); out.t5_list_bad = await mod(p); await p.close();
+  const nums2 = {'score--zorg': D5('score', 'zorg', {value: 5, delta: 5, trend: [1, 'x', 3]}), 'score--zorg-pay': D5('score', 'zorg-pay', {value: 1.5, delta: 0, trend: [2, 2, 2]})};
+  [p, errs] = await open(APP(snapDocs(nums2), FIXCFG)); await tab(p, 'score'); out.t5_num2 = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-number')).map(n => ({v: n.querySelector('.gpm-num-value').textContent, d: (n.querySelector('.gpm-num-delta') || {textContent: null}).textContent,
+    u: !!n.querySelector('.gpm-num-unit'), spark: n.querySelectorAll('.gpm-spark').length, pts: n.querySelector('polyline') ? n.querySelector('polyline').getAttribute('points') : null}))); await p.close();
+  // live: a new section and a new config change what is shown, no reload
+  [p, errs] = await open(APP(snapDocs(), null));
+  await p.evaluate(() => { window.__push2('snapshot', 'portfolio--zorg-pay', {v: 1, product: 'zorg-pay', section: 'portfolio', made: '2026-12-02T08:00:00Z', data: {columns: [{key: 'journey', title: 'J'}], rows: [{journey: 'Live row'}]}});
+    const m = window.__colls.snapshot.meta; m.sections['portfolio--zorg-pay'] = '2026-12-02T08:00:00Z'; window.__push2('snapshot', 'meta', m); });
+  await p.waitForTimeout(100); out.t5_live1 = await mod(p);
+  await p.evaluate(() => window.__push2('config', 'app', {v: 1, modules: [{id: 'portfolio', on: false}]})); await p.waitForTimeout(100); out.t5_live2 = await mod(p);
+  await p.evaluate(() => window.__push2('config', 'app', null)); await p.waitForTimeout(100); out.t5_live3 = await mod(p); out.t5_live_errs = errs; await p.close();
+  // phone width
+  const wide = {'portfolio--zorg': D5('portfolio', 'zorg', {columns: Array.from({length: 10}, (_, i) => ({key: 'c' + i, title: 'Column number ' + i})), rows: [Object.fromEntries(Array.from({length: 10}, (_, i) => ['c' + i, 'value ' + i]))]})};
+  [p, errs] = await open(APP(snapDocs(wide), FIXCFG), {width: 360, height: 640}); await tab(p, 'portfolio');
+  out.t5_phone = await p.evaluate(() => { const d = document.documentElement, sc = document.querySelector('.gpm-scroll'), tb = document.querySelector('.gpm-tabs'), pr = document.querySelector('.gpm-products');
+    return {sw: d.scrollWidth, cw: d.clientWidth, scrollInner: sc.scrollWidth, scrollOuter: sc.clientWidth, tabsInner: tb.scrollWidth, tabsOuter: tb.clientWidth, tabsOverflow: getComputedStyle(tb).overflowX, prRight: pr.getBoundingClientRect().right}; });
+  out.t5_phone_errs = errs; await p.close();
+  // English
+  [p, errs] = await open(APP(snapDocs({}, null), EVILCFG), null, process.argv[4]); out.t5_en = await mod(p); await tab(p, 'm1'); out.t5_en_unsup = (await mod(p)).unsupported; await tab(p, 'edits'); out.t5_en_edits = (await mod(p)).placeholders; await p.close();
+  [p, errs] = await open(APP(snapDocs({}, null), null), null, process.argv[4]); await tab(p, 'map'); out.t5_en_empty = (await mod(p)).empties;
+  out.t5_en_sw = await p.evaluate(() => document.querySelector('.gpm-products').getAttribute('aria-label')); await p.close();
   console.log(JSON.stringify(out)); await b.close();
 })();""")
-        pr = subprocess.run(["node", js, pg, "x", pg_en], capture_output=True, text=True, timeout=180, env=dict(os.environ, NODE_PATH=npm))
+        _, _, _, pg_pm = wrap(d, ZORG, name="pm-os", out="pmos-app.html")
+        pr = subprocess.run(["node", js, pg, "x", pg_en, os.path.join(ROOT, "testing", "fixtures", "app"), pg_pm], capture_output=True, text=True, timeout=180, env=dict(os.environ, NODE_PATH=npm))
         try:
             br = json.loads(pr.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
@@ -854,6 +1005,235 @@ with tempfile.TemporaryDirectory() as d:
           len(re.findall(r"https?://", js_src)) == 1 and "https://fonts.googleapis.com/css2?family=" in js_src and '"gpm-theme"' in js_src
           and js_src.count("localStorage") == 2, len(re.findall(r"https?://", js_src)))
 
+
+# ---- Task 5: modules, blocks, products, config ---------------------------------------------------------------------------
+FUNNEL, SCORE, RISKS, FEED, CONFIG = (os.path.join(FIX, n) for n in ("zorg-funnel.json", "zorg-score.json", "zorg-risks.json",
+                                                                       "zorg-feed.json", "zorg-config.json"))
+SHELL_DIR = os.path.join(ROOT, "scripts", "app_shell")
+COMPOSED = {"id": "watch", "title": {"uk": "Стеження", "en": "Watch"},
+            "blocks": [{"block": "list", "source": "risks", "title": {"uk": "Ризики", "en": "Risks"}},
+                       {"block": "feed", "source": "news"}]}
+
+with tempfile.TemporaryDirectory() as d:
+    # test_wrap_embeds_every_file: shell.js, then blocks.js (each its own inline <script>), byte for byte
+    rc, text, res, o = wrap(d, ZORG, out="t5.html")
+    html5 = body_of(o) if os.path.exists(o) else ""
+    names = [n for n in ("shell.js", "blocks.js", "map.js", "desk.js") if os.path.exists(os.path.join(SHELL_DIR, n))]
+    srcs = {n: open(os.path.join(SHELL_DIR, n), encoding="utf-8", newline="").read() for n in names}
+    scripts5 = re.findall(r'<script id="gpm-(\w+)">\n(.*?)</script>', html5, re.S)
+    check("13.1 blocks.js exists and is embedded right after shell.js, each as its own inline <script>, byte for byte",
+          "blocks.js" in srcs and [n for n, _ in scripts5][:2] == ["shell", "blocks"]
+          and all(src in html5 for src in srcs.values() if "</script" not in src.lower()), (names, [n for n, _ in scripts5]))
+    check("13.2 every embedded file is one IIFE, never closes a script, no <script src>, map.js only with a map block",
+          all(s.lstrip().startswith("(function") and "</script" not in s.lower() for s in srcs.values())
+          and not re.search(r"<script\b[^>]*\bsrc\s*=", html5, re.I)
+          and ("map.js" not in srcs or "gpm-map" in html5), names)
+    pm = wrap(d, ZORG, name="pm-os", out="pmos.html")
+    check("13.3 a profile without a map block does not get map.js", "gpm-map" not in body_of(pm[3]) and pm[0] == 0, pm[1])
+    two = wrap(d, ZORG, out="t5b.html")
+    check("13.4 two runs give the same bytes with every file", body_of(two[3]) == html5, "")
+    check("13.5 shell.js exposes the registry window.__gpmShell and starts the parts on DOMContentLoaded",
+          "__gpmShell" in srcs["shell.js"] and "DOMContentLoaded" in srcs["shell.js"], "")
+    bj = srcs.get("blocks.js", "")
+    check("13.6 blocks.js: only the SVG namespace as an address; storage only in try/catch under gpm-tab and gpm-product; no innerHTML",
+          len(re.findall(r"https?://", bj)) == 1 and "http://www.w3.org/2000/svg" in bj and '"gpm-tab"' in bj and '"gpm-product"' in bj
+          and "innerHTML" not in bj and "insertAdjacentHTML" not in bj and "createElementNS" in bj and "eval(" not in bj, len(bj))
+    check("13.7 blocks.js: the block names are the same as app_shell.py's BLOCKS",
+          re.findall(r'"([a-z]+)"', (re.search(r"var BLOCK_NAMES = \[([^\]]*)\]", bj) or re.search("(x)", "x")).group(1)) == list(sh.BLOCKS), "")
+
+    # test_module_forms: the short and the composed form (R9)
+    def mods(*ms):
+        return prof(modules=list(ms), menu=[])
+    short = {"id": "a", "block": "table", "source": "a", "home": True, "title": {"uk": "А", "en": "A"}}
+    check("13.8 'blocks' is a module key", "blocks" in sh.MODULE_KEYS, sh.MODULE_KEYS)
+    check("13.9 the composed form is clean", sh.check_profile("zorg", mods(short, COMPOSED)) == [], sh.check_profile("zorg", mods(short, COMPOSED)))
+    both = dict(COMPOSED, block="table", source="risks")
+    check("13.10 both forms in one module are refused", has(sh.check_profile("zorg", mods(both)), "both"), sh.check_profile("zorg", mods(both)))
+    check("13.11 a module with neither form is refused", sh.check_profile("zorg", mods({"id": "x", "title": {"uk": "Х", "en": "X"}})) != [], "")
+    for label, blocks in (("an empty blocks list", []), ("blocks that is not a list", "table"), ("a block entry that is not a mapping", ["table"]),
+                          ("an unknown block", [{"block": "pie", "source": "risks"}]),
+                          ("a URL as source", [{"block": "list", "source": "https://zorg.example/x"}]),
+                          ("a source outside the section names", [{"block": "list", "source": "Not A Section"}]),
+                          ("a missing source", [{"block": "list"}]),
+                          ("an unknown key in a block", [{"block": "list", "source": "risks", "code": "x"}]),
+                          ("a block title without both languages", [{"block": "list", "source": "risks", "title": {"uk": "Р"}}]),
+                          ("a map next to another block", [{"block": "map", "source": "map"}, {"block": "list", "source": "risks"}])):
+        errs = sh.check_profile("zorg", mods(dict(COMPOSED, blocks=blocks)))
+        check("13.12 composed module with %s is refused" % label, errs != [], errs)
+    check("13.13 a map as the single block of a composed module is allowed",
+          sh.check_profile("zorg", mods(dict(COMPOSED, blocks=[{"block": "map", "source": "map"}]))) == [], "")
+    check("13.14 the source @edits is allowed; a URL or a path as a short source is refused",
+          sh.check_profile("zorg", mods(dict(short, block="feed", source="@edits"))) == []
+          and sh.check_profile("zorg", mods(dict(short, source="https://zorg.example"))) != []
+          and sh.check_profile("zorg", mods(dict(short, source="../x"))) != [], "")
+    # the repo's profiles are still clean, and a composed profile wraps
+    check("13.15 wrap takes a profile with a composed module", sh.wrap_page(ZORG, "zorg", mods(short, COMPOSED), "uk").count('"blocks"') == 1, "")
+
+    # test_config_check (rules shared with the page)
+    cfg = json.load(open(CONFIG, encoding="utf-8"))
+    check("13.16 the Zorg config fixture is clean", sh.check_config(cfg) == [], sh.check_config(cfg))
+    html_cfg = dict(cfg, custom=[dict(cfg["custom"][0], title="<img src=x onerror=alert(1)>")])
+    check("13.17 HTML in a title is not an error: it is just text", sh.check_config(html_cfg) == [], sh.check_config(html_cfg))
+    def bad_custom(**over):
+        return dict(cfg, custom=[dict(cfg["custom"][0], **over)])
+    for label, c, needle in (
+            ("an unknown block", bad_custom(block="pie"), "block"),
+            ("the block map", bad_custom(block="map", source="map"), "map"),
+            ("a URL as source", bad_custom(source="https://zorg.example/x"), "source"),
+            ("a source with a slash", bad_custom(source="a/b"), "source"),
+            ("a title that is not text", bad_custom(title=5), "title"),
+            ("a title over 80 characters", bad_custom(title="x" * 81), "title"),
+            ("both forms", bad_custom(blocks=[{"block": "list", "source": "risks"}]), "both"),
+            ("an empty blocks list", {"v": 1, "custom": [{"id": "w", "title": "W", "blocks": []}]}, "blocks"),
+            ("a map inside blocks", {"v": 1, "custom": [{"id": "w", "title": "W", "blocks": [{"block": "map", "source": "map"}]}]}, "map"),
+            ("a bad custom id", bad_custom(id="Not Ok"), "id"),
+            ("a bad version", dict(cfg, v=2), "v"),
+            ("modules that is not a list", dict(cfg, modules="x"), "modules"),
+            ("an entry with 'on' that is not a boolean", dict(cfg, modules=[{"id": "funnel", "on": "no"}]), "on"),
+            ("an entry with a fractional order", dict(cfg, modules=[{"id": "funnel", "on": True, "order": 1.5}]), "order"),
+            ("a config that is not a mapping", ["x"], "mapping")):
+        errs = sh.check_config(c)
+        check("13.18 check_config names %s" % label, has(errs, needle), errs)
+    check("13.19 @edits is a legal custom source", sh.check_config(bad_custom(block="feed", source="@edits")) == [], "")
+    rc, out, res = run("check", "--config", CONFIG)
+    check("13.20 check --config FILE on the fixture: ok, no errors", rc == 0 and res == {"ok": True, "errors": []}, out)
+    badf = os.path.join(d, "bad-config.json")
+    json.dump(bad_custom(block="pie", source="https://zorg.example"), open(badf, "w"))
+    rc, out, res = run("check", "--config", badf)
+    check("13.21 check --config with an unknown block and a bad source: exit 1, both named", rc == 1 and res.get("ok") is False
+          and has(res.get("errors", []), "block") and has(res.get("errors", []), "source"), out)
+    htmlf = os.path.join(d, "html-config.json")
+    json.dump(html_cfg, open(htmlf, "w"))
+    rc, out, res = run("check", "--config", htmlf)
+    check("13.22 check --config with HTML in a title: ok", rc == 0 and res.get("ok") is True, out)
+    rc, out, res = run("check", "--config", os.path.join(d, "nope.json"))
+    check("13.23 check --config on a missing file: exit 1 with the reason", rc == 1 and res.get("ok") is False and res.get("error"), out)
+    notjson = os.path.join(d, "notjson.json")
+    open(notjson, "w").write("{oops")
+    rc, out, res = run("check", "--config", notjson)
+    check("13.24 check --config on text that is not JSON: exit 1 with the reason", rc == 1 and res.get("ok") is False and res.get("error"), out)
+    # the Zorg section fixtures take the snapshot builder
+    rc, out, res = run("snapshot", "--profile", "cjm", *ZP, "--section", "funnel:zorg:" + FUNNEL, "--section", "funnel:zorg-pay:" + FUNNEL,
+                       "--section", "score:zorg:" + SCORE, "--section", "risks:zorg:" + RISKS, "--section", "news:zorg:" + FEED,
+                       "--at", MADE, "--out", os.path.join(d, "s5"))
+    check("13.25 the funnel (both products), score, risks and feed fixtures go through the snapshot command", rc == 0 and res.get("ok") is True, out)
+
+
+if have_pw:
+    ALL_ORDER = ["portfolio", "map", "funnel", "edits"]
+    def g(k):
+        return br.get(k) or {}
+    df = g("t5_default")
+    check("14.1 no config: the tabs are the profile's modules in its order, the home module is open, the modules replace the page",
+          df.get("tabs") == ALL_ORDER and df.get("selected") == ["portfolio"] and df.get("modulesShown") is True and df.get("pageShown") is False
+          and df.get("tabTexts") == ["Портфель", "Карти", "Воронка", "Правки команди"] and not br.get("t5_default_errs"), df)
+    od = g("t5_order")
+    check("14.2 pw_modules_order: config hides funnel and puts edits first -> tabs edits, portfolio, map; the home module still opens first",
+          od.get("tabs") == ["edits", "portfolio", "map"] and od.get("selected") == ["portfolio"] and not br.get("t5_order_errs"), od)
+    check("14.3 the source @edits shows the placeholder for now", g("t5_edits").get("placeholders") == ["Правки команди з'являться тут"], g("t5_edits"))
+    fx_ = g("t5_fix")
+    check("14.4 the fixture config: funnel off, edits first, then the two custom modules last",
+          fx_.get("tabs") == ["edits", "portfolio", "map", "score", "watch"] and fx_.get("tabTexts")[3:] == ["Health score", "Risks and news"], fx_)
+    sd = g("t5_score_dom")
+    check("14.5 pw_custom_block: a custom number block draws its section: value, unit, delta with a sign, a sparkline built with createElementNS",
+          sd.get("value") == "74" and sd.get("unit") == "pts" and sd.get("delta") == "-3" and sd.get("ns") == "http://www.w3.org/2000/svg" and sd.get("pts") == 5, sd)
+    wt = g("t5_watch")
+    check("14.6 a composed custom module shows its blocks one under another, each with its title; list and feed are plain lists",
+          wt.get("blockTitles") == ["Risks", "News"] and "Refund takes too long" in wt.get("panel", "") and "Funnel stage renamed" in wt.get("panel", "")
+          and "25.11.2026" in wt.get("panel", "") and "Median 6 days" in wt.get("panel", ""), wt)
+    ev = g("t5_evil")
+    check("14.7 foreign config: bad modules entries are ignored, a bad custom id, a duplicate id and junk are dropped, a bad custom block keeps its tab",
+          ev.get("tabs") == ["portfolio", "map", "edits", "m1", "u1", "h1", "long", "both", "cm", "cs", "cb", "num"] and not br.get("t5_evil_errs"), ev)
+    bits = g("t5_evil_bits")
+    check("14.8 pw_custom_block: a custom `map`, a URL as source, both forms, a map next to a block, a source outside the names and an unknown block each show «блок не підтримується»",
+          all(bits.get(k) == ["блок не підтримується"] for k in ("m1", "u1", "both", "cm", "cs", "cb")), bits)
+    h1 = g("t5_evil_h1")
+    check("14.9 a title with HTML is shown as text; nothing is injected; the block still renders", h1.get("imgs") == 0 and h1.get("pwned") is False
+          and "<img src=x onerror=window.__pwned=1>" in br.get("t5_evil_title", []) and "74" in h1.get("panel", ""), (h1, br.get("t5_evil_title")))
+    tt = br.get("t5_evil_title") or []
+    check("14.10 a title is cut to 80 characters; a title that is not text falls back to the id", len(tt) > 7 and len(tt[6]) == 80 and tt[11] == "num", tt)
+    al = g("t5_all")
+    check("14.11 pw_product_switch: «Усі» shows the cards of both products, each with its label, in the order of the products",
+          [c.get("chip") for c in al.get("cards", [])] == ["Zorg", "Zorg Pay"] and al.get("headerSwitch") is True
+          and [(b["text"], b["pressed"]) for b in al.get("switchBtns", [])] == [("Усі", "true"), ("Zorg", "false"), ("Zorg Pay", "false")], al)
+    check("14.12 the row that names its own product carries its label", any("Zorg Pay" in " ".join(r) for r in al.get("rows", [])) and len(al.get("chips", [])) >= 3, al.get("chips"))
+    cs = br.get("t5_chipstyle") or []
+    check("14.13 the chip is the product's colour with white or black text; a product without a colour takes the palette colour by position",
+          cs == [{"t": "Zorg", "bg": "rgb(47, 111, 222)", "fg": "rgb(255, 255, 255)"}, {"t": "Zorg Pay", "bg": "rgb(26, 127, 55)", "fg": "rgb(255, 255, 255)"}], cs)
+    cc = br.get("t5_chipcontrast") or []
+    check("14.14 a light product colour gets black text, a dark one white", [(c["bg"], c["fg"]) for c in cc] == [
+          ("rgb(255, 224, 138)", "rgb(0, 0, 0)"), ("rgb(18, 52, 86)", "rgb(255, 255, 255)")], cc)
+    zg = g("t5_zorg")
+    check("14.15 choosing `zorg` hides the cards of zorg-pay and the rows of another product; the choice is kept in gpm-product",
+          [c.get("chip") for c in zg.get("cards", [])] == ["Zorg"] and not any("Pay by card" in " ".join(r) for r in zg.get("rows", []))
+          and any("First order" in " ".join(r) for r in zg.get("rows", [])) and zg.get("prod") == "zorg"
+          and [b["pressed"] for b in zg.get("switchBtns", [])] == ["false", "true", "false"], zg)
+    pk = g("t5_pay_key")
+    check("14.16 the switch works from the keyboard (Enter), and the focus stays on the button", [c.get("chip") for c in pk.get("cards", [])] == ["Zorg Pay"]
+          and pk.get("prod") == "zorg-pay" and pk.get("active") == "zorg-pay", pk)
+    check("14.17 the product survives a reload; «Усі» brings both back", [c.get("chip") for c in g("t5_reload").get("cards", [])] == ["Zorg Pay"]
+          and [c.get("chip") for c in g("t5_back_all").get("cards", [])] == ["Zorg", "Zorg Pay"] and g("t5_back_all").get("prod") == "", (g("t5_reload"), g("t5_back_all")))
+    check("14.18 a stored product that meta does not know falls back to «Усі»", len(g("t5_ghost_prod").get("cards", [])) == 2, g("t5_ghost_prod"))
+    check("14.19 with one product there is no switch", g("t5_one").get("switchBtns") == [] and g("t5_one").get("headerSwitch") is False, g("t5_one"))
+    un, uz = g("t5_unknown"), g("t5_unknown_zorg")
+    check("14.20 pw_unknown_product: a document of a product that meta lacks, and one with no product, go under «Без продукту»; «Усі» shows them",
+          sorted(c.get("chip") for c in un.get("cards", [])) == ["Zorg", "Zorg", "Без продукту", "Без продукту"]    # the list block, then the feed block
+          and "Ghost risk" in un.get("panel", "") and "Lost risk" in un.get("panel", ""), un)
+    check("14.21 …and choosing a product hides them", [c.get("chip") for c in uz.get("cards", [])] == ["Zorg", "Zorg"] and "Ghost risk" not in uz.get("panel", "") and "Lost risk" not in uz.get("panel", "")
+          and not br.get("t5_unknown_errs"), uz)
+    check("14.22 a module with no data shows the empty state in words", g("t5_map_empty").get("empties") == ["Ще немає даних — Claude додасть їх після наступного прогону"], g("t5_map_empty"))
+    mp = g("t5_map")
+    check("14.23 the block map shows its placeholder for each map section (map and map.*)", mp.get("placeholders") == ["Карта з'явиться тут"] * 2 and mp.get("empties") == [], mp)
+    check("14.24 a module shows «дані від» with the oldest date of what it shows, and follows the product choice",
+          "дані від 20.11.2026" in br.get("t5_fresh_all", "") and "дані від 26.11.2026" in br.get("t5_fresh_pay", ""), (br.get("t5_fresh_all"), br.get("t5_fresh_pay")))
+    for key in ("t5_nosnap", "t5_nodb", "t5_throws", "t5_plain", "t5_pmos"):
+        r = g(key)
+        check("14.25 %s: the page stays as it was, the modules stay hidden, no switch, no error" % key, r.get("pageShown") is True and r.get("modulesShown") is False
+              and r.get("tabs") == [] and r.get("headerSwitch") is False and not br.get(key + "_errs"), r)
+    tc, tr_ = g("t5_tab_click"), g("t5_tab_reload")
+    check("14.26 the last tab is kept in gpm-tab and opens again after a reload", tc.get("tab") == "funnel" and tr_.get("selected") == ["funnel"], (tc, tr_))
+    check("14.27 a stored tab that is gone opens the home module", g("t5_tab_gone").get("selected") == ["portfolio"], g("t5_tab_gone"))
+    n0, n1, n2 = g("t5_nostore0"), g("t5_nostore1"), g("t5_nostore2")
+    check("14.28 with a storage that throws everything works for the session, no error", n0.get("selected") == ["portfolio"] and n1.get("selected") == ["funnel"]
+          and [c.get("chip") for c in n2.get("cards", [])] == ["Zorg"] and not br.get("t5_nostore_errs"), (n0, n1, n2))
+    check("14.29 the arrow keys and End move between tabs and keep the focus", g("t5_arrow").get("selected") == ["map"] and g("t5_arrow").get("active") == "map"
+          and g("t5_end").get("selected") == ["edits"] and g("t5_end").get("active") == "edits", (g("t5_arrow"), g("t5_end")))
+    ch = br.get("t5_chart") or []
+    check("14.30 the chart: one horizontal bar per stage as SVG, value and baseline as text, cart warn, pay crit, done and visit ok, a stage with no baseline plain",
+          len(ch) == 5 and all(c.get("ns") == "http://www.w3.org/2000/svg" and c.get("tag") == "rect" for c in ch)
+          and [("warn" in c["cls"], "crit" in c["cls"]) for c in ch] == [(False, False), (True, False), (False, True), (False, False), (False, False)]
+          and "700" in ch[1]["head"] and "800" in ch[1]["head"] and "база" not in ch[4]["head"] and "база" in ch[1]["head"], ch)
+    check("14.31 …the status is also a word (never colour alone); bar widths follow the values", len(ch) == 5 and ch[1]["attn"] == "Увага" and ch[2]["attn"] == "Критично"
+          and ch[0]["bar"] == 100 and abs(ch[4]["bar"] - 1.2) < 0.01 and ch[1]["base"] and not ch[4]["base"], ch)
+    check("14.32 meta.thresholds move the marks; with none the defaults 0.10 / 0.25 apply", br.get("t5_chart_th") == ["gpm-stage gpm-stage-ok", "gpm-stage gpm-stage-ok", "gpm-stage gpm-stage-warn", "gpm-stage gpm-stage-ok", "gpm-stage"]
+          and (br.get("t5_chart_noth") or [""] * 3)[1] == "gpm-stage gpm-stage-warn" and br.get("t5_chart_noth")[2] == "gpm-stage gpm-stage-crit", (br.get("t5_chart_th"), br.get("t5_chart_noth")))
+    mk = br.get("t5_marks") or []
+    check("14.33 table: an attention mark per row with its own shape colour and a word", [(m["ok"], m["warn"], m["crit"]) for m in mk[:3]] == [(True, False, False), (False, True, False), (False, False, True)]
+          and [m["text"] for m in mk[:3]] == ["Усе гаразд", "Увага", "Критично"] and len({m["shape"] for m in mk}) == 3, mk)
+    check("14.34 the weakest line of a table is shown", "Pay by card" in (br.get("t5_weakest") or "") and "44" in br.get("t5_weakest", ""), br.get("t5_weakest"))
+    te = g("t5_table_evil")
+    check("14.35 table data is text: HTML shows as text, no element, no script; a cell that is not text or a finite number is empty; long text is cut",
+          te.get("imgs") == 0 and te.get("pwned") is False and any("<img src=x onerror=window.__pwned=1>" in " ".join(r) for r in te.get("rows", []))
+          and not br.get("t5_table_errs") and max([max(r["cellLen"] or [0]) for r in br.get("t5_table_marks", [])] or [9999]) <= 500 and "<i>Journey</i>" in br.get("t5_table_heads", []), (te, br.get("t5_table_heads")))
+    check("14.36 an unknown attention value shows no mark; a junk row is skipped", [m["text"] for m in br.get("t5_table_marks", [])] == ["Критично", "", "Увага", "Усе гаразд", "Усе гаразд"], br.get("t5_table_marks"))
+    check("14.37 a number block whose value is not a finite number, and a list with no items, show the empty state",
+          g("t5_num_bad").get("empties") == ["Ще немає даних — Claude додасть їх після наступного прогону"] and len(g("t5_list_bad").get("empties", [])) >= 1, (g("t5_num_bad"), g("t5_list_bad")))
+    n2s = br.get("t5_num2") or []
+    check("14.38 number: a positive delta has a +, zero none, a trend needs two numbers; a flat trend is a flat line",
+          [(n["v"], n["d"], n["u"], n["spark"]) for n in n2s] == [("5", "+5", False, 1), ("1.5", "0", False, 1)] and len(n2s) == 2 and n2s[1]["pts"].split(" ")[0].split(",")[1] == n2s[1]["pts"].split(" ")[1].split(",")[1], n2s)
+    l1, l2, l3 = g("t5_live1"), g("t5_live2"), g("t5_live3")
+    check("14.39 live: a new section document shows without a reload; a new config reorders and hides; deleting the config restores the profile's order",
+          any("Live row" in " ".join(r) for r in l1.get("rows", [])) and l2.get("tabs") == ["map", "funnel", "edits"] and l3.get("tabs") == ALL_ORDER
+          and not br.get("t5_live_errs"), (l1, l2, l3))
+    ph = g("t5_phone")
+    check("14.40 at phone width the page never scrolls sideways; tabs scroll in their own strip, the wide table in its own container",
+          ph and ph["sw"] <= ph["cw"] and ph["scrollInner"] > ph["scrollOuter"] and ph["tabsInner"] > ph["tabsOuter"] and ph["tabsOverflow"] in ("auto", "scroll")
+          and ph["prRight"] <= ph["cw"] and not br.get("t5_phone_errs"), ph)
+    en = g("t5_en")
+    check("14.41 an English page: tabs, the switch label, the unsupported line and the placeholders are in English",
+          br.get("t5_en_unsup") == ["this block is not supported"] and br.get("t5_en_edits") == ["Team edits will appear here"]
+          and br.get("t5_en_empty") == ["No data yet — Claude will add it after the next run"] and br.get("t5_en_sw") == "Product"
+          and [b["text"] for b in en.get("switchBtns", [])][:1] == ["All"], (en, br.get("t5_en_unsup"), br.get("t5_en_empty")))
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)
