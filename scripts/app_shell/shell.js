@@ -152,7 +152,9 @@
 
   // A role's binding {server, tool, input, pick} (the same rules as `snapshot --connectors` in app_shell.py): the
   // connector's display name and tool, the tool's arguments (plain JSON, at most 4 KiB and 6 levels, the placeholders
-  // {codes} / "{codes[]}" only) and three dot-paths that read the answer. A binding that does not fit is dropped.
+  // {codes} / "{codes[]}" only) and three dot-paths that read the answer; `product`, when present, a product id (the
+  // product whose funnel the live numbers belong to). A binding that does not fit is dropped.
+  var PRODUCT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
   var PICK_PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$/;
   var INPUT_MAX = 4096, INPUT_DEPTH = 6;
   function inputFits(v, depth) {
@@ -181,7 +183,10 @@
         pick[k] = v;
         return typeof v === "string" && (PICK_PATH.test(v) || (k === "items" && v === ""));
       });
-      return ok ? { server: b.server, tool: b.tool, input: JSON.parse(text), pick: pick } : null;
+      if (!ok || (b.product !== undefined && (typeof b.product !== "string" || !PRODUCT_ID.test(b.product)))) { return null; }
+      var out = { server: b.server, tool: b.tool, input: JSON.parse(text), pick: pick };
+      if (b.product !== undefined) { out.product = b.product; }
+      return out;
     } catch (e) { return null; }
   }
 

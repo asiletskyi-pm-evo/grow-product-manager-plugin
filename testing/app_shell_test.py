@@ -759,7 +759,9 @@ const fakeDesktop = `
     m.rows.forEach((r, i) => { r.code = codes[i] || ''; });
     for (let i = m.rows.length; i < codes.length; i++) { m.rows.push({id: 'q' + i, stage: 's1', lane: 'action', text: 'Row ' + i, parent: '', code: codes[i], target: false, locked: false, meta: ''}); }
     return m; };
-  const docs8 = (codes, bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(codes))}, extra || {}));
+  // one funnel (zorg's): with no `product` in the binding, live funnel numbers are painted only when the snapshot holds
+  // exactly one funnel section (R21) — the two-funnel cases are their own block below
+  const docs8 = (codes, bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(codes)), 'funnel--zorg-pay': null}, extra || {}));
     if (bind) { dd.meta.connectors = bind; } return dd; };
   const REPLY8 = (table) => '(function (s, t, i, n, call) { const T = ' + JSON.stringify(table) + '; const e = T[t]; if (!e) { return null; } if (call) { return e.c || null; }'
     + ' return Array.isArray(e.w) ? (e.w[Math.min(n, e.w.length) - 1] || null) : (e.w || null); })';
@@ -887,6 +889,22 @@ const fakeDesktop = `
   [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: ERR8('needs_reauth')}, stage_counts: {w: ERR8('server_not_connected')}}), {width: 360, height: 640}); await tab(p, 'funnel');
   out.t8_phone = await live8(p); await p.close();
   [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK), null, process.argv[4]); await tab(p, 'funnel'); out.t8_en = await live8(p); out.t8_en_errs = errs; await p.close();
+  // R21: live funnel numbers per product — two products whose funnels share stage ids (visit, cart, pay, ...)
+  const cards21 = (pg) => pg.evaluate(() => Array.from(document.querySelectorAll('.gpm-panel .gpm-card')).map(c => ({product: c.getAttribute('data-product'),
+    live: Array.from(c.querySelectorAll('.gpm-stage')).map(s => Array.from(s.querySelectorAll('.gpm-live')).map(x => x.textContent))})));
+  const two21 = (bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(['ZRG-1']))}, extra || {})); dd.meta.connectors = bind; return dd; };
+  [p, errs] = await open(APP(two21({'funnel-numbers': Object.assign({}, BOARD8, {product: 'zorg-pay'})}), null) + MCP8(BOTH_OK)); await tab(p, 'funnel');
+  out.t21_pay = {cards: await cards21(p), live: await live8(p), errs}; await p.close();
+  [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}), null) + MCP8(BOTH_OK)); await tab(p, 'funnel');
+  out.t21_none = {cards: await cards21(p), live: await live8(p), errs}; await p.close();
+  [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}), null) + MCP8(BOTH_OK), null, process.argv[4]); await tab(p, 'funnel');
+  out.t21_none_en = {live: await live8(p), errs}; await p.close();
+  [p, errs] = await open(APP(two21({'funnel-numbers': Object.assign({}, BOARD8, {product: 'zorg-pay'}), 'issue-status': TRACKER8}), null) + MCP8(BOTH_OK)); await tab(p, 'map');
+  out.t21_issue = await live8(p); await p.close();
+  // one funnel and no product: the funnel's chart gets the values, another chart of the same product with the same stage ids does not
+  const STEPS21 = {v: 1, custom: [{id: 'steps', title: 'Steps', block: 'chart', source: 'steps'}]};
+  [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}, {'funnel--zorg-pay': null, 'steps--zorg': D5('steps', 'zorg', fx('zorg-funnel.json'))}), STEPS21) + MCP8(BOTH_OK));
+  await tab(p, 'funnel'); out.t21_one = {cards: await cards21(p), live: await live8(p)}; await tab(p, 'steps'); out.t21_steps = {cards: await cards21(p), errs}; await p.close();
   } catch (e) { out.t8_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
@@ -1776,6 +1794,25 @@ if have_pw:
     check("16.57 an English page: «Live numbers», «live: 990 · hh:mm», «Refresh»", any(x.startswith("Live numbers") and "Zorg Board" in x for x in en8["bar"]["lines"]) and en8["bar"]["btn"] == "Refresh"
           and en8["stages"][0]["live"] == ["live: 990 · " + T8] and not br.get("t8_en_errs"), (en8["bar"], en8["stages"][0]))
 
+    # ---- R21 (final review I-1): live funnel numbers of one product never land on another product's chart ------------------
+    t21p, t21n, t21e, t21i = g("t21_pay"), g("t21_none"), g("t21_none_en"), g("t21_issue")
+    byp = {c["product"]: c["live"] for c in t21p.get("cards", [])}
+    check("21.1 a funnel-numbers binding with product zorg-pay: only zorg-pay's funnel shows live values; zorg's funnel, with the same stage ids, shows none",
+          set(byp) == {"zorg", "zorg-pay"} and all(x == [] for x in byp["zorg"]) and byp["zorg-pay"][0] == ["наживо: 990 · " + T8]
+          and [w["tool"] for w in t21p["live"]["m"]["watches"]] == ["stage_counts"] and not t21p.get("errs"), t21p)
+    check("21.2 two funnels and no product in the binding: no watch for the funnel, nothing live on either chart, and the live line says why in words",
+          all(all(x == [] for x in c["live"]) for c in t21n.get("cards", [])) and len(t21n.get("cards", [])) == 2
+          and [w["tool"] for w in t21n["live"]["m"]["watches"]] == []
+          and any("кілька воронок" in x and "26.11.2026" in x for x in (t21n["live"]["bar"] or {}).get("lines", [])) and not t21n.get("errs"), t21n)
+    check("21.3 the same line in English", any("several funnels" in x for x in (t21e["live"]["bar"] or {}).get("lines", [])) and not t21e.get("errs"), t21e)
+    check("21.4 issue-status is unchanged next to a per-product funnel binding: one watch each, the map's statuses shown",
+          sorted(w["tool"] for w in t21i["m"]["watches"]) == ["search_items", "stage_counts"]
+          and [r["live"] for r in t21i["rows"] if r["code"] == "ZRG-1"] == [["In Review"]], t21i.get("m"))
+    o21, s21 = g("t21_one"), g("t21_steps")
+    check("21.5 one funnel and no product works as before; a chart of another section with the same stage ids gets no live value",
+          o21.get("cards") and o21["cards"][0]["live"][0] == ["наживо: 990 · " + T8] and s21.get("cards")
+          and all(all(x == [] for x in c["live"]) for c in s21["cards"]) and not s21.get("errs"), (o21, s21))
+
 # ---- Task 8: live numbers through the viewer's connectors (Python half) ---------------------------------------------------
 TRACKER = {"server": "Zorg Tracker", "tool": "search_items", "input": {"query": "key in ({codes})", "limit": 50},
            "pick": {"items": "data.items", "key": "key", "value": "state.name"}}
@@ -1922,6 +1959,17 @@ with tempfile.TemporaryDirectory() as d:
     check("16.20 --prev-meta with a missing file: refused", rc == 1 and not os.path.exists(os.path.join(d, "pbadx")), text)
     api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None, {"sections": {"x--zorg": MADE}})
     check("16.21 build_snapshot(..., prev_meta) carries sections the same way", api["snapshot/meta"]["sections"] == {"portfolio--zorg": LATER_AT, "x--zorg": MADE}, api["snapshot/meta"])
+
+    # R21: a funnel-numbers binding may name the product whose funnel it feeds
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "r21.json", {"funnel-numbers": dict(BOARD, product="zorg-pay")}), out="r21ok")
+    check("21.10 snapshot --connectors: funnel-numbers with product zorg-pay (one of the products) is written with it",
+          rc == 0 and jread(o, "snapshot", "meta.json")["connectors"]["funnel-numbers"].get("product") == "zorg-pay", text)
+    for i, (label, obj, needle) in enumerate((
+            ("a product that is not among the snapshot's products", {"funnel-numbers": dict(BOARD, product="ghost")}, "ghost"),
+            ("a product id that does not fit the pattern", {"funnel-numbers": dict(BOARD, product="Zorg Pay")}, "product"),
+            ("a product on issue-status", {"issue-status": dict(TRACKER, product="zorg")}, "product"))):
+        rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "r21b%d.json" % i, obj), out="r21bad%d" % i)
+        check("21.11 --connectors with %s: refused, nothing written" % label, rc == 1 and needle in res.get("error", "") and not os.path.exists(o), text)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

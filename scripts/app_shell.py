@@ -752,7 +752,8 @@ def _path_safe(made):
     return re.sub(r"[^A-Za-z0-9._-]", "-", made)
 
 
-BINDING_KEYS = ("server", "tool", "input", "pick")
+BINDING_KEYS = ("server", "tool", "input", "pick", "product")
+PRODUCT_ROLES = ("funnel-numbers",)   # a binding that may name the one product whose section it feeds (R21)
 PICK_KEYS = ("items", "key", "value")
 PICK_PATH = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$")
 INPUT_MAX = 4096              # a binding's input, serialized, in bytes
@@ -786,7 +787,9 @@ def _input_errors(v, depth, errs):
 
 
 def check_binding(role, b, roles, profile):
-    """One role's binding {server, tool, input, pick} -> the cleaned copy. Bad on anything that does not fit."""
+    """One role's binding {server, tool, input, pick, product?} -> the cleaned copy. Bad on anything that does not fit.
+    `product` (funnel-numbers only) names the product whose funnel the live numbers are painted on; that it is one of
+    the snapshot's products is checked where the products are known (_build)."""
     w = "connectors.%s" % role
     if role not in roles:
         raise Bad("connector role '%s' is not declared by profile '%s' (it declares: %s)" % (role, profile, ", ".join(roles) or "none"))
@@ -819,7 +822,14 @@ def check_binding(role, b, roles, profile):
         v = pick[k]
         if not isinstance(v, str) or not (PICK_PATH.match(v) or (k == "items" and v == "")):
             raise Bad("%s: pick.%s must be a dot-path of up to 8 names (letters, digits, _)%s" % (w, k, "; items may be empty" if k == "items" else ""))
-    return {"server": b["server"].strip(), "tool": b["tool"].strip(), "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
+    out = {"server": b["server"].strip(), "tool": b["tool"].strip(), "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
+    if "product" in b:
+        if role not in PRODUCT_ROLES:
+            raise Bad("%s: product is for %s only" % (w, ", ".join(PRODUCT_ROLES)))
+        if not isinstance(b["product"], str) or not PRODUCT.match(b["product"]):
+            raise Bad("%s: product must be a product id (%s)" % (w, PRODUCT.pattern))
+        out["product"] = b["product"]
+    return out
 
 
 def check_connectors(doc, roles, profile):
@@ -892,6 +902,9 @@ def _build(sections, products, theme, made, connectors=None, prev=None):
     if connectors is None and prev:
         connectors = prev.get("connectors")
     if connectors:
+        for role, b in connectors.items():
+            if "product" in b and b["product"] not in ids:
+                raise Bad("connectors.%s: product '%s' is not one of the snapshot's products" % (role, b["product"]))
         meta["connectors"] = {role: dict(b) for role, b in connectors.items()}
     docs["snapshot/meta"] = meta
     if theme is not None:
