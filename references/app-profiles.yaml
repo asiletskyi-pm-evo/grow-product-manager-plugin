@@ -23,5 +23,12 @@ profiles:
     title: {uk: "PM OS", en: "PM OS"}
     icon: {glyph: os}
     permissions: [notifications, menu-bar]
-    modules: []
+    modules:
+      - {id: today, home: true, title: {uk: "Сьогодні", en: "Today"}, blocks: [{block: feed, source: needs-you, title: {uk: "Потребує тебе", en: "Needs you"}}, {block: list, source: focus, title: {uk: "Фокуси дня", en: "Focus of the day"}}, {block: list, source: meetings, title: {uk: "Зустрічі дня", en: "Meetings today"}}, {block: list, source: signals, title: {uk: "Сигнали метрик", en: "Metric signals"}}]}
+      - {id: directions, title: {uk: "Напрямки", en: "Directions"}, blocks: [{block: table, source: directions, title: {uk: "У роботі", en: "In progress"}}, {block: list, source: directions-rest, title: {uk: "На паузі й закриті", en: "Paused and closed"}}]}
+      - {id: metrics, title: {uk: "Метрики", en: "Metrics"}, blocks: [{block: number, source: goal, title: {uk: "Головна ціль", en: "Main goal"}}, {block: table, source: metrics, title: {uk: "Другий рівень", en: "Second level"}}]}
+      - {id: rhythms, title: {uk: "Ритми", en: "Rhythms"}, blocks: [{block: table, source: rhythms, title: {uk: "Свіжість джерел", en: "Source freshness"}}, {block: feed, source: runs-log, title: {uk: "Журнал оновлень", en: "Update log"}}]}
+      - {id: context, title: {uk: "Контекст", en: "Context"}, blocks: [{block: number, source: context-health, title: {uk: "Стан сховища", en: "Store health"}}, {block: list, source: context-inbox, title: {uk: "Запамʼятати?", en: "Remember?"}}]}
+    menu: [today, directions, metrics, rhythms, context, {action: open-in-claude}]
+    connectors: [{role: issue-status, needs: "<jira_project>"}]
     commands: []
