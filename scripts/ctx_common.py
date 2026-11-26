@@ -28,6 +28,12 @@ import threading
 import time
 import unicodedata
 
+
+def shq(s):
+    """`s` in single quotes for a command line the plugin prints (since v4.11.1): a name, a path or a title from a note
+    stays text — `$(…)`, a backtick or `"` in it are never read by a shell; a `'` in it is closed, escaped and reopened."""
+    return "'" + str(s).replace("'", "'\\''") + "'"
+
 N = lambda s: unicodedata.normalize("NFC", s or "")
 
 # Characters that are never printed as they came from a server: C0 and C1 controls, the line and paragraph

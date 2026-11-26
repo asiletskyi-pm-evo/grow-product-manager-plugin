@@ -196,7 +196,7 @@ with tempfile.TemporaryDirectory() as d:
                            lambda: ((reg, idx, sctx), None), sl.load_catalogue())
     check("v3.18.1 C8a: a core rule for team.members — its list alone, as before, and «з карток ще N — ctx entity …»",
           "Core Person — PM" in text and "Rhea One" not in text and "з карток ще 2" in text
-          and 'ctx entity "Zorg Pay" --slot team.members' in text, text)
+          and "ctx entity 'Zorg Pay' --slot team.members" in text, text)
     result["why"], result["prefer"] = "перевага: repo:zorg-core", "repo:zorg-core"
     text = es.read_members(result, {"id": "team.zorg-pay-zp", "title": "Team: Zorg Pay (ZP)"}, FakeOrigin(),
                            lambda: ((reg, idx, sctx), None), sl.load_catalogue())

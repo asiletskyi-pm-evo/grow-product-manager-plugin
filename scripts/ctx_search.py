@@ -106,7 +106,7 @@ ICLOUD_OPEN = "файл не завантажено з iCloud: %s — відкр
 GET_CHARS = 20000               # --get, any form (a section after `#` too): the characters of its text at most
 FULL_CHARS = 60000              # --get --full (a note the model took as «прямо», search-protocol §4): at most
 LONG_NOTE = "нотатка довга — показано %s знаків із %s; %s"
-LONG_NEXT = "далі: %s — --get \"%s#<заголовок>\""
+LONG_NEXT = "далі: %s — --get %s"          # since v4.11.1 the path in single quotes (cc.shq)
 LONG_NONE = "заголовків далі немає"
 LONG_FULL = "--full (до 60 000)"
 LONG_NAMES, LONG_NAMES_CHARS = 20, 600      # the headings LONG_NOTE names at most, and their characters
@@ -1998,7 +1998,7 @@ def long_note(path, shown, total, names, full):
             kept.append(name)
             size += len(name) + 3
         listed = " · ".join(kept + (["ще %d" % (len(names) - len(kept))] if len(kept) < len(names) else []))
-        tail = LONG_NEXT % (listed, path) + (" --full" if full else " або " + LONG_FULL)     # read as this one was
+        tail = LONG_NEXT % (listed, cc.shq(path + "#<заголовок>")) + (" --full" if full else " або " + LONG_FULL)     # read as this one was
     else:
         tail = LONG_NONE + ("" if full else " — " + LONG_FULL)
     return LONG_NOTE % (_thousands(shown), _thousands(total), tail)

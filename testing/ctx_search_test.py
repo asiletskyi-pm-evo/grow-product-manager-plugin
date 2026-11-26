@@ -1452,7 +1452,7 @@ with tempfile.TemporaryDirectory() as d:
         check("U6 (v3.16.1): a whole note is cut at 20 000 characters, then how much of how many, the heading the cut falls "
               "under and the --get of a section or --full",
               hg == "> [own · %s · 2026-10-03 · note]" % LONG and tg.startswith("## Part 1\n\n") and tg == whole6[:20000]
-              + "\n\nнотатка довга — показано 20 000 знаків із %s; далі: Part 2 — --get \"%s#<заголовок>\" або --full "
+              + "\n\nнотатка довга — показано 20 000 знаків із %s; далі: Part 2 — --get '%s#<заголовок>' або --full "
               "(до 60 000)" % ("{:,}".format(len(whole6)).replace(",", " "), LONG), (hg, len(tg), tg[-200:]))
         hp, tp = cs_.get(sx, LONG + "#Part 2")
         check("…a section of it is whole, with no such line", hp == "> [own · %s › Long zebra › Part 2 · 2026-10-03 · note]" % LONG
@@ -1673,8 +1673,8 @@ check("fix round 2 — provider §5: your layer first, then the older; the headi
       and "so a breadcrumb is never the snippet" in section(SP, 3), section(PP, 10)[-1500:])
 check("fix round 4 — search-protocol §4: a twin, a newer version and a hub's link are read with `ctx search --get <шлях>`; "
       "context-protocol §3: --get ID|PATH", all(x in section(SP, 4) for x in (
-          "read the newer one with `ctx search --get \"<шлях>\" --json`", "read the twin too (`ctx search --get \"<шлях>\" --json`)",
-          "a note it links to is read with `ctx search --get \"<назва або шлях>\" --json`", "Never open a vault file by its path yourself"))
+          "read the newer one with `ctx search --get '<шлях>' --json`", "read the twin too (`ctx search --get '<шлях>' --json`)",
+          "a note it links to is read with `ctx search --get '<назва або шлях>' --json`", "Never open a vault file by its path yourself"))
       and "from its path" not in section(SP, 4) and "`search --get ID\\|PATH\\|NAME [--json]`" in section(CP, 3), section(SP, 4)[-1200:])
 check("fix round 5 — search-protocol §4: a hub's link by name or path, the name forms, the several-notes and excluded lines, "
       "the 20 000 cap and the section after `#`, the source `vault`, the never-open sentence scoped to Step 0.5 with SHELL; §5: `vault`",
@@ -1732,7 +1732,7 @@ def long_line(path, shown, total, names, full):
     head = "нотатка довга — показано %s знаків із %s; " % (n(shown), n(total))
     more = " --full" if full else " або --full (до 60 000)"
     if names:
-        return head + "далі: " + " · ".join(names) + " — --get \"%s#<заголовок>\"" % path + more
+        return head + "далі: " + " · ".join(names) + " — --get '%s#<заголовок>'" % path + more
     return head + "заголовків далі немає" + (" — --full (до 60 000)" if not full else "")
 
 
@@ -1780,7 +1780,7 @@ with tempfile.TemporaryDirectory() as d:
     h, t = cut_of(MANY)
     names = heading_names_after(many, 20000)
     check("…more than 20 names: the first 20, then `· ще N`", t is not None and t.endswith(
-        "далі: " + " · ".join(names[:20]) + " · ще %d — --get \"%s#<заголовок>\" або --full (до 60 000)" % (len(names) - 20, MANY)),
+        "далі: " + " · ".join(names[:20]) + " · ще %d — --get '%s#<заголовок>' або --full (до 60 000)" % (len(names) - 20, MANY)),
         (t or "")[-500:])
     dup = cs_._note_of(sx, DUP)[5]
     h, t = cut_of(DUP)
@@ -2404,7 +2404,7 @@ with tempfile.TemporaryDirectory() as d:
     env.refresh(sx)
     h, t = cs_.get(sx, "Notes/Zorg chunks.md", full=True)
     check("v3.16.2 review M4 (Task 4): after --full the hint carries --full — the read it names is cut like this one",
-          t.rsplit("\n\n", 1)[-1].endswith(' — --get "Notes/Zorg chunks.md#<заголовок>" --full'), t[-160:])
+          t.rsplit("\n\n", 1)[-1].endswith(" — --get 'Notes/Zorg chunks.md#<заголовок>' --full"), t[-160:])
     write(env.note("Notes/Zorg blocks.md"), "# Zorg blocks\n\n## X\n\n" + "x " * 120 + "\n\n### A#B\n\n" + "ab " * 80
           + "\n\n### A\n\n" + "a " * 80 + "\n")
     env.refresh(sx)
@@ -2585,7 +2585,7 @@ NAV = read(ROOT, "skills", "context-navigator", "SKILL.md")
 NAV_FM = NAV.split("\n---", 1)[0]
 check("v3.17.0: context-navigator 0.3.0 searches your whole context — the description says so, a missing shared core is "
       "one line and the search goes on, §13 and the «Де шукав» line are named",
-      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM or "version: 0.3.2" in NAV_FM or "version: 0.4.0" in NAV_FM or "version: 0.4.1" in NAV_FM or "version: 0.4.2" in NAV_FM or "version: 0.4.3" in NAV_FM or "version: 0.4.4" in NAV_FM or "version: 0.5.0" in NAV_FM or "version: 0.5.1" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
+      ("version: 0.3.0" in NAV_FM or "version: 0.3.1" in NAV_FM or "version: 0.3.2" in NAV_FM or "version: 0.4.0" in NAV_FM or "version: 0.4.1" in NAV_FM or "version: 0.4.2" in NAV_FM or "version: 0.4.3" in NAV_FM or "version: 0.4.4" in NAV_FM or "version: 0.5.0" in NAV_FM or "version: 0.5.1" in NAV_FM or "version: 0.5.2" in NAV_FM) and "знайди в моєму контексті" in NAV_FM and len(NAV_FM.split("description: ", 1)[-1].split("\n")[0]) <= 400
       and "`Спільне ядро не підключене — шукаю у твоїй базі`" in NAV and "§13" in NAV and "`Де шукав: …`" in NAV
       and "None → say that no shared context is connected and offer `context-connect`; never invent" not in NAV)
 
@@ -2689,14 +2689,14 @@ S13e = section(SP18, 13)
 check("v3.18.0 §13: «who / what it is» — a question about a person, a team, a mission, a module, a metric, a work item "
       "or a Jira key, or who links to one, asks `ctx entity` first; its lines are the answer with the path; several → its "
       "list; «Не знаю такої сутності» → §13 as usual; a sensitive line outside People as `ctx entity` gives it",
-      all(x in S13e for x in ('`ctx entity "<X>" --skill context-navigator`', "**Who or what it is",
+      all(x in S13e for x in ('`ctx entity --q-stdin --skill context-navigator`', "**Who or what it is",
                               "`Не знаю такої сутності: «…»`", "`уточни, кого саме`", " · sensitive`")), S13e[-1500:])
 check("…the person bullet takes the identity from `ctx entity`, not a card read by hand",
       "the identity `ctx entity` gives" in S13e, S13e[-900:])
 NAV18 = read(ROOT, "skills", "context-navigator", "SKILL.md")
 check("v3.18.0 context-navigator: a person, a team, a mission or a Jira key goes to `ctx entity` first (§13), and its "
       "Routing names «хто такий» and «що таке <ключ>»",
-      '`ctx entity "<X>" --skill context-navigator`' in NAV18 and "«хто такий X»" in NAV18 and "«що таке PROJ-1234»" in NAV18,
+      '`ctx entity --q-stdin --skill context-navigator`' in NAV18 and "«хто такий X»" in NAV18 and "«що таке PROJ-1234»" in NAV18,
       NAV18[-800:])
 
 # ------------------------------------------------------------------ v4.9.0 Task 1: `ctx search --type` — notes by type
