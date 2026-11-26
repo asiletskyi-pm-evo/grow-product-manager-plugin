@@ -64,3 +64,10 @@ One service merge commit joins the histories permanently; never rewrite a protec
 **Symptom:** `fatal: not a git repository … .git` right after opening a fresh terminal.
 **Cause:** command run from `~` instead of the repo.
 **Guard:** every generated terminal block starts with `cd <repo>`.
+
+## P10 — A release run where the mirror cannot be reached drops the mirror step
+
+**Symptom:** the canonical remote has the new tags, the mirror (and the registry that reads it) is several releases behind; nobody noticed until an installed copy was compared with the canonical version. Observed 2026-11-26: four releases in a row were merged from cloud sessions, none reached the mirror.
+**Cause:** Step 7 needs the release machine — the mirror remote, its credentials, the VPN. A session without them finished the release at the tag and left no trace that the mirror push, the local pull and the vault record were still to do.
+**Guard:** Step 8.2 runs `python3 testing/release_reach.py --skip-hosts --mirror <name>` — a mirror that is behind or cannot be checked from here fails the run. What this session cannot do is written out as «Left to do on the release machine» (Step 8.6), never dropped.
+**Recovery:** on the release machine run Step 7's block as it is (`git pull --ff-only`, `git fetch --tags`, `git push <mirror> main --tags`), then the reach check again.
