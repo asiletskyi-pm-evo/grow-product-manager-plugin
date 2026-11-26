@@ -427,7 +427,7 @@ A map whose file name is not page-safe, holds a space or any of «·», «•»,
 - A publication or a new version without the question; a publication from a scheduled run; a board read, updated or asked about by the scheduled health-check.
 - An automatic two-way sync with a board: the team's changes come back only through §12, the health-check rows never.
 - A class the PM did not pick; a deletion of what the team added; a deletion from a board without its own «так» per item.
-- `parent` connectors on a board; a story map on the host's board type.
+- `parent` connectors on a board.
 - A person's name on the map or a board (the model's `person_name` pass on taken text; a board state keeps the team's texts page-safe, names not filtered, and never leaves this machine); an Opportunity Score.
 - A health score read from a snapshot's text.
 - A write to Jira: an initiative links an existing code; creating one is `roadmap-architect`'s.

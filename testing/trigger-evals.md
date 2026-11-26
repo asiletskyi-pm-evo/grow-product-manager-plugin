@@ -376,6 +376,8 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | X10 | зроби дошку в Miro для ретро команди | none or diagram-prototyper or brainstorm-features — NOT roadmap-architect |
 | X11 | намалюй шлях покупця від кошика до отримання посилки | cjm-research or diagram-prototyper — NOT roadmap-architect |
 | X12 | що з мапи історій беремо в план на Q1 з урахуванням місткості команди | quarterly-planning — NOT roadmap-architect |
+| X13 | опублікуй мапу історій на дошку Claude (added v4.11.2) | roadmap-architect |
+| X14 | мапа історій без Miro — у нас немає платного акаунта (added v4.11.2) | roadmap-architect |
 
 ### Group Y — Journey map vs neighbours (added 2026-11-16, v4.7.0)
 
@@ -468,6 +470,7 @@ Collisions: since v3.17.0 context-navigator is the one entry for searching and a
 | 2026-11-17 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Y`, mode `real`, model claude-opus-5-5), pre-release v4.8.0 — Group Y once (18 phrases) | Y 18/18 | None. The new Y15–Y17 («забери правки з дошки карти шляху», «опублікуй карту шляху … на дошку», the English take-back) route to cjm-research with its description unchanged — the phrases live in `## Routing`; Y18 «онови дошку мапи історій» stays roadmap-architect; Y1–Y14 unchanged (Y13 → the accepted deep-research alternative). |
 | 2026-11-20 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups Z`, mode `real`, model claude-opus-5-5), pre-release v4.9.0 — Group Z once (7 phrases) | Z 7/7 | None. Z1–Z4 («покажи портфель шляхів», «усі карти шляху продукту — які потребують уваги», the English portfolio, «зведи всі карти шляху й ручні CJM») route to cjm-research with its description unchanged — the phrases live in `## Routing`; the neighbours held — Z5 «портфель проєктів» → project-planning, Z6 «портфель ініціатив і епіків» → product-reporter, Z7 «що потребує моєї уваги сьогодні» → focus-advisor. |
 | 2026-11-24 | **Claude Code, live** (`python3 testing/trigger_claude.py --groups AA`, mode `real`, the working tree of `feature/frameworks-v4.10.0` after task 6, model claude-fable-5-2), pre-release v4.10.0 — Group AA once (7 phrases) | AA 7/7 | None. AA1–AA4 («дочірня карта для кроку … карти …», «розклади крок на окрему карту», the English child map, «дерево карт шляху») route to cjm-research with its description unchanged — the phrases live in `## Routing`; the neighbours held — AA5 «дочірні історії на мапі історій» → roadmap-architect, AA6 «ієрархія екранів як діаграма» → diagram-prototyper, AA7 «дочірні цілі команд» → goal-setter. |
+| 2026-11-26 | **Claude Code 2.1.332, live** (`python3 testing/trigger_claude.py --groups X`, modes `real` and `visible`, the working tree of `claude/project-thread-ksc61v` with `board-layout`), pre-release v4.11.2 — Group X once per mode (14 phrases) | X 14/14 (real), 14/14 (visible) | None. X13 «опублікуй мапу історій на дошку Claude» and X14 «мапа історій без Miro» → roadmap-architect; the neighbours held (X6 project-planning, X7 task-creator, X8/X10/X11 diagram-prototyper, X9 cjm-research, X12 quarterly-planning). |
 
 ## Maintenance
 
