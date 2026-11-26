@@ -1173,7 +1173,7 @@ try:
             drift29("references/artifact-publishing.md", "`cjm-research` (the journey map, `journey-protocol.md` §11, since v4.8.0)", "", "consumer", "11.10 artifact-publishing §1 without the journey map's board is named")
             drift29("references/artifact-publishing.md", "(deck, dashboard, document, design, board)", "(deck, dashboard, document, design)", "typed", "11.11 artifact-publishing §2 without ARTIFACT typed board is named")
             drift29("references/tools-seed.yaml", "roadmap-architect, cjm-research]", "roadmap-architect]", "miro", "11.12 the seed's board record without cjm-research is named")
-            drift29("scripts/story_map.py", "def read_boards(paths):", "def read_board(path):\n    return bs.read_board(path)\n\n\ndef read_boards(paths):", "story_map.py", "11.13 a map script with a board reader of its own is named")
+            drift29("scripts/story_map.py", 'def read_boards(paths, surface="miro"):', 'def read_board(path):\n    return bs.read_board(path)\n\n\ndef read_boards(paths, surface="miro"):', "story_map.py", "11.13 a map script with a board reader of its own is named")
             drift29("scripts/journey_map.py", "import board_state as bs", "import note_table as bs", "journey_map.py", "11.14 a map script that does not import board_state is named")
             drift29("skills/cjm-research/SKILL.md", "- **J6", "- **J7", "J6", "11.15 the skill without its step J6 is named")
             jp3 = os.path.join(r3, "scripts", "journey_map.py")

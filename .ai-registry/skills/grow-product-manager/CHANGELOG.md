@@ -63,6 +63,40 @@ The note, the board, the board's diff and counts, the portfolio and every result
 
 ---
 
+## v4.11.2 (2026-11-26)
+
+**The story map's board without Miro, laid out by the plugin itself.** A team board for the user story map no longer needs a board tool's account: the host's own board type comes first, and the plugin lays it out on every version, so nobody moves a column by hand.
+
+### Added
+
+- **The host's own board for the story map** (`roadmap-architect` 0.8.0, `references/story-map-protocol.md` §6–§8, §10–§11). The map's board is offered on the host's board type first, then a registry record's board (Miro) only when its tools are in the session. One team board per map: the question offers the candidates as alternatives, never both. A map already on Miro gets its «нова версія N» first; it moves to the host's board only on its own answer, and that same «так» forgets the Miro record (`publications.py forget`). The host's board is private until the user shares it. A Miro board left view-only by its plan's limit, or deleted, is a place gone: never recreated silently.
+- **Reading the host's board back** (`scripts/story_map.py` `board-state` / `board-diff --surface miro|whiteboard`). A section is a frame, a rounded block or a note is a sticky; the state names `surface: whiteboard` and lives at `<key>.artifact.board.json`. A read missing a slice section or a backbone block the state holds — a page of the list skipped, or another board — is `partial` (board-diff) or refused (board-state), never «everything removed». A person's note is always the team's addition, whatever its text.
+- **`story_map.py board-layout`** — the host's board laid out by the script (added on the user's choice of 2026-11-26: a board on which every column had to be moved by hand suited a quick grooming, not systematic work). From the note, the state and a whole list read again just now it gives the board's writes in batches of at most 50, each update pinned to its version. One column per step and the activity over its steps; a section per slice as tall as its tallest cell, the sections under it moved down by as much; a new step moves the columns after it right. The team's items move only with their section and column, never otherwise changed; nothing is deleted — a block the note dropped is named (`left`) and its removal asked one item at a time. The same note on a board it laid out writes nothing.
+
+### Changed
+
+- `references/artifact-publishing.md` §2–§3: both maps offer the host's own board; the story map's order is the host's board first. `references/journey-protocol.md` §15 no longer lists the story map on the host's board as future work.
+- Check 26 (`story_map.check_protocol`) also fails when the host's board is not offered first (§7, artifact-publishing §3, the skill), when §11 or artifact-publishing §2 excludes it again, when a §10 board command does not name both surfaces, and when §6 or the skill does not lay the host's board out through `board-layout`.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/story_map.py` | `--surface` on board-state / board-diff, the partial guard, `board-layout`, check 26 |
+| `skills/roadmap-architect/SKILL.md` | 0.7.0 → 0.8.0: Step 7d/7e on the host's board, laid out by `board-layout` |
+| `references/story-map-protocol.md` | §6 the grid on the host's board, §7 order and one board per map, §8 reading the host's board, §10 the commands, §11 |
+| `references/artifact-publishing.md`, `references/journey-protocol.md` | the host's board for both maps |
+| `testing/story_map_test.py` | §12 (host reads, partial, surfaces), §13 (layout), drift 7.12–7.15b, mutations; the 14 Miro goldens unchanged |
+| `testing/fixtures/story-map/wb-*` | the Zorg board as the host's element list |
+
+Acceptance (2026-11-26, on the host): a first board published, a partial read, a Miro record forgotten on the move, and a version laid out by `board-layout` on the scratch Zorg board with the user's own note kept theirs (`testing/test-cases.md` TC-*-4101-*).
+
+### Backwards compatibility
+
+A Miro board, its state and every Miro result are byte for byte those of v4.7.0 (`story_map_test.py` 11.1 replays the 14 goldens). Nothing to migrate: a map without a board, or on Miro, works as before.
+
+---
+
 ## v4.11.1 (2026-11-25)
 
 **A shared core is data: its paths stay inside it, it runs no command of its own, and its rules wait for your yes.** A security patch. The full Skill Security Audit of v4.10.0 (2026-11-25, 301 files) gave **BLOCK** with three high findings and two medium ones. This release closes all five, plus the hardening notes the audit added. No user step is needed.
