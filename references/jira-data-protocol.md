@@ -49,7 +49,7 @@ project = PROJ AND (assignee = <accountId> OR cf[10041] = <accountId> OR cf[1003
 
 ## Large-response extraction (mandatory)
 
-A search over a sprint or a quarter does not fit inline: the host **saves the response to a file** and shows its path (measured 2026-11-26 on Atlassian MCP v2: 100 issues with eight fields — about 380 000 characters, two fifths of them avatar links). Do not read that file whole.
+A search over a sprint or a quarter does not fit inline: the host **saves the response to a file** and shows its path (measured 2026-11-26 on Claude Code 2.1.332 with Atlassian MCP v2: 100 issues with eight fields — about 380 000 characters, two fifths of them avatar links). Do not read that file whole.
 
 1. **Ask only for the fields the mode needs** (`fields: ["summary", "status", "customfield_…"]`). With an explicit list v2 returns no description; `view: "evidence"` brings every comment of every issue, so it is not the way to custom fields in a search (`integration-strategy.md` 1c, point 4).
 2. **Know the shape.** It differs between the two servers, and a reader of the wrong one finds nothing and reports every estimate as missing:
@@ -78,7 +78,7 @@ statuses/[a-z]*\.png","name":"[^"]*"   # status name (not statusCategory)
 "id":[0-9]+,"name":"[^"]*","state":"[a-z]+"   # sprint entries
 ```
 
-On v1 the custom-field lines are `"customfield_10014":(null|"[A-Z]+-[0-9]+")`, `"customfield_10036":(null|[0-9.]+)` and `"customfield_10041":(null|\{"self":"[^"]*","accountId":"[^"]*"`; the rest is the same.
+On v1 the user and custom-field lines are `"customfield_10014":(null|"[A-Z]+-[0-9]+")`, `"customfield_10036":(null|[0-9.]+)`, `"customfield_10041":(null|\{"self":"[^"]*","accountId":"[^"]*"` and `"assignee":(null|\{"self":"[^"]*","accountId":"[^"]*"` — a v1 user starts with its `self` link; the rest is the same.
 
 Notes:
 - The "Team = name" form returns 0; always use the team **id**.
