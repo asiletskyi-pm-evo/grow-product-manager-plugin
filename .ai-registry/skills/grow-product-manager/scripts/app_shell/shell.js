@@ -115,6 +115,7 @@
   // into the page only through textContent. readSnapshot never throws and never rejects.
   var SECTION_ID = /^[a-z0-9][a-z0-9.-]{0,63}--[a-z0-9][a-z0-9-]{0,63}$/;
   var COLOR = /^#[0-9a-fA-F]{6}$/;
+  var PRODUCT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;   // the same as PRODUCT in app_shell.py
   var LOAD_TIMEOUT = 10000;
 
   function isObj(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
@@ -128,7 +129,7 @@
     var meta = { made: made, products: [], thresholds: { warning: 0.1, critical: 0.25 }, sections: {}, connectors: {} };
     if (Array.isArray(raw.products)) {
       raw.products.forEach(function (p) {
-        if (!isObj(p) || !str(p.id, 64) || !str(p.label, 24)) { return; }
+        if (!isObj(p) || !str(p.id, 64) || !PRODUCT_ID.test(p.id) || !str(p.label, 24)) { return; }   // an id goes into selectors
         meta.products.push({ id: p.id, label: p.label, color: typeof p.color === "string" && COLOR.test(p.color) ? p.color : null });
       });
     }
@@ -152,7 +153,8 @@
 
   // A role's binding {server, tool, input, pick} (the same rules as `snapshot --connectors` in app_shell.py): the
   // connector's display name and tool, the tool's arguments (plain JSON, at most 4 KiB and 6 levels, the placeholders
-  // {codes} / "{codes[]}" only) and three dot-paths that read the answer. A binding that does not fit is dropped.
+  // {codes} / "{codes[]}" only) and three dot-paths that read the answer; `product`, when present, a product id (the
+  // product whose funnel the live numbers belong to). A binding that does not fit is dropped.
   var PICK_PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$/;
   var INPUT_MAX = 4096, INPUT_DEPTH = 6;
   function inputFits(v, depth) {
@@ -181,7 +183,10 @@
         pick[k] = v;
         return typeof v === "string" && (PICK_PATH.test(v) || (k === "items" && v === ""));
       });
-      return ok ? { server: b.server, tool: b.tool, input: JSON.parse(text), pick: pick } : null;
+      if (!ok || (b.product !== undefined && (typeof b.product !== "string" || !PRODUCT_ID.test(b.product)))) { return null; }
+      var out = { server: b.server, tool: b.tool, input: JSON.parse(text), pick: pick };
+      if (b.product !== undefined) { out.product = b.product; }
+      return out;
     } catch (e) { return null; }
   }
 
@@ -214,6 +219,13 @@
         } catch (e) { /* one malformed document is skipped */ }
       });
     } catch (e) { return emptySnapshot(); }
+    // The index decides (R22): a section document that meta.sections does not list — left by an earlier run, a map
+    // renamed, removed or grown past the limit — reaches no module. Without a meta nothing is shown anyway (as before).
+    if (out.meta) {
+      Object.keys(out.sections).forEach(function (id) {
+        if (!Object.prototype.hasOwnProperty.call(out.meta.sections, id)) { delete out.sections[id]; }
+      });
+    }
     return out;
   }
 

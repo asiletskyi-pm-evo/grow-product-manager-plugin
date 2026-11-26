@@ -12,7 +12,7 @@ profiles:
       - {id: map, block: map, source: map, title: {uk: "Карти", en: "Maps"}}
       - {id: funnel, block: chart, source: funnel, title: {uk: "Воронка", en: "Funnel"}}
       - {id: edits, block: feed, source: "@edits", title: {uk: "Правки команди", en: "Team edits"}}
-    menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits, {action: open-in-claude}]
+    menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits]
     badge: "@edits.pending"
     tray: {title: portfolio.weakest, menu: map}
     notify: [edits.new, threshold.crossed]
@@ -30,6 +30,6 @@ profiles:
       - {id: metrics, title: {uk: "Метрики", en: "Metrics"}, counts: {uk: ["сигнал", "сигнали", "сигналів"], en: ["signal", "signals"]}, blocks: [{block: lead, source: metrics-lead}, {block: number, source: goal}, {block: bars, source: metrics-change, group: main, title: {uk: "Головні метрики", en: "Key metrics"}}, {block: bars, source: metrics-compare, group: main}, {block: table, source: metrics, group: main}, {block: number, source: metrics-pace, group: pace, title: {uk: "Темп", en: "Pace"}}, {block: bars, source: metrics-periods, group: pace}, {block: line, source: metrics-trend, title: {uk: "Динаміка", en: "Over time"}}]}
       - {id: rhythms, title: {uk: "Ритми", en: "Rhythms"}, counts: {uk: ["застаріло", "застаріли", "застаріло"], en: ["stale", "stale"]}, blocks: [{block: lead, source: rhythms-lead}, {block: table, source: rhythms, title: {uk: "Джерела", en: "Sources"}}, {block: feed, source: runs-log, title: {uk: "Оновлення пульта", en: "Updates of the pult"}}]}
       - {id: context, title: {uk: "Контекст", en: "Context"}, blocks: [{block: lead, source: context-lead}, {block: list, source: context-inbox, title: {uk: "Питання до тебе", en: "Questions for you"}}, {block: number, source: context-health, title: {uk: "Стан записів", en: "State of the records"}}]}
-    menu: [today, directions, metrics, rhythms, context, {action: open-in-claude}]
+    menu: [today, directions, metrics, rhythms, context]
     connectors: [{role: issue-status, needs: "<jira_project>"}]
     commands: []

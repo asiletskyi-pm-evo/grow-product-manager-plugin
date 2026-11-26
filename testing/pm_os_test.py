@@ -146,8 +146,7 @@ bad_sum = sh.check_profile("x", dict(prof, modules=[dict(mods[0], blocks=[{"bloc
 check("1.12 the source @summary under any block but lead is refused", any("@summary" in e for e in bad_sum), bad_sum)
 check("1.8 no full access, no commands, no permission beyond the shell's", prof.get("level") == "app" and prof.get("commands") == []
       and set(prof.get("permissions") or []) <= set(sh.PERMISSIONS))
-check("1.9 the menu names the modules only, then the action to open the chat",
-      prof.get("menu") == MODULES + [{"action": "open-in-claude"}], prof.get("menu"))
+check("1.9 the menu names the modules only", prof.get("menu") == MODULES, prof.get("menu"))
 check("1.10 a connector is a role and a placeholder, never a value",
       all(set(c) == {"role", "needs"} and re.fullmatch(r"<[a-z][a-z0-9_]*>", c["needs"]) for c in prof.get("connectors") or []))
 
@@ -196,9 +195,10 @@ check("3.6 a partial run keeps the dates of the sections it did not write (proto
       and kept.get("meetings--zorg") == LATER and kept.get("directions--zorg") == MADE
       and len(kept) == len(sources) * 2 and "--prev-meta" in protocol, kept)
 with tempfile.TemporaryDirectory() as d:
-    args = ["snapshot", "--profile", "pm-os", "--at", MADE, "--out", os.path.join(d, "db")]
-    for p in PRODUCTS:
-        args += ["--product", "%s:%s:%s" % (p["id"], p["label"], p["color"])]
+    pf = os.path.join(d, "products.json")
+    with open(pf, "w", encoding="utf-8") as f:
+        json.dump(PRODUCTS, f)
+    args = ["snapshot", "--profile", "pm-os", "--at", MADE, "--products", pf, "--out", os.path.join(d, "db")]
     for s in sources:
         for p in PRODUCTS:
             args += ["--section", "%s:%s:%s" % (s, p["id"], os.path.join(FIX, "zorg-%s.json" % s))]

@@ -78,6 +78,31 @@ PYEOF
   ok "codex manifest: .codex-plugin/plugin.json in sync with plugin.json, logo assets present"
 fi
 
+# Claude listing icon (since v4.12.3): when plugin.json names an icon, it is a file inside the
+# plugin, a PNG or JPEG, square, 512–2048 px on a side, under 2 MB (the documented listing rules).
+if python3 -c 'import json,sys;sys.exit(0 if "icon" in json.load(open(".claude-plugin/plugin.json")) else 1)'; then
+  if python3 - <<'PYEOF'; then ok "plugin icon: $(python3 -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["icon"])'), a square PNG/JPEG within the listing rules"; else err "plugin.json icon: must be a square PNG or JPEG inside the plugin, 512–2048 px, under 2 MB"; fi
+import json,os,struct,sys
+p=json.load(open(".claude-plugin/plugin.json"))["icon"]
+f=os.path.normpath(p)
+if os.path.isabs(f) or f.startswith("..") or not os.path.isfile(f): print("  missing or outside the plugin:",p); sys.exit(1)
+if os.path.getsize(f)>=2*1024*1024: print("  2 MB or more:",p); sys.exit(1)
+b=open(f,"rb").read()
+if b[:8]==b"\x89PNG\r\n\x1a\n": w,h=struct.unpack(">II",b[16:24])
+elif b[:2]==b"\xff\xd8":
+    i=2; w=h=None
+    while i+9<len(b):
+        if b[i]!=0xFF: i+=1; continue
+        m=b[i+1]
+        if m in (0xC0,0xC1,0xC2,0xC3,0xC5,0xC6,0xC7,0xC9,0xCA,0xCB,0xCD,0xCE,0xCF):
+            h,w=struct.unpack(">HH",b[i+5:i+9]); break
+        i+=2+struct.unpack(">H",b[i+2:i+4])[0]
+    if w is None: print("  no JPEG size found:",p); sys.exit(1)
+else: print("  not a PNG or JPEG:",p); sys.exit(1)
+if w!=h or not 512<=w<=2048: print("  %dx%d, expected square 512–2048:"%(w,h),p); sys.exit(1)
+PYEOF
+fi
+
 # --- 2. SKILL.md frontmatter --------------------------------------------------
 for f in skills/*/SKILL.md; do
   head -6 "$f" | grep -q '^name: '        || err "$f: missing 'name:' in frontmatter"

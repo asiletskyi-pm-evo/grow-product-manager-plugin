@@ -11,6 +11,9 @@
   --gpm-accent-fg: #ffffff;
   --gpm-radius: 8px;
   --gpm-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* the text on an added map card, whose light yellow (the map page's CSS_EDIT) is the same in either theme */
+  --gpm-on-added: #1f2328;
+  --gpm-on-added-muted: #5c646d;
 }
 /* the dark values: the OS asks for dark unless the person chose light; or the person chose dark */
 @media (prefers-color-scheme: dark) {
@@ -190,6 +193,9 @@
 .gpm-map .item.chip { border-left-color: var(--gpm-accent); cursor: pointer; }
 .gpm-map .item.chip:focus-visible { outline: 2px solid var(--gpm-accent); }
 .gpm-map .item.ref { border-left-color: var(--gpm-muted); border-style: dashed; font-style: italic; }
+/* an added card keeps the v4.12.0 page's light yellow (CSS_EDIT), so its text is dark in either theme */
+.gpm-map .item.added { color: var(--gpm-on-added); }
+.gpm-map .item.added .m { color: var(--gpm-on-added-muted); }
 .gpm-map details.child { margin: 16px 0 0; padding-left: 12px; border-left: 3px solid var(--gpm-border); min-width: 0; }
 .gpm-map details.child > summary { margin: 4px 0; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
 .gpm-map details.child > summary .m { color: var(--gpm-muted); font-size: 12px; font-weight: 400; }

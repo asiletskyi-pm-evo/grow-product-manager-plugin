@@ -186,7 +186,7 @@
   // The children of a node as the tree page shows them: a chip on the parent's step, each child's grid in a <details>,
   // its own children inside it, the references past the depth as chips and one line.
   function tree(n, m, ids, wraps, plain) {
-    var chips = {}, body = [];
+    var chips = Object.create(null), body = [];       // keyed by a stage id from the data: no prototype
     n.children.forEach(function (k) {
       var id = ids();
       var chip = item("chip", k.chipT, k.chipM);
@@ -301,7 +301,7 @@
   var ctx = null;
   S.part("map", function (c) { ctx = c; watchEdits(); });
 
-  var state = { key: null, root: null, maps: [], started: false, frozen: false, selected: null, stale: {} };
+  var state = { key: null, root: null, maps: [], started: false, frozen: false, selected: null, stale: Object.create(null) };
 
   function isMapSection(name) { return name === "map" || (typeof name === "string" && name.indexOf("map.") === 0); }
 
@@ -371,7 +371,7 @@
   function watchEdits() {
     if (!ctx) { return; }
     ctx.watchEdits(function (list) {
-      var by = {};
+      var by = Object.create(null);                  // keyed by a document's `map` value: no prototype
       list.forEach(function (d) {
         var x = d.x;
         if (typeof x.map !== "string" || typeof x.digest !== "string" || (x.kind !== "row" && x.kind !== "add")) { return; }
@@ -431,9 +431,6 @@
       maps.push(mp);
     });
     if (!maps.length) { return null; }
-    var bar = root.querySelector(".edit-bar");
-    if (bar && maps[0].product) { bar.setAttribute("data-product", maps[0].product); }
-    if (bar) { bar.setAttribute("data-root", maps[0].box.getAttribute("data-map")); }
     state.root = root;
     state.maps = maps;
     return root;
@@ -451,6 +448,13 @@
     });
     var pick = state.root.querySelector(".gpm-map-pick");
     if (pick) { pick.hidden = shown.length < 2; }
+    // the edit bar names the map shown: EDIT reads its root and product when the edits are saved or copied
+    var bar = state.root.querySelector(".edit-bar");
+    var cur = state.maps.filter(function (mp) { return mp.id === state.selected; })[0];
+    if (bar && cur) {
+      bar.setAttribute("data-root", cur.box.getAttribute("data-map"));
+      if (cur.product) { bar.setAttribute("data-product", cur.product); } else { bar.removeAttribute("data-product"); }
+    }
   }
 
   // EDIT once per page, after the maps are in it — never next to another page's editing.

@@ -43,7 +43,7 @@ BASE = {"level": "app", "title": {"uk": "Zorg", "en": "Zorg"}, "icon": {"glyph":
         "permissions": ["notifications", "menu-bar"],
         "modules": [{"id": "a", "block": "table", "source": "a", "home": True, "title": {"uk": "А", "en": "A"}},
                     {"id": "b", "block": "list", "source": "b", "title": {"uk": "Б", "en": "B"}}],
-        "menu": ["a", "b", {"action": "edit", "accel": "CmdOrCtrl+E"}, {"action": "open-in-claude"}],
+        "menu": ["a", "b", {"action": "edit", "accel": "CmdOrCtrl+E"}],
         "connectors": [{"role": "issue-status", "needs": "<jira_project>"}], "commands": []}
 
 
@@ -59,7 +59,7 @@ check("1.1 check on the repo is clean", rc == 0 and res == {"ok": True, "errors"
 check("1.2 the base profile of this test is clean", sh.check_profile("zorg", BASE) == [], sh.check_profile("zorg", BASE))
 rc, out, res = run("schema")
 check("1.3 schema prints the constants", res.get("levels") == ["page", "app"] and res.get("later") == list(sh.LATER)
-      and res.get("blocks") == list(sh.BLOCKS), out)
+      and res.get("blocks") == list(sh.BLOCKS) and res.get("actions") == ["edit"], out)
 doc = sh.load_profiles()
 cjm = doc["profiles"]["cjm"]
 check("1.4 the reader reads flow mappings and lists", cjm["title"] == {"uk": "CJM", "en": "CJM"} and cjm["menu"][3] ==
@@ -98,6 +98,7 @@ cases = (
     ("unknown permission", prof(permissions=["camera"]), "unknown permission 'camera'"),
     ("menu entry not a module", prof(menu=["ghost"]), "menu entry 'ghost'"),
     ("menu action unknown", prof(menu=[{"action": "delete"}]), "menu action 'delete'"),
+    ("open-in-claude, an action no longer known (ledger 184)", prof(menu=[{"action": "open-in-claude"}]), "menu action 'open-in-claude' is unknown"),
     ("duplicate module id", prof(modules=[BASE["modules"][0], dict(BASE["modules"][1], id="a")]), "duplicate module id 'a'"),
     ("two homes", prof(modules=[BASE["modules"][0], dict(BASE["modules"][1], home=True)]), "more than one home"),
     ("unknown level", prof(level="tablet"), "unknown level 'tablet'"),
@@ -572,6 +573,7 @@ const fakeDesktop = `
   [p, errs] = await open(APP(snapDocs({}, null), EVILCFG), null, process.argv[4]); out.t5_en = await mod(p); await tab(p, 'm1'); out.t5_en_unsup = (await mod(p)).unsupported; await tab(p, 'edits'); out.t5_en_edits = (await mod(p)).placeholders; await p.close();
   [p, errs] = await open(APP(snapDocs({}, null), null), null, process.argv[4]); await tab(p, 'map'); out.t5_en_empty = (await mod(p)).empties;
   out.t5_en_sw = await p.evaluate(() => document.querySelector('.gpm-products').getAttribute('aria-label')); await p.close();
+  let D7g = null;           // D7 for the later blocks (R22)
   try {
   // ---- Task 7: menu, badge, tray, notifications, permissions, icon (fake desktop that records every call)
   const TIMER7 = `window.__timers = []; window.__retries = []; window.__retryFns = []; window.__fireRetry = () => { const f = window.__retryFns.shift(); if (f) { f(); } }; const __st = window.setTimeout;
@@ -597,6 +599,7 @@ const fakeDesktop = `
       + (o.seen ? 'try { localStorage.setItem("gpm-seen", ' + JSON.stringify(JSON.stringify(o.seen)) + '); } catch (e) {};' : '')
       + TIMER7 + fakeDesktop + fakeDb2({snapshot: docs, config: {}, edits: o.edits || {}}, 'ok') + EXTRA7(o); };
   const GRANTED = {notifications: 'granted', 'menu-bar': 'granted'};
+  D7g = D7;
   const MAPDOC = D5('map.first-order', 'zorg', fx('zorg-map.json'));
   const PAYW = Object.assign({}, payTable, {weakest: {title: 'Top up', score: 70}});
   const docs7 = (extra) => snapDocs(Object.assign({'map.first-order--zorg': MAPDOC, 'portfolio--zorg-pay': D5('portfolio', 'zorg-pay', PAYW)}, extra || {}));
@@ -759,7 +762,9 @@ const fakeDesktop = `
     m.rows.forEach((r, i) => { r.code = codes[i] || ''; });
     for (let i = m.rows.length; i < codes.length; i++) { m.rows.push({id: 'q' + i, stage: 's1', lane: 'action', text: 'Row ' + i, parent: '', code: codes[i], target: false, locked: false, meta: ''}); }
     return m; };
-  const docs8 = (codes, bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(codes))}, extra || {}));
+  // one funnel (zorg's): with no `product` in the binding, live funnel numbers are painted only when the snapshot holds
+  // exactly one funnel section (R21) — the two-funnel cases are their own block below
+  const docs8 = (codes, bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(codes)), 'funnel--zorg-pay': null}, extra || {}));
     if (bind) { dd.meta.connectors = bind; } return dd; };
   const REPLY8 = (table) => '(function (s, t, i, n, call) { const T = ' + JSON.stringify(table) + '; const e = T[t]; if (!e) { return null; } if (call) { return e.c || null; }'
     + ' return Array.isArray(e.w) ? (e.w[Math.min(n, e.w.length) - 1] || null) : (e.w || null); })';
@@ -887,7 +892,81 @@ const fakeDesktop = `
   [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: ERR8('needs_reauth')}, stage_counts: {w: ERR8('server_not_connected')}}), {width: 360, height: 640}); await tab(p, 'funnel');
   out.t8_phone = await live8(p); await p.close();
   [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK), null, process.argv[4]); await tab(p, 'funnel'); out.t8_en = await live8(p); out.t8_en_errs = errs; await p.close();
+  // R21: live funnel numbers per product — two products whose funnels share stage ids (visit, cart, pay, ...)
+  const cards21 = (pg) => pg.evaluate(() => Array.from(document.querySelectorAll('.gpm-panel .gpm-card')).map(c => ({product: c.getAttribute('data-product'),
+    live: Array.from(c.querySelectorAll('.gpm-stage')).map(s => Array.from(s.querySelectorAll('.gpm-live')).map(x => x.textContent))})));
+  const two21 = (bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(['ZRG-1']))}, extra || {})); dd.meta.connectors = bind; return dd; };
+  [p, errs] = await open(APP(two21({'funnel-numbers': Object.assign({}, BOARD8, {product: 'zorg-pay'})}), null) + MCP8(BOTH_OK)); await tab(p, 'funnel');
+  out.t21_pay = {cards: await cards21(p), live: await live8(p), errs}; await p.close();
+  [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}), null) + MCP8(BOTH_OK)); await tab(p, 'funnel');
+  out.t21_none = {cards: await cards21(p), live: await live8(p), errs}; await p.close();
+  [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}), null) + MCP8(BOTH_OK), null, process.argv[4]); await tab(p, 'funnel');
+  out.t21_none_en = {live: await live8(p), errs}; await p.close();
+  [p, errs] = await open(APP(two21({'funnel-numbers': Object.assign({}, BOARD8, {product: 'zorg-pay'}), 'issue-status': TRACKER8}), null) + MCP8(BOTH_OK)); await tab(p, 'map');
+  out.t21_issue = await live8(p); await p.close();
+  // one funnel and no product: the funnel's chart gets the values, another chart of the same product with the same stage ids does not
+  const STEPS21 = {v: 1, custom: [{id: 'steps', title: 'Steps', block: 'chart', source: 'steps'}]};
+  [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}, {'funnel--zorg-pay': null, 'steps--zorg': D5('steps', 'zorg', fx('zorg-funnel.json'))}), STEPS21) + MCP8(BOTH_OK));
+  await tab(p, 'funnel'); out.t21_one = {cards: await cards21(p), live: await live8(p)}; await tab(p, 'steps'); out.t21_steps = {cards: await cards21(p), errs}; await p.close();
+  // R22: the index decides — a section document that snapshot/meta.sections does not list reaches no module
+  const gone22 = (() => { const m = JSON.parse(JSON.stringify(fx('zorg-map.json'))); m.map = 'journey-gone'; m.journey = 'Gone map';
+    m.rows.forEach((r, i) => { r.code = i === 0 ? 'ZRG-77' : ''; }); return m; })();
+  const docs22 = (() => { const dd = docs8(['ZRG-1'], {'issue-status': TRACKER8});
+    dd['map.gone--zorg'] = D5('map.gone', 'zorg', gone22);                   // left in the database by an earlier run, not in the index
+    delete dd.meta.sections['portfolio--zorg-pay'];                           // a product's portfolio the new index no longer lists
+    return dd; })();
+  [p, errs] = await open(D7g(docs22, {perm: {notifications: 'granted', 'menu-bar': 'granted'}}) + MCP8({search_items: {w: STAT8([{key: 'ZRG-1', state: {name: 'Open'}}, {key: 'ZRG-77', state: {name: 'Stale'}}])}}));
+  await p.waitForTimeout(200);
+  out.t22_home = await mod(p); out.t22_live = await live8(p); out.t22_tray = await p.evaluate(() => (window.__tray[window.__tray.length - 1] || {menu: []}).menu.map(m => m.label || m.type));
+  out.t22_held = await p.evaluate(() => Object.keys(window.__gpm.data.sections).sort());
+  await tab(p, 'map'); out.t22_map = await p.evaluate(() => ({boxes: Array.from(document.querySelectorAll('.gpm-map[data-section]')).map(b => b.getAttribute('data-section')),
+    picks: Array.from(document.querySelectorAll('.gpm-map-pick button')).map(b => b.textContent), text: document.querySelector('.gpm-panel').textContent.indexOf('Gone map') >= 0}));
+  out.t22_errs = errs; await p.close();
   } catch (e) { out.t8_crash = String(e).slice(0, 400); }
+  try {
+  // ---- Final review, group 4: small fixes that change the shell's bytes
+  const MAP4 = D5('map.first-order', 'zorg', fx('zorg-map.json'));
+  const ratio4 = `(() => { const rgb = (c) => c.match(/\\d+(\\.\\d+)?/g).slice(0, 3).map(Number);
+    const lum = (c) => { const v = rgb(c).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    return (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }; })()`;
+  // Minor 1: an added card is readable in the dark theme
+  [p, errs] = await open(APP(snapDocs({'map.first-order--zorg': MAP4}), null)); await p.emulateMedia({colorScheme: 'dark'}); await tab(p, 'map');
+  out.g4_added = await p.evaluate((r) => { const ratio = eval(r); const cell = document.querySelector('.gpm-map td[data-stage]');
+    const d = document.createElement('div'); d.className = 'item added'; const t = document.createElement('div'); t.className = 't'; t.textContent = 'New row';
+    const m = document.createElement('div'); m.className = 'm'; m.textContent = 'meta'; d.appendChild(t); d.appendChild(m); cell.appendChild(d);
+    const cs = getComputedStyle(d), ms = getComputedStyle(m);
+    return {fg: cs.color, bg: cs.backgroundColor, text: ratio(cs.color, cs.backgroundColor), meta: ratio(ms.color, cs.backgroundColor)}; }, ratio4);
+  out.g4_added_errs = errs; await p.close();
+  // Minor 3: a document whose `map` is an Object member does not unlock a stale map; a ref on a stage named so does not break the map
+  const stale4 = {a: {kind: 'row', map: 'journey-first-order', row: 'a1', digest: '0000000000000000', edit: {text: 'x'}, by: 'u1', at: '2026-11-26T11:00:00Z'}};
+  const lockOf = (pg) => pg.evaluate(() => ({locked: document.querySelectorAll('.gpm-map .wrap.gpm-map-locked').length, notes: Array.from(document.querySelectorAll('.gpm-map-note')).map(n => n.textContent)}));
+  [p, errs] = await open(fakeDesktop + fakeDb2({snapshot: snapDocs({'map.first-order--zorg': MAP4}), config: {}, edits: stale4}, 'ok')); await tab(p, 'map'); await p.waitForTimeout(150);
+  out.g4_stale = await lockOf(p);
+  await p.close();
+  const ctor4 = Object.assign({}, stale4, {b: {kind: 'row', map: 'constructor', row: 'r', digest: 'd', edit: {text: 'y'}, by: 'u2', at: '2026-11-26T12:00:00Z'}});
+  [p, errs] = await open(fakeDesktop + fakeDb2({snapshot: snapDocs({'map.first-order--zorg': MAP4}), config: {}, edits: ctor4}, 'ok')); await tab(p, 'map'); await p.waitForTimeout(150);
+  out.g4_stale_ctor = await lockOf(p); out.g4_stale_errs = errs; await p.close();
+  const refMap = JSON.parse(JSON.stringify(fx('zorg-map.json'))); refMap.tree = Object.assign({}, refMap.tree || {}, {deeper: [{stage: 'constructor', t: 'Deeper', m: 'ref'}, {stage: 's1', t: 'Deeper s1', m: 'ref'}]});
+  [p, errs] = await open(APP(snapDocs({'map.first-order--zorg': D5('map.first-order', 'zorg', refMap)}), null)); await tab(p, 'map');
+  out.g4_ref = await p.evaluate(() => ({boxes: document.querySelectorAll('.gpm-map[data-section]').length, refs: Array.from(document.querySelectorAll('.gpm-map .item.ref')).map(x => x.textContent)})); out.g4_ref_errs = errs; await p.close();
+  // Minor 4: a product id from the database that does not fit the pattern is dropped by cleanMeta
+  const evilP = snapDocs({}, [{id: 'zorg"]pay', label: 'Evil'}, {id: 'zorg', label: 'Zorg', color: '#2f6fde'}, {id: 'zorg-pay', label: 'Zorg Pay', color: null}]);
+  [p, errs] = await open(APP(evilP, null));
+  out.g4_prod0 = await mod(p);
+  const evilAt = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-products button')).findIndex(x => (x.getAttribute('data-product') || '').indexOf('"') >= 0));
+  if (evilAt >= 0) { await p.evaluate((i) => document.querySelectorAll('.gpm-products button')[i].focus(), evilAt); await p.keyboard.press('Enter'); await p.waitForTimeout(80); }
+  out.g4_prod1 = await mod(p); out.g4_prod_errs = errs; await p.close();
+  // Ledger 121: the edit bar follows the map shown — the saved edits of the second map name the second map's root
+  const second = JSON.parse(JSON.stringify(fx('zorg-map.json'))); second.map = 'journey-second'; second.product = 'zorg-pay'; second.journey = 'Друга карта';
+  [p, errs] = await open(APP(snapDocs({'map.first-order--zorg': MAP4, 'map.second--zorg-pay': D5('map.second', 'zorg-pay', second)}), null)); await tab(p, 'map'); await p.waitForTimeout(150);
+  const bar4 = (pg) => pg.evaluate(() => { const b = document.querySelector('.gpm-maps .edit-bar'); return b ? {root: b.getAttribute('data-root'), product: b.getAttribute('data-product')} : null; });
+  out.g4_bar1 = await bar4(p);
+  await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-map-pick button')).find(b => b.textContent.indexOf('Друга карта') === 0).click()); await p.waitForTimeout(80);
+  out.g4_bar2 = await bar4(p);
+  out.g4_saved = await p.evaluate(() => { const c = document.querySelector('.gpm-maps .edit-copy'); if (c) { c.click(); } const o = document.querySelector('.gpm-maps .edit-out'); try { const j = JSON.parse(o.value); return {root: j.root, product: j.product}; } catch (e) { return {raw: o ? o.value.slice(0, 80) : null}; } });
+  await p.waitForTimeout(80); if (!out.g4_saved || !out.g4_saved.root) { out.g4_saved = await p.evaluate(() => { const o = document.querySelector('.gpm-maps .edit-out'); try { const j = JSON.parse(o.value); return {root: j.root, product: j.product}; } catch (e) { return {raw: o ? o.value.slice(0, 80) : null}; } }); }
+  out.g4_bar_errs = errs; await p.close();
+  } catch (e) { out.g4_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
         bare_prof = os.path.join(d, "bare.yaml")
@@ -1004,11 +1083,49 @@ const fakeDesktop = `
         check("10.33 at phone width the switch adds no horizontal scroll, stays on screen, the header stays small",
               tp and tp.get("sw") <= tp.get("cw") and tp.get("right") <= tp.get("cw") and tp.get("h") < 120, tp)
 
+# ---- the pin of the shell (final review ledger 180, ruling R18 made checkable) ------------------------------------------------
+# The sha256 of `wrap`'s output for a fixed data-free page, per profile of references/app-profiles.yaml and per language:
+# it covers the shell's files, shell.css, journey_map.py's EDIT / CSS_EDIT / edit bar and the embedded profile. One line per
+# profile and language, so a change of one profile does not touch another's line.
+PIN_PAGE = ('<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>App</title></head><body><p>Дані застосунку '
+            'завантажуються з бази артефакту, коли його відкриває людина, що увійшла в обліковий запис.</p></body></html>')
+PIN = {
+    ("cjm", "uk"): "4bf3678684908b67252152490b13796151333760a05f07a5024008b98d5494aa",
+    ("cjm", "en"): "24f988414b448354a69b3051144808ef4c1ba26775888af69eed5e0563f3a2fc",
+    ("pm-os", "uk"): "70daf0dd6abacd05349575f92b3cf44a18b7ca2b73a113802e323475a9a03e03",
+    ("pm-os", "en"): "6ac2f41a9c5d4968cdce83a0712a3643904720b44125549f3460fad54b55c17f",
+}
+PIN_WHAT = ("the shell or the profile changed: raise `SHELL_VERSION` (every installed app is offered a new page and asks its "
+            "permissions again) or, when no published app needs the new page, update this hash on purpose "
+            "(release-manager pitfall P11)")
+
+
+def pin_of(name, lang):
+    import hashlib
+    return hashlib.sha256(sh.wrap_page(PIN_PAGE, name, sh.load_profiles()["profiles"][name], lang).encode("utf-8")).hexdigest()
+
+
+check("25.0 the pin has one line per profile of app-profiles.yaml and per language",
+      sorted(PIN) == sorted((n, l) for n in sh.load_profiles()["profiles"] for l in sh.LANGS), sorted(PIN))
+for (name, lang), want in sorted(PIN.items()):
+    got = pin_of(name, lang) if name in sh.load_profiles()["profiles"] else "(no such profile)"
+    check("25.1 pin %s/%s: wrap's output is shell %d's bytes" % (name, lang, sh.SHELL_VERSION), got == want,
+          "%s — sha256 now %s, pinned %s" % (PIN_WHAT, got, want or "(none)"))
+
 # ---- Task 3: the data channel (snapshot) --------------------------------------------------------------------------------
 FIX = os.path.join(ROOT, "testing", "fixtures", "app")
 PORT, MAP, THEME = (os.path.join(FIX, n) for n in ("zorg-portfolio.json", "zorg-map.json", "zorg-theme.json"))
 MADE = "2026-11-26T10:00:00Z"
-ZP = ["--product", "zorg:Zorg:#2f6fde", "--product", "zorg-pay:Zorg Pay"]
+PRODUCTS = os.path.join(FIX, "zorg-products.json")       # [{id, label, color?}] — the products travel as a file (R23)
+ZP = ["--products", PRODUCTS]
+
+
+def pfile(d, name, products):
+    """A `--products` file of this test's own -> the two arguments."""
+    path = os.path.join(d, name)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(products, f, ensure_ascii=False)
+    return ["--products", path]
 
 
 def snap(d, *args, out="snap"):
@@ -1053,8 +1170,15 @@ with tempfile.TemporaryDirectory() as d:
     api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, MADE)
     check("11.7 build_snapshot(sections, products, theme, made) -> {path: document}; no theme -> no theme document",
           sorted(api) == ["runs/2026-11-26T10-00-00Z", "snapshot/meta", "snapshot/portfolio--zorg"], sorted(api))
-    rc, text, res, o2 = snap(d, "--product", "zorg:Зорг:#2f6fde", "--section", "portfolio:zorg:" + PORT, out="uk")
+    rc, text, res, o2 = snap(d, *pfile(d, "uk.json", [{"id": "zorg", "label": "Зорг", "color": "#2f6fde"}]), "--section", "portfolio:zorg:" + PORT, out="uk")
     check("11.8 a label may be non-Latin and have spaces", rc == 0 and jread(o2, "snapshot", "meta.json")["products"][0]["label"] == "Зорг", text)
+
+    # R23: no free text on the command line — the products come as a file; the old flag is gone
+    rc, text, res, o3 = snap(d, *pfile(d, "shellish.json", [{"id": "zorg", "label": "Zorg $(x) `y`"}]), "--section", "portfolio:zorg:" + PORT, out="shellish")
+    check("23.1 --products FILE: a label with $(…) and a backtick is data, stored as text exactly",
+          rc == 0 and jread(o3, "snapshot", "meta.json")["products"] == [{"id": "zorg", "label": "Zorg $(x) `y`", "color": None}], text)
+    rc, text, res, o4 = snap(d, "--product", "zorg:Zorg", "--section", "portfolio:zorg:" + PORT, out="oldflag")
+    check("23.2 the old --product ID:LABEL flag is gone: argparse refuses it (exit 2), nothing written", rc == 2 and not os.path.exists(o4), text)
 
     # test_snapshot_size
     big = os.path.join(d, "big.json")
@@ -1070,14 +1194,20 @@ with tempfile.TemporaryDirectory() as d:
 
     # test_snapshot_ids
     cases = (
-        ("a product id with a capital", ["--product", "Zorg:Zorg"], ["--section", "portfolio:Zorg:" + PORT], "product"),
-        ("a product id with an underscore", ["--product", "zorg_pay:Zorg"], ["--section", "portfolio:zorg_pay:" + PORT], "product"),
+        ("a product id with a capital", pfile(d, "p1.json", [{"id": "Zorg", "label": "Zorg"}]), ["--section", "portfolio:Zorg:" + PORT], "product"),
+        ("a product id with an underscore", pfile(d, "p2.json", [{"id": "zorg_pay", "label": "Zorg"}]), ["--section", "portfolio:zorg_pay:" + PORT], "product"),
         ("a section name with a slash", ZP, ["--section", "a/b:zorg:" + PORT], "section"),
         ("a section name over 64", ZP, ["--section", "a" * 65 + ":zorg:" + PORT], "section"),
         ("a section name starting with a dot", ZP, ["--section", ".x:zorg:" + PORT], "section"),
         ("a section of an unknown product", ZP, ["--section", "portfolio:ghost:" + PORT], "ghost"),
-        ("a label with 25 characters", ["--product", "zorg:" + "я" * 25], ["--section", "portfolio:zorg:" + PORT], "label"),
-        ("a bad colour", ["--product", "zorg:Zorg:red"], ["--section", "portfolio:zorg:" + PORT], "color"),
+        ("a label with 25 characters", pfile(d, "p3.json", [{"id": "zorg", "label": "я" * 25}]), ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a bad colour", pfile(d, "p4.json", [{"id": "zorg", "label": "Zorg", "color": "red"}]), ["--section", "portfolio:zorg:" + PORT], "color"),
+        ("--products that is not a list", pfile(d, "p5.json", {"id": "zorg", "label": "Zorg"}), ["--section", "portfolio:zorg:" + PORT], "list"),
+        ("a product that is not an object", pfile(d, "p6.json", ["zorg:Zorg"]), ["--section", "portfolio:zorg:" + PORT], "object"),
+        ("a product with an unknown key", pfile(d, "p7.json", [{"id": "zorg", "label": "Zorg", "logo": "x"}]), ["--section", "portfolio:zorg:" + PORT], "logo"),
+        ("a product with no label", pfile(d, "p8.json", [{"id": "zorg"}]), ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a label that is not text", pfile(d, "p9.json", [{"id": "zorg", "label": 7}]), ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a missing --products file", ["--products", os.path.join(d, "nope-products.json")], ["--section", "portfolio:zorg:" + PORT], "nope-products.json"),
         ("the same section twice", ZP, ["--section", "portfolio:zorg:" + PORT, "--section", "portfolio:zorg:" + PORT], "twice"),
         ("a missing data file", ZP, ["--section", "portfolio:zorg:" + os.path.join(d, "nope.json")], "nope.json"),
     )
@@ -1788,6 +1918,56 @@ if have_pw:
     check("16.57 an English page: «Live numbers», «live: 990 · hh:mm», «Refresh»", any(x.startswith("Live numbers") and "Zorg Board" in x for x in en8["bar"]["lines"]) and en8["bar"]["btn"] == "Refresh"
           and en8["stages"][0]["live"] == ["live: 990 · " + T8] and not br.get("t8_en_errs"), (en8["bar"], en8["stages"][0]))
 
+    # ---- R21 (final review I-1): live funnel numbers of one product never land on another product's chart ------------------
+    t21p, t21n, t21e, t21i = g("t21_pay"), g("t21_none"), g("t21_none_en"), g("t21_issue")
+    byp = {c["product"]: c["live"] for c in t21p.get("cards", [])}
+    check("21.1 a funnel-numbers binding with product zorg-pay: only zorg-pay's funnel shows live values; zorg's funnel, with the same stage ids, shows none",
+          set(byp) == {"zorg", "zorg-pay"} and all(x == [] for x in byp["zorg"]) and byp["zorg-pay"][0] == ["наживо: 990 · " + T8]
+          and [w["tool"] for w in t21p["live"]["m"]["watches"]] == ["stage_counts"] and not t21p.get("errs"), t21p)
+    check("21.2 two funnels and no product in the binding: no watch for the funnel, nothing live on either chart, and the live line says why in words",
+          all(all(x == [] for x in c["live"]) for c in t21n.get("cards", [])) and len(t21n.get("cards", [])) == 2
+          and [w["tool"] for w in t21n["live"]["m"]["watches"]] == []
+          and any("кілька воронок" in x and "26.11.2026" in x for x in (t21n["live"]["bar"] or {}).get("lines", [])) and not t21n.get("errs"), t21n)
+    check("21.3 the same line in English", any("several funnels" in x for x in (t21e["live"]["bar"] or {}).get("lines", [])) and not t21e.get("errs"), t21e)
+    check("21.4 issue-status is unchanged next to a per-product funnel binding: one watch each, the map's statuses shown",
+          sorted(w["tool"] for w in t21i["m"]["watches"]) == ["search_items", "stage_counts"]
+          and [r["live"] for r in t21i["rows"] if r["code"] == "ZRG-1"] == [["In Review"]], t21i.get("m"))
+    o21, s21 = g("t21_one"), g("t21_steps")
+    check("21.5 one funnel and no product works as before; a chart of another section with the same stage ids gets no live value",
+          o21.get("cards") and o21["cards"][0]["live"][0] == ["наживо: 990 · " + T8] and s21.get("cards")
+          and all(all(x == [] for x in c["live"]) for c in s21["cards"]) and not s21.get("errs"), (o21, s21))
+
+    # ---- R22 (final review I-2): the index decides what is shown ----------------------------------------------------------
+    h22, l22, m22 = g("t22_home"), g("t22_live"), g("t22_map")
+    check("22.1 a section document absent from meta.sections is not held for any module (the one door in shell.js)",
+          br.get("t22_held") and "map.gone--zorg" not in br["t22_held"] and "portfolio--zorg-pay" not in br["t22_held"] and "map.first-order--zorg" in br["t22_held"], br.get("t22_held"))
+    check("22.2 ... not rendered: the portfolio shows only the listed product's card",
+          [c["product"] for c in h22.get("cards", [])] == ["zorg"] and "Top up" not in h22.get("panel", ""), h22.get("cards"))
+    check("22.3 ... not in the map picker", m22.get("boxes") == ["map.first-order--zorg"] and m22.get("text") is False, m22)
+    check("22.4 ... not in the tray", br.get("t22_tray") and "Gone map" not in br["t22_tray"] and "Перше замовлення" in br["t22_tray"], br.get("t22_tray"))
+    check("22.5 ... not asked for live: its code is never sent", [w["input"]["ids"] for w in (l22.get("m") or {}).get("watches", [])] == [["ZRG-1"]] and not br.get("t22_errs"),
+          (l22.get("m"), br.get("t22_errs")))
+
+    # ---- final review, group 4 ------------------------------------------------------------------------------------------
+    check("24.0 the group-4 browser pass ran to its end", not br.get("g4_crash"), br.get("g4_crash"))
+    ad = g("g4_added")
+    check("24.1 Minor 1: an added card in the map is readable in the dark theme (text and its meta line at least 4.5:1 on its own background)",
+          ad.get("text", 0) >= 4.5 and ad.get("meta", 0) >= 4.5 and not br.get("g4_added_errs"), ad)
+    s0, s1 = g("g4_stale"), g("g4_stale_ctor")
+    check("24.2 Minor 3: an edit of map «constructor» does not unlock a map whose shared edits were made on another version",
+          s0.get("locked", 0) >= 1 and s1.get("locked", 0) >= 1 and any("1" in n for n in s1.get("notes", [])) and not br.get("g4_stale_errs"), (s0, s1, br.get("g4_stale_errs")))
+    rf = g("g4_ref")
+    check("24.3 Minor 3: a map with a reference on a stage named «constructor» is still drawn (the chips table has no prototype)",
+          rf.get("boxes") == 1 and "Deeper s1ref" in "".join(rf.get("refs", [])) and not br.get("g4_ref_errs"), (rf, br.get("g4_ref_errs")))
+    p0, p1 = g("g4_prod0"), g("g4_prod1")
+    check("24.4 Minor 4: a product id holding '\"]' is dropped by cleanMeta — not in the switch; the switch keeps working, no error",
+          [b["product"] for b in p0.get("switchBtns", [])] == ["", "zorg", "zorg-pay"] and p1.get("modulesShown") is True and not br.get("g4_prod_errs"),
+          (p0.get("switchBtns"), p1.get("modulesShown"), br.get("g4_prod_errs")))
+    b1, b2, sv = br.get("g4_bar1") or {}, br.get("g4_bar2") or {}, br.get("g4_saved") or {}
+    check("24.5 ledger 121: the edit bar follows the map shown; the saved edits of the second map name its root and product",
+          b1 == {"root": "journey-first-order", "product": "zorg"} and b2 == {"root": "journey-second", "product": "zorg-pay"}
+          and sv == {"root": "journey-second", "product": "zorg-pay"} and not br.get("g4_bar_errs"), (b1, b2, sv, br.get("g4_bar_errs")))
+
 # ---- Task 8: live numbers through the viewer's connectors (Python half) ---------------------------------------------------
 TRACKER = {"server": "Zorg Tracker", "tool": "search_items", "input": {"query": "key in ({codes})", "limit": 50},
            "pick": {"items": "data.items", "key": "key", "value": "state.name"}}
@@ -1919,7 +2099,7 @@ with tempfile.TemporaryDirectory() as d:
                         "--connectors", wjson(d, "new.json", {"funnel-numbers": BOARD}))
     check("16.17 --connectors given with --prev-meta: the new bindings replace the old ones", jread(o4, "snapshot", "meta.json")["connectors"] == {"funnel-numbers": BOARD}, text)
     o5 = os.path.join(d, "p5")
-    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o5, "--at", LATER_AT, "--product", "zorg:Zorg", "--section", "portfolio:zorg:" + PORT, "--prev-meta",
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o5, "--at", LATER_AT, *pfile(d, "only-zorg.json", [{"id": "zorg", "label": "Zorg"}]), "--section", "portfolio:zorg:" + PORT, "--prev-meta",
                         wjson(d, "pm.json", {"v": 1, "made": MADE, "sections": {"portfolio--zorg": MADE, "map.a--zorg-pay": MADE, "map.b--zorg": MADE, "BAD ID--zorg": MADE, "x--zorg": 5}}))
     check("16.18 an entry is carried only when its product is still among --product and its id is well-formed",
           jread(o5, "snapshot", "meta.json")["sections"] == {"portfolio--zorg": LATER_AT, "map.b--zorg": MADE}, text)
@@ -1934,6 +2114,67 @@ with tempfile.TemporaryDirectory() as d:
     check("16.20 --prev-meta with a missing file: refused", rc == 1 and not os.path.exists(os.path.join(d, "pbadx")), text)
     api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None, {"sections": {"x--zorg": MADE}})
     check("16.21 build_snapshot(..., prev_meta) carries sections the same way", api["snapshot/meta"]["sections"] == {"portfolio--zorg": LATER_AT, "x--zorg": MADE}, api["snapshot/meta"])
+    # R25: a full update's index is what it wrote; the connectors are still carried
+    pm_ab = wjson(d, "pm_ab.json", {"v": 1, "made": MADE, "sections": {"map.a--zorg": MADE, "map.b--zorg": MADE}, "connectors": BINDINGS})
+    o7 = os.path.join(d, "pfull")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o7, "--at", LATER_AT, *ZP, "--section", "map.a:zorg:" + MAP, "--full", "--prev-meta", pm_ab)
+    m7 = jread(o7, "snapshot", "meta.json") if rc == 0 else {}
+    check("16.22 --full --prev-meta: the new index is exactly the sections written now (map.b is not carried), the connectors are carried",
+          rc == 0 and m7.get("sections") == {"map.a--zorg": LATER_AT} and m7.get("connectors") == BINDINGS, (text, m7))
+    o8 = os.path.join(d, "ppart")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o8, "--at", LATER_AT, *ZP, "--section", "map.a:zorg:" + MAP, "--prev-meta", pm_ab)
+    check("16.23 the same without --full is a partial update: map.b keeps its previous date",
+          rc == 0 and jread(o8, "snapshot", "meta.json")["sections"] == {"map.a--zorg": LATER_AT, "map.b--zorg": MADE}, text)
+    api2 = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None,
+                             {"sections": {"x--zorg": MADE}, "connectors": BINDINGS}, full=True) if "full" in sh.build_snapshot.__code__.co_varnames else {}
+    check("16.24 build_snapshot(..., full=True) carries no section, only the connectors",
+          api2.get("snapshot/meta", {}).get("sections") == {"portfolio--zorg": LATER_AT} and api2["snapshot/meta"].get("connectors") == BINDINGS, api2.get("snapshot/meta"))
+
+    # R22: a reused --out folder is refused (files of an earlier run are never written again); no --out in the plugin
+    reused = os.path.join(d, "reused")
+    os.makedirs(os.path.join(reused, "snapshot"))
+    with open(os.path.join(reused, "snapshot", "map.old--zorg.json"), "w") as f:
+        f.write("{}")
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, out="reused")
+    check("22.10 snapshot --out a folder that exists and is not empty: refused («not empty»), nothing written into it",
+          rc == 1 and "not empty" in res.get("error", "") and sorted(os.listdir(reused)) == ["snapshot"]
+          and os.listdir(os.path.join(reused, "snapshot")) == ["map.old--zorg.json"], text)
+    os.makedirs(os.path.join(d, "empty-out"))
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, out="empty-out")
+    check("22.11 an existing empty folder is fine", rc == 0 and os.path.exists(os.path.join(o, "snapshot", "meta.json")), text)
+    inside = os.path.join(ROOT, "testing", "r22-must-not-exist")
+    link = os.path.join(d, "into-plugin")
+    os.symlink(os.path.join(ROOT, "testing"), link)
+    zp = os.path.join(d, "in.html")
+    with open(zp, "w", encoding="utf-8") as f:
+        f.write(ZORG)
+    tz = os.path.join(FIX, "zorg-tokens.json")
+    for label, args, target in (
+            ("snapshot --out", ["snapshot", "--profile", "cjm", *ZP, "--section", "portfolio:zorg:" + PORT, "--out", inside], inside),
+            ("snapshot --out through a symlink", ["snapshot", "--profile", "cjm", *ZP, "--section", "portfolio:zorg:" + PORT, "--out", os.path.join(link, "r22-must-not-exist")], inside),
+            ("wrap --out", ["wrap", "--page", zp, "--profile", "cjm", "--out", inside + ".html"], inside + ".html"),
+            ("theme --out", ["theme", "--tokens", tz, "--out", inside + ".json"], inside + ".json")):
+        rc, text, res = run(*args)
+        check("22.12 %s inside the plugin's own folder: refused, nothing written" % label, rc == 1 and "plugin" in res.get("error", "")
+              and not os.path.exists(target), text)
+    big2 = os.path.join(d, "big2.json")
+    with open(big2, "w") as f:
+        json.dump({"rows": [{"t": "x" * 1000} for _ in range(300)]}, f)
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", os.path.join(d, "r22over"), "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT,
+                        "--section", "feed:zorg:" + big2, "--prev-meta", wjson(d, "r22pm.json", {"v": 1, "made": MADE, "sections": {"portfolio--zorg": MADE, "feed--zorg": MADE}}))
+    check("22.13 a section over 256 KiB now is not carried from --prev-meta either: it leaves the index, so the app does not show its old version",
+          rc == 1 and "feed--zorg" not in jread(d, "r22over", "snapshot", "meta.json")["sections"], text)
+
+    # R21: a funnel-numbers binding may name the product whose funnel it feeds
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "r21.json", {"funnel-numbers": dict(BOARD, product="zorg-pay")}), out="r21ok")
+    check("21.10 snapshot --connectors: funnel-numbers with product zorg-pay (one of the products) is written with it",
+          rc == 0 and jread(o, "snapshot", "meta.json")["connectors"]["funnel-numbers"].get("product") == "zorg-pay", text)
+    for i, (label, obj, needle) in enumerate((
+            ("a product that is not among the snapshot's products", {"funnel-numbers": dict(BOARD, product="ghost")}, "ghost"),
+            ("a product id that does not fit the pattern", {"funnel-numbers": dict(BOARD, product="Zorg Pay")}, "product"),
+            ("a product on issue-status", {"issue-status": dict(TRACKER, product="zorg")}, "product"))):
+        rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "r21b%d.json" % i, obj), out="r21bad%d" % i)
+        check("21.11 --connectors with %s: refused, nothing written" % label, rc == 1 and needle in res.get("error", "") and not os.path.exists(o), text)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

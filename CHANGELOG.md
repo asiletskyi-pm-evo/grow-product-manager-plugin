@@ -24,8 +24,8 @@ When a skill changes, its version is bumped independently. The plugin version is
 - **The journey map inside the app.** The same map as on the v4.12.0 page, with the same switch «Редагувати» and the same shared edits of the team; a map is picked from a list when there are several. The edits are still a draft: they reach the note only through its preview, as before.
 - **A badge, a menu-bar item and notifications.** The badge on the icon counts the team's edits not yet taken into the note; the menu-bar (tray) item names the weakest journey; a notification comes for a new team edit and for a funnel stage that has got worse, past the threshold below its baseline, since it was last seen on this computer (never on first sight). A notification never carries a person's name.
 - **Permissions one at a time.** The panel «Дозволи» asks for each permission only when you press its button, each with a 30 second wait, never on load and never several in one call (three in one call hung the app when measured). A permission you did not grant leaves its feature off silently.
-- **Live numbers from your own connectors.** Issue statuses and the funnel's numbers are read through the connectors of the person who opens the app, once when the data arrives and again on «Оновити» — never polled. The app's own numbers stay as the base with their date, and a missing connector is said in words.
-- **Updates without a new version.** The numbers live in the artifact's database, in a snapshot, so a new snapshot updates the app and the permissions are not asked again. A new version of the page is published only when the shell or the profile changed, and then the person is told first that the permissions will be asked again.
+- **Live numbers from your own connectors.** Issue statuses and the funnel's numbers are read through the connectors of the person who opens the app, once when the data arrives and again on «Оновити» — never polled. The app's own numbers stay as the base with their date, and a missing connector is said in words. The funnel's live numbers belong to one product: the binding names it, or the app has one funnel only — they are never painted on another product's chart.
+- **Updates without a new version.** The numbers live in the artifact's database, in a snapshot, so a new snapshot updates the app and the permissions are not asked again. A new version of the page is published only when the shell or the profile changed, and then the person is told first that the permissions they allowed will be asked again (a «Don't allow» stays for every version). The snapshot's index decides what the app shows: every update of the CJM app is a full one (`snapshot --full`), so a map renamed, removed or grown too large for the database leaves the index and the app at once, and the update deletes its old document — the question before the write names it.
 - **A browser or a phone.** Where the platform cannot install, the page works as in v4.12.0; every part of the shell that is absent or refused switches itself off with no error.
 
 Every snapshot is a publication: one question before every write into the database, and a scheduled run never writes to it. The database's rules let everyone who may view the page read the snapshot, the settings and the log, and only the owner write them — a colleague who may edit the page can write edits, never the numbers.
@@ -34,7 +34,7 @@ Every snapshot is a publication: one question before every write into the databa
 
 - **No files, no commands, no full access.** An app that reads a folder or runs the plugin's commands on your computer arrives in v4.13.1, after a second security audit. A profile that asks for it is refused with «arrives in v4.13.1».
 - **No «Ask Claude» button** — not in this release.
-- **No «Open in Claude» item in the menu.** The profile can name it, but the shell leaves it out: the platform gives a page no call for it.
+- **No «Open in Claude» item in the menu.** The platform gives a page no call for it, so the shell has no such action and a profile that names one is refused by `check`.
 - **PM OS** is a placeholder profile with no screens. Its modules and sources belong to its own protocol and release; this release gives it the shell, the blocks, the theme, the products, `config/app`, `runs` and the rules.
 
 ### Still to be measured on a real computer
@@ -44,13 +44,13 @@ Every snapshot is a publication: one question before every write into the databa
 ### Added
 
 - **`references/desktop-app-protocol.md`** — the shared protocol: the three levels (page, app, full access later), profiles, the one question before the first build, build and publish, the data channel and its rules, connectors as data, permissions, updating, a map too large for one database document, what never happens.
-- **`references/app-profiles.yaml`** and **`scripts/app_shell.py`** — the profiles `cjm` and `pm-os` with placeholders only, and the script: `schema`, `check` (a profile or an owner's `config/app`), `wrap`, `theme`, `snapshot`. `SHELL_VERSION` is 1. The script never reads `local-context.md` and never writes into the plugin's files.
+- **`references/app-profiles.yaml`** and **`scripts/app_shell.py`** — the profiles `cjm` and `pm-os` with placeholders only, and the script: `schema`, `check` (a profile or an owner's `config/app`), `wrap`, `theme`, `snapshot` (the products as a file, `--products FILE`, so a label from your context never reaches a command line). `SHELL_VERSION` is 1. The script never reads `local-context.md` and never writes into the plugin's files.
 - **`scripts/app_shell/`** — the shell's own files, embedded byte for byte into a wrapped page: `shell.js`, `blocks.js`, `map.js`, `desk.js`, `live.js`, `shell.css`.
 - **`journey_map.py app-data`** and **`journey_portfolio.py app-data`** — a map and the portfolio as the data of one section of the snapshot; a map too large for one database document stays out and is named.
 - **`publications.py record --app PROFILE:SHELL[:PERM,PERM]`** — the publication record remembers that a place is an app, with its profile, shell number and permissions; `find` returns them, so the skill sees what changed.
 - **Lint check 33 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
-- **Tests** — `testing/app_shell_test.py` (400 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (56), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
-- **A release guard** — `release-manager` pitfall P11 and a line in Step 3: a release that changes the shell's files, the `wrap` function or a profile's modules or menu raises `SHELL_VERSION`; otherwise a published app is never offered its new page.
+- **Tests** — `testing/app_shell_test.py` (444 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (56), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
+- **A release guard** — `release-manager` pitfall P11 and a line in Step 3: a release that changes the shell's files, the `wrap` function, the map's editing code that `wrap` embeds or a profile's modules or menu raises `SHELL_VERSION` (and the profiles file's `version` with it); otherwise a published app is never offered its new page. A pin test in `testing/app_shell_test.py` keeps the hash of shell 1's bytes per profile and language and goes red on any such change.
 - **`docs/superpowers/specs/2026-11-26-desktop-apps-design.md`** and its Ukrainian twin — the design this release follows.
 
 ### Changed
@@ -79,6 +79,92 @@ Every snapshot is a publication: one question before every write into the databa
 ### Backwards compatibility
 
 No page that exists changes: a page without the shell is published, edited and read exactly as in v4.12.0, and the `edits` collection keeps its format. The app is an offer after a map's page, made only when the product has a map and never without the one question. The publication record gains an optional field; a record without it reads as before. Nothing in a user's `local-context.md`, vault or notes changes, and a scheduled run still publishes and writes nothing.
+
+---
+
+## v4.12.3 (2026-11-26)
+
+**The plugin's logo in Claude.** Claude's plugin list shows a picture beside each plugin's name; ours showed the default one. The logo has been in `assets/` since v3.0.1, named only by the Codex manifest.
+
+### Added
+
+- **`icon` in `.claude-plugin/plugin.json`** — `"./assets/logo.png"`, the same 512×512 PNG the Codex and ChatGPT card uses. The field is the one Anthropic documents for a plugin's listing ([plugins reference → Directory listing fields](https://code.claude.com/docs/en/plugins-reference#directory-listing-fields)): a square PNG or JPEG inside the plugin, 512 to 2048 px on a side, under 2 MB. Claude Code does not read it when it loads the plugin; `claude plugin validate` accepts it from v2.1.281 (measured on 2.1.332: no warning).
+- **Validator check 1** — when `plugin.json` names an `icon`, the file exists inside the plugin, is a PNG or JPEG, square, 512 to 2048 px, under 2 MB.
+- **`testing/plugin_icon_test.py`** (TC-icon-4123) — seeds nine bad icons in a copy of the tree (too small, too large, not square as PNG and as JPEG, 2 MB or more, not an image, an SVG, a missing file, a path out of the plugin) and asserts each turns the check `FAIL`; the repo's logo and a square JPEG stay `ok`, and no `icon` field leaves the check silent.
+
+### Files
+
+| File | Change |
+|---|---|
+| `.claude-plugin/plugin.json` | `icon`; version |
+| `testing/validate-consistency.sh` | check 1: the icon file |
+| `testing/plugin_icon_test.py`, `testing/test-cases.md` | new test; TC-icon-4123 |
+| `README.md` | «New in v4.12.3»; the Codex card paragraph names the Claude field |
+
+### Backwards compatibility
+
+Nothing for a user to do.
+
+### Known limits
+
+- The docs name `icon` for a listing in Anthropic's directory. Whether the list of a personal marketplace synced from GitHub shows it is not documented: it is checked on claude.ai after this release syncs.
+
+---
+
+## v4.12.2 (2026-11-26)
+
+**Sprint and quarter reports read Story Points again on Atlassian MCP v2.** v4.11.0 moved the plugin to v2 by its tool names and inputs, checked with `discover`; its known limit was that no call had been run live. On 2026-11-26 every read of §1c was run on a live v2 site. The names and inputs held. One thing they could not show did not: the shape of what a Jira search returns.
+
+### Fixed
+
+- **Custom fields of a saved Jira search were not found on v2** (`references/jira-data-protocol.md` → Large-response extraction). v2 returns them under `fields.customFields`, keyed by the field's display name, each `{"id": "customfield_N", "value": …}`, and leaves a field with no value out; v1 had `fields.customfield_N`, with `null` for an empty one. The protocol's `Grep -o` patterns looked for the v1 form, so on v2 each of them matched nothing (measured: 0 of 100 issues), and `product-reporter` and the Planning Suite read a sprint as having no Story Points, no epic and no developer. The patterns also aligned their matches by count, which an absent field breaks.
+
+### Added
+
+- **`scripts/jira_rows.py`** — a saved Jira response as compact rows, one JSON line per issue, the same for both servers. `python3 scripts/jira_rows.py <saved file> [<saved file> …] [--sprint-history]`, or `-` for stdin.
+  - A row: `key`, the system fields that came (`summary`, `status`, `category`, `type`, `assignee`, `resolved`, `versions`, `labels`, `components`, `parent`), `cf` — the custom fields by id — and `closed_sprints` (0 = new in its sprint, ≥1 = carried over).
+  - A user is `{"id", "name"}`: the account id and the display name. The e-mail address, the avatar links, a description and a comment's text never reach a row; `comments` is their count.
+  - A custom field with no value has no key in `cf`, on v1 too.
+  - The sprints printed are the ones not closed; `--sprint-history` prints the whole history with its dates.
+  - After a file's rows, one `{"_page": …}` line: `has_next`, `next_page_token`, `shape`, and on v2 `cf_names` — the display name of each field id.
+  - A file that is not a Jira response, or one cut in the middle, is exit 2 — never an empty report.
+  - Measured on a 100-issue search with eight fields: 382 000 characters in, 54 000 out.
+- **`testing/jira_rows_test.py`** (TC-jira-4122) — 31 checks on fictional v2 and v1 responses (`testing/fixtures/jira/`): both shapes give the same rows; nothing of a person but the id and the name; every no-shell pattern of the protocol matches the v2 fixture; two mutations (a reader of the v1 form alone, a reader that keeps the user object whole) are caught.
+
+### Changed
+
+- **`references/jira-data-protocol.md`** — *Large-response extraction* is rewritten: ask for fields by id; the table of the two shapes; the script with SHELL; without a shell, patterns for the v2 form that open a node at each `"key":` and never align by count (the v1 forms stay in one line until 2027-03-01). Pagination and carried-over point at the script's `next_page_token` and `closed_sprints`. One issue's whole history on v2 is `listJiraIssueChangelogs`.
+- **`references/integration-strategy.md` §1c** — what the live pass measured:
+  - Point 4: custom fields come under `fields.customFields`; ask for them with `fields: ["customfield_…"]`. `view: "evidence"` also returns every comment in full (one epic: 98 000 characters, 94 000 of them comments), so it is for one issue whose field ids are unknown, never for a search.
+  - A session that holds both servers uses v2 and says nothing about reconnecting (measured in a Claude Code cloud session: another installed plugin still declares v1).
+  - Point 2: a read without `draft: true` returns the published version's token, not the draft's.
+  - The format guide ends by naming a second reference to read before a new page is composed, and says Confluence storage XML renders as raw text; `metadata.hasSpaceInstructions: false` means there are no space instructions to fetch.
+  - The table says which of its rows were run live (every read) and which were not (the writes).
+- **`skills/product-reporter/SKILL.md`** 0.12.3 — Step 2 reads the saved search with the script.
+- **`skills/task-creator/SKILL.md`** 0.15.5 — the Team field of an existing task is read with `fields`, not with `view: "evidence"`.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/jira_rows.py` | new |
+| `testing/jira_rows_test.py`, `testing/fixtures/jira/` | new test and its four fixtures |
+| `references/jira-data-protocol.md` | *Large-response extraction* for v2; pagination, carried-over, status transitions |
+| `references/integration-strategy.md` | §1c: points 2 and 4, both servers in one session, the format guide, what was run live |
+| `skills/product-reporter/SKILL.md` | 0.12.3 |
+| `skills/task-creator/SKILL.md` | 0.15.5 |
+| `AGENTS.md`, `testing/test-cases.md` | the script's row; TC-jira-4122 |
+| `README.md` | «New in v4.12.2», skill versions |
+
+### Backwards compatibility
+
+Nothing for a user to do. A v1 connection reads the same rows through the same script until 2027-03-01. No local context, vault note or config changes.
+
+### Known limits
+
+- The writes on v2 are still not run live: a page created and updated (`contentType: "page"`, `snapshotToken`), an issue created with an assignee and labels, an issue link. Their names and inputs are verified with `discover` (v4.11.0).
+- The script needs SHELL. A host without one reads the saved file with the patterns, which give the account id of a user field and the display name that follows it, not a parsed row.
+- The Codex CLI namespace for v2 is still not measured.
 
 ---
 

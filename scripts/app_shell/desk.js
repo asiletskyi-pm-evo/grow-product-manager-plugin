@@ -335,8 +335,7 @@
     function reveal(forTray) {
       if (forTray && desktop.window && typeof desktop.window.show === "function") { guard(function () { return desktop.window.show(); }); }
     }
-    // [{label, enabled, click, accelerator?}] from profile.menu in order. `open-in-claude` has no call in the typed API:
-    // it is left out.
+    // [{label, enabled, click, accelerator?}] from profile.menu in order: module ids and the action `edit`.
     function profileItems(forTray) {
       var out = [];
       (Array.isArray(profile.menu) ? profile.menu : []).forEach(function (entry) {

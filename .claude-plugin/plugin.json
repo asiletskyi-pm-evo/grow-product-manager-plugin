@@ -4,5 +4,6 @@
   "description": "AI assistant for product managers: research, concepts, requirements, Jira tasks, planning, reports, meetings, people and team context — across Jira, Confluence, Figma and your notes.",
   "author": {
     "name": "Andrii Siletskyi"
-  }
+  },
+  "icon": "./assets/logo.png"
 }

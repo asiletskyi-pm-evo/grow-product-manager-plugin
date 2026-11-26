@@ -195,7 +195,8 @@
   // A block renderer takes the data of one section document and the view -> an element, or null when the data does not
   // hold what the block shows. `view` = {meta, filter, chip(id), shows(id)}; `info` = {id, product, section, made}.
   // A renderer tells the registry about a node it drew and that something else may add to: decorate(kind, node, key) —
-  // kinds `stage` (a chart stage's head, key = the stage id) and `code` (a map row, key = its code, from map.js).
+  // kinds `stage` (a chart stage's head, key = "<section document id>|<stage id>", so a value is always the value of
+  // that one document — that product, that section) and `code` (a map row, key = its code, from map.js).
   // Whoever registered with onDecorate (live.js) hears it; with nobody registered nothing changes in the output.
   var DECORATORS = [];
   function onDecorate(fn) { if (typeof fn === "function") { DECORATORS.push(fn); } }
@@ -446,7 +447,7 @@
     return drop <= -th.critical ? "crit" : drop <= -th.warning ? "warn" : "ok";
   }
 
-  function chart(data, view) {
+  function chart(data, view, info) {
     var stages = (Array.isArray(data.stages) ? data.stages : []).filter(function (s) {
       return isObj(s) && str(s.title, 200) && num(s.value) !== null;
     }).slice(0, MAX_STAGES);
@@ -466,7 +467,7 @@
       if (base !== null) { head.appendChild(el("span", "gpm-stage-base", S.t.baseline + " " + base + unit)); }
       if (level && level !== "ok") { head.appendChild(mark(level)); }
       row.appendChild(head);
-      if (str(s.id, 64)) { decorate("stage", head, s.id); }
+      if (str(s.id, 64) && info && str(info.id, 200)) { decorate("stage", head, info.id + "|" + s.id); }
       var scale = top > 0 ? 100 / top : 0;
       var g = svg("svg", { "class": "gpm-bars", viewBox: "0 0 100 10", preserveAspectRatio: "none", role: "img", width: "100%", height: "10" });
       g.setAttribute("aria-label", s.title + ": " + s.value + (base !== null ? " / " + base : ""));
