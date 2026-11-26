@@ -1083,6 +1083,35 @@ const fakeDesktop = `
         check("10.33 at phone width the switch adds no horizontal scroll, stays on screen, the header stays small",
               tp and tp.get("sw") <= tp.get("cw") and tp.get("right") <= tp.get("cw") and tp.get("h") < 120, tp)
 
+# ---- the pin of shell 1 (final review ledger 180, ruling R18 made checkable) ------------------------------------------------
+# The sha256 of `wrap`'s output for a fixed data-free page, per profile of references/app-profiles.yaml and per language:
+# it covers the shell's files, shell.css, journey_map.py's EDIT / CSS_EDIT / edit bar and the embedded profile. One line per
+# profile and language, so a change of one profile does not touch another's line.
+PIN_PAGE = ('<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>App</title></head><body><p>Дані застосунку '
+            'завантажуються з бази артефакту, коли його відкриває людина, що увійшла в обліковий запис.</p></body></html>')
+PIN = {
+    ("cjm", "uk"): "89ed634dec42bc0419a81603a4a558f0fe530281984167c2cf66e1f3c14d80b3",
+    ("cjm", "en"): "ee7321a79e961726ee477ce32258347dad8e97ff0f936b4717334723e90c5fcf",
+    ("pm-os", "uk"): "a93febed617a6c855591e2af129531274c211e2f47dec8c7b2fdeb3016870a2e",
+    ("pm-os", "en"): "b75a2f998befe2752d0d397c0546f6864147383be9079d5d4c0f0147d6a55c54",
+}
+PIN_WHAT = ("the shell or the profile changed: raise `SHELL_VERSION` (every installed app is offered a new page and asks its "
+            "permissions again) or, when no published app needs the new page, update this hash on purpose "
+            "(release-manager pitfall P11)")
+
+
+def pin_of(name, lang):
+    import hashlib
+    return hashlib.sha256(sh.wrap_page(PIN_PAGE, name, sh.load_profiles()["profiles"][name], lang).encode("utf-8")).hexdigest()
+
+
+check("25.0 the pin has one line per profile of app-profiles.yaml and per language",
+      sorted(PIN) == sorted((n, l) for n in sh.load_profiles()["profiles"] for l in sh.LANGS), sorted(PIN))
+for (name, lang), want in sorted(PIN.items()):
+    got = pin_of(name, lang) if name in sh.load_profiles()["profiles"] else "(no such profile)"
+    check("25.1 pin %s/%s: wrap's output is shell %d's bytes" % (name, lang, sh.SHELL_VERSION), got == want,
+          "%s — sha256 now %s, pinned %s" % (PIN_WHAT, got, want or "(none)"))
+
 # ---- Task 3: the data channel (snapshot) --------------------------------------------------------------------------------
 FIX = os.path.join(ROOT, "testing", "fixtures", "app")
 PORT, MAP, THEME = (os.path.join(FIX, n) for n in ("zorg-portfolio.json", "zorg-map.json", "zorg-theme.json"))
