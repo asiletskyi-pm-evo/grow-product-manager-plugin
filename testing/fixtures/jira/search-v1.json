@@ -1,0 +1,134 @@
+{
+ "issues": {
+  "nodes": [
+   {
+    "expand": "names,schema",
+    "id": "5001",
+    "self": "https://example.com/rest/api/3/issue/5001",
+    "key": "PROJ-101",
+    "fields": {
+     "summary": "Поштомат як спосіб доставки в кошику",
+     "customfield_10041": {
+      "self": "https://example.com/rest/api/3/user?accountId=acc-zorg-dev",
+      "accountId": "acc-zorg-dev",
+      "emailAddress": "zorg.dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://example.com/avatars/48.png",
+       "24x24": "https://example.com/avatars/24.png"
+      },
+      "displayName": "Zorg Dev",
+      "active": true,
+      "timeZone": "Europe/Kyiv",
+      "accountType": "atlassian"
+     },
+     "customfield_10037": {
+      "self": "https://example.com/rest/api/3/user?accountId=acc-zorg-qa",
+      "accountId": "acc-zorg-qa",
+      "emailAddress": "zorg.qa@example.com",
+      "avatarUrls": {
+       "48x48": "https://example.com/avatars/48.png",
+       "24x24": "https://example.com/avatars/24.png"
+      },
+      "displayName": "Zorg QA",
+      "active": true,
+      "timeZone": "Europe/Kyiv",
+      "accountType": "atlassian"
+     },
+     "customfield_10020": [
+      {
+       "id": 902,
+       "name": "Zorg sprint 12",
+       "state": "active",
+       "boardId": 77,
+       "goal": "",
+       "startDate": "2026-11-16T08:00:00.000Z",
+       "endDate": "2026-11-29T06:00:00.000Z"
+      },
+      {
+       "id": 901,
+       "name": "Zorg sprint 11",
+       "state": "closed",
+       "boardId": 77,
+       "goal": "",
+       "startDate": "2026-11-02T08:00:00.000Z",
+       "endDate": "2026-11-15T21:00:00.000Z",
+       "completeDate": "2026-11-16T07:30:00.000Z"
+      },
+      {
+       "id": 900,
+       "name": "Zorg sprint 10",
+       "state": "closed",
+       "boardId": 77,
+       "goal": "",
+       "startDate": "2026-10-19T08:00:00.000Z",
+       "endDate": "2026-11-01T21:00:00.000Z",
+       "completeDate": "2026-11-02T07:30:00.000Z"
+      }
+     ],
+     "assignee": {
+      "self": "https://example.com/rest/api/3/user?accountId=acc-zorg-dev",
+      "accountId": "acc-zorg-dev",
+      "emailAddress": "zorg.dev@example.com",
+      "avatarUrls": {
+       "48x48": "https://example.com/avatars/48.png",
+       "24x24": "https://example.com/avatars/24.png"
+      },
+      "displayName": "Zorg Dev",
+      "active": true,
+      "timeZone": "Europe/Kyiv",
+      "accountType": "atlassian"
+     },
+     "customfield_10014": "PROJ-90",
+     "customfield_10036": 3,
+     "customfield_10043": "PROJ_101_PARCEL_LOCKER_AB",
+     "status": {
+      "description": "A status of the fictional project.",
+      "iconUrl": "https://example.com/images/icons/statuses/closed.png",
+      "name": "Closed",
+      "id": "6",
+      "statusCategory": {
+       "id": 3,
+       "key": "done",
+       "colorName": "green",
+       "name": "Done"
+      }
+     }
+    },
+    "webUrl": "https://example.atlassian.net/browse/PROJ-101"
+   },
+   {
+    "expand": "names,schema",
+    "id": "5003",
+    "self": "https://example.com/rest/api/3/issue/5003",
+    "key": "PROJ-103",
+    "fields": {
+     "summary": "Без оцінки і без виконавця",
+     "customfield_10041": null,
+     "customfield_10037": null,
+     "customfield_10020": null,
+     "assignee": null,
+     "customfield_10014": null,
+     "customfield_10036": null,
+     "status": {
+      "description": "A status of the fictional project.",
+      "iconUrl": "https://example.com/images/icons/statuses/open.png",
+      "name": "To Do",
+      "id": "6",
+      "statusCategory": {
+       "id": 3,
+       "key": "new",
+       "colorName": "green",
+       "name": "New"
+      }
+     }
+    },
+    "webUrl": "https://example.atlassian.net/browse/PROJ-103"
+   }
+  ],
+  "webUrl": "https://example.atlassian.net/issues?jql=project%20%3D%20PROJ",
+  "pageInfo": {
+   "hasNextPage": false,
+   "endCursor": null
+  }
+ }
+}

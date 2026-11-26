@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.15.4
+version: 0.15.5
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «розбий вимоги на задачі». EN — "break this spec into Jira tasks".
 ---
 
@@ -349,7 +349,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.4", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.5", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -370,7 +370,7 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 - The Team field format varies by Jira instance — check an existing task to find the correct format
 - Feature code goes into Labels, not into the task title prefix
 - Use `contentFormat: "markdown"` when creating tasks with description
-- On Atlassian MCP v2 `createJiraIssue` takes `issueType` (not `issueTypeName`) and `assignee` (not `assignee_account_id`); `editJiraIssue` replaces labels and components, so send the whole list; read the Team field of an existing task with `view: "evidence"` (`references/integration-strategy.md` 1c)
+- On Atlassian MCP v2 `createJiraIssue` takes `issueType` (not `issueTypeName`) and `assignee` (not `assignee_account_id`); `editJiraIssue` replaces labels and components, so send the whole list; read the Team field of an existing task with `fields: ["<the Team field id>"]` — it comes as `fields.customFields.<display name>.value`, and `view: "evidence"` is for when the id is unknown: it brings the task's comments too (`references/integration-strategy.md` 1c)
 
 ## Additional Resources
 

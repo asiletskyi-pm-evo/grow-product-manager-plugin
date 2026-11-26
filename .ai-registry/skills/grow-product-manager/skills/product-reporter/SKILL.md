@@ -1,6 +1,6 @@
 ---
 name: product-reporter
-version: 0.12.2
+version: 0.12.3
 description: Jira operational and goal reports — sprint plan/review, quarter review, member review, 3T5F goal report. Not goal setting (goal-setter), not a plan-vs-actual retro (quarterly-planning). UA — «звіт по спринту», «результати кварталу», «звіт по релізах», «які фічі виїхали в реліз», «QBR». EN — "board update".
 ---
 
@@ -82,7 +82,7 @@ Follow `references/jira-data-protocol.md`. Per mode, build the JQL and fetch the
 - `member-review` adds: `changelog` (status transitions) to date "passed to test / review / tested / closed" events and to compute period dynamics.
 - `quarter-review` adds: epic-level rollup (issuetype Epic, status), `resolutiondate`, `fixVersions`.
 
-**Extraction technique (mandatory for large teams):** markdown responses include descriptions and exceed token limits → the tool saves to a file. Run `Grep -o` with compact field patterns and parse; paginate via `nextPageToken` (~100/page). See protocol for the exact patterns.
+**Extraction technique (mandatory for large teams):** a sprint's or a quarter's search does not fit inline → the host saves it to a file. Read it with `python3 scripts/jira_rows.py <saved file>` — the same rows on Atlassian MCP v2 and v1, where the custom fields sit in different places — or, with no shell, with the protocol's `Grep -o` patterns; paginate via `nextPageToken` (~100/page). See the protocol → Large-response extraction.
 
 ### Step 2.5 — Data integrity gate
 
@@ -167,7 +167,7 @@ Present a short summary + links. Ask if changes are needed; iterate. If a correc
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.12.2", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
+1. `vault_save({ type: "ops-report" | "report-3t5f", product: active_product, skill: "product-reporter", skill_version: "0.12.3", tags: [mode (sprint-plan/sprint-review/quarter-review/initiative-status/member-review/goal-report), period], content: final report markdown, related: [previous report of same mode], extra_frontmatter: { mode, period, confluence_url (if published) } })`
    - Ops modes → `type: "ops-report"` → `Reports/ops/{product}/` → "Saved to Vault: Reports/ops/{product}/…"
    - `goal-report` → `type: "report-3t5f"` → `People/reports/{person_slug}/` → "Saved to Vault: People/reports/{person_slug}/…". **People-data locality applies** (`data-policy.md`): vault/local only, never auto-published to Confluence.
    - `goal-report` and `member-review` notes are not publication records: they name a person (`data-policy.md`).

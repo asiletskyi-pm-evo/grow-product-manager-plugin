@@ -12,6 +12,63 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.12.2 (2026-11-26)
+
+**Sprint and quarter reports read Story Points again on Atlassian MCP v2.** v4.11.0 moved the plugin to v2 by its tool names and inputs, checked with `discover`; its known limit was that no call had been run live. On 2026-11-26 every read of §1c was run on a live v2 site. The names and inputs held. One thing they could not show did not: the shape of what a Jira search returns.
+
+### Fixed
+
+- **Custom fields of a saved Jira search were not found on v2** (`references/jira-data-protocol.md` → Large-response extraction). v2 returns them under `fields.customFields`, keyed by the field's display name, each `{"id": "customfield_N", "value": …}`, and leaves a field with no value out; v1 had `fields.customfield_N`, with `null` for an empty one. The protocol's `Grep -o` patterns looked for the v1 form, so on v2 each of them matched nothing (measured: 0 of 100 issues), and `product-reporter` and the Planning Suite read a sprint as having no Story Points, no epic and no developer. The patterns also aligned their matches by count, which an absent field breaks.
+
+### Added
+
+- **`scripts/jira_rows.py`** — a saved Jira response as compact rows, one JSON line per issue, the same for both servers. `python3 scripts/jira_rows.py <saved file> [<saved file> …] [--sprint-history]`, or `-` for stdin.
+  - A row: `key`, the system fields that came (`summary`, `status`, `category`, `type`, `assignee`, `resolved`, `versions`, `labels`, `components`, `parent`), `cf` — the custom fields by id — and `closed_sprints` (0 = new in its sprint, ≥1 = carried over).
+  - A user is `{"id", "name"}`: the account id and the display name. The e-mail address, the avatar links, a description and a comment's text never reach a row; `comments` is their count.
+  - A custom field with no value has no key in `cf`, on v1 too.
+  - The sprints printed are the ones not closed; `--sprint-history` prints the whole history with its dates.
+  - After a file's rows, one `{"_page": …}` line: `has_next`, `next_page_token`, `shape`, and on v2 `cf_names` — the display name of each field id.
+  - A file that is not a Jira response, or one cut in the middle, is exit 2 — never an empty report.
+  - Measured on a 100-issue search with eight fields: 382 000 characters in, 54 000 out.
+- **`testing/jira_rows_test.py`** (TC-jira-4122) — 31 checks on fictional v2 and v1 responses (`testing/fixtures/jira/`): both shapes give the same rows; nothing of a person but the id and the name; every no-shell pattern of the protocol matches the v2 fixture; two mutations (a reader of the v1 form alone, a reader that keeps the user object whole) are caught.
+
+### Changed
+
+- **`references/jira-data-protocol.md`** — *Large-response extraction* is rewritten: ask for fields by id; the table of the two shapes; the script with SHELL; without a shell, patterns for the v2 form that open a node at each `"key":` and never align by count (the v1 forms stay in one line until 2027-03-01). Pagination and carried-over point at the script's `next_page_token` and `closed_sprints`. One issue's whole history on v2 is `listJiraIssueChangelogs`.
+- **`references/integration-strategy.md` §1c** — what the live pass measured:
+  - Point 4: custom fields come under `fields.customFields`; ask for them with `fields: ["customfield_…"]`. `view: "evidence"` also returns every comment in full (one epic: 98 000 characters, 94 000 of them comments), so it is for one issue whose field ids are unknown, never for a search.
+  - A session that holds both servers uses v2 and says nothing about reconnecting (measured in a Claude Code cloud session: another installed plugin still declares v1).
+  - Point 2: a read without `draft: true` returns the published version's token, not the draft's.
+  - The format guide ends by naming a second reference to read before a new page is composed, and says Confluence storage XML renders as raw text; `metadata.hasSpaceInstructions: false` means there are no space instructions to fetch.
+  - The table says which of its rows were run live (every read) and which were not (the writes).
+- **`skills/product-reporter/SKILL.md`** 0.12.3 — Step 2 reads the saved search with the script.
+- **`skills/task-creator/SKILL.md`** 0.15.5 — the Team field of an existing task is read with `fields`, not with `view: "evidence"`.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/jira_rows.py` | new |
+| `testing/jira_rows_test.py`, `testing/fixtures/jira/` | new test and its four fixtures |
+| `references/jira-data-protocol.md` | *Large-response extraction* for v2; pagination, carried-over, status transitions |
+| `references/integration-strategy.md` | §1c: points 2 and 4, both servers in one session, the format guide, what was run live |
+| `skills/product-reporter/SKILL.md` | 0.12.3 |
+| `skills/task-creator/SKILL.md` | 0.15.5 |
+| `AGENTS.md`, `testing/test-cases.md` | the script's row; TC-jira-4122 |
+| `README.md` | «New in v4.12.2», skill versions |
+
+### Backwards compatibility
+
+Nothing for a user to do. A v1 connection reads the same rows through the same script until 2027-03-01. No local context, vault note or config changes.
+
+### Known limits
+
+- The writes on v2 are still not run live: a page created and updated (`contentType: "page"`, `snapshotToken`), an issue created with an assignee and labels, an issue link. Their names and inputs are verified with `discover` (v4.11.0).
+- The script needs SHELL. A host without one reads the saved file with the patterns, which give the account id of a user field and the display name that follows it, not a parsed row.
+- The Codex CLI namespace for v2 is still not measured.
+
+---
+
 ## v4.12.1 (2026-11-26)
 
 **A release is finished when it has reached every place that serves it, not when the tag exists.** On 2026-11-26 the canonical remote was at v4.12.0, the mirror at v4.10.0, and a machine was reported at v4.9.1. The report measured the wrong folders — the terminal's, last synced two days before and with a leftover of an older sync beside it, not the desktop app's, which was at most an hour behind. The mirror was the real gap: four releases were run from sessions that could not reach it, and nothing recorded the step as left to do. This release makes the end of a release a check, and makes a skipped step visible. No user step is needed.

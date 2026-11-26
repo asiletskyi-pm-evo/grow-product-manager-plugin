@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.12.1
+**Version:** 4.12.2
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.12.2** — **Sprint and quarter reports read Story Points again on Atlassian MCP v2** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). v4.11.0 moved the plugin to v2 by its tool names and inputs; a live pass of every read on a v2 site on 2026-11-26 found what the names did not show: v2 returns an issue's custom fields under `fields.customFields`, keyed by the field's display name, and leaves an empty field out, while the patterns `jira-data-protocol.md` read a saved search with looked for `fields.customfield_N` — so on v2 `product-reporter` and the Planning Suite found no Story Points, no epic and no developer in a sprint's search. A new script, `scripts/jira_rows.py`, reads a saved Jira response of either server as one compact JSON line per issue (custom fields by id, a user as account id and name, closed sprints as a count — and no e-mail address, description or comment text); the protocol's no-shell patterns are rewritten for v2 and tested against a fixture. §1c of `integration-strategy.md` records the rest of the pass: `view: "evidence"` brings every comment (one epic — 98 000 characters), so custom fields are asked for by id; a session that holds both servers uses v2; the format guide names a second reference to read before a new page. The writes on v2 — a page created and updated, an issue created — are still not run live. See [CHANGELOG.md](CHANGELOG.md).
 
 **New in v4.12.1** — **A release is finished when it has reached every place that serves it, not when the tag exists** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). Four releases in a row reached the canonical remote and never its mirror, because they were run from sessions that could not reach it and nothing recorded the step as left. `release-manager` 0.5.2 now ends with a reach check: `python3 testing/release_reach.py` compares the canonical branch and its tag with every mirror and with the copies of the plugin installed on the machine, and fails while anything is behind or could not be checked. A step a session cannot do — the mirror push, the vault record — is written out as «Left to do on the release machine» instead of being passed over. `references/host-profiles.md` §8 says how each host takes a release and how soon, measured on six releases: a claim «the machine is at version N» now names which host's copy. And a session says so itself: when another copy of the plugin on the machine is at another version, the SessionStart digest ends with a `plugin copies:` line — a ⚠ the user hears once when this host lags a newer copy, a list named on request when the others are older. Local files only, no network.
 
@@ -332,7 +334,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 7. Task Creator (v0.15.4)
+### 7. Task Creator (v0.15.5)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -493,7 +495,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 14. Product Reporter (v0.12.2) — renamed from Team Ops Reporter in v2.0.0
+### 14. Product Reporter (v0.12.3) — renamed from Team Ops Reporter in v2.0.0
 
 **Description:** Operational team reports from Jira. Pulls issues, processes them in Python (aggregations, Story Points, carried-vs-new, per-Assignee/Developer, changelog-based throughput), renders from a template, and offers charts.
 
@@ -695,7 +697,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Brainstorm Features | v0.15.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.3 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.4 | Create and analyze feature requirements |
-| Task Creator | v0.15.4 | Create Jira tasks from requirements |
+| Task Creator | v0.15.5 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.16.1 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
@@ -704,7 +706,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Knowledge Library | v0.10.3 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
 | Design Bridge | v0.10.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
-| Product Reporter | v0.12.2 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
+| Product Reporter | v0.12.3 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
 | Roadmap Architect | v0.8.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
 | Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
@@ -1142,5 +1144,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.12.1  
+**Version:** 4.12.2  
 **Last Updated:** November 2026
