@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.11.1
+**Version:** 4.11.2
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.11.2** — **The story map's board without Miro, laid out by the plugin itself** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). In `roadmap-architect` 0.8.0 the map's team board is offered on the host's own board type first, so no board tool's account or paid plan is ever needed; one board per map, and a map on Miro moves to the host's board only on its own answer. `story_map.py board-state` and `board-diff` read the host's board (`--surface whiteboard`); a read missing a page is `partial`, never «everything removed», and a person's note is always the team's. The new `story_map.py board-layout` lays the host's board out on every version: a new step widens its activity and moves the columns after it, a section grows with its tallest cell and the sections under it move down, the team's notes move only with their section and column, nothing is deleted, and the same note on a board it laid out writes nothing. The Miro path is byte for byte as before. See CHANGELOG for details.
 
 **New in v4.11.1** — **A shared core is data: its paths stay inside it, it runs no command of its own, and its rules wait for your yes** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). A security patch that closes the five findings of the full audit of v4.10.0. The bundle builder refuses a core path that leaves the core and writes only inside its folder. `people_resolver` and a core's own copy of the builder are never run. Names from notes go to `ctx entity` / `ctx search` on stdin (`--q-stdin`). The daily sync no longer takes a core rule or a new block without your yes. The write gate also asks before an Atlassian delete, before a provider's address is approved and before a command that changes the gate itself — neither a pause nor `--write-gate off` covers those questions. See CHANGELOG for details.
 
@@ -1136,5 +1138,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.11.1  
+**Version:** 4.11.2  
 **Last Updated:** November 2026
