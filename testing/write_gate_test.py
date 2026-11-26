@@ -343,8 +343,14 @@ with tempfile.TemporaryDirectory() as d:
                      ("cd ~/.grow-pm/plugin-data && echo {} > config.json", "cd into plugin-data"),
                      ("rm -rf ~/.grow-pm/trust ~/.grow-pm/.trust-seeded", "the trust store removed"),
                      ("sed -i s/ask/allow/ /p/scripts/write_gate.py", "the gate's own script"),
-                     ("cp /dev/null /p/hooks/hooks.json", "hooks.json")):
+                     ('cp /dev/null "$CLAUDE_PLUGIN_ROOT/hooks/hooks.json"', "hooks.json"),
+                     ("ctx provider 'trust' a --code 1", "a quoted trust"),
+                     ("cd ~/.grow-pm && rm -r trust .trust-seeded", "a delete under ~/.grow-pm"),
+                     ("echo x > %s/config.json" % pdata, "the expanded plugin-data path")):
         check("re-audit 2: asks — " + why, ASK in bash(cmd), cmd)
+    for cmd, why in (("npm run setup -- --watch", "another project's setup"), ("cat hooks/hooks.json 2>/dev/null", "a read with 2>/dev/null"),
+                     ("ls ~/.grow-pm", "a listing of ~/.grow-pm")):
+        check("re-audit 2: passes — " + why, bash(cmd) == "", cmd)
     for cmd in ("echo '{\"write_gate\":\"off\"}' > \"$CLAUDE_PLUGIN_DATA/config.json\"",
                 "python3 -c 'open(\"%s/.grow-pm/plugin-data/config.json\",\"w\")'" % home,
                 "cp x ~/.grow-pm/trust/addresses.json"):
@@ -359,7 +365,8 @@ with tempfile.TemporaryDirectory() as d:
     for path, why in ((os.path.join(home, ".GROW-PM", "Trust", "x.json"), "the trust store in other case"),
                       (os.path.join(home, ".grow-pm", ".trust-seeded"), ".trust-seeded"),
                       (os.path.join(ROOT, "scripts", "write_gate.py"), "the gate's own script"),
-                      (os.path.join(ROOT, "hooks", "hooks.json"), "hooks.json")):
+                      (os.path.join(ROOT, "hooks", "hooks.json"), "hooks.json"),
+                      (os.path.join(ROOT, "scripts", "ctx_common.py"), "any file of the plugin")):
         out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": path, "old_string": "a", "new_string": "b"}})
         check("re-audit 2: an Edit asks — " + why, ASK in out, out)
     out = run(env, {"tool_name": "Write", "cwd": pdata, "tool_input": {"file_path": "config.json", "content": "{}"}})

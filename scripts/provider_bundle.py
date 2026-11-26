@@ -3,7 +3,7 @@
 core and propose its context blocks for the user's local-context.md (since v3.10.0).
 
   python3 provider_bundle.py --core <core root> --out <target> --email <e-mail>
-          [--manifest <path>] [--team <slug>] [--role <profile>] [--name "Name"]
+          [--manifest <path>] [--team <slug>] [--role <profile>] [--name '<Name>']
           [--existing-context <copy of local-context.md>] [--jira-write own|none|ask]
           [--skip-blocks <id,id>] [--proposal-dir <private folder>]
           [--propose-only] [--force] [--in-place] [--no-personal-overlay]

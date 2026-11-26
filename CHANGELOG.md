@@ -49,7 +49,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ### Hardening
 
-- **The write gate** asks before an Atlassian `executeDestructive` (always), before a Bash command that approves a provider's address (`ctx provider trust … --code`) and before anything changes the gate itself. Neither a pause nor `--write-gate off` covers these. 5 hooks in all.
+- **The write gate** asks before an Atlassian `executeDestructive` (always), before a Bash command that approves a provider's address (`ctx provider trust … --code`) and before a command or an edit that changes the gate itself, its config, the trust store or any file of the plugin. A check that cannot run asks. Neither a pause nor `--write-gate off` covers these. 5 hooks in all.
 - **`visual-annotation-protocol.md`** — curl reads the Atlassian credentials from stdin (`--config -`), never from the command line.
 - **`connect-steps.md`** pins `mcp-remote@0.16.5` (no `@latest`).
 - **`design-toolkit-protocol.md`** — a toolkit's `command` runs only after the user saw the exact command.
@@ -81,6 +81,9 @@ When a skill changes, its version is bumped independently. The plugin version is
 | `scripts/ctx_synced.py` | rules and new blocks wait; the report says how to take them |
 | `scripts/ctx_blocks.py` | `held_rules`: a manual apply holds a changed rule |
 | `scripts/ctx_identity.py`, `scripts/ctx_kit.py` | single quotes in hints; no line break in a kit's fields |
+| `scripts/ctx_resolve.py`, `scripts/ctx_read.py`, `scripts/session_start.py` | the `slot map` hint and the `--product` hint in single quotes |
+| `scripts/write-gate.sh` | runs the gate with `python3 -I`; a check that cannot run asks |
+| `skills/context-connect/references/connect-steps.md`, `skills/knowledge-library/references/tools-workflows.md`, `examples/provider-kit/zorg-core/` | values in single quotes; the example playbook titled «Team conventions» |
 | `scripts/write_gate.py`, `hooks/hooks.json` | `executeDestructive`, address approval |
 | `references/context-provider-protocol.md`, `search-protocol.md`, `local-context-protocol.md`, `context-protocol.md`, `people-context-protocol.md`, `visual-annotation-protocol.md`, `design-toolkit-protocol.md`, `self-improvement.md`, `AGENTS.md` | the rules above |
 | `skills/context-connect/SKILL.md` | 0.9.2 → 0.9.3 |
@@ -109,12 +112,12 @@ When a skill changes, its version is bumped independently. The plugin version is
 - A user with `sync: daily` now sees new blocks and changed core rules as «awaits a decision» instead of finding them applied.
 - The engine's printed hints use single quotes instead of double quotes.
 - `ctx provider apply` without `--choose <block>=theirs` no longer takes a changed core rule.
-- Turning the write gate off or pausing it is now always your own click: the agent's command asks.
+- A command or an edit of the agent's that turns the write gate off or pauses it now asks you first.
 
 ### Known limits
 
 - `executeWrite` (comments, links, transitions on Atlassian MCP v2) stays ungated, as v4.11.0 decided.
-- The write gate reads a command's text: it confirms what the agent does, it is not a sandbox. A command built to hide what it does, or a file tool other than Bash and `Write`/`Edit`/`MultiEdit`/`NotebookEdit` (another plugin's MCP file server, say), is not caught.
+- The write gate reads a command's text: it confirms what the agent does, it is not a sandbox. A command its patterns do not recognise (some ordinary ones too, such as a script that edits the files indirectly), or a file tool other than Bash and `Write`/`Edit`/`MultiEdit`/`NotebookEdit` (another plugin's MCP file server, say), is not caught. A trust store and its mark removed together still make the next `ctx` run trust every registration that has an address, as the migration of v4.9.1 does; deleting them now asks.
 - Observations of the re-audit left for later: a core's `exclude` patterns are regular expressions it chooses, `atomic_write` does not refuse a link at the target, and `journey_portfolio render-html --out` writes where it is told.
 
 ---
