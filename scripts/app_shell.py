@@ -5,6 +5,8 @@
   check    references/app-profiles.yaml (or --profiles PATH) against them: {"ok": bool, "errors": [...]}
   wrap     an HTML page + a profile -> an installable app: the permission manifest, the shell (shell.js, shell.css),
            the profile as JSON; the page's own body goes into <div class="gpm-page">. Writes nothing on a refusal.
+  theme    token files of the products' design systems -> theme candidates (light, dark, contrast check, the built-in
+           `neutral`); --pick ID writes the one theme that `snapshot --theme` takes
   snapshot sections + products (+ a theme, + connector bindings) -> one JSON file per database document under
            DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
@@ -13,7 +15,7 @@ levels `page` and `app` exist; `full`, `full-access` and `commands` arrive in v4
 read, never written; local-context.md is never read. Every command ends with one `APP_RESULT {json}` line.
 Stdlib only (Python 3.9). Exit 0; 1 when a check fails; 2 for a wrong argument.
 """
-import argparse, datetime, html, json, os, re, sys
+import argparse, colorsys, copy, datetime, html, json, math, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROFILES = os.path.join(os.path.dirname(HERE), "references", "app-profiles.yaml")
@@ -40,6 +42,21 @@ LABEL_MAX = 24
 THRESHOLDS = {"warning": 0.10, "critical": 0.25}
 PEOPLE_KEYS = ("email", "e-mail", "author", "assignee", "person", "owner", "reporter")
 THEME_KEYS = ("v", "id", "light", "dark", "font", "radius")
+TOKENS = ("bg", "surface", "text", "muted", "accent", "border", "ok", "warn", "crit")
+FONTS = ("Inter", "Roboto", "Open Sans", "Montserrat", "Manrope", "Rubik", "Nunito", "PT Sans", "Fira Sans",
+         "IBM Plex Sans", "Noto Sans", "Golos Text")      # Google Fonts with Cyrillic; shell.js carries the same list
+# The built-in theme: the default of every app. shell.css holds the same values as the defaults of the --gpm-*
+# variables (a test compares them); the system font stack, so no network request.
+NEUTRAL = {"v": 1, "id": "neutral",
+           "light": {"bg": "#f6f6f4", "surface": "#ffffff", "text": "#1f2328", "muted": "#5c646d", "accent": "#2f6fde",
+                     "border": "#d0d7de", "ok": "#1a7f37", "warn": "#9a6700", "crit": "#cf222e"},
+           "dark": {"bg": "#121417", "surface": "#1b1e23", "text": "#e8eaed", "muted": "#a7adb5", "accent": "#6aa0f5",
+                    "border": "#2c3138", "ok": "#3fb950", "warn": "#d29922", "crit": "#f85149"},
+           "font": "", "radius": 8}
+# token -> backgrounds it is read on, and the WCAG ratio it needs there
+NEEDS = {"text": (("bg", 4.5), ("surface", 4.5)), "muted": (("bg", 4.5), ("surface", 4.5)),
+         "accent": (("surface", 3.0),), "ok": (("surface", 3.0),), "warn": (("surface", 3.0),), "crit": (("surface", 3.0),)}
+TOKEN_FILE_KEYS = ("product", "light", "dark", "font", "radius") + TOKENS
 
 
 class Bad(Exception):
@@ -393,8 +410,9 @@ def wrap_page(page, name, prof, lang):
 # ---- snapshot -----------------------------------------------------------------------------------------------------
 
 def check_theme(theme):
-    """The errors of one theme `{v: 1, id, light: {token: #rrggbb}, dark: {…}, font, radius}` — [] when it is clean.
-    Task 4 tightens it (the token list, the fonts); the shape is checked here."""
+    """The errors of one theme `{v: 1, id, light: {<TOKENS>}, dark: {<TOKENS>}, font, radius}` — [] when it is clean:
+    exactly the nine tokens, each #rrggbb, in light and in dark; font "" (the system font) or one of FONTS; radius a
+    whole number 0-24. Contrast is a different question: see theme_weak."""
     if not isinstance(theme, dict):
         return ["theme: not a mapping"]
     errs = ["theme: unknown key '%s'" % k for k in theme if k not in THEME_KEYS]
@@ -403,22 +421,164 @@ def check_theme(theme):
         errs.append("theme: v must be 1")
     if not isinstance(theme.get("id"), str) or not theme.get("id"):
         errs.append("theme: id must be text")
-    if not isinstance(theme.get("font"), str) or not theme.get("font"):
-        errs.append("theme: font must be text")
+    f = theme.get("font")
+    if "font" in theme and (not isinstance(f, str) or (f != "" and f not in FONTS)):
+        errs.append("theme: font must be \"\" (the system font) or one of: %s" % ", ".join(FONTS))
     for side in ("light", "dark"):
         tokens = theme.get(side)
         if side not in theme:
             continue
-        if not isinstance(tokens, dict) or not tokens:
+        if not isinstance(tokens, dict):
             errs.append("theme: %s must be a mapping of tokens" % side)
             continue
-        for k, v in tokens.items():
-            if not isinstance(v, str) or not COLOR.match(v):
+        errs += ["theme: %s has an unknown token '%s'" % (side, k) for k in tokens if k not in TOKENS]
+        errs += ["theme: %s.%s is missing" % (side, k) for k in TOKENS if k not in tokens]
+        for k in TOKENS:
+            if k in tokens and (not isinstance(tokens[k], str) or not COLOR.match(tokens[k])):
                 errs.append("theme: %s.%s must be #rrggbb" % (side, k))
     r = theme.get("radius")
     if "radius" in theme and (isinstance(r, bool) or not isinstance(r, int) or not 0 <= r <= 24):
         errs.append("theme: radius must be a whole number 0-24")
     return errs
+
+
+# ---- theme: contrast, dark derivation, candidates -------------------------------------------------------------------
+
+def _rgb(h):
+    return tuple(int(h[i:i + 2], 16) / 255 for i in (1, 3, 5))
+
+
+def _lum(h):
+    lin = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in _rgb(h)]
+    return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+
+def _ratio(a, b):
+    hi, lo = sorted((_lum(a), _lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def contrast(a, b):
+    """The WCAG 2.x contrast ratio of two #rrggbb colours, 1.0-21.0, to two decimals."""
+    return round(_ratio(a, b), 2)
+
+
+def hls(h):
+    """(hue, lightness, saturation) of a #rrggbb colour, each 0-1."""
+    return colorsys.rgb_to_hls(*_rgb(h))
+
+
+def _hex(hue, light, sat):
+    r, g, b = colorsys.hls_to_rgb(hue, min(1.0, max(0.0, light)), sat)
+    return "#%02x%02x%02x" % (round(r * 255), round(g * 255), round(b * 255))
+
+
+def _passes(token, color, tokens):
+    return all(_ratio(color, tokens[bg]) >= need for bg, need in NEEDS[token])
+
+
+def _suggest(token, mode, tokens):
+    """The nearest colour of the token's hue and saturation that passes its thresholds on `tokens`' backgrounds: lightness
+    moves in 0.5% steps, towards the contrast first (darker in light mode, lighter in dark). None when nothing does."""
+    hue, light, sat = hls(tokens[token])
+    toward = (-1, 1) if mode == "light" else (1, -1)
+    for k in range(1, 201):
+        for sign in toward:
+            c = _hex(hue, light + sign * k * 0.005, sat)
+            if _passes(token, c, tokens):
+                return c
+    return None
+
+
+def theme_weak(theme):
+    """The tokens of a theme that are under their contrast threshold, one entry per mode and token:
+    [{mode, token, ratio, need, suggest}] (ratio: the lowest of its pairs, cut to two decimals so it never shows
+    a passing number for a failing pair)."""
+    out = []
+    for mode in ("light", "dark"):
+        tokens = theme[mode]
+        for tok, pairs in NEEDS.items():
+            ratio = min(_ratio(tokens[tok], tokens[bg]) for bg, _ in pairs)
+            if not _passes(tok, tokens[tok], tokens):
+                out.append({"mode": mode, "token": tok, "ratio": math.floor(ratio * 100) / 100,
+                            "need": max(n for _, n in pairs), "suggest": _suggest(tok, mode, tokens)})
+    return out
+
+
+def _weak_text(weak):
+    return "; ".join("%s.%s %.2f < %s (suggest %s)" % (w["mode"], w["token"], w["ratio"], w["need"], w["suggest"]) for w in weak)
+
+
+def derive_dark(light):
+    """The dark side of a theme that brought none: the neutral dark bg, surface, text, muted, border; the product's
+    accent, ok, warn, crit lightened in 2% HSL steps until they pass their threshold on the dark surface."""
+    dark = dict(NEUTRAL["dark"])
+    for tok in ("accent", "ok", "warn", "crit"):
+        hue, lt, sat = hls(light[tok])
+        c = light[tok]
+        for _ in range(50):
+            if _passes(tok, c, dark):
+                break
+            lt = min(1.0, lt + 0.02)
+            c = _hex(hue, lt, sat)
+        dark[tok] = c
+    return dark
+
+
+def _read_tokens(path):
+    """One token file -> a candidate (without `weak`). Bad on anything that is not clean."""
+    raw = _read_json(path, "tokens")
+    if not isinstance(raw, dict):
+        raise Bad("tokens %s: not a mapping" % path)
+    for k in raw:
+        if k not in TOKEN_FILE_KEYS:
+            raise Bad("tokens %s: unknown key '%s'" % (path, k))
+    product = raw.get("product")
+    if not isinstance(product, str) or not PRODUCT.match(product):
+        raise Bad("tokens %s: product must be an id like 'zorg' (lowercase letters, digits, '-')" % path)
+    if product == NEUTRAL["id"]:
+        raise Bad("tokens %s: the product id 'neutral' is the built-in theme's" % path)
+    top = [k for k in TOKENS if k in raw]
+    if "light" in raw and top:
+        raise Bad("tokens %s: give the tokens either in 'light' or at the top level, not both (%s)" % (path, ", ".join(top)))
+    sides = {}
+    for side, src in (("light", raw.get("light") if "light" in raw else {k: raw[k] for k in top}), ("dark", raw.get("dark"))):
+        if side == "dark" and "dark" not in raw:
+            continue
+        if not isinstance(src, dict):
+            raise Bad("tokens %s: %s must be a mapping of the nine tokens" % (path, side))
+        for k in src:
+            if k not in TOKENS:
+                raise Bad("tokens %s: %s has an unknown token '%s'" % (path, side, k))
+        for k in TOKENS:
+            if k not in src:
+                raise Bad("tokens %s: %s.%s is missing" % (path, side, k))
+            if not isinstance(src[k], str) or not COLOR.match(src[k]):
+                raise Bad("tokens %s: %s.%s must be #rrggbb" % (path, side, k))
+        sides[side] = {k: src[k].lower() for k in TOKENS}
+    font, radius = raw.get("font", NEUTRAL["font"]), raw.get("radius", NEUTRAL["radius"])
+    if not isinstance(font, str) or (font != "" and font not in FONTS):
+        raise Bad("tokens %s: font must be \"\" or one of: %s" % (path, ", ".join(FONTS)))
+    if isinstance(radius, bool) or not isinstance(radius, int) or not 0 <= radius <= 24:
+        raise Bad("tokens %s: radius must be a whole number 0-24" % path)
+    return {"v": 1, "id": product, "product": product, "light": sides["light"],
+            "dark": sides.get("dark") or derive_dark(sides["light"]), "font": font, "radius": radius}
+
+
+def theme_candidates(token_files):
+    """One candidate per token file, in the order given, and always `neutral` last:
+    [{v, id, product, light, dark, font, radius, weak}]. Bad on a file that does not pass."""
+    out, seen = [], set()
+    for path in token_files:
+        c = _read_tokens(path)
+        if c["id"] in seen:
+            raise Bad("tokens %s: the product '%s' is given twice" % (path, c["id"]))
+        seen.add(c["id"])
+        out.append(c)
+    out.append(dict(copy.deepcopy(NEUTRAL), product=NEUTRAL["id"]))
+    for c in out:
+        c["weak"] = theme_weak(c)
+    return out
 
 
 def strip_people(data, label):
@@ -495,6 +655,9 @@ def _build(sections, products, theme, made, connectors=None):
         errs = check_theme(theme)
         if errs:
             raise Bad("; ".join(errs))
+        weak = theme_weak(theme)
+        if weak:
+            raise Bad("theme under the contrast threshold: " + _weak_text(weak))
         docs["snapshot/theme"] = theme
     run_id = _path_safe(made)
     if len(run_id.encode("utf-8")) > SEGMENT_MAX:
@@ -579,6 +742,29 @@ def cmd_snapshot(a):
     return 1 if over else 0
 
 
+def cmd_theme(a):
+    cands = theme_candidates(a.tokens)
+    if a.pick is None:
+        data = {"candidates": cands}
+    else:
+        c = next((x for x in cands if x["id"] == a.pick), None)
+        if c is None:
+            raise Bad("no theme '%s' (there are: %s)" % (a.pick, ", ".join(x["id"] for x in cands)))
+        if c["weak"]:
+            raise Bad("the theme '%s' has tokens under the contrast threshold, replace them first: %s" % (a.pick, _weak_text(c["weak"])))
+        data = {k: c[k] for k in THEME_KEYS}
+        errs = check_theme(data)
+        if errs:
+            raise Bad("; ".join(errs))
+    try:
+        with open(a.out, "w", encoding="utf-8", newline="") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except OSError as e:
+        raise Bad("the theme does not write: %s" % e)
+    result(ok=True, out=a.out, candidates=cands, **({"picked": a.pick} if a.pick is not None else {}))
+    return 0
+
+
 # ---- the commands -------------------------------------------------------------------------------------------------
 
 def cmd_schema(_a):
@@ -640,6 +826,11 @@ def main(argv=None):
     n.add_argument("--out", required=True)
     n.add_argument("--profiles", default=None)
     n.set_defaults(fn=cmd_snapshot)
+    t = sub.add_parser("theme")
+    t.add_argument("--tokens", action="append", default=[], metavar="FILE")
+    t.add_argument("--pick", default=None, metavar="ID")
+    t.add_argument("--out", required=True)
+    t.set_defaults(fn=cmd_theme)
     a = ap.parse_args(argv)
     try:
         return a.fn(a)

@@ -1,22 +1,43 @@
 :root {
   --gpm-bg: #f6f6f4;
-  --gpm-fg: #1f2328;
-  --gpm-muted: #656d76;
+  --gpm-surface: #ffffff;
+  --gpm-text: #1f2328;
+  --gpm-muted: #5c646d;
   --gpm-accent: #2f6fde;
-  --gpm-accent-fg: #ffffff;
   --gpm-border: #d0d7de;
+  --gpm-ok: #1a7f37;
+  --gpm-warn: #9a6700;
+  --gpm-crit: #cf222e;
+  --gpm-accent-fg: #ffffff;
   --gpm-radius: 8px;
   --gpm-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+/* the dark values: the OS asks for dark unless the person chose light; or the person chose dark */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --gpm-bg: #22262b;
-    --gpm-fg: #e6e8ea;
-    --gpm-muted: #9aa3ad;
-    --gpm-accent: #5b93f0;
+  :root:not([data-theme="light"]) {
+    --gpm-bg: #121417;
+    --gpm-surface: #1b1e23;
+    --gpm-text: #e8eaed;
+    --gpm-muted: #a7adb5;
+    --gpm-accent: #6aa0f5;
+    --gpm-border: #2c3138;
+    --gpm-ok: #3fb950;
+    --gpm-warn: #d29922;
+    --gpm-crit: #f85149;
     --gpm-accent-fg: #0d1117;
-    --gpm-border: #3a4048;
   }
+}
+:root[data-theme="dark"] {
+  --gpm-bg: #121417;
+  --gpm-surface: #1b1e23;
+  --gpm-text: #e8eaed;
+  --gpm-muted: #a7adb5;
+  --gpm-accent: #6aa0f5;
+  --gpm-border: #2c3138;
+  --gpm-ok: #3fb950;
+  --gpm-warn: #d29922;
+  --gpm-crit: #f85149;
+  --gpm-accent-fg: #0d1117;
 }
 .gpm-shell {
   box-sizing: border-box;
@@ -24,21 +45,21 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px 8px;
   margin: 0;
-  padding: 8px 16px;
-  background: var(--gpm-bg);
-  color: var(--gpm-fg);
+  padding: 6px 16px;
+  background: var(--gpm-surface);
+  color: var(--gpm-text);
   border-bottom: 1px solid var(--gpm-border);
   font: 600 15px/1.3 var(--gpm-font);
 }
 .gpm-title { min-width: 0; overflow-wrap: anywhere; }
 .gpm-fresh { color: var(--gpm-muted); font-weight: 400; font-size: 13px; }
 .gpm-fresh[hidden] { display: none; }
-.gpm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.gpm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-left: auto; }
 .gpm-actions:empty { display: none; }
 .gpm-btn {
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 14px;
   border: 1px solid var(--gpm-accent);
   border-radius: var(--gpm-radius);
@@ -50,5 +71,19 @@
 .gpm-btn:disabled { opacity: .65; cursor: default; }
 .gpm-state { color: var(--gpm-muted); font: 400 13px/1.3 var(--gpm-font); overflow-wrap: anywhere; }
 .gpm-state:empty { display: none; }
-.gpm-modules { box-sizing: border-box; padding: 16px; color: var(--gpm-fg); font-family: var(--gpm-font); }
+.gpm-modules { box-sizing: border-box; padding: 16px; background: var(--gpm-bg); color: var(--gpm-text); font-family: var(--gpm-font); }
 .gpm-modules[hidden] { display: none !important; }
+.gpm-theme { display: inline-flex; border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); overflow: hidden; }
+.gpm-theme button {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-left: 1px solid var(--gpm-border);
+  background: transparent;
+  color: var(--gpm-text);
+  font: 400 12px/1 var(--gpm-font);
+  cursor: pointer;
+}
+.gpm-theme button:first-child { border-left: 0; }
+.gpm-theme button[aria-pressed="true"] { background: var(--gpm-accent); color: var(--gpm-accent-fg); font-weight: 600; }
+.gpm-theme button:focus-visible, .gpm-btn:focus-visible { outline: 2px solid var(--gpm-accent); outline-offset: 2px; }

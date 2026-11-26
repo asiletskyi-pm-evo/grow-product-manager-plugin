@@ -249,6 +249,7 @@ with tempfile.TemporaryDirectory() as d:
         print("⏭  10.x the browser pass — skipped: no playwright")
     else:
         rc, _, _, pg = wrap(d, ZORG, out="app.html")
+        _, _, _, pg_en = wrap(d, ZORG, "--lang", "en", out="app-en.html")
         js = os.path.join(d, "pw.js")
         with open(js, "w") as f:
             f.write(r"""
@@ -264,10 +265,13 @@ const fakeDesktop = `
   const mode = process.argv[3];
   const b = await chromium.launch();
   const out = {};
-  async function open(init, viewport) {
+  async function open(init, viewport, file) {
     const p = await b.newPage({viewport: viewport || {width: 1000, height: 700}}); const errs = [];
+    p.__reqs = []; p.__url = 'file://' + (file || process.argv[2]);
     p.on('pageerror', e => errs.push(String(e))); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-    await p.addInitScript(init); await p.goto('file://' + process.argv[2]); await p.waitForTimeout(300);
+    p.on('request', r => p.__reqs.push(r.url()));
+    await p.route(/^https?:/, r => r.fulfill({status: 200, contentType: 'text/css', body: ''}));
+    await p.addInitScript(init); await p.goto(p.__url); await p.waitForTimeout(300);
     return [p, errs];
   }
   // available -> visible; click -> at once Виконується…, then Готово
@@ -348,9 +352,74 @@ const fakeDesktop = `
   out.hang = {fresh: (await p.$$eval('.gpm-fresh', e => e.map(x => x.textContent).join(''))), errs}; await p.close();
   [p, errs] = await open(fakeDesktop + fakeDb({'meta': META}, 'ok'), {width: 360, height: 640});
   out.livePhone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth})); await p.close();
+
+  // ---- Task 4: the theme (snapshot/theme), the switch
+  const GOOD = {v: 1, id: 'zorg-calm', font: 'Inter', radius: 12,
+    light: {bg: '#f7f6f2', surface: '#fefefe', text: '#1d2127', muted: '#5f6770', accent: '#2f6fde', border: '#d8dce1', ok: '#1f8a4c', warn: '#a8691a', crit: '#c53030'},
+    dark: {bg: '#1b1f24', surface: '#242a31', text: '#e8eaed', muted: '#9aa3ad', accent: '#6aa0f5', border: '#39414a', ok: '#4cc38a', warn: '#e0a53a', crit: '#f06a6a'}};
+  const TH = (t) => fakeDesktop + fakeDb({'meta': META, 'theme': t}, 'ok');
+  const vars = (pg) => pg.evaluate(() => { const cs = getComputedStyle(document.documentElement), g = n => cs.getPropertyValue('--gpm-' + n).trim();
+    return {bg: g('bg'), surface: g('surface'), text: g('text'), muted: g('muted'), accent: g('accent'), border: g('border'), ok: g('ok'), warn: g('warn'),
+            crit: g('crit'), radius: g('radius'), font: g('font'), mode: document.documentElement.getAttribute('data-theme'),
+            links: Array.from(document.querySelectorAll('link[rel=stylesheet]')).map(l => l.href),
+            headBg: getComputedStyle(document.querySelector('.gpm-shell')).backgroundColor,
+            keep: getComputedStyle(document.querySelector('.gpm-page #keep')).color,
+            style: document.documentElement.getAttribute('style') || ''}; });
+  const foreign = (pg) => pg.__reqs.filter(u => u !== pg.__url);
+  const sw = (mode) => '.gpm-theme button[data-mode="' + mode + '"]';
+  [p, errs] = await open(fakeDesktop);                     // no database, no theme: the neutral defaults
+  await p.emulateMedia({colorScheme: 'light'}); await p.waitForTimeout(80);
+  out.th_none = await vars(p); out.th_none_errs = errs;
+  out.th_group = await p.evaluate(() => { const g = document.querySelector('.gpm-theme');
+    return g ? {label: g.getAttribute('aria-label'), n: g.querySelectorAll('button').length,
+                texts: Array.from(g.querySelectorAll('button')).map(x => x.textContent), pressed: Array.from(g.querySelectorAll('button')).map(x => x.getAttribute('aria-pressed')),
+                tags: Array.from(g.querySelectorAll('button')).map(x => x.tagName), inHeader: !!g.closest('header.gpm-shell')} : null; });
+  await p.emulateMedia({colorScheme: 'dark'}); await p.waitForTimeout(80);
+  out.th_none_dark = await vars(p); await p.close();
+  [p, errs] = await open(TH(GOOD));
+  await p.emulateMedia({colorScheme: 'light'}); await p.waitForTimeout(80);
+  out.th_sys_light = await vars(p); out.th_reqs = foreign(p);
+  await p.emulateMedia({colorScheme: 'dark'}); await p.waitForTimeout(80);
+  out.th_sys_dark = await vars(p);
+  await p.click(sw('light')); out.th_pick_light = await vars(p);
+  out.th_pressed = await p.$$eval('.gpm-theme button', e => e.map(x => x.getAttribute('aria-pressed')));
+  await p.click(sw('dark')); out.th_pick_dark = await vars(p); out.th_stored = await p.evaluate(() => localStorage.getItem('gpm-theme'));
+  await p.reload(); await p.waitForTimeout(300); out.th_reload = await vars(p);
+  await p.click(sw('system')); await p.waitForTimeout(50); out.th_back_sys = await vars(p);
+  await p.focus(sw('light')); await p.keyboard.press('Enter'); out.th_key_enter = (await vars(p)).mode;
+  await p.focus(sw('dark')); await p.keyboard.press('Space'); out.th_key_space = (await vars(p)).mode;
+  out.th_errs = errs;
+  await p.evaluate(() => window.__push('theme', Object.assign({}, window.__docs.theme, {font: 'PT Sans', radius: 4})));
+  await p.waitForTimeout(100); out.th_live = await vars(p);
+  await p.evaluate(() => window.__push('theme', Object.assign({}, window.__docs.theme, {font: '', radius: 0})));
+  await p.waitForTimeout(100); out.th_live_sys = await vars(p);
+  await p.close();
+  // foreign values: nothing applied, nothing requested
+  const EVIL = Object.assign({}, GOOD, {font: 'Evil', radius: '9999'});
+  EVIL.light = Object.assign({}, GOOD.light, {accent: 'red; background:url(x)', bg: 'url(x)', text: '#12345'});
+  EVIL.dark = Object.assign({}, GOOD.dark, {accent: 'red; background:url(x)', bg: '#12345g'});
+  [p, errs] = await open(TH(EVIL));
+  await p.emulateMedia({colorScheme: 'light'}); await p.waitForTimeout(80);
+  out.th_evil = await vars(p); out.th_evil_reqs = foreign(p); out.th_evil_errs = errs; await p.emulateMedia({colorScheme: 'dark'}); await p.waitForTimeout(80);
+  out.th_evil_dark = await vars(p); await p.close();
+  for (const bad of [{font: 'Inter&family=Evil'}, {font: 'inter'}, {font: 12}, {radius: 25}, {radius: -1}, {radius: 4.5}, {radius: null}]) {
+    [p, errs] = await open(TH(Object.assign({}, GOOD, bad)));
+    const v = await vars(p); out['th_bad_' + JSON.stringify(bad)] = {links: v.links, radius: v.radius, font: v.font, reqs: foreign(p), errs}; await p.close();
+  }
+  // a storage that throws: the page renders, the switch works for the session
+  [p, errs] = await open("Object.defineProperty(window, 'localStorage', {get() { throw new Error('denied'); }});" + TH(GOOD));
+  out.th_nostore0 = await vars(p); await p.click(sw('dark')); out.th_nostore1 = await vars(p);
+  out.th_nostore_page = await p.isVisible('.gpm-page #keep'); out.th_nostore_errs = errs; await p.close();
+  // English
+  [p, errs] = await open(fakeDesktop, null, process.argv[4]);
+  out.th_en = await p.evaluate(() => { const g = document.querySelector('.gpm-theme'); return {label: g.getAttribute('aria-label'), texts: Array.from(g.querySelectorAll('button')).map(x => x.textContent)}; }); await p.close();
+  // phone width with the switch and the install button
+  [p, errs] = await open(TH(GOOD), {width: 360, height: 640});
+  out.th_phone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth,
+    right: document.querySelector('.gpm-theme').getBoundingClientRect().right, h: document.querySelector('.gpm-shell').getBoundingClientRect().height})); await p.close();
   console.log(JSON.stringify(out)); await b.close();
 })();""")
-        pr = subprocess.run(["node", js, pg], capture_output=True, text=True, timeout=180, env=dict(os.environ, NODE_PATH=npm))
+        pr = subprocess.run(["node", js, pg, "x", pg_en], capture_output=True, text=True, timeout=180, env=dict(os.environ, NODE_PATH=npm))
         try:
             br = json.loads(pr.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
@@ -399,6 +468,66 @@ const fakeDesktop = `
               (br.get("hang") or {}).get("fresh") == "дані від 26.11.2026" and (br.get("hang") or {}).get("errs") == [], br.get("hang"))
         lp = br.get("livePhone") or {}
         check("10.17 at phone width the freshness line adds no horizontal scroll", lp and lp.get("sw") <= lp.get("cw"), lp)
+
+        NL, ND = sh.NEUTRAL["light"], sh.NEUTRAL["dark"]
+        GOOD_LIGHT = {'bg': '#f7f6f2', 'surface': '#fefefe', 'text': '#1d2127', 'muted': '#5f6770', 'accent': '#2f6fde', 'border': '#d8dce1', 'ok': '#1f8a4c', 'warn': '#a8691a', 'crit': '#c53030'}
+        GOOD_DARK = {'bg': '#1b1f24', 'surface': '#242a31', 'text': '#e8eaed', 'muted': '#9aa3ad', 'accent': '#6aa0f5', 'border': '#39414a', 'ok': '#4cc38a', 'warn': '#e0a53a', 'crit': '#f06a6a'}
+        TOK = sh.TOKENS
+
+        def only(v, side):
+            return all(v.get(k) == side[k] for k in TOK)
+        n0, n1 = br.get("th_none") or {}, br.get("th_none_dark") or {}
+        check("10.18 pw_theme_defaults: with no theme (and no database) the neutral light values; the OS in dark -> the neutral dark values; radius 8px, system font",
+              only(n0, NL) and only(n1, ND) and n0.get("radius") == "8px" and "system-ui" in n0.get("font", "") and not n0.get("links")
+              and not br.get("th_none_errs"), (n0, n1))
+        g = br.get("th_group") or {}
+        check("10.19 the switch: one group in the header, three real <button>s «Світла / Темна / Як у системі», the default (system) is the pressed one",
+              g.get("inHeader") is True and g.get("n") == 3 and g.get("texts") == ["Світла", "Темна", "Як у системі"] and g.get("label") == "Тема"
+              and g.get("tags") == ["BUTTON"] * 3 and g.get("pressed") == ["false", "false", "true"], g)
+        sl, sd = br.get("th_sys_light") or {}, br.get("th_sys_dark") or {}
+        check("10.20 pw_theme_apply: the theme from snapshot/theme sets --gpm-<token>, --gpm-radius and --gpm-font on <html> (light OS) ",
+              only(sl, GOOD_LIGHT) and sl.get("radius") == "12px" and sl.get("font", "").startswith('"Inter"') and sl.get("mode") == "system", sl)
+        check("10.21 «as in the system» follows prefers-color-scheme live: the OS turns dark -> the dark tokens, no reload",
+              only(sd, GOOD_DARK) and sd.get("mode") == "system", sd)
+        pl, pd = br.get("th_pick_light") or {}, br.get("th_pick_dark") or {}
+        check("10.22 pw_theme_switch: «Світла» / «Темна» set data-theme on <html> and choose the tokens against the OS; the pressed state shows it",
+              pl.get("mode") == "light" and only(pl, GOOD_LIGHT) and pd.get("mode") == "dark" and only(pd, GOOD_DARK)
+              and br.get("th_pressed") == ["true", "false", "false"], (pl, pd, br.get("th_pressed")))
+        check("10.23 the choice is kept in localStorage under gpm-theme and comes back after a reload",
+              br.get("th_stored") == "dark" and (br.get("th_reload") or {}).get("mode") == "dark" and only(br.get("th_reload") or {}, GOOD_DARK), (br.get("th_stored"), br.get("th_reload")))
+        check("10.24 «Як у системі» again; the switch is usable by keyboard (Enter and Space on a focused button)",
+              (br.get("th_back_sys") or {}).get("mode") == "system" and br.get("th_key_enter") == "light" and br.get("th_key_space") == "dark"
+              and not br.get("th_errs"), (br.get("th_back_sys"), br.get("th_key_enter"), br.get("th_key_space"), br.get("th_errs")))
+        check("10.25 the header is painted with the theme's surface; the wrapped page keeps its own colours (R5), in light and in dark",
+              sl.get("headBg") == "rgb(254, 254, 254)" and pl.get("keep") == pd.get("keep") == n0.get("keep"), (sl.get("headBg"), pl.get("keep"), pd.get("keep")))
+        check("10.26 one <link rel=stylesheet> to Google Fonts, built from the list's spelling; it is the only request outside the page",
+              sl.get("links") == ["https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"]
+              and br.get("th_reqs") == sl.get("links"), (sl.get("links"), br.get("th_reqs")))
+        lv, ls = br.get("th_live") or {}, br.get("th_live_sys") or {}
+        check("10.27 a new snapshot/theme changes the variables live: another font replaces the link (still one), radius follows; font '' removes the link",
+              lv.get("links") == ["https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap"] and lv.get("radius") == "4px"
+              and lv.get("font", "").startswith('"PT Sans"') and ls.get("links") == [] and ls.get("radius") == "0px" and "system-ui" in ls.get("font", ""), (lv, ls))
+        ev, evd = br.get("th_evil") or {}, br.get("th_evil_dark") or {}
+        check("10.28 test_theme_rejects_foreign_values: accent 'red; background:url(x)', font 'Evil', radius '9999' -> the default values, no request, no error",
+              ev.get("accent") == NL["accent"] and ev.get("radius") == "8px" and "Evil" not in ev.get("font", "") and not ev.get("links")
+              and br.get("th_evil_reqs") == [] and not br.get("th_evil_errs") and "url(" not in ev.get("style", "") and "red" not in ev.get("style", ""), (ev, br.get("th_evil_reqs")))
+        check("10.29 a bad colour keeps only that token's default, the good tokens of the same theme apply (light and dark)",
+              ev.get("bg") == NL["bg"] and ev.get("text") == NL["text"] and ev.get("muted") == GOOD_LIGHT["muted"]
+              and evd.get("bg") == ND["bg"] and evd.get("accent") == ND["accent"] and evd.get("text") == GOOD_DARK["text"], (ev, evd))
+        bads = {k: v for k, v in br.items() if k.startswith("th_bad_")}
+        check("10.30 a font off the list (injection, wrong case, a number) or a radius that is not a whole 0-24 -> default, no link, no request",
+              len(bads) == 7 and all(v["reqs"] == v["links"] and not v["errs"] and (v["links"] == [] or v["links"][0].split("family=")[1].startswith("Inter:"))
+                                     for v in bads.values())
+              and all(v["radius"] in ("8px", "12px") and ("Evil" not in v["font"]) for v in bads.values())
+              and all(v["font"].startswith('"Inter"') or "system-ui" in v["font"] for v in bads.values()), bads)
+        n0s, n1s = br.get("th_nostore0") or {}, br.get("th_nostore1") or {}
+        check("10.31 pw_theme_switch without localStorage (it throws): the page renders, no error, the switch still works for the session",
+              n0s.get("mode") == "system" and n1s.get("mode") == "dark" and only(n1s, GOOD_DARK) and br.get("th_nostore_page") is True
+              and not br.get("th_nostore_errs"), (n0s, n1s, br.get("th_nostore_errs")))
+        check("10.32 the switch is labelled in English on an English page", (br.get("th_en") or {}) == {"label": "Theme", "texts": ["Light", "Dark", "System"]}, br.get("th_en"))
+        tp = br.get("th_phone") or {}
+        check("10.33 at phone width the switch adds no horizontal scroll, stays on screen, the header stays small",
+              tp and tp.get("sw") <= tp.get("cw") and tp.get("right") <= tp.get("cw") and tp.get("h") < 120, tp)
 
 # ---- Task 3: the data channel (snapshot) --------------------------------------------------------------------------------
 FIX = os.path.join(ROOT, "testing", "fixtures", "app")
@@ -538,6 +667,192 @@ with tempfile.TemporaryDirectory() as d:
     rc, text, res = run("snapshot", "--profile", "cjm", "--out", os.path.join(d, "def"), *ZP, "--section", "portfolio:zorg:" + PORT)
     made_default = jread(d, "def", "snapshot", "meta.json").get("made", "")
     check("11.20 --at omitted: made is now in UTC as publications.py writes it", re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", made_default) is not None, made_default)
+
+    # ---- Task 4: the theme ---------------------------------------------------------------------------------------------
+    TZ, TP = (os.path.join(FIX, n) for n in ("zorg-tokens.json", "zorg-pay-tokens.json"))
+
+    def theme(*args, out="th.json"):
+        o = os.path.join(d, out)
+        if os.path.exists(o):
+            os.remove(o)
+        rc, text, res = run("theme", *args, "--out", o)
+        return rc, text, res, o
+
+    def passes(t, mode):
+        c = t[mode]
+        return all(sh.contrast(c[k], c[b]) >= 4.5 - 1e-9 for k in ("text", "muted") for b in ("bg", "surface")) and \
+            all(sh.contrast(c[k], c["surface"]) >= 3.0 - 1e-9 for k in ("accent", "ok", "warn", "crit"))
+
+    # test_contrast_known
+    check("12.1 contrast: black on white is 21.0, #777777 on white ~4.48, symmetric",
+          sh.contrast("#000000", "#ffffff") == 21.0 and abs(sh.contrast("#777777", "#ffffff") - 4.48) < 0.01
+          and sh.contrast("#ffffff", "#777777") == sh.contrast("#777777", "#ffffff") and sh.contrast("#abcdef", "#abcdef") == 1.0,
+          (sh.contrast("#000000", "#ffffff"), sh.contrast("#777777", "#ffffff")))
+    check("12.2 the constants: nine tokens in the brief's order, twelve fonts with Cyrillic",
+          sh.TOKENS == ("bg", "surface", "text", "muted", "accent", "border", "ok", "warn", "crit")
+          and sh.FONTS == ("Inter", "Roboto", "Open Sans", "Montserrat", "Manrope", "Rubik", "Nunito", "PT Sans", "Fira Sans",
+                           "IBM Plex Sans", "Noto Sans", "Golos Text"), (sh.TOKENS, sh.FONTS))
+
+    # test_candidates_two_products
+    rc, text, res, o = theme("--tokens", TZ, "--tokens", TP)
+    cands = res.get("candidates") or []
+    check("12.3 test_candidates_two_products: two files -> zorg, zorg-pay, neutral; ok; the file holds {candidates}",
+          rc == 0 and res.get("ok") is True and [c["id"] for c in cands] == ["zorg", "zorg-pay", "neutral"]
+          and [c["product"] for c in cands] == ["zorg", "zorg-pay", "neutral"] and jread(o) == {"candidates": cands}, text)
+    check("12.4 a candidate is {v, id, product, light, dark, font, radius, weak}; the tokens are the nine in each mode",
+          all(set(c) == {"v", "id", "product", "light", "dark", "font", "radius", "weak"} and c["v"] == 1
+              and set(c["light"]) == set(sh.TOKENS) == set(c["dark"]) for c in cands), cands[:1])
+    zc, pc, nc = (cands + [{}, {}, {}])[:3]
+    check("12.5 zorg (tokens at top level) keeps its light values, font and radius; zorg-pay keeps its own dark; both clean",
+          zc.get("light", {}).get("accent") == "#2f6fde" and zc.get("font") == "Inter" and zc.get("radius") == 8
+          and pc.get("dark", {}).get("accent") == "#3fc1b3" and pc.get("font") == "Manrope" and pc.get("radius") == 12
+          and zc.get("weak") == [] and pc.get("weak") == [] and nc.get("weak") == [], (zc.get("weak"), pc.get("weak")))
+
+    # test_dark_derived
+    ND = sh.NEUTRAL["dark"]
+    check("12.6 test_dark_derived: no dark -> neutral bg/surface/text/muted/border, every pair passes its threshold",
+          all(zc.get("dark", {}).get(k) == ND[k] for k in ("bg", "surface", "text", "muted", "border")) and passes(zc, "dark")
+          and ND["bg"] == "#121417" and ND["surface"] == "#1b1e23" and ND["text"] == "#e8eaed" and ND["muted"] == "#a7adb5" and ND["border"] == "#2c3138", zc.get("dark"))
+    dark_tokens = os.path.join(d, "dark-tokens.json")
+    with open(dark_tokens, "w") as f:   # an accent and a crit that are too dark for the dark surface
+        json.dump(dict(jread(TZ), accent="#1a3a7a", ok="#145c34", warn="#7a4a00", crit="#8a1f1f"), f)
+    rc, text, res, o = theme("--tokens", dark_tokens, out="dk.json")
+    dz = res["candidates"][0]
+    check("12.7 the product's accent/ok/warn/crit that fail on the dark surface are lightened in 2% HSL steps until they pass; the hue stays",
+          passes(dz, "dark") and all(dz["dark"][k] != jread(dark_tokens)[k] for k in ("accent", "ok", "warn", "crit")) and dz["weak"] == []
+          and all(abs(sh.hls(dz["dark"][k])[0] - sh.hls(jread(dark_tokens)[k])[0]) < 0.02 for k in ("accent", "ok", "warn", "crit"))
+          and all(round((sh.hls(dz["dark"][k])[1] - sh.hls(jread(dark_tokens)[k])[1]) * 100) % 2 == 0 for k in ("accent", "ok", "warn", "crit")), dz["dark"])
+    rc, text2, res2, o2 = theme("--tokens", TZ, "--tokens", TP, out="th2.json")
+    check("12.8 deterministic: the same input twice gives the same bytes", open(o, "rb").read() == open(theme("--tokens", dark_tokens, out="dk2.json")[3], "rb").read()
+          and open(os.path.join(d, "th.json"), "rb").read() == open(o2, "rb").read(), "")
+
+    # test_weak_token_named
+    weak_file = os.path.join(d, "weak-tokens.json")
+    with open(weak_file, "w") as f:
+        json.dump(dict(jread(TZ), muted="#9aa0a6", surface="#ffffff", bg="#ffffff"), f)
+    rc, text, res, o = theme("--tokens", weak_file, out="wk.json")
+    wz = res["candidates"][0]
+    w = [x for x in wz["weak"] if x["token"] == "muted"]
+    check("12.9 test_weak_token_named: muted #9aa0a6 on white -> weak {mode: light, token: muted, need: 4.5} with a ratio below it; it is a finding, not an error",
+          rc == 0 and res.get("ok") is True and len(w) == 1 and w[0]["mode"] == "light" and w[0]["need"] == 4.5 and w[0]["ratio"] < 4.5
+          and set(w[0]) == {"mode", "token", "ratio", "need", "suggest"} and len(wz["weak"]) == 1, wz["weak"])
+    sg = w[0]["suggest"] if w else "#000000"
+    check("12.10 its suggest passes the threshold on bg and surface, is the same hue, and is the nearest (one 0.5% step lighter fails)",
+          re.fullmatch(r"#[0-9a-f]{6}", sg) is not None and sh.contrast(sg, "#ffffff") >= 4.5 and abs(sh.hls(sg)[0] - sh.hls("#9aa0a6")[0]) < 0.01
+          and sh.hls(sg)[1] < sh.hls("#9aa0a6")[1], sg)
+    # text and accent weak on a dark surface are named by mode as well
+    both = os.path.join(d, "both.json")
+    with open(both, "w") as f:
+        json.dump({"product": "zorg", "light": {k: jread(TZ)[k] for k in sh.TOKENS},
+                   "dark": dict({k: jread(TP)["dark"][k] for k in sh.TOKENS}, text="#556070", accent="#223344")}, f)
+    rc, text, res, o = theme("--tokens", both, out="both-out.json")
+    ws = {(x["mode"], x["token"]): x for x in res["candidates"][0]["weak"]}
+    check("12.11 weak entries are per mode and token: dark text (4.5) and dark accent (3.0) are named, each with a passing suggest",
+          set(ws) == {("dark", "text"), ("dark", "accent")} and ws[("dark", "text")]["need"] == 4.5 and ws[("dark", "accent")]["need"] == 3.0
+          and sh.contrast(ws[("dark", "text")]["suggest"], jread(TP)["dark"]["surface"]) >= 4.5
+          and sh.contrast(ws[("dark", "accent")]["suggest"], jread(TP)["dark"]["surface"]) >= 3.0, ws)
+
+    # the built-in neutral theme
+    nt = sh.NEUTRAL
+    check("12.12 neutral: a complete light + dark pair that passes every threshold, system font, a whole radius; it is the neutral candidate",
+          passes(nt, "light") and passes(nt, "dark") and nt["font"] == "" and nt["radius"] == 8 and set(nt["light"]) == set(sh.TOKENS) == set(nt["dark"])
+          and all(nc.get(k) == nt[k] for k in ("light", "dark", "font", "radius")) and nc.get("weak") == [], nt)
+    css_text = open(os.path.join(ROOT, "scripts", "app_shell", "shell.css"), encoding="utf-8").read()
+
+    def css_block(selector_re):
+        m = re.search(selector_re + r"\s*\{([^{}]*)\}", css_text)
+        return dict(re.findall(r"--gpm-([a-z-]+):\s*([^;]+);", m.group(1))) if m else {}
+    lightv, darkv = css_block(r"(?m)^:root"), css_block(r':root\[data-theme="dark"\]')
+    mediav = css_block(r'(?m)^\s+:root:not\(\[data-theme="light"\]\)')
+    check("12.13 neutral lives once: shell.css :root holds the Python light values, :root[data-theme=dark] the dark ones (and the OS-dark rule the same), radius 8px",
+          all(lightv.get(k) == nt["light"][k] for k in sh.TOKENS) and all(darkv.get(k) == nt["dark"][k] for k in sh.TOKENS)
+          and all(mediav.get(k) == nt["dark"][k] for k in sh.TOKENS) and lightv.get("radius") == "8px" and "system-ui" in lightv.get("font", ""),
+          (lightv, darkv, mediav))
+    check("12.14 the CSS sets no colour of its own beyond the variables: no '#' literal outside the :root blocks",
+          not re.search(r"#[0-9a-fA-F]{3,8}\b", re.sub(r"[^{}]*:root[^{}]*\{[^{}]*\}", "", css_text)), "")
+
+    # --pick (R2)
+    rc, text, res, o = theme("--tokens", TZ, "--tokens", TP, "--pick", "zorg-pay", out="pick.json")
+    pk = jread(o) if os.path.exists(o) else {}
+    check("12.15 --pick zorg-pay writes that one theme: exactly the theme keys (product and weak dropped), check_theme clean",
+          rc == 0 and res.get("ok") is True and res.get("picked") == "zorg-pay" and list(pk) == list(sh.THEME_KEYS) and pk["id"] == "zorg-pay"
+          and pk["v"] == 1 and sh.check_theme(pk) == [] and pk["light"] == jread(TP)["light"], (text, pk))
+    rc, text, res, o2 = theme("--tokens", TZ, "--pick", "neutral", out="pickn.json")
+    check("12.16 --pick neutral works with no token file other than the one given; the written theme is the built-in one",
+          rc == 0 and jread(o2) == sh.NEUTRAL and sh.check_theme(jread(o2)) == [], (text, jread(o2) if os.path.exists(o2) else None))
+    rc, text, res, o3 = theme("--tokens", TZ, "--pick", "nope", out="p3.json")
+    check("12.17 --pick of an unknown id is refused, naming the ids there are; no file", rc == 1 and res.get("ok") is False
+          and "nope" in res.get("error", "") and "zorg" in res.get("error", "") and not os.path.exists(o3), text)
+    rc, text, res, o3 = theme("--tokens", weak_file, "--pick", "zorg", out="p4.json")
+    check("12.18 --pick of a candidate with weak tokens is refused: it names the token, the mode and its suggest; no file",
+          rc == 1 and res.get("ok") is False and "muted" in res.get("error", "") and "light" in res.get("error", "") and sg in res.get("error", "")
+          and not os.path.exists(o3), text)
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", os.path.join(d, "withpick"), "--at", MADE, *ZP, "--section", "portfolio:zorg:" + PORT, "--theme", o)
+    check("12.19 the picked theme goes into snapshot --theme as snapshot/theme", rc == 0 and jread(d, "withpick", "snapshot", "theme.json") == pk, text)
+    rc, text, res, o3 = theme("--tokens", TZ, out="nofile.json")
+    check("12.20 a lone token file still gets the neutral candidate (2 candidates)", rc == 0 and [c["id"] for c in res["candidates"]] == ["zorg", "neutral"], text)
+
+    # a token input is checked strictly
+    def refused(label, mut, needle):
+        t = jread(TZ)
+        mut(t)
+        f = os.path.join(d, "tok-bad.json")
+        with open(f, "w") as fh:
+            json.dump(t, fh)
+        rc, text, res, o = theme("--tokens", f, out="tb.json")
+        check("12.21 a token file with %s is refused naming it; no output file" % label, rc == 1 and res.get("ok") is False and needle in res.get("error", "")
+              and not os.path.exists(o), text)
+    refused("a missing token (warn)", lambda t: t.pop("warn"), "warn")
+    refused("a missing token inside light", lambda t: t.update(light={k: t[k] for k in sh.TOKENS if k != "ok"}) or [t.pop(k) for k in sh.TOKENS], "ok")
+    refused("an unknown key", lambda t: t.update(shadow="x"), "shadow")
+    refused("both light and top-level tokens", lambda t: t.update(light={k: t[k] for k in sh.TOKENS}), "light")
+    refused("a colour that is not #rrggbb", lambda t: t.update(accent="red"), "accent")
+    refused("a 3-digit colour", lambda t: t.update(bg="#fff"), "bg")
+    refused("a font off the list", lambda t: t.update(font="Evil"), "font")
+    refused("a radius of 25", lambda t: t.update(radius=25), "radius")
+    refused("a fractional radius", lambda t: t.update(radius=2.5), "radius")
+    refused("no product", lambda t: t.pop("product"), "product")
+    refused("the product named neutral", lambda t: t.update(product="neutral"), "neutral")
+    refused("a product that is not an id", lambda t: t.update(product="Zorg Pay"), "product")
+    refused("a dark that is not nine tokens", lambda t: t.update(dark={"bg": "#000000"}), "dark")
+    rc, text, res, o3 = theme("--tokens", TZ, "--tokens", TZ, out="dup.json")
+    check("12.22 the same product twice is refused", rc == 1 and "zorg" in res.get("error", "") and not os.path.exists(o3), text)
+    rc, text, res, o3 = theme("--tokens", os.path.join(d, "no-such.json"), out="nf.json")
+    check("12.23 a token file that is not there is an error, not a traceback", rc == 1 and res.get("ok") is False and "Traceback" not in text, text)
+    rc, text, res = run("theme", "--out", os.path.join(d, "x.json"))
+    check("12.24 theme without --tokens: the neutral theme alone is a valid result (1 candidate)", rc == 0 and [c["id"] for c in res.get("candidates", [])] == ["neutral"], text)
+
+    # check_theme, tightened (R2)
+    good = jread(THEME)
+    check("12.25 check_theme: the Zorg theme (font '') is clean and passes the thresholds", sh.check_theme(good) == [] and passes(good, "light") and passes(good, "dark"), sh.check_theme(good))
+    for label, mut in (("a tenth token in light", lambda t: t["light"].update(shadow="#000000")),
+                       ("a missing token in dark", lambda t: t["dark"].pop("crit")),
+                       ("the font 'system'", lambda t: t.update(font="system")),
+                       ("a font off the list", lambda t: t.update(font="Evil")),
+                       ("a font in the wrong case", lambda t: t.update(font="inter")),
+                       ("a number as the font", lambda t: t.update(font=12))):
+        t = copy.deepcopy(good)
+        mut(t)
+        check("12.26 check_theme names %s" % label, sh.check_theme(t) != [], "")
+    for fnt in [""] + list(sh.FONTS):
+        t = dict(good, font=fnt)
+        check("12.27 check_theme accepts the font '%s'" % fnt, sh.check_theme(t) == [], sh.check_theme(t))
+    for r in (0, 24):
+        check("12.28 check_theme accepts radius %d" % r, sh.check_theme(dict(good, radius=r)) == [], "")
+    weak_theme = dict(good, light=dict(good["light"], muted="#9aa0a6"))
+    rc, text, res, o3 = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--theme", (lambda f: (json.dump(weak_theme, open(f, "w")), f)[1])(os.path.join(d, "weak-theme.json")), out="weaksnap")
+    check("12.29 snapshot --theme with a token under the contrast threshold is refused before anything is written, naming the token",
+          rc == 1 and "muted" in res.get("error", "") and not os.path.exists(o3), text)
+
+    # the page's list of fonts is the same as the script's
+    js_src = open(os.path.join(ROOT, "scripts", "app_shell", "shell.js"), encoding="utf-8").read()
+    m = re.search(r"var FONTS = \[([^\]]*)\]", js_src)
+    check("12.30 shell.js: the fonts list and the nine tokens are the same as app_shell.py's, in the same order",
+          m is not None and re.findall(r'"([^"]+)"', m.group(1)) == list(sh.FONTS)
+          and re.findall(r'"([a-z]+)"', re.search(r"var TOKENS = \[([^\]]*)\]", js_src).group(1)) == list(sh.TOKENS), "")
+    check("12.31 shell.js: the only address that is built is fonts.googleapis.com; localStorage is touched only in try/catch under gpm-theme",
+          len(re.findall(r"https?://", js_src)) == 1 and "https://fonts.googleapis.com/css2?family=" in js_src and '"gpm-theme"' in js_src
+          and js_src.count("localStorage") == 2, len(re.findall(r"https?://", js_src)))
 
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))

@@ -13,7 +13,11 @@
       unavailable: "Тут встановити не вийде",
       failed: "Не вдалося встановити",
       refused: "Відмовлено",
-      freshness: "дані від "
+      freshness: "дані від ",
+      themeLabel: "Тема",
+      themeLight: "Світла",
+      themeDark: "Темна",
+      themeSystem: "Як у системі"
     },
     en: {
       install: "Install as an app",
@@ -23,7 +27,11 @@
       unavailable: "Cannot be installed here",
       failed: "Installation failed",
       refused: "Refused",
-      freshness: "data from "
+      freshness: "data from ",
+      themeLabel: "Theme",
+      themeLight: "Light",
+      themeDark: "Dark",
+      themeSystem: "System"
     }
   };
   var PARTS = [];
@@ -211,6 +219,113 @@
     }
     function apply(snap) { ctx.setData(snap); paint(snap); }
     return ctx.db().then(function (db) { return readSnapshot(db, apply); }).then(apply);
+  });
+
+  // ---- the theme --------------------------------------------------------------------------------------------------
+  // The colours, font and radius of the shell come from the product's design tokens: the document `snapshot/theme`
+  // (light and dark), read through the data channel. It is foreign input: a colour only as #rrggbb, a font only from the
+  // fixed list below (the same twelve as the script that writes the theme), a radius only a whole number 0-24; anything
+  // else keeps the neutral default that shell.css holds. Only variables on the root element are set — the wrapped
+  // page's own colours are never touched. The switch in the header chooses light, dark or the system's own.
+  var TOKENS = ["bg", "surface", "text", "muted", "accent", "border", "ok", "warn", "crit"];
+  var FONTS = ["Inter", "Roboto", "Open Sans", "Montserrat", "Manrope", "Rubik", "Nunito", "PT Sans", "Fira Sans",
+    "IBM Plex Sans", "Noto Sans", "Golos Text"];
+  var FONT_FALLBACK = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  var FONT_LINK = "gpm-font";
+  var CHOICES = ["light", "dark", "system"];
+  var STORE_KEY = "gpm-theme";
+  var choice = "system";          // the person's choice; the default follows the system
+
+  function relLuminance(hex) {
+    var c = [1, 3, 5].map(function (i) {
+      var v = parseInt(hex.substr(i, 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  function ratio(a, b) {
+    var x = relLuminance(a), y = relLuminance(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  }
+
+  function systemDark() {
+    try { return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches); } catch (e) { return false; }
+  }
+  function effectiveMode() { return choice === "system" ? (systemDark() ? "dark" : "light") : choice; }
+
+  function readChoice() {
+    try {
+      var v = window.localStorage.getItem(STORE_KEY);
+      return CHOICES.indexOf(v) >= 0 ? v : "system";
+    } catch (e) { return "system"; }
+  }
+  function saveChoice(v) {
+    try { window.localStorage.setItem(STORE_KEY, v); } catch (e) { /* kept for this session only */ }
+  }
+
+  // The one place where a font is loaded: a single <link> built from the list's own spelling, never from the database.
+  function setFont(name) {
+    var link = document.getElementById(FONT_LINK);
+    var i = FONTS.indexOf(name);
+    if (i < 0) { if (link) { link.parentNode.removeChild(link); } return false; }
+    var href = "https://fonts.googleapis.com/css2?family=" + FONTS[i].split(" ").join("+") + ":wght@400;700&display=swap";
+    if (!link) {
+      link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.id = FONT_LINK;
+      document.head.appendChild(link);
+    }
+    if (link.getAttribute("href") !== href) { link.setAttribute("href", href); }
+    return true;
+  }
+
+  function applyTheme(theme) {
+    var style = document.documentElement.style;
+    var side = isObj(theme) && isObj(theme[effectiveMode()]) ? theme[effectiveMode()] : {};
+    TOKENS.forEach(function (k) {
+      if (typeof side[k] === "string" && COLOR.test(side[k])) { style.setProperty("--gpm-" + k, side[k]); }
+      else { style.removeProperty("--gpm-" + k); }
+    });
+    if (typeof side.accent === "string" && COLOR.test(side.accent)) {
+      style.setProperty("--gpm-accent-fg", ratio("#ffffff", side.accent) >= ratio("#0d1117", side.accent) ? "#ffffff" : "#0d1117");
+    } else { style.removeProperty("--gpm-accent-fg"); }
+    var r = isObj(theme) ? theme.radius : null;
+    if (typeof r === "number" && isFinite(r) && Math.floor(r) === r && r >= 0 && r <= 24) { style.setProperty("--gpm-radius", r + "px"); }
+    else { style.removeProperty("--gpm-radius"); }
+    var f = isObj(theme) ? theme.font : null;
+    if (typeof f === "string" && setFont(f)) { style.setProperty("--gpm-font", '"' + f + '", ' + FONT_FALLBACK); }
+    else { setFont(null); style.removeProperty("--gpm-font"); }
+  }
+
+  part("theme", function (ctx) {
+    var theme = ctx.data ? ctx.data.theme : null;
+    var group = el("div", "gpm-theme");
+    group.setAttribute("role", "group");
+    group.setAttribute("aria-label", ctx.t.themeLabel);
+    var labels = { light: ctx.t.themeLight, dark: ctx.t.themeDark, system: ctx.t.themeSystem };
+    var buttons = {};
+    function paint() {
+      document.documentElement.setAttribute("data-theme", choice);
+      CHOICES.forEach(function (c) { buttons[c].setAttribute("aria-pressed", c === choice ? "true" : "false"); });
+      applyTheme(theme);
+    }
+    CHOICES.forEach(function (c) {
+      var b = el("button", null, labels[c]);
+      b.type = "button";
+      b.setAttribute("data-mode", c);
+      b.addEventListener("click", function () { choice = c; saveChoice(c); paint(); });
+      buttons[c] = b;
+      group.appendChild(b);
+    });
+    ctx.actions.appendChild(group);
+    choice = readChoice();
+    paint();
+    try {   // «as in the system» follows the system live
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      var follow = function () { if (choice === "system") { paint(); } };
+      if (mq.addEventListener) { mq.addEventListener("change", follow); } else if (mq.addListener) { mq.addListener(follow); }
+    } catch (e) { /* no live following; the choice still works */ }
+    ctx.onData(function (snap) { theme = snap && snap.theme ? snap.theme : null; applyTheme(theme); });
   });
 
   // ---- the start --------------------------------------------------------------------------------------------------
