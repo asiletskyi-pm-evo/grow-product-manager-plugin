@@ -916,9 +916,9 @@ def render(res):
     lines = list(res.get("notes") or [])
     if res.get("action") == "pairs":
         for p in res["pairs"]:
-            lines.append("можливо той самий: %s ↔ %s%s — ctx entity same|not-same \"%s\" \"%s\""
+            lines.append("можливо той самий: %s ↔ %s%s — ctx entity same|not-same %s %s"
                          % (p["a"]["path"], p["b"]["path"], " (%s)" % (HINT % p["hint"]) if p.get("hint") else "",
-                            p["a"]["path"], p["b"]["path"]))
+                            cc.shq(p["a"]["path"]), cc.shq(p["b"]["path"])))
         lines.append("відкритих пар: %d" % res["count"])
         return "\n".join(lines) + "\n"
     ents = res["entities"]
@@ -927,7 +927,7 @@ def render(res):
     if res.get("several", len(ents)) > 1:
         lines.append("кілька сутностей «%s»:" % res["query"])
         for e in ents:
-            lines.append("%s · %s — ctx entity \"%s\"" % (e["label"], e["kind"], e["id"]))
+            lines.append("%s · %s — ctx entity %s" % (e["label"], e["kind"], cc.shq(e["id"])))
         if res["several"] > len(ents):
             lines.append("ще %d — уточни запит або --kind" % (res["several"] - len(ents)))
         return "\n".join(lines) + "\n"
@@ -949,8 +949,8 @@ def render(res):
         for r in e["related"]:
             lines.append("  пов'язана з: %s — %s" % (r["label"], r["path"]))
         for m in e["maybe"]:
-            lines.append("  можливо той самий: %s%s — ctx entity same|not-same \"%s\" \"%s\""
-                         % (m["path"], " (%s)" % (HINT % m["hint"]) if m.get("hint") else "", m["mine"], m["path"]))
+            lines.append("  можливо той самий: %s%s — ctx entity same|not-same %s %s"
+                         % (m["path"], " (%s)" % (HINT % m["hint"]) if m.get("hint") else "", cc.shq(m["mine"]), cc.shq(m["path"])))
         if e.get("facts"):                             # v4.0.0
             import ctx_facts as cf
             lines.append("  факти:")

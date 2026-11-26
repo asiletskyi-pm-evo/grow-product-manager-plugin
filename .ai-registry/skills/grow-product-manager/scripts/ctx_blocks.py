@@ -1132,6 +1132,13 @@ def no_block(blocks, rid):
     return "no block %s in the plan of %s — `ctx provider plan %s` lists them" % (", ".join(blocks), rid, rid)
 
 
+def held_rules(p, choose):
+    """Since v4.11.1: the "~" rows of a core rule (`rule: True`) a manual `ctx provider apply` holds unless `choose`
+    says theirs for them — a changed rule is the core's text and comes in only on your yes, never as an order."""
+    return [r["block"] for r in p["rows"] if r["sign"] == "~" and r.get("rule")
+            and (choose or {}).get(r["block"]) != "theirs"]
+
+
 def held_rejected(p, choose, add):
     """The blocks a manual `ctx provider apply` holds, in plan order: the rows of plan `p` that offer a text you rejected
     by undoing a sync pass (`rejected: True`; spec v3.14 §5.4, "do not repeat") — unless this pass takes it: `choose`
@@ -1373,7 +1380,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
         # theirs on a ✎, or on a row that offers a text you rejected (the explicit take), is an answer too — but not on a
         # ✎ whose source lags and lacks the block: there is no text of the repository to take
         answers = sign in ("⚠", "?") or (how == "theirs" and ((sign == "✎" and t is not None)
-                                                              or bool(row.get("rejected"))))
+                                                              or bool(row.get("rejected"))
+                                                              or (sign == "~" and bool(row.get("rule")))))   # v4.11.1: a held rule's yes
         if (how and not answers) or (wanted and sign != "+"):
             ignored[bid] = sign                         # an answer to a question the plan does not ask: dropped
         wanted = (wanted or (answers and sign == "+")) and sign == "+"    # theirs on a rejected "+" is its --add
@@ -1665,8 +1673,8 @@ def render_overlay(res, ops, show_diff=True):
 
 def render_apply(res):
     """The text of an apply: the plan's table (a "⚠" with its three versions under it), then what was not needed,
-    what was held (`утримано: <sign> <block> — цей прохід його не чіпав`, and for a text you rejected
-    ` · взяти текст ядра: --choose <block>=theirs` after it), what waits and how to answer it, what was
+    what was held (`утримано: <sign> <block> — цей прохід його не чіпав`, and for a text you rejected or a changed
+    core rule (since v4.11.1, `(правило ядра — лише на твою згоду)`) ` · взяти текст ядра: --choose <block>=theirs` after it), what waits and how to answer it, what was
     written — and the last line `Чекають рішення: N · змінено записів: M`.
     A pass that changed nothing, with nothing waiting or held, is the header and the one line "без змін" — and under
     it the blocks that could not be checked ("·", such as a team block whose core folder is not here) and those whose
@@ -1685,9 +1693,11 @@ def render_apply(res):
         else:
             lines.append("не потрібне: --choose/--add %s — знак %s" % (clip(bid, HEADER_CLIP), sign))
     rejected = {r["block"] for r in p["rows"] if r.get("rejected")}
+    rules = {r["block"] for r in p["rows"] if r.get("rule") and r["sign"] == "~"}
     for bid, sign in held.items():
         lines.append("утримано: %s %s — цей прохід його не чіпав" % (sign, clip(bid, HEADER_CLIP))
-                     + (" · взяти текст ядра: --choose %s=theirs" % clip(bid, HEADER_CLIP) if bid in rejected else ""))
+                     + (" (правило ядра — лише на твою згоду)" if bid in rules and bid not in rejected else "")
+                     + (" · взяти текст ядра: --choose %s=theirs" % clip(bid, HEADER_CLIP) if bid in rejected | rules else ""))
     signs = {r["block"]: r["sign"] for r in p["rows"]}
     gone = {r["block"] for r in p["rows"] if r["source"] is None and r["sign"] in ("⚠", "?")}
     for bid in res["pending"]:

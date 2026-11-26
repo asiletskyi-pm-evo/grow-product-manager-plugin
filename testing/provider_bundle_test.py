@@ -13,8 +13,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIX = os.path.join(ROOT, "testing", "fixtures", "context-connect")
 SCRIPT = os.path.join(ROOT, "scripts", "provider_bundle.py")
 
+HOME = tempfile.mkdtemp()                     # since v4.11.1 an in-place run writes its proposal under ~/.grow-pm/proposals/
+
 def run(*args):
-    p = subprocess.run([sys.executable, SCRIPT] + list(args), capture_output=True, text=True, timeout=60)
+    p = subprocess.run([sys.executable, SCRIPT] + list(args), capture_output=True, text=True, timeout=60,
+                       env=dict(os.environ, HOME=HOME))
     return p.returncode, p.stdout + p.stderr
 
 def report(out, tag):
@@ -253,6 +256,11 @@ rc, o = run("--core", core, "--out", core, "--email", "b.two@zorg.example", "--i
 check("in-place analyst run copies nothing and writes no overlay", rc == 0 and "role analyst" in o
       and not os.path.exists(os.path.join(core, "Core", "Now.md"))
       and os.path.isfile(os.path.join(core, "Core", "_System", "bundle-manifest.md")), (rc, o))
+pdir = os.path.join(HOME, ".grow-pm", "proposals", "zorg-core")
+check("v4.11.1 in place without --proposal-dir: the proposal and the report go to ~/.grow-pm/proposals/<id>/, never into the core",
+      os.path.isfile(os.path.join(pdir, "local-context.proposed.md")) and os.path.isfile(os.path.join(pdir, "context-merge-report.md"))
+      and not os.path.exists(os.path.join(core, "Core", "_System", "local-context.proposed.md"))
+      and not os.path.exists(os.path.join(core, "Core", "_System", "context-merge-report.md")), (o[-300:], os.listdir(os.path.join(core, "Core", "_System"))))
 shutil.rmtree(d)
 
 # 2g — v3.10.1: a refresh keeps the user's own note on the Updated line
@@ -415,8 +423,8 @@ skill = read_root("skills", "context-connect", "SKILL.md")
 check("connect-steps uses plan and apply", "ctx.py\" provider plan" in steps and "provider apply" in steps and "provider adopt --apply" in steps, "")
 check("connect-steps: the answers are --choose and --add, an unreachable repository (exit 5) writes nothing, the old path stays for no store",
       "--choose" in steps and "--add" in steps and "exit 5" in steps and "unreachable" in steps and "provider_bundle.py" in steps, "")
-check("the skill is 0.9.2 (since v4.9.1) and a refresh with a store never stamps Updated or appends a changelog",
-      "version: 0.9.2" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
+check("the skill is 0.9.3 (since v4.11.1) and a refresh with a store never stamps Updated or appends a changelog",
+      "version: 0.9.3" in skill and "Updated:" in skill and "Changelog" in skill, skill[:200])
 
 # 11 — fix round 1: a refresh keeps a registration the user completed; a removed block recommends keeping the text; the apply carve-out
 # (the builder only proposes the registration — it never writes the file in the user's vault, so the rule lives in the procedure)
@@ -444,8 +452,9 @@ check("the 'never overwrite local-context.md without a yes' rule has the snapsho
       "without an explicit" in forbid and "ctx provider apply" in forbid and "snapshot" in forbid and "ctx undo" in forbid
       and "`~`" in forbid and "`−`" in forbid and "one message" in forbid, forbid)
 check("connect-steps says the same where it says there is no question: the plan was shown, the snapshot is the gate",
-      "No `⚠`, `+` or `?` row → no question" in steps_f and "snapshot" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400]
-      and "one message" in steps_f[steps_f.index("No `⚠`, `+` or `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
+      "No `⚠`, `+`, `?` row and no `~` of a rule → no question" in steps_f
+      and "snapshot" in steps_f[steps_f.index("No `⚠`, `+`, `?` row"):][:400]
+      and "one message" in steps_f[steps_f.index("No `⚠`, `+`, `?` row"):][:400], steps_f[steps_f.index("No `⚠`"):][:400])
 
 # 12 — the docs pass (Task 12): the residual wording of the re-review of Task 11
 core_keys = ["`core_root`", "`namespace`", "`blocks_file`", "`paths`", "`endpoint.url`", "`endpoint.root`", "`rank`"]
@@ -583,6 +592,81 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import provider_bundle as pbm  # noqa: E402
 m_out, _ = pbm.read_manifest(core, path=outside)
 check("…read_manifest gives an outside manifest no `_path`", m_out is not None and not m_out.get("_path"), m_out and m_out.get("_path"))
+shutil.rmtree(d)
+
+# ---- since v4.11.1: a hostile core — every path it names stays inside the core, every write inside --out
+def evil(edit_manifest=None, edit_model=None):
+    d, core, out = fresh()
+    mp = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+    jp = os.path.join(core, "Core", "_System", "access-bundles.json")
+    if edit_manifest:
+        t = open(mp, encoding="utf-8").read(); open(mp, "w", encoding="utf-8").write(edit_manifest(t))
+    if edit_model:
+        J = json.load(open(jp, encoding="utf-8")); edit_model(J); json.dump(J, open(jp, "w", encoding="utf-8"))
+    return d, core, out
+
+def outside_of(d, out):
+    """Files the run left in the temp folder outside core/ and out/."""
+    return [f for f in files_under(d) if not f.startswith("core" + os.sep) and not f.startswith("out" + os.sep)]
+
+for label, edit in (("dashboard_file `../`", lambda t: t.replace("dashboard_file: Core/Dashboard.md", "dashboard_file: ../evil.md")),
+                    ("dashboard_file absolute", lambda t: t.replace("dashboard_file: Core/Dashboard.md", "dashboard_file: /tmp/evil-dash.md")),
+                    ("personal_notes.todo `../`", lambda t: t + 'personal_notes:\n  todo: "../../pwn-{{NAME}}.md"\n'),
+                    ("personal_notes.now `~`", lambda t: t + 'personal_notes:\n  now: "~/.bashrc"\n'),
+                    ("templates_dir `..`", lambda t: t + "templates_dir: ../tpl\n"),
+                    ("blocks_file absolute", lambda t: t.replace("blocks_file: Core/_System/context-blocks.md", "blocks_file: /etc/passwd"))):
+    d, core, out = evil(edit)
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+    check("evil_core: %s is refused before anything is written" % label,
+          rc == 3 and "leaves the core" in o and not os.path.exists(out) and outside_of(d, out) == [], (rc, o[-300:], outside_of(d, out)))
+    shutil.rmtree(d)
+
+for label, edit in (("shared", lambda J: J["shared"].append("../../outside.md")),
+                    ("always", lambda J: J["always"].append("/etc")),
+                    ("teams.files", lambda J: J["teams"]["alpha"]["files"].append("Core/../../x.md")),
+                    ("layer_prefixes", lambda J: J["layer_prefixes"].setdefault(sorted(J["layer_prefixes"])[0], []).append("../"))):
+    d, core, out = evil(edit_model=edit)
+    rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+    check("evil_core: role model %s outside the core is refused" % label,
+          rc == 3 and "a path leaves the core" in o and not os.path.exists(out), (rc, o[-300:]))
+    shutil.rmtree(d)
+
+d, core, out = fresh()                                   # a name from the core's people card is one file-name part
+card = os.path.join(core, "Core", "People", "a-one.md")
+ctext = open(card, encoding="utf-8").read().replace('name: "Alex One"', 'name: "../../../pwn"')
+open(card, "w", encoding="utf-8").write(ctext)
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+check("evil_core: a `../` name in the people card stays a file name inside --out",
+      rc == 0 and outside_of(d, out) == [] and any(f.startswith(os.path.join("out", "Core", "TODO")) and "pwn" in f for f in files_under(d)),
+      (rc, o[-300:], outside_of(d, out)))
+shutil.rmtree(d)
+
+d, core, out = fresh()                                   # a link in the core is never followed out of it
+secret = os.path.join(d, "secret.txt"); open(secret, "w").write("TOP-SECRET-KEY")
+os.symlink(secret, os.path.join(core, "Core", "Playbook", "02 Leak.md"))
+os.makedirs(os.path.join(core, "Core", "_System", "tpl"))
+os.symlink(secret, os.path.join(core, "Core", "_System", "tpl", "now.md"))
+mp = os.path.join(core, "Core", "_System", "provider-manifest.yaml")
+open(mp, "a", encoding="utf-8").write("templates_dir: Core/_System/tpl\n")
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example")
+leaked = [f for f in files_under(out) if "TOP-SECRET-KEY" in open(os.path.join(out, f), encoding="utf-8", errors="replace").read()]
+check("evil_core: a link in the core (a playbook note, a template) brings nothing from outside into the bundle",
+      rc == 0 and leaked == [] and not os.path.exists(os.path.join(out, "Core", "Playbook", "02 Leak.md")), (rc, o[-300:], leaked))
+shutil.rmtree(d)
+
+d, core, out = fresh()                                   # a link already in --out is never written through
+target = os.path.join(d, "victim.md"); open(target, "w").write("untouched")
+os.makedirs(os.path.join(out, "Core"))
+os.symlink(target, os.path.join(out, "Core", "Dashboard.md"))
+rc, o = run("--core", core, "--out", out, "--email", "a.one@zorg.example", "--force")
+check("evil_core: a link in --out (Dashboard.md → outside) is refused, its target untouched",
+      rc == 3 and "is a link" in o and open(target).read() == "untouched", (rc, o[-300:], open(target).read()))
+shutil.rmtree(d)
+
+d, core, out = evil(lambda t: t.replace("people_dir: Core/People", "people_dir: ../../home"))
+m_bad, why = pbm.read_manifest(core)
+check("evil_core: read_manifest fails closed for every caller (ctx_repos, the daily sync)",
+      m_bad is None and "people_dir" in (why or ""), why)
 shutil.rmtree(d)
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌", "(%d failed)" % fails)

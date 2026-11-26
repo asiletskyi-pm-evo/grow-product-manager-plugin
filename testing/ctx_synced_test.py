@@ -66,18 +66,20 @@ check("the module is the one named in the plan", sy.__name__ == "ctx_synced" and
 check("⚠ keeps yours", decide(P(("a", "⚠")), T(a=PLAIN))["choose"] == {"a": "mine"})
 check("…and says so (kept_yours), not a rule", decide(P(("a", "⚠")), T(a=PLAIN))["kept_yours"] == ["a"]
       and decide(P(("a", "⚠")), T(a=PLAIN))["took_rule"] == [])
-check("⚠ of a rule takes theirs", decide(P(("a", "⚠")), T(a=RULE))["choose"] == {"a": "theirs"})
-check("…and says so (took_rule), not kept_yours", decide(P(("a", "⚠")), T(a=RULE))["took_rule"] == ["a"]
+check("v4.11.1: ⚠ of a rule is held and awaits your answer — never taken unattended",
+      decide(P(("a", "⚠")), T(a=RULE)) == dict(EMPTY, hold=["a"], awaiting=["a"]), decide(P(("a", "⚠")), T(a=RULE)))
+check("…took_rule stays empty, and it is not kept_yours either", decide(P(("a", "⚠")), T(a=RULE))["took_rule"] == []
       and decide(P(("a", "⚠")), T(a=RULE))["kept_yours"] == [])
-check("? waits, or takes a rule", decide(P(("a", "?")), T(a=PLAIN))["awaiting"] == ["a"]
-      and decide(P(("a", "?")), T(a=RULE))["choose"] == {"a": "theirs"})
+check("? waits, a rule's too", decide(P(("a", "?")), T(a=PLAIN))["awaiting"] == ["a"]
+      and decide(P(("a", "?")), T(a=RULE))["choose"] == {})
 check("a ? that waits is no answer: it is not in choose, so apply leaves it pending and the base does not move",
       decide(P(("a", "?")), T(a=PLAIN))["choose"] == {} and decide(P(("a", "?")), T(a=PLAIN))["hold"] == [])
-check("a ? of a rule is took_rule and is not awaiting", decide(P(("a", "?")), T(a=RULE))["took_rule"] == ["a"]
-      and decide(P(("a", "?")), T(a=RULE))["awaiting"] == [])
-check("+ is added", decide(P(("n", "+")), T(n=PLAIN))["add"] == ["n"])
-check("a + that is a rule is added all the same (the rule only decides a conflict)",
-      decide(P(("n", "+")), T(n=RULE)) == dict(EMPTY, add=["n"]), decide(P(("n", "+")), T(n=RULE)))
+check("v4.11.1: a ? of a rule is held and awaiting, never took_rule", decide(P(("a", "?")), T(a=RULE)) == dict(EMPTY, hold=["a"], awaiting=["a"]),
+      decide(P(("a", "?")), T(a=RULE)))
+check("v4.11.1: + is not added unattended — held, awaiting your yes", decide(P(("n", "+")), T(n=PLAIN)) == dict(EMPTY, hold=["n"], awaiting=["n"]),
+      decide(P(("n", "+")), T(n=PLAIN)))
+check("…a + that is a rule waits the same way",
+      decide(P(("n", "+")), T(n=RULE)) == dict(EMPTY, hold=["n"], awaiting=["n"]), decide(P(("n", "+")), T(n=RULE)))
 check("one removal goes through, two are held",
       decide(P(("a", "−")), T())["hold"] == [] and sorted(decide(P(("a", "−"), ("b", "−")), T())["held_removals"]) == ["a", "b"])
 check("a single − is left to apply: nothing is chosen, nothing held",
@@ -89,8 +91,8 @@ check("a ? of a removed block waits (awaiting), it is not chosen", decide(P(("a"
 check("= ~ ✎ ✂ · are left to apply: nothing chosen, added, held or noted",
       all(decide(P(("a", s)), T(a=PLAIN)) == EMPTY for s in ("=", "~", "✎", "✂", "·")),
       [(s, decide(P(("a", s)), T(a=PLAIN))) for s in ("=", "~", "✎", "✂", "·")])
-check("a ~ that is a rule needs no answer either (nothing of yours is overruled)",
-      decide(P(("a", "~")), T(a=RULE)) == EMPTY, decide(P(("a", "~")), T(a=RULE)))
+check("v4.11.1: a ~ of a rule (the core changed its rule) is held and awaits your answer",
+      decide(P(("a", "~")), T(a=RULE)) == dict(EMPTY, hold=["a"], awaiting=["a"]), decide(P(("a", "~")), T(a=RULE)))
 check("an unknown sign is left alone", decide(P(("a", "§")), T(a=PLAIN)) == EMPTY)
 
 # ------------------------------------------------------------------ a text you rejected (spec §5.4)
@@ -114,8 +116,8 @@ check("a block that is not rejected is untouched by a rejected neighbour",
 
 # ------------------------------------------------------------------ the removal guard (spec §6.1)
 d = decide(P(("a", "−"), ("b", "−"), ("c", "~"), ("n", "+")), T(c=PLAIN, n=PLAIN))
-check("two removals held, the rest of the signs go on", d["held_removals"] == ["a", "b"] and d["hold"] == ["a", "b"]
-      and d["add"] == ["n"] and d["choose"] == {}, d)
+check("two removals held, the rest of the signs go on (the + waits for your yes)", d["held_removals"] == ["a", "b"]
+      and d["hold"] == ["a", "b", "n"] and d["awaiting"] == ["n"] and d["add"] == [] and d["choose"] == {}, d)
 d = decide(P(("a", "−"), ("b", "⚠")), T())
 check("a − and a ⚠ of a removed block (no text in the repository) are two removals: both held, no choice",
       d["held_removals"] == ["a", "b"] and d["hold"] == ["a", "b"] and d["choose"] == {} and d["kept_yours"] == [], d)
@@ -154,12 +156,12 @@ d = decide(PL(("a", "−"), ("b", "−"), ("c", "~", True)), T(c=PLAIN))
 check("…removals of a lagging copy are held as behind, not as a §6.1 removal; a rejected row stays rejected",
       d == dict(EMPTY, hold=["a", "b", "c"], held_behind=["a", "b"], rejected=["c"]), d)
 check("…a plan that does not lag (or says nothing) acts row by row as before",
-      decide(dict(P(("a", "⚠"), ("n", "+")), lagging=False), T(a=PLAIN, n=PLAIN)) == dict(EMPTY, choose={"a": "mine"}, kept_yours=["a"], add=["n"])
-      and decide(P(("a", "⚠"), ("n", "+")), T(a=PLAIN, n=PLAIN)) == dict(EMPTY, choose={"a": "mine"}, kept_yours=["a"], add=["n"]), "")
-check("…a bare list of rows carries no lagging mark: row by row", decide([dict(block="n", sign="+")], T(n=PLAIN)) == dict(EMPTY, add=["n"]), "")
+      decide(dict(P(("a", "⚠"), ("n", "+")), lagging=False), T(a=PLAIN, n=PLAIN)) == dict(EMPTY, choose={"a": "mine"}, kept_yours=["a"], hold=["n"], awaiting=["n"])
+      and decide(P(("a", "⚠"), ("n", "+")), T(a=PLAIN, n=PLAIN)) == dict(EMPTY, choose={"a": "mine"}, kept_yours=["a"], hold=["n"], awaiting=["n"]), "")
+check("…a bare list of rows carries no lagging mark: row by row", decide([dict(block="n", sign="+")], T(n=PLAIN)) == dict(EMPTY, hold=["n"], awaiting=["n"]), "")
 d = decide(P(("a", "−"), ("b", "⚠"), ("c", "⚠")), T(b=PLAIN, c=RULE))
 check("the guard counts removals only: two ⚠ with a repository text beside one − are all decided as usual",
-      d["held_removals"] == [] and d["choose"] == {"b": "mine", "c": "theirs"}, d)
+      d["held_removals"] == [] and d["choose"] == {"b": "mine"} and d["awaiting"] == ["c"], d)
 
 # ------------------------------------------------------------------ a rule is read from the repository's text
 check("a rule is read from the begin marker only, not from a word in the text", decide(P(("a", "⚠")), T(a=BODY_RULE))["choose"] == {"a": "mine"})
@@ -167,8 +169,9 @@ check("is_rule on the same texts agrees", cb.is_rule(RULE) and not cb.is_rule(PL
 row = P(("a", "⚠"))
 row["rows"][0]["rule"] = True
 check("a row's own `rule` key is not what decides: the text of the repository is",
-      decide(row, T(a=PLAIN))["choose"] == {"a": "mine"} and decide(P(("a", "⚠")), T(a=RULE))["choose"] == {"a": "theirs"})
-check("a mixed plan: each ⚠ by its own text", decide(P(("a", "⚠"), ("b", "⚠")), T(a=RULE, b=PLAIN))["choose"] == {"a": "theirs", "b": "mine"})
+      decide(row, T(a=PLAIN))["choose"] == {"a": "mine"} and decide(P(("a", "⚠")), T(a=RULE))["awaiting"] == ["a"])
+check("a mixed plan: each ⚠ by its own text", decide(P(("a", "⚠"), ("b", "⚠")), T(a=RULE, b=PLAIN))["choose"] == {"b": "mine"}
+      and decide(P(("a", "⚠"), ("b", "⚠")), T(a=RULE, b=PLAIN))["awaiting"] == ["a"])
 check("a block missing from theirs is no rule (None never counts)", decide(P(("a", "⚠")), {})["took_rule"] == [])
 
 # ------------------------------------------------------------------ the whole table at once, in plan order
@@ -176,9 +179,9 @@ plan = P(("eq", "="), ("new", "~"), ("mine", "✎"), ("both", "⚠"), ("law", "�
          ("cut", "✂"), ("skip", "·"), ("again", "~", True))
 tx = T(eq=PLAIN, new=PLAIN, mine=PLAIN, both=PLAIN, law=RULE, q=PLAIN, qlaw=RULE, add=PLAIN, again=PLAIN)
 d = decide(plan, tx)
-check("every sign at once", d == {"choose": {"both": "mine", "law": "theirs", "qlaw": "theirs"}, "add": ["add"], "hold": ["again"],
-                                  "held_removals": [], "held_behind": [], "awaiting": ["q"], "rejected": ["again"], "kept_yours": ["both"],
-                                  "took_rule": ["law", "qlaw"]}, d)
+check("every sign at once", d == {"choose": {"both": "mine"}, "add": [], "hold": ["law", "qlaw", "add", "again"],
+                                  "held_removals": [], "held_behind": [], "awaiting": ["law", "q", "qlaw", "add"], "rejected": ["again"],
+                                  "kept_yours": ["both"], "took_rule": []}, d)
 check("hold only names rows of the plan", set(d["hold"]) <= {r["block"] for r in plan["rows"]}
       and set(d["add"]) <= {r["block"] for r in plan["rows"]})
 check("the same plan as a bare list of rows is the same answer", decide(plan["rows"], tx) == d)

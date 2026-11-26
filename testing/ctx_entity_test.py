@@ -138,12 +138,12 @@ class Env:
         self.idx = ci.Index(self.home)
         self.idx.refresh(self.sctx["roots"], self.sctx["store_rel"], self.sctx["blocks_rels"])
 
-    def cli(self, *args):
-        """(exit code, output, CTX_RESULT) of `ctx.py <args> --home --context`."""
+    def cli(self, *args, stdin=None):
+        """(exit code, output, CTX_RESULT) of `ctx.py <args> --home --context`; `stdin` (text) is fed to the command."""
         env = dict(os.environ)
         env.pop("GROW_PM_CONTEXT_PATH", None)
         p = subprocess.run([sys.executable, CTX] + list(args) + ["--home", self.home, "--context", self.ctx],
-                           capture_output=True, text=True, env=env, timeout=120)
+                           capture_output=True, text=True, env=env, timeout=120, input=stdin if stdin is not None else "")
         lines = [l for l in p.stdout.splitlines() if l.strip()]
         try:
             res = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None
@@ -342,8 +342,8 @@ with tempfile.TemporaryDirectory() as d:
           e1)
     rc, out, res = env.cli("entity", "Cy Namesake", "--json")
     rc2, out2, _ = env.cli("entity", "Cy Namesake")
-    check("v3.18.0 several entities: two lines `— ctx entity \"<шлях>\"`, no block",
-          rc == 0 and len((res or {}).get("entities") or []) == 2 and out2.count('— ctx entity "ZorgCore/People/cy-namesake') == 2,
+    check("v3.18.0 several entities: two lines `— ctx entity '<шлях>'` (single quotes since v4.11.1), no block",
+          rc == 0 and len((res or {}).get("entities") or []) == 2 and out2.count("— ctx entity 'ZorgCore/People/cy-namesake") == 2,
           out2[-400:])
     rc, out, _ = env.cli("entity", "Alpha")
     check("v3.18.0 a team: «пов'язана з» the partner squad linked under another name", rc == 0
@@ -540,7 +540,7 @@ with tempfile.TemporaryDirectory() as d:
     env.idx.refresh(env.sctx["roots"], env.sctx["store_rel"], env.sctx["blocks_rels"])
     out = ce.render(ce.run(env.sctx, "eve@zorg.example"))
     check("v3.18.0 final I1: the «maybe the same» line names the two cards that paired, so its command closes the pair",
-          'ctx entity same|not-same "Notes/People/eve.md" "ZorgCore/People/eve-namesake.md"' in out, out)
+          "ctx entity same|not-same 'Notes/People/eve.md' 'ZorgCore/People/eve-namesake.md'" in out, out)
     env.cli("migrate", "--apply")
     env.cli("entity", "not-same", "Notes/People/eve.md", "ZorgCore/People/eve-namesake.md")
     rc, out2, _ = env.cli("entity", "eve@zorg.example")
@@ -825,6 +825,24 @@ with tempfile.TemporaryDirectory() as d:
     check("…while its tool holds it open, a note still only in its -wal is found", rc == 0
           and "Partner/Notes/fresh.md" in paths, (rc, sorted(paths), out[-500:]))
     live.close()
+
+# ---- since v4.11.1: --q-stdin — a name from a meeting never stands in the command line
+with tempfile.TemporaryDirectory() as d:
+    env = Env(d)
+    rc, out, res = env.cli("entity", "--q-stdin", "--kind", "person", "--json", stdin="bea.two@zorg.example\n\n")
+    e0 = (res or {}).get("entities") or []
+    check("v4.11.1 `ctx entity --q-stdin`: the request read from stdin finds the same person as the argument",
+          rc == 0 and len(e0) == 1 and len(e0[0].get("cards") or []) == 3, (rc, out[-400:]))
+    probe = os.path.join(d, "PWNED")
+    hostile = "Bea $(touch %s) `touch %s`\n" % (probe, probe)
+    rc, out, res = env.cli("entity", "--q-stdin", "--kind", "person", "--json", stdin=hostile)
+    check("…`$(…)` and backticks on stdin are text of the request — nothing runs",
+          not os.path.exists(probe) and rc in (0, 5) and "$(touch" in json.dumps(res or {}, ensure_ascii=False), (rc, out[-300:]))
+    rc, out, _ = env.cli("entity", "--q-stdin", stdin="")
+    check("…nothing on stdin is a usage error (exit 3), not an empty search", rc == 3 and "--q-stdin" in out, (rc, out[-200:]))
+    rc, out, res = env.cli("search", "--q-stdin", "--sources", "own", "--json", stdin="Bea $(touch %s)\n" % probe)
+    check("v4.11.1 `ctx search --q-stdin`: the request from stdin is searched, nothing runs",
+          rc in (0, 5) and not os.path.exists(probe) and res is not None, (rc, out[-300:]))
 
 print("RESULT:", "GREEN ✅" if not fails else "RED ❌")
 sys.exit(1 if fails else 0)

@@ -414,7 +414,7 @@ def _read_view(store, copies, skill, product, today, manifest, repos, skipped, c
                 res["needs_product"] = True
                 res["products"] = sctx["products"]
                 blocks = ["Продукти: %s. Повтори з назвою продукту із запиту, або спитай користувача (крок 0d):\n"
-                          'python3 "<plugin root>/scripts/ctx.py" read --skill %s --product "<назва>"\n'
+                          'python3 "<plugin root>/scripts/ctx.py" read --skill %s --product \'<назва>\'\n'
                           "Не читай local-context.md цілком." % (", ".join(res["products"]), skill)]
         if not res["needs_product"]:
             for kind in spec["records"]:

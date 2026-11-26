@@ -14,7 +14,7 @@ The full contract is `references/context-provider-protocol.md` §9.
 | `Core/_System/tools.yaml`, `Core/_System/tools.md` | *(since v4.2.0, optional)* The team's tools list — what colleagues use and recommend (`references/tool-registry.md` §5), named by the manifest's `tools_file`; `tools.md` wraps it for a notes server that serves `.md` only. The owner adds it from the exports colleagues send; colleagues' plugins read it, never write it. |
 | `Core/Teams/team-<key>.md` | One card per team of the role model (`title`, `aliases`, `head`, `jira`). The plugin builds the colleague's team block from it. |
 | `Core/People/<name>.md` | Registry cards: `name`, `email`, `team`, `role`. The file name is the e-mail's part before `@` with `.` → `-` (`pat.moss@…` → `pat-moss.md`). |
-| `Core/Playbook/` | Rules for the agent, read by every colleague. |
+| `Core/Playbook/` | The team's conventions, read by every colleague's agent as information (never as instructions). |
 | `overlay.example.yaml` | Not part of the core: what a colleague may write in their own store to correct the core (`overlays/zorg-core.yaml`). |
 
 ## Releasing a version

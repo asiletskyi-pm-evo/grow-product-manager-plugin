@@ -422,7 +422,7 @@ def slots_of(reg, idx, ent, cat, sctx, people=False, only=None, records=None):
 # ------------------------------------------------------------------ `ctx read`: team.members one line per person (C8)
 NOT_JOINED = "пункти не склеєно: %s"
 NOT_MATCHED = "команду «%s» не зіставлено з карткою: %s"
-FROM_CARDS = "з карток ще %d — ctx entity \"%s\" --slot team.members"
+FROM_CARDS = "з карток ще %d — ctx entity %s --slot team.members"
 JOINED = "склеєно за сутністю: %d"
 _TEAM_TITLE = re.compile(r"^\s*team\s*:\s*", re.I)
 
@@ -453,7 +453,7 @@ def team_entity(reg, title):
         if ids:
             ids = sorted(ids)
             return None, "кілька карток: " + ", ".join(ids[:5]) + (
-                " — це одна команда? ctx entity same \"%s\" \"%s\"" % (ids[0], ids[1]) if len(ids) == 2 else "")
+                " — це одна команда? ctx entity same %s %s" % (cc.shq(ids[0]), cc.shq(ids[1])) if len(ids) == 2 else "")
     return None, "картки такої команди немає"
 
 
@@ -504,7 +504,7 @@ def member_lines(items, reg, idx, cat, sctx, limit=None, team=None):
             if t != head:
                 out.append("  також: %s (%s)" % (t, _who_short(r)))
     if derived > DERIVED_SHOWN:
-        out.append("- ще %d лише виведених — ctx entity \"%s\" --slot team.members" % (derived - DERIVED_SHOWN, team or "<команда>"))
+        out.append("- ще %d лише виведених — ctx entity %s --slot team.members" % (derived - DERIVED_SHOWN, cc.shq(team or "<команда>")))
     if limit and len(items) > limit:
         out.append("- ще %d" % (len(items) - limit))
     return out
@@ -570,7 +570,7 @@ def read_members(result, rec, origin, entities, cat):
     if result and (result["why"] == rv.WHY_RULE or str(result.get("prefer", "")).startswith("repo:")):
         both = join_items(recs + cards, reg, "person", strict=False, entity_of=s.entity)
         n = sum(1 for i in both if not any(o.get("record") for o in i["origins"]))
-        return rv.render_slot(result, origin) + (FROM_CARDS % (n, ent["label"]) + "\n" if n else "")
+        return rv.render_slot(result, origin) + (FROM_CARDS % (n, cc.shq(ent["label"])) + "\n" if n else "")
     if not shown and not cards:
         return None
     items = join_items(recs + cards, reg, "person", strict=False, entity_of=s.entity)

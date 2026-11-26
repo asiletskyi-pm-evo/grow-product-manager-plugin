@@ -1946,8 +1946,14 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               rc == 0 and scope_row.get("rule") is True and any(l.startswith("~") and "scope" in l and l.endswith("(правило ядра)")
                                                                 for l in out.splitlines()), (rc, out[-500:]))
         rc, out, res = apply_run(e, core, "zorg-core")
-        check("…and so does apply, which takes a '~' of a rule as any other", rc == 0 and res["applied"].get("scope") == "~"
-              and "(правило ядра)" in out and "policy=rule" in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
+        check("…and so does apply, which since v4.11.1 holds a '~' of a rule until you say yes: nothing taken, the command shown",
+              rc == 0 and "scope" not in res["applied"] and res["held"].get("scope") == "~"
+              and "утримано: ~ scope — цей прохід його не чіпав (правило ядра — лише на твою згоду) · взяти текст ядра: --choose scope=theirs" in out
+              and "policy=rule" not in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
+        rc, out, res = apply_run(e, core, "zorg-core", "--choose", "scope=theirs")
+        check("…--choose scope=theirs takes it, and does not call the answer «не потрібне»", rc == 0 and res["applied"].get("scope") == "~"
+              and "scope" not in res["ignored"] and "не потрібне" not in out
+              and "policy=rule" in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
 
 def reject(e, repo, texts):
     """Write `rejected` into the repository's block state: {block: repository text or None (a removal)} — what undoing a
@@ -2220,9 +2226,11 @@ with tempfile.TemporaryDirectory() as d:                 # a provider-registrati
     checked_at(e, "zorg-core", DAY0)
     rc, out, res = run_ok(e, "provider", "sync", "--if-due", "--now", DAY1)
     r0 = (res or {}).get("results", [{}])[0]
-    check("a provider-registration/1 with sync: daily is synced: the core's new block is added",
-          rc == 0 and res["synced"] == ["zorg-core"] and r0.get("outcome") == "changed" and r0.get("added") == 1
-          and region_in(read(e.ctx), "zorg-core", "product") and "Ядро оновило 1 блок у zorg-core" in out, (rc, out[-500:]))
+    check("a provider-registration/1 with sync: daily is synced: since v4.11.1 the core's new block waits for your yes",
+          rc == 0 and res["synced"] == ["zorg-core"] and r0.get("added") == 0 and r0.get("awaiting") == ["product"]
+          and not region_in(read(e.ctx), "zorg-core", "product") and "Ядро оновило 1 блок у zorg-core" not in out, (rc, out[-500:], r0))
+    run_ok(e, "provider", "apply", "zorg-core", "--add", "product")     # the user's yes to it
+    check("…and `provider apply --add` takes it on your yes", region_in(read(e.ctx), "zorg-core", "product"), read(e.ctx)[-400:])
     pristine = read(blocks_file)
     open(blocks_file, "w", encoding="utf-8", newline="").write(
         pristine.replace(region_in(pristine, "zorg-core", "scope") + "\n\n", "").replace(region_in(pristine, "zorg-core", "teams"), ""))
@@ -2257,17 +2265,18 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # end to end: plan → 
         rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
         r0 = (res or {}).get("results", [{}])[0]
         jl = last_journal(e)
-        check("end to end, one pass: ⚠ kept yours, + added, ~ updated — outcome changed, the counts",
+        check("end to end, one pass: ⚠ kept yours, ~ updated, + waits for your yes (v4.11.1) — outcome changed, the counts",
               rc == 0 and r0.get("outcome") == "changed" and r0.get("kept_yours") == ["growth-metrics"] and r0.get("updated") == 1
-              and r0.get("added") == 1 and r0.get("removed") == 0 and r0.get("took_rule") == [] and r0.get("awaiting") == [], (rc, r0, out[-600:]))
-        check("…the records, both copies: your metrics, the core's team, the new block",
+              and r0.get("added") == 0 and r0.get("removed") == 0 and r0.get("took_rule") == [] and r0.get("awaiting") == ["growth-okr"], (rc, r0, out[-600:]))
+        check("…the records, both copies: your metrics, the core's team, no new block yet",
               all(region_in(read(p), "zorg-growth", "growth-metrics") == mine_metrics and region_in(read(p), "zorg-growth", "team") == core_team
-                  and region_in(read(p), "zorg-growth", "growth-okr") == G_OKR for p in (e.ctx, e.mirror)), read(e.ctx)[-1500:])
+                  and not region_in(read(p), "zorg-growth", "growth-okr") for p in (e.ctx, e.mirror)), read(e.ctx)[-1500:])
         check("…the journal: one provider-sync line with the decisions, `taken` naming the core's texts written (not yours)",
               jl["op"] == "provider-sync" and jl["source"] == "repo:zorg-growth"
-              and jl["decisions"] == {"growth-metrics": "⚠ mine", "team": "~", "growth-okr": "+"}
-              and jl["taken"] == {"team": sha_of(core_team), "growth-okr": sha_of(G_OKR)} and jl["snapshot"] == r0.get("snapshot"), jl)
-        check("…the sentence: two blocks, one conflict kept yours", "Ядро оновило 2 блоки у zorg-growth, конфліктів 1 (лишено твоє)" in out, out[-400:])
+              and jl["decisions"] == {"growth-metrics": "⚠ mine", "team": "~"}
+              and jl["taken"] == {"team": sha_of(core_team)} and jl["snapshot"] == r0.get("snapshot"), jl)
+        check("…the sentence: one block, one conflict kept yours", "Ядро оновило 1 блок у zorg-growth" in out and "лишено твоє" in out, out[-400:])
+        run_ok(e, "provider", "apply", "zorg-growth", "--add", "growth-okr")     # the user's yes to the new block
         rc, out, res = run_ok(e, "provider", "plan", "zorg-growth")
         check("…the next plan: ✎ for yours (its base is the core's text now), = for the others — nothing asks again",
               signs_in(res) == {"growth-metrics": "✎", "team": "=", "growth-okr": "="} and res["questions"] == 0, out[-500:])
@@ -2532,22 +2541,26 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # one pass: ⚠ kept yo
         r0 = (res or {}).get("results", [{}])[0]
         rep = report_of(e, "2026-10-16") or ""
         rows = table_rows(rep)
-        okr_host = block_state(e, "zorg-growth")["blocks"]["growth-okr"]["host"]
+        okr_state = block_state(e, "zorg-growth")["blocks"].get("growth-okr")   # since v4.11.1 a "+" waits for your yes
         check("the pass writes the day's report in the vault: its path is in the result, in the state's sync_result and in the sentence",
               rc == 0 and r0.get("report") == "_System/context/sync/2026-10-16.md" and rep
               and block_state(e, "zorg-growth")["sync_result"]["report"] == r0["report"]
-              and "Ядро оновило 2 блоки у zorg-growth, конфліктів 1 (лишено твоє) — звіт: _System/context/sync/2026-10-16.md" in out,
+              and "Ядро оновило 1 блок у zorg-growth, конфліктів 1 (лишено твоє) — звіт: _System/context/sync/2026-10-16.md" in out,
               (rc, r0, out[-500:]))
         check("…a file with frontmatter (type system, kind context-sync, date, repos) and the title `# Синк контексту — YYYY-MM-DD`",
               rep.startswith("---\ntype: system\nkind: context-sync\ndate: 2026-10-16\nrepos: [zorg-growth]\n---\n\n# Синк контексту — 2026-10-16\n\n"), rep[:300])
         check("…the section: `## <id> · HH:MM · джерело <label> · ядро v<v> · база v<a> → v<b>` (the version the pass moved the bases to), "
               "each version as code",
               re.search(r"^## zorg-growth · 09:00 · джерело .+ · ядро v`[^`\s]+` · база v`0\.1` → v`0\.2`$", rep, re.M), rep[:400])
-        check("…three rows: ⚠ kept yours, ~ updated, + added — each in the cascade's words, with the record it is in",
+        check("…three rows: ⚠ kept yours, ~ updated, + waits for your yes (since v4.11.1) — each in the cascade's words",
               len(rows) == 3 and "| Блок | Знак | Рішення | Чому | Запис |" in rep
               and "`growth-metrics`" in rows[0] and "⚠" in rows[0] and "змінили обидва → лишено твоє: блок не є правилом ядра" in rows[0]
               and "`team`" in rows[1] and "~" in rows[1] and "текст ядра" in rows[1]
-              and "`growth-okr`" in rows[2] and "новий блок у ядрі → додано" in rows[2] and "`%s`" % okr_host in rows[2], rows)
+              and "`growth-okr`" in rows[2] and "новий блок у ядрі → не додано без твоєї згоди" in rows[2]
+              and not (okr_state or {}).get("base_sha") and "growth-okr" not in read(e.ctx), rows)
+        check("…and the part «Чекає твоєї згоди» names it with the command that adds it",
+              "### Чекає твоєї згоди" in rep and "- `growth-okr`" in rep
+              and "Додати блок: ctx provider apply zorg-growth --add growth-okr" in rep.splitlines(), rep[-900:])
         check("…the conflict: its own part with BOTH texts (yours as you wrote it, the core's as it is now)",
               "### Конфлікт: `growth-metrics` — лишено твоє" in rep and "weekly active shoppers (mine)" in rep and "weekly buyers" in rep
               and "Твій текст (v`0.1`)" in rep and "Текст ядра (v`0.2`)" in rep, rep)
@@ -2555,7 +2568,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # one pass: ⚠ kept yo
               "Взяти текст ядра: ctx provider apply zorg-growth --choose growth-metrics=theirs" in rep.splitlines()
               and rep.rstrip("\n").splitlines()[-1] == "Відкотити цей прохід: ctx undo (знімок %s)" % r0["snapshot"], rep[-400:])
         check("…the command works: it takes the core's text for the ✎ the next plan shows",
-              run_ok(e, "provider", "apply", "zorg-growth", "--choose", "growth-metrics=theirs")[0] == 0
+              run_ok(e, "provider", "apply", "zorg-growth", "--choose", "growth-metrics=theirs", "--add", "growth-okr")[0] == 0
               and region_in(read(e.ctx), "zorg-growth", "growth-metrics") == core_metrics, region_in(read(e.ctx), "zorg-growth", "growth-metrics"))
         check("a snapshot of the pass does not hold the report (it is in the vault, not in the store's state)",
               not any("2026-10-16.md" in n for _, _, fs in os.walk(r0["snapshot"]) for n in fs), r0["snapshot"])
@@ -2625,21 +2638,23 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # two repositories one 
         by = {r["repo"]: r for r in (res or {}).get("results", [])}
         rep = report_of(e, "2026-10-16") or ""
         check("two repositories synced the same day: one file, the parts in registration order, both in `repos`",
-              rc == 0 and by["zorg-core"]["outcome"] == "changed" and by["zorg-growth"]["outcome"] == "changed"
+              rc == 0 and by["zorg-core"]["outcome"] == "no-changes" and by["zorg-growth"]["outcome"] == "changed"
               and "repos: [zorg-core, zorg-growth]" in rep and rep.index("\n## zorg-core · ") < rep.index("\n## zorg-growth · ")
               and by["zorg-core"]["report"] == by["zorg-growth"]["report"] == "_System/context/sync/2026-10-16.md", (by, rep[:300]))
-        check("a ⚠ of a core rule: the core's text won — and the report holds the text you wrote, which the record no longer does",
-              by["zorg-core"]["took_rule"] == ["scope"] and "my way" not in read(e.ctx)
-              and "правило ядра → текст ядра" in rep and "The user works on Zorg App, my way." in rep
-              and "The user works on Zorg App and Zorg Lite." in rep and "### Конфлікт: `scope` — правило ядра, взято текст ядра" in rep, rep[:1800])
+        check("a ⚠ of a core rule (since v4.11.1): yours stays until you say yes — the report holds both texts and both commands",
+              by["zorg-core"]["took_rule"] == [] and "scope" in by["zorg-core"]["awaiting"] and "my way" in read(e.ctx)
+              and "правило ядра → лишається твій текст; текст ядра — лише на твою згоду" in rep
+              and "The user works on Zorg App, my way." in rep and "The user works on Zorg App and Zorg Lite." in rep
+              and "### Конфлікт: `scope` — правило ядра, чекає твоєї згоди" in rep
+              and "Взяти текст ядра: ctx provider apply zorg-core --choose scope=theirs" in rep, rep[:1800])
         check("…a ? waits: yours stays in the record, the report names the block once with both texts and both commands",
-              by["zorg-core"]["awaiting"] == ["teams"] and "(my teams)" in read(e.ctx) and rep.count("### Конфлікт: `teams`") == 1
+              "teams" in by["zorg-core"]["awaiting"] and "(my teams)" in read(e.ctx) and rep.count("### Конфлікт: `teams`") == 1
               and "- Alpha, Beta (my teams)" in rep and "- Alpha, Beta, Gamma" in rep
               and "Взяти текст ядра: ctx provider apply zorg-core --choose teams=theirs" in rep
               and "Лишити своє: ctx provider apply zorg-core --choose teams=mine" in rep, rep)
         check("…the table row of the ? says it waits", any("`teams`" in r and "?" in r and "чекає рішення" in r for r in table_rows(rep)), table_rows(rep))
-        check("…the core part ends with its own way back; the growth part has its own",
-              rep.count("Відкотити цей прохід: ctx undo (знімок ") == 2, rep[-300:])
+        check("…the core part wrote nothing, so it has nothing to undo; the growth part has its way back",
+              rep.count("Відкотити цей прохід: ctx undo (знімок ") == 1 and "Знімка цього проходу немає: відкочувати нічого." in rep, rep[-300:])
 
 with tempfile.TemporaryDirectory() as d:                 # the safeguard: held is reported once; a new set is reported again; old reports go
     e = repos_env(d, "http://127.0.0.1:9/mcp", core_extra="sync: daily\n")
@@ -2663,6 +2678,7 @@ with tempfile.TemporaryDirectory() as d:                 # the safeguard: held i
           and os.path.exists(os.path.join(e.store, "sync", "my-notes.md")), (rc, moved, os.listdir(os.path.join(e.store, "sync"))))
     rc, out, res = run_ok(e, "list", "--trash")
     check("…the trash listing copes with a file that is no record", rc == 0, (rc, out[-300:]))
+    run_ok(e, "provider", "apply", "zorg-core", "--add", "product")    # since v4.11.1 a new block comes in on your yes
     pristine = read(blocks_file)
     open(blocks_file, "w", encoding="utf-8", newline="").write(
         pristine.replace(region_in(pristine, "zorg-core", "scope") + "\n\n", "").replace(region_in(pristine, "zorg-core", "teams"), ""))
@@ -2753,13 +2769,14 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a text you rejected b
         run_ok(e, "migrate", "--apply")
         run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
         core_team = G_TEAM.replace("v=0.1", "v=0.2").replace("- **Growth squad:** Alpha", "- **Growth squad:** Alpha Prime")
-        fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, core_team, G_OKR)
+        metrics2 = G_METRICS.replace("v=0.1", "v=0.2").replace("weekly active shoppers", "weekly buyers")
+        fake.tree[GROWTH_PATH] = growth_blocks(metrics2, core_team)      # since v4.11.1 a ~ goes through (a + would wait)
         reject(e, "zorg-growth", {"team": core_team})
         rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1)
         r0 = (res or {}).get("results", [{}])[0]
         rep = report_of(e, "2026-10-16") or ""
-        check("a text rejected by an earlier undo is held (the + goes through): «утримано», «відкинуто вами раніше», and the way to take it",
-              r0.get("outcome") == "changed" and r0.get("rejected") == ["team"] and r0.get("added") == 1
+        check("a text rejected by an earlier undo is held (the ~ goes through): «утримано», «відкинуто вами раніше», and the way to take it",
+              r0.get("outcome") == "changed" and r0.get("rejected") == ["team"] and r0.get("updated") == 1
               and any("`team`" in r and "утримано" in r and "відкинуто вами раніше" in r for r in table_rows(rep))
               and "Взяти текст ядра: ctx provider apply zorg-growth --choose team=theirs" in rep.splitlines()
               and "Alpha Prime" not in read(e.ctx), (r0, rep))
@@ -2941,7 +2958,8 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:   # a block the core remo
         run_ok(e, "migrate", "--apply")
         run_ok(e, "provider", "adopt", "zorg-growth", "--apply")
         fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, G_TEAM, G_OKR)
-        run_ok(e, "provider", "sync", "--now", DAY1)                           # the core's new block is added (a base for it)
+        run_ok(e, "provider", "sync", "--now", DAY1)                           # since v4.11.1 the new block waits for your yes…
+        run_ok(e, "provider", "apply", "zorg-growth", "--add", "growth-okr")   # …and comes in on it (a base for it)
         added = region_in(read(e.ctx), "zorg-growth", "growth-okr") == G_OKR
         fake.tree[GROWTH_PATH] = growth_blocks(G_METRICS, G_TEAM)
         rc, out, res = run_ok(e, "provider", "sync", "--now", DAY1_PLUS_1H)    # …and removed again, a lone removal
@@ -3233,7 +3251,7 @@ need_cst = ["`sync: daily`", "`sync: off`", "except `sync`", "`--choose <block>=
             "One `--choose` takes several answers", "ctx provider sync <repo>"]
 check("connect-steps asks about `sync: daily` once, settles every `?` before it, carves `sync` out of the kept-keys rule and shows several answers per --choose",
       not lacks(cst3, need_cst) and 0 <= i_first < i_q, (lacks(cst3, need_cst), i_first, i_q))
-need_skl = ["version: 0.9.2", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
+need_skl = ["version: 0.9.3", "`sync: daily`", "Settle every `?`", "only on the user's own yes"]
 check("the skill is 0.5.0 (slots, v3.15.0) and asks the daily-sync question only on the user's own yes", not lacks(skl3, need_skl), lacks(skl3, need_skl))
 
 # the registry: one case per area, above v3.13.1
@@ -3251,17 +3269,18 @@ cp_f1, pp_f1, cst_f1, skl_f1, lcp_f1 = doc("references", "context-protocol.md"),
 sec11_f1 = between(pp_f1, "### 12.11 ", "### 12.12 ") if "### 12.12 " in pp_f1 else pp_f1[pp_f1.find("### 12.11 "):]
 need_f1 = [
     (cp_f1, ["Every pass that changes something has a snapshot and a journal line (`provider-sync`)",
-             "a `?` is left waiting unless the block is a rule (then the core's text)", "prints only the `CTX_RESULT` line",
+             "a `?`, a block new in the core and every new or changed core rule (`policy=rule`) wait for your answer",   # since v4.11.1
+             "prints only the `CTX_RESULT` line",
              "but not under one where the core removed the block"]),
     (sec11_f1, ["every pass that changes something can be taken back (`ctx undo`) and is explained in a report",
                 "prints only the `CTX_RESULT` line", "not under a `⚠` of a block the core removed",
                 "Знімка цього проходу немає: відкочувати нічого."]),
     (pp_f1, ["unless your blocks note carries a `team` region itself", "The proposal a refresh builds carries no `sync`"]),
     (cst_f1, ["every pass that changes something has a snapshot", "tried again at the first skill start an hour or more later",
-              "unless the block is a core rule (`policy=rule`", "unless the core marked the block a rule (`policy=rule`)",
+              "a block the core marks as its rule (`policy=rule`) is never taken without the user's yes either",   # since v4.11.1
               "The proposal a refresh builds carries no `sync`", "An explicit request to turn the daily sync on or off comes here whatever the key says",
               "turning it off needs no `?` settling and no question", "`context-provider-protocol.md` §12.11"]),
-    (skl_f1, ["the sync leaves a `?` waiting (unless the block is a core rule)", "turning it off needs no `?` settling and no question",
+    (skl_f1, ["the sync leaves a `?` waiting (a core rule's too, since v4.11.1)", "turning it off needs no `?` settling and no question",
               "`references/context-provider-protocol.md` §12.11"]),
     (lcp_f1, ["prints only its `CTX_RESULT` line"]),
 ]
@@ -3771,7 +3790,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               confl["candidates"] == [] and confl["winner"] is None and confl["looked_in"]["names"] == ["Confluence Space"]
               and "product.confluence_space · одне значення · Product: Zorg App · не знайдено\n" in out
               and "  шукав: Confluence Space — у Product: Zorg App; блоків із цим слотом немає" in out
-              and '  прив\'язати свою підсекцію: ctx slot map product.zorg-app "<Назва>" product.confluence_space' in out, out[-1500:])
+              and "  прив'язати свою підсекцію: ctx slot map product.zorg-app '<Назва>' product.confluence_space" in out, out[-1500:])
         key = slot_in(res, "product.jira_key")
         check("a value your text answers: one candidate, it won, «єдиний кандидат»", outcomes_of(key) == [("mine", "won")] and key["winner"] == "mine"
               and key["why"] == "єдиний кандидат" and "  ✔ твоє · product.zorg-app › Jira Project Key" in out, (key, out[:600]))
@@ -3895,7 +3914,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # your own name
         km = slot_in(res, "product.key_metrics")
         check("a subsection under a name of your own: the slot is not found, and the command is printed to map it", km["candidates"] == []
               and "  шукав: Key Metrics, Ключові метрики — у Product: Zorg App; блоків із цим слотом немає" in out
-              and km["commands"] == ['ctx slot map product.zorg-app "<Назва>" product.key_metrics'], (km, out[:800]))
+              and km["commands"] == ["ctx slot map product.zorg-app '<Назва>' product.key_metrics"], (km, out[:800]))
         rc_m, out_m, _ = run_ok(e, *ctx_args(printed(out, "ctx slot map").replace("<Назва>", "Core numbers")))
         rc, out, res = run_ok(e, "explain", "product.key_metrics")
         km = slot_in(res, "product.key_metrics")

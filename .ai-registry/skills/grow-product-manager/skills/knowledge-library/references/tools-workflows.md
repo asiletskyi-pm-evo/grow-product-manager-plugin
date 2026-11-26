@@ -29,20 +29,20 @@ Names only — never a tool's arguments, results or descriptions beyond a short 
 ## Tools Add — «додай інструмент», a site, a portal, a course, a colleague's tip
 
 1. Ask, in one message, what the user did not already say: name, kind (`site`, `portal`, `course`, `cli`, `app`, `plugin`, `skill`, `mcp`), the job, how to connect, access, and who recommended it (`я` or a name).
-2. `add --name "<name>" --kind <kind> job=… connect=… access=… skills=… recommended_by=…`. A refusal by the never-store filter names the field and the kind — ask for the line without the key; never repeat the value.
+2. `add --name '<name>' --kind <kind> 'job=…' 'connect=…' 'access=…' 'skills=…' 'recommended_by=…'` — every value the user typed in single quotes, a `'` in it written `'\''` (`references/search-protocol.md` §3a); never in double quotes, never bare. A refusal by the never-store filter names the field and the kind — ask for the line without the key; never repeat the value.
 3. Mirror (TS-6).
 
 ## Tools Search — «знайди інструмент для …» (on request only)
 
 1. Turn the request into 2–4 **public** keywords (`data-policy.md`: the search leaves the session) — the job, not the user's product, team or data.
 2. Search the MCP registry (`references/integration-strategy.md` Step 2) and, when the session has a tool for it, the organisation's plugin catalogue. Show one list: name, what it does, connected or not.
-3. The user picks → `add --name … --kind mcp|plugin --source registry-search|catalog --state connected|not-installed job=…`, the state as the search gave it. Nothing they did not pick is kept.
+3. The user picks → `add --name '…' --kind mcp|plugin --source registry-search|catalog --state connected|not-installed 'job=…'`, the state as the search gave it. Nothing they did not pick is kept.
 4. Connecting is the user's: offer the host's own connection card when it has one; never configure a server or a plugin yourself.
 
 ## Tools Manage — «покажи інструменти», «познач X як рекомендований», «знову пропонуй X»
 
 - **Show:** the table «tools.md» — the user's records, then «Від команди».
-- **Set:** `set --id <id> verdict=recommended|tried|deprecated`, `shared=true`, `recommended_by=…`, `job=…`, `connect=…`, `skills=a,b`, `notes=…`. An empty value removes the field, and the seed never fills it back. The scan never touches these. A refusal names the field and the kind, never the value.
+- **Set:** `set --id '<id>' verdict=recommended|tried|deprecated`, `shared=true`, `'recommended_by=…'`, `'job=…'`, `'connect=…'`, `skills=a,b`, `'notes=…'` (a value the user typed in single quotes). An empty value removes the field, and the seed never fills it back. The scan never touches these. A refusal names the field and the kind, never the value.
 - **A «ні» taken back:** `decline --skill <skill> --id <id> --undo`.
 - Never delete a record; `deprecated` is how a tool leaves the suggestions.
 
@@ -56,4 +56,4 @@ Names only — never a tool's arguments, results or descriptions beyond a short 
 
 1. `team` — reads the `tools_file` of every core the user has registered, through the registrations `ctx` knows; a core without the key is skipped silently, one whose file is outside the core or unreadable is named in one line, and a list no core publishes any more is removed.
 2. Show the «Від команди» records: name, job, who recommends. They are read-only.
-3. «Взяти собі» → `add --from-team "<name>"` copies one into the user's registry.
+3. «Взяти собі» → `add --from-team '<name>'` copies one into the user's registry.
