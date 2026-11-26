@@ -53,7 +53,7 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 
-**A release that changes the shell of a published app** (since v4.13.0, pitfall P11) — a file under `scripts/app_shell/`, the `wrap` function of `scripts/app_shell.py`, or a profile's modules or menu in `references/app-profiles.yaml` — also raises `SHELL_VERSION` in `scripts/app_shell.py`; the validator cannot see the omission.
+**A release that changes the shell of a published app** (since v4.13.0, pitfall P11) — a file under `scripts/app_shell/`, the `wrap` function of `scripts/app_shell.py`, `EDIT`, `CSS_EDIT` or the edit bar of `scripts/journey_map.py` (embedded by `wrap`), or a profile's modules or menu in `references/app-profiles.yaml` — also raises `SHELL_VERSION` in `scripts/app_shell.py` together with the `version` of `references/app-profiles.yaml`; the validator cannot see the omission, the pin test in `testing/app_shell_test.py` does (P11).
 
 Skill frontmatter versions are normally bumped in the feature PRs themselves; verify they match the CHANGELOG claims.
 
