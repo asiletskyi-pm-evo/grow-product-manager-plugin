@@ -43,7 +43,7 @@ BASE = {"level": "app", "title": {"uk": "Zorg", "en": "Zorg"}, "icon": {"glyph":
         "permissions": ["notifications", "menu-bar"],
         "modules": [{"id": "a", "block": "table", "source": "a", "home": True, "title": {"uk": "А", "en": "A"}},
                     {"id": "b", "block": "list", "source": "b", "title": {"uk": "Б", "en": "B"}}],
-        "menu": ["a", "b", {"action": "edit", "accel": "CmdOrCtrl+E"}, {"action": "open-in-claude"}],
+        "menu": ["a", "b", {"action": "edit", "accel": "CmdOrCtrl+E"}],
         "connectors": [{"role": "issue-status", "needs": "<jira_project>"}], "commands": []}
 
 
@@ -59,7 +59,7 @@ check("1.1 check on the repo is clean", rc == 0 and res == {"ok": True, "errors"
 check("1.2 the base profile of this test is clean", sh.check_profile("zorg", BASE) == [], sh.check_profile("zorg", BASE))
 rc, out, res = run("schema")
 check("1.3 schema prints the constants", res.get("levels") == ["page", "app"] and res.get("later") == list(sh.LATER)
-      and res.get("blocks") == list(sh.BLOCKS), out)
+      and res.get("blocks") == list(sh.BLOCKS) and res.get("actions") == ["edit"], out)
 doc = sh.load_profiles()
 cjm = doc["profiles"]["cjm"]
 check("1.4 the reader reads flow mappings and lists", cjm["title"] == {"uk": "CJM", "en": "CJM"} and cjm["menu"][3] ==
@@ -98,6 +98,7 @@ cases = (
     ("unknown permission", prof(permissions=["camera"]), "unknown permission 'camera'"),
     ("menu entry not a module", prof(menu=["ghost"]), "menu entry 'ghost'"),
     ("menu action unknown", prof(menu=[{"action": "delete"}]), "menu action 'delete'"),
+    ("open-in-claude, an action no longer known (ledger 184)", prof(menu=[{"action": "open-in-claude"}]), "menu action 'open-in-claude' is unknown"),
     ("duplicate module id", prof(modules=[BASE["modules"][0], dict(BASE["modules"][1], id="a")]), "duplicate module id 'a'"),
     ("two homes", prof(modules=[BASE["modules"][0], dict(BASE["modules"][1], home=True)]), "more than one home"),
     ("unknown level", prof(level="tablet"), "unknown level 'tablet'"),
@@ -922,6 +923,50 @@ const fakeDesktop = `
     picks: Array.from(document.querySelectorAll('.gpm-map-pick button')).map(b => b.textContent), text: document.querySelector('.gpm-panel').textContent.indexOf('Gone map') >= 0}));
   out.t22_errs = errs; await p.close();
   } catch (e) { out.t8_crash = String(e).slice(0, 400); }
+  try {
+  // ---- Final review, group 4: small fixes that change the shell's bytes
+  const MAP4 = D5('map.first-order', 'zorg', fx('zorg-map.json'));
+  const ratio4 = `(() => { const rgb = (c) => c.match(/\\d+(\\.\\d+)?/g).slice(0, 3).map(Number);
+    const lum = (c) => { const v = rgb(c).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    return (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }; })()`;
+  // Minor 1: an added card is readable in the dark theme
+  [p, errs] = await open(APP(snapDocs({'map.first-order--zorg': MAP4}), null)); await p.emulateMedia({colorScheme: 'dark'}); await tab(p, 'map');
+  out.g4_added = await p.evaluate((r) => { const ratio = eval(r); const cell = document.querySelector('.gpm-map td[data-stage]');
+    const d = document.createElement('div'); d.className = 'item added'; const t = document.createElement('div'); t.className = 't'; t.textContent = 'New row';
+    const m = document.createElement('div'); m.className = 'm'; m.textContent = 'meta'; d.appendChild(t); d.appendChild(m); cell.appendChild(d);
+    const cs = getComputedStyle(d), ms = getComputedStyle(m);
+    return {fg: cs.color, bg: cs.backgroundColor, text: ratio(cs.color, cs.backgroundColor), meta: ratio(ms.color, cs.backgroundColor)}; }, ratio4);
+  out.g4_added_errs = errs; await p.close();
+  // Minor 3: a document whose `map` is an Object member does not unlock a stale map; a ref on a stage named so does not break the map
+  const stale4 = {a: {kind: 'row', map: 'journey-first-order', row: 'a1', digest: '0000000000000000', edit: {text: 'x'}, by: 'u1', at: '2026-11-26T11:00:00Z'}};
+  const lockOf = (pg) => pg.evaluate(() => ({locked: document.querySelectorAll('.gpm-map .wrap.gpm-map-locked').length, notes: Array.from(document.querySelectorAll('.gpm-map-note')).map(n => n.textContent)}));
+  [p, errs] = await open(fakeDesktop + fakeDb2({snapshot: snapDocs({'map.first-order--zorg': MAP4}), config: {}, edits: stale4}, 'ok')); await tab(p, 'map'); await p.waitForTimeout(150);
+  out.g4_stale = await lockOf(p);
+  await p.close();
+  const ctor4 = Object.assign({}, stale4, {b: {kind: 'row', map: 'constructor', row: 'r', digest: 'd', edit: {text: 'y'}, by: 'u2', at: '2026-11-26T12:00:00Z'}});
+  [p, errs] = await open(fakeDesktop + fakeDb2({snapshot: snapDocs({'map.first-order--zorg': MAP4}), config: {}, edits: ctor4}, 'ok')); await tab(p, 'map'); await p.waitForTimeout(150);
+  out.g4_stale_ctor = await lockOf(p); out.g4_stale_errs = errs; await p.close();
+  const refMap = JSON.parse(JSON.stringify(fx('zorg-map.json'))); refMap.tree = Object.assign({}, refMap.tree || {}, {deeper: [{stage: 'constructor', t: 'Deeper', m: 'ref'}, {stage: 's1', t: 'Deeper s1', m: 'ref'}]});
+  [p, errs] = await open(APP(snapDocs({'map.first-order--zorg': D5('map.first-order', 'zorg', refMap)}), null)); await tab(p, 'map');
+  out.g4_ref = await p.evaluate(() => ({boxes: document.querySelectorAll('.gpm-map[data-section]').length, refs: Array.from(document.querySelectorAll('.gpm-map .item.ref')).map(x => x.textContent)})); out.g4_ref_errs = errs; await p.close();
+  // Minor 4: a product id from the database that does not fit the pattern is dropped by cleanMeta
+  const evilP = snapDocs({}, [{id: 'zorg"]pay', label: 'Evil'}, {id: 'zorg', label: 'Zorg', color: '#2f6fde'}, {id: 'zorg-pay', label: 'Zorg Pay', color: null}]);
+  [p, errs] = await open(APP(evilP, null));
+  out.g4_prod0 = await mod(p);
+  const evilAt = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-products button')).findIndex(x => (x.getAttribute('data-product') || '').indexOf('"') >= 0));
+  if (evilAt >= 0) { await p.evaluate((i) => document.querySelectorAll('.gpm-products button')[i].focus(), evilAt); await p.keyboard.press('Enter'); await p.waitForTimeout(80); }
+  out.g4_prod1 = await mod(p); out.g4_prod_errs = errs; await p.close();
+  // Ledger 121: the edit bar follows the map shown — the saved edits of the second map name the second map's root
+  const second = JSON.parse(JSON.stringify(fx('zorg-map.json'))); second.map = 'journey-second'; second.product = 'zorg-pay'; second.journey = 'Друга карта';
+  [p, errs] = await open(APP(snapDocs({'map.first-order--zorg': MAP4, 'map.second--zorg-pay': D5('map.second', 'zorg-pay', second)}), null)); await tab(p, 'map'); await p.waitForTimeout(150);
+  const bar4 = (pg) => pg.evaluate(() => { const b = document.querySelector('.gpm-maps .edit-bar'); return b ? {root: b.getAttribute('data-root'), product: b.getAttribute('data-product')} : null; });
+  out.g4_bar1 = await bar4(p);
+  await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-map-pick button')).find(b => b.textContent.indexOf('Друга карта') === 0).click()); await p.waitForTimeout(80);
+  out.g4_bar2 = await bar4(p);
+  out.g4_saved = await p.evaluate(() => { const c = document.querySelector('.gpm-maps .edit-copy'); if (c) { c.click(); } const o = document.querySelector('.gpm-maps .edit-out'); try { const j = JSON.parse(o.value); return {root: j.root, product: j.product}; } catch (e) { return {raw: o ? o.value.slice(0, 80) : null}; } });
+  await p.waitForTimeout(80); if (!out.g4_saved || !out.g4_saved.root) { out.g4_saved = await p.evaluate(() => { const o = document.querySelector('.gpm-maps .edit-out'); try { const j = JSON.parse(o.value); return {root: j.root, product: j.product}; } catch (e) { return {raw: o ? o.value.slice(0, 80) : null}; } }); }
+  out.g4_bar_errs = errs; await p.close();
+  } catch (e) { out.g4_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
         bare_prof = os.path.join(d, "bare.yaml")
@@ -1861,6 +1906,26 @@ if have_pw:
     check("22.4 ... not in the tray", br.get("t22_tray") and "Gone map" not in br["t22_tray"] and "Перше замовлення" in br["t22_tray"], br.get("t22_tray"))
     check("22.5 ... not asked for live: its code is never sent", [w["input"]["ids"] for w in (l22.get("m") or {}).get("watches", [])] == [["ZRG-1"]] and not br.get("t22_errs"),
           (l22.get("m"), br.get("t22_errs")))
+
+    # ---- final review, group 4 ------------------------------------------------------------------------------------------
+    check("24.0 the group-4 browser pass ran to its end", not br.get("g4_crash"), br.get("g4_crash"))
+    ad = g("g4_added")
+    check("24.1 Minor 1: an added card in the map is readable in the dark theme (text and its meta line at least 4.5:1 on its own background)",
+          ad.get("text", 0) >= 4.5 and ad.get("meta", 0) >= 4.5 and not br.get("g4_added_errs"), ad)
+    s0, s1 = g("g4_stale"), g("g4_stale_ctor")
+    check("24.2 Minor 3: an edit of map «constructor» does not unlock a map whose shared edits were made on another version",
+          s0.get("locked", 0) >= 1 and s1.get("locked", 0) >= 1 and any("1" in n for n in s1.get("notes", [])) and not br.get("g4_stale_errs"), (s0, s1, br.get("g4_stale_errs")))
+    rf = g("g4_ref")
+    check("24.3 Minor 3: a map with a reference on a stage named «constructor» is still drawn (the chips table has no prototype)",
+          rf.get("boxes") == 1 and "Deeper s1ref" in "".join(rf.get("refs", [])) and not br.get("g4_ref_errs"), (rf, br.get("g4_ref_errs")))
+    p0, p1 = g("g4_prod0"), g("g4_prod1")
+    check("24.4 Minor 4: a product id holding '\"]' is dropped by cleanMeta — not in the switch; the switch keeps working, no error",
+          [b["product"] for b in p0.get("switchBtns", [])] == ["", "zorg", "zorg-pay"] and p1.get("modulesShown") is True and not br.get("g4_prod_errs"),
+          (p0.get("switchBtns"), p1.get("modulesShown"), br.get("g4_prod_errs")))
+    b1, b2, sv = br.get("g4_bar1") or {}, br.get("g4_bar2") or {}, br.get("g4_saved") or {}
+    check("24.5 ledger 121: the edit bar follows the map shown; the saved edits of the second map name its root and product",
+          b1 == {"root": "journey-first-order", "product": "zorg"} and b2 == {"root": "journey-second", "product": "zorg-pay"}
+          and sv == {"root": "journey-second", "product": "zorg-pay"} and not br.get("g4_bar_errs"), (b1, b2, sv, br.get("g4_bar_errs")))
 
 # ---- Task 8: live numbers through the viewer's connectors (Python half) ---------------------------------------------------
 TRACKER = {"server": "Zorg Tracker", "tool": "search_items", "input": {"query": "key in ({codes})", "limit": 50},

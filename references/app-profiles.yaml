@@ -12,7 +12,7 @@ profiles:
       - {id: map, block: map, source: map, title: {uk: "Карти", en: "Maps"}}
       - {id: funnel, block: chart, source: funnel, title: {uk: "Воронка", en: "Funnel"}}
       - {id: edits, block: feed, source: "@edits", title: {uk: "Правки команди", en: "Team edits"}}
-    menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits, {action: open-in-claude}]
+    menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits]
     badge: "@edits.pending"
     tray: {title: portfolio.weakest, menu: map}
     notify: [edits.new, threshold.crossed]

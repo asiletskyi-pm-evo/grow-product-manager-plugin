@@ -115,6 +115,7 @@
   // into the page only through textContent. readSnapshot never throws and never rejects.
   var SECTION_ID = /^[a-z0-9][a-z0-9.-]{0,63}--[a-z0-9][a-z0-9-]{0,63}$/;
   var COLOR = /^#[0-9a-fA-F]{6}$/;
+  var PRODUCT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;   // the same as PRODUCT in app_shell.py
   var LOAD_TIMEOUT = 10000;
 
   function isObj(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
@@ -128,7 +129,7 @@
     var meta = { made: made, products: [], thresholds: { warning: 0.1, critical: 0.25 }, sections: {}, connectors: {} };
     if (Array.isArray(raw.products)) {
       raw.products.forEach(function (p) {
-        if (!isObj(p) || !str(p.id, 64) || !str(p.label, 24)) { return; }
+        if (!isObj(p) || !str(p.id, 64) || !PRODUCT_ID.test(p.id) || !str(p.label, 24)) { return; }   // an id goes into selectors
         meta.products.push({ id: p.id, label: p.label, color: typeof p.color === "string" && COLOR.test(p.color) ? p.color : null });
       });
     }
@@ -154,7 +155,6 @@
   // connector's display name and tool, the tool's arguments (plain JSON, at most 4 KiB and 6 levels, the placeholders
   // {codes} / "{codes[]}" only) and three dot-paths that read the answer; `product`, when present, a product id (the
   // product whose funnel the live numbers belong to). A binding that does not fit is dropped.
-  var PRODUCT_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
   var PICK_PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$/;
   var INPUT_MAX = 4096, INPUT_DEPTH = 6;
   function inputFits(v, depth) {

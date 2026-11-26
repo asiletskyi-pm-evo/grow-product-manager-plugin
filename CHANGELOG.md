@@ -34,7 +34,7 @@ Every snapshot is a publication: one question before every write into the databa
 
 - **No files, no commands, no full access.** An app that reads a folder or runs the plugin's commands on your computer arrives in v4.13.1, after a second security audit. A profile that asks for it is refused with «arrives in v4.13.1».
 - **No «Ask Claude» button** — not in this release.
-- **No «Open in Claude» item in the menu.** The profile can name it, but the shell leaves it out: the platform gives a page no call for it.
+- **No «Open in Claude» item in the menu.** The platform gives a page no call for it, so the shell has no such action and a profile that names one is refused by `check`.
 - **PM OS** is a placeholder profile with no screens. Its modules and sources belong to its own protocol and release; this release gives it the shell, the blocks, the theme, the products, `config/app`, `runs` and the rules.
 
 ### Still to be measured on a real computer
