@@ -12,6 +12,33 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.12.3 (2026-11-26)
+
+**The plugin's logo in Claude.** Claude's plugin list shows a picture beside each plugin's name; ours showed the default one. The logo has been in `assets/` since v3.0.1, named only by the Codex manifest.
+
+### Added
+
+- **`icon` in `.claude-plugin/plugin.json`** — `"./assets/logo.png"`, the same 512×512 PNG the Codex and ChatGPT card uses. The field is the one Anthropic documents for a plugin's listing ([plugins reference → Directory listing fields](https://code.claude.com/docs/en/plugins-reference#directory-listing-fields)): a square PNG or JPEG inside the plugin, 512 to 2048 px on a side, under 2 MB. Claude Code does not read it when it loads the plugin; `claude plugin validate` accepts it from v2.1.281 (measured on 2.1.332: no warning).
+- **Validator check 1** — when `plugin.json` names an `icon`, the file exists inside the plugin, is a PNG or JPEG, square, 512 to 2048 px, under 2 MB.
+
+### Files
+
+| File | Change |
+|---|---|
+| `.claude-plugin/plugin.json` | `icon`; version |
+| `testing/validate-consistency.sh` | check 1: the icon file |
+| `README.md` | «New in v4.12.3»; the Codex card paragraph names the Claude field |
+
+### Backwards compatibility
+
+Nothing for a user to do.
+
+### Known limits
+
+- The docs name `icon` for a listing in Anthropic's directory. Whether the list of a personal marketplace synced from GitHub shows it is not documented: it is checked on claude.ai after this release syncs.
+
+---
+
 ## v4.12.2 (2026-11-26)
 
 **Sprint and quarter reports read Story Points again on Atlassian MCP v2.** v4.11.0 moved the plugin to v2 by its tool names and inputs, checked with `discover`; its known limit was that no call had been run live. On 2026-11-26 every read of §1c was run on a live v2 site. The names and inputs held. One thing they could not show did not: the shape of what a Jira search returns.
