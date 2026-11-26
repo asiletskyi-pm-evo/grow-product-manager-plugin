@@ -1,0 +1,44 @@
+# The mirror takes the releases itself (testing/mirror_sync.sh).
+#
+# This file is read by the GitLab mirror of the repository, never by GitHub. A pipeline
+# schedule there runs one job: it reads main and the tags from the canonical repository
+# and pushes what the mirror lacks, never by force. Nothing runs on a push or on a merge
+# request: the workflow rule lets in a schedule and a manual run («Run pipeline»), no more.
+#
+# Set once in the mirror's project:
+#   - one last push by hand of the default branch, so that the mirror holds this file and
+#     the script: a mirror that is behind this commit has no job to schedule;
+#   - Settings → CI/CD: a variable MIRROR_PUSH_TOKEN, masked and protected: a project
+#     access token with the scope write_repository and a role that may push to the
+#     default branch;
+#   - Build → Pipeline schedules: a schedule on the default branch.
+# Optional variables: MIRROR_JOB_IMAGE — an image with sh and git that the runners can
+# pull; MIRROR_SOURCE_URL — another address of the canonical repository.
+#
+# The job runs the script as the mirror's default branch has it, with a token that may
+# write to the mirror: whoever may merge into the canonical main decides what it does.
+#
+# Not part of the plugin: testing/registry_copy.py leaves this file out of the copy users
+# install. Its test is testing/mirror_sync_test.py.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
+variables:
+  MIRROR_SOURCE_URL: "https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin.git"
+  MIRROR_JOB_IMAGE: "alpine/git:2.54.1"
+
+mirror-sync:
+  image:
+    name: $MIRROR_JOB_IMAGE
+    entrypoint: [""]
+  # A scheduled and a manual run never push at the same time.
+  resource_group: mirror-sync
+  timeout: 10 minutes
+  variables:
+    GIT_DEPTH: "1"
+    MIRROR_TARGET_URL: "${CI_PROJECT_URL}.git"
+  script:
+    - sh testing/mirror_sync.sh
