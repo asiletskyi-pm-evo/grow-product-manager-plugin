@@ -26,7 +26,7 @@ Report at most five Nits per review. When there are more, give the count in the 
 
 - Anything under `.ai-registry/`, apart from the hand edit above. It is generated from the source files; review those.
 - `CHANGELOG.md` sections of versions other than the one this pull request releases, and the wording of release notes.
-- What CI already fails on: `testing/validate-consistency.sh`, `testing/skill_lint.py` and `testing/seeded_leak_test.py` cover frontmatter, version numbers across the manifests, description length, references that do not resolve and the organisation denylist.
+- What CI already fails on: `testing/validate-consistency.sh`, `testing/skill_lint.py` and `testing/seeded_leak_test.py` cover frontmatter, version numbers across the manifests and description length. The organisation denylist is a local file and does not run in CI, so a real organisation in the diff is still yours to catch.
 - Markdown style: heading levels, line length, table alignment, list markers.
 - Ukrainian next to English in skill descriptions, trigger phrases, release titles and user-facing strings. It is intended.
 
