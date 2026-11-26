@@ -135,8 +135,8 @@ def copies_line(version, home=None, root=None, tell=True):
     if t.is_alive() or "copies" not in box:
         return None
     me, others = os.path.realpath(root), []
-    for where, v, path, shown in box["copies"]:
-        if v == version or os.path.realpath(path) == me:
+    for where, v, path, shown, live in box["copies"]:
+        if not live or v == version or os.path.realpath(path) == me:   # a folder an earlier sync left is no copy a host loads
             continue
         item = (pc.compare(v, version) == "ahead", pc.version_key(v) or (), "v%s %s (%s)" % (v, where, shown))
         if item not in others:

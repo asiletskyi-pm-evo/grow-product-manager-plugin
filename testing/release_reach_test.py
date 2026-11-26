@@ -176,6 +176,28 @@ with tempfile.TemporaryDirectory() as d:
     check("after a fetch the same clone compares against the canonical version, whatever its own branch holds",
           rc == 0 and "1.4.0" in out and row(out, "tag v1.4.0") == "ok", (rc, out, err))
 
+    # --- the folders an earlier sync left behind ----------------------------------------------
+    home3 = os.path.join(d, "home3"); acct = os.path.join(home3, ".claude", "plugins", "synced", "o1_u1"); os.makedirs(acct)
+    manifest(os.path.join(acct, NAME), "0.5.0"); manifest(os.path.join(acct, NAME + "~g5"), "1.2.0")
+    manifest(os.path.join(acct, NAME + "~g2"), "1.4.0")
+    def sync_manifest(entry):
+        with open(os.path.join(acct, "manifest.json"), "w") as f:
+            json.dump({"lastUpdated": "2026-01-01T00:00:00Z", "plugins": [entry, {"name": "other", "generation": 5}]}, f)
+    sync_manifest({"name": NAME, "generation": 2})
+    rc, out, err = reach(stale, home3)
+    lines = [l for l in out.splitlines() if "Claude Code" in l]
+    check("the folder the sync manifest names (generation 2 → ~g2) is the copy; older folders beside it are leftovers that do not fail the run",
+          rc == 0 and len(lines) == 3 and [l.split()[0] for l in lines].count("leftover") == 2
+          and row(out, NAME + "~g2") == "ok" and row(out, NAME + "~g5") == "leftover", (rc, out, err))
+    sync_manifest({"name": NAME})
+    rc, out, err = reach(stale, home3)
+    check("with no generation in the sync manifest the plain folder is the copy — here an old one, so the run fails",
+          rc == 1 and row(out, "0.5.0") == "behind" and row(out, NAME + "~g2") == "leftover", (rc, out, err))
+    with open(os.path.join(acct, "manifest.json"), "w") as f:
+        f.write("{ not json")
+    rc, out, err = reach(stale, home3)
+    check("an unreadable sync manifest leaves every folder a copy, as before", rc == 1 and "leftover" not in out and "Traceback" not in err, (rc, out, err[-300:]))
+
     # --- a manifest that is not a manifest -------------------------------------------------
     odd_origin, odd = os.path.join(d, "odd.git"), os.path.join(d, "odd")
     git(d, "init", "-q", "--bare", "-b", "main", odd_origin); git(d, "init", "-q", "-b", "main", odd)

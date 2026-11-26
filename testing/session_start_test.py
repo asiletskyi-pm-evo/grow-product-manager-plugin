@@ -840,6 +840,13 @@ if hasattr(ss, "copies_line") and getattr(ss, "pc", None) is not None:
               "ignore the user" not in out and "rm -rf" not in out and "+3" in out, out)
         check("4121.10 an unknown version of this session gives no line", ss.copies_line("?", home=home, root=own) is None)
 
+        with open(os.path.join(synced, "manifest.json"), "w", encoding="utf-8") as f:   # the sync's own record: this session's folder is the live one
+            json.dump({"plugins": [{"name": "demo-plugin"}]}, f)
+        out = line() or ""
+        check("4121.18 the folders an earlier sync left beside the live one are not copies: no synced folder in the line",
+              "synced" not in out and "Codex" in out and "+" not in out, out)
+        os.remove(os.path.join(synced, "manifest.json"))
+
         real = ss.pc.installed_copies                      # the copies never hold the session start
         ss.pc.installed_copies = lambda *a, **k: (time.sleep(3), real(*a, **k))[1]
         try:

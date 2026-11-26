@@ -14,7 +14,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ## v4.12.1 (2026-11-26)
 
-**A release is finished when it has reached every place that serves it, not when the tag exists.** On 2026-11-26 the canonical remote was at v4.12.0, the mirror at v4.10.0, and a machine was reported at v4.9.1. The report measured the wrong folder — the terminal's copy, last synced two days before, not the desktop app's, which was at most an hour behind. The mirror was the real gap: four releases were run from sessions that could not reach it, and nothing recorded the step as left to do. This release makes the end of a release a check, and makes a skipped step visible. No user step is needed.
+**A release is finished when it has reached every place that serves it, not when the tag exists.** On 2026-11-26 the canonical remote was at v4.12.0, the mirror at v4.10.0, and a machine was reported at v4.9.1. The report measured the wrong folders — the terminal's, last synced two days before and with a leftover of an older sync beside it, not the desktop app's, which was at most an hour behind. The mirror was the real gap: four releases were run from sessions that could not reach it, and nothing recorded the step as left to do. This release makes the end of a release a check, and makes a skipped step visible. No user step is needed.
 
 ### Added
 
@@ -23,10 +23,11 @@ When a skill changes, its version is bumped independently. The plugin version is
   - A copy that is absent is not a failure; a copy newer than the release is `ahead`. `--skip-hosts` checks the remotes alone, for the minutes after a merge when the hosts have not synced yet.
   - A clone that has not fetched the canonical branch says so instead of comparing against its own old version.
   - A mirror whose tag points at another commit than the canonical tag is `behind`, not `ok`.
-- **`references/host-profiles.md` §8 «How a release reaches each host»** — the route and the delay per host, each with its source: a claude.ai account's marketplace about 95 seconds after the merge, a cloud session at its start, the desktop app within the hour, a terminal on its next signed-in start by the vendor's document (the one start measured did not sync; the cause is not established), Codex on its start, a mirror only when Step 7 runs on the release machine. Measured on the six releases v4.9.1–v4.12.0, vendor documents linked.
+  - A folder an earlier account sync left beside the one it loads now is a `leftover` row, not a failure: the sync's own `manifest.json` says which folder is loaded. The 2026-11-26 report of «v4.9.1 and v3.17.0» was two such folders.
+- **`references/host-profiles.md` §8 «How a release reaches each host»** — the route and the delay per host, each with its source: a claude.ai account's marketplace about 95 seconds after the merge, a cloud session at its start, the desktop app within the hour, a terminal on a signed-in start (measured once: about 20 seconds in, into a new folder beside the old ones; an earlier start that day did not sync, unexplained), Codex on its start, a mirror only when Step 7 runs on the release machine. Measured on the six releases v4.9.1–v4.12.0, vendor documents linked.
 - **The `plugin copies:` line of the SessionStart digest** (`scripts/session_start.py`, `scripts/plugin_copies.py`) — a session says when the machine holds another copy of this plugin at another version. A newer copy elsewhere means this host has not taken an update the machine already has: the line starts with ⚠ and the model tells the user once — asked at a start and after `/clear`, not again on a resume, a fork or a compaction. Older copies are listed and named only when the user asks about the version. Local files only — the manifests in the hosts' folders, read within 0.5 s; no network, nothing written; the folders are shown with their account and plugin ids as `*`, and a manifest whose version is not a version is left out. `plugin_copies.py` is the one list of those folders, shared with the reach check.
 - **Pitfall P10** (`skills/release-manager/references/release-pitfalls.md`) — a release run where the mirror cannot be reached drops the mirror step.
-- **Tests** — `testing/release_reach_test.py`: 29 checks on throw-away git remotes and a fictional home folder. `testing/session_start_test.py`: 18 checks of the `plugin copies:` line on a fictional home folder (4121.x), and its WAL fixture no longer fails on an SQLite that removes the `-wal` file itself.
+- **Tests** — `testing/release_reach_test.py`: 33 checks on throw-away git remotes and a fictional home folder. `testing/session_start_test.py`: 19 checks of the `plugin copies:` line on a fictional home folder (4121.x), and its WAL fixture no longer fails on an SQLite that removes the `-wal` file itself.
 
 ### Changed
 
@@ -38,7 +39,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 |---|---|
 | `testing/release_reach.py`, `testing/release_reach_test.py` | new |
 | `scripts/plugin_copies.py` | new — the folders a host keeps its copy in |
-| `scripts/session_start.py`, `testing/session_start_test.py` | the `plugin copies:` line; 18 checks |
+| `scripts/session_start.py`, `testing/session_start_test.py` | the `plugin copies:` line; 19 checks |
 | `skills/release-manager/SKILL.md` | 0.5.2 — Steps 7 and 8 |
 | `skills/release-manager/references/release-pitfalls.md` | P10 |
 | `references/host-profiles.md` | §8 |

@@ -12,7 +12,8 @@ exists. This script reads the version on the canonical remote's branch and compa
 It writes nothing and changes nothing: `git ls-remote` for the remotes, file reads for the
 copies. Exit 0 — everything it could see is current. Exit 1 — something is behind or could
 not be checked; the rows say what. An installed copy that is absent is not a failure, and
-neither is one newer than the release (a development install).
+neither is one newer than the release (a development install), nor a `leftover` — a folder
+an earlier account sync left beside the one it loads now.
 
   python3 testing/release_reach.py                 # after the merge and the mirror push
   python3 testing/release_reach.py --skip-hosts    # remotes only: the hosts have not synced yet
@@ -154,9 +155,12 @@ def main():
         rows.append(("unchecked", "installed copies", "no plugin name in %s — the copies on this machine were not looked for" % MANIFEST))
     elif not a.skip_hosts:
         home = a.home.rstrip(os.sep)
-        for where, v, path, _ in installed_copies(a.home, name):
+        for where, v, path, _, live in installed_copies(a.home, name):
             shown_path = "~" + path[len(home):] if path == home or path.startswith(home + os.sep) else path
-            rows.append((compare(v, version), where, "%s  %s" % (v, shown_path)))
+            if live:
+                rows.append((compare(v, version), where, "%s  %s" % (v, shown_path)))
+            else:                                   # the sync's record names another folder as the one loaded
+                rows.append(("leftover", where, "%s  %s — not loaded, an earlier sync left it" % (v, shown_path)))
 
     print("release reach — %s v%s (%s/%s %s)\n" % (name, version, a.canonical, a.branch, head[:7]))
     width = max(len(w) for _, w, _ in rows)
