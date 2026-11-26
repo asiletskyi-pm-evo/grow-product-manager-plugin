@@ -20,6 +20,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 - **`icon` in `.claude-plugin/plugin.json`** — `"./assets/logo.png"`, the same 512×512 PNG the Codex and ChatGPT card uses. The field is the one Anthropic documents for a plugin's listing ([plugins reference → Directory listing fields](https://code.claude.com/docs/en/plugins-reference#directory-listing-fields)): a square PNG or JPEG inside the plugin, 512 to 2048 px on a side, under 2 MB. Claude Code does not read it when it loads the plugin; `claude plugin validate` accepts it from v2.1.281 (measured on 2.1.332: no warning).
 - **Validator check 1** — when `plugin.json` names an `icon`, the file exists inside the plugin, is a PNG or JPEG, square, 512 to 2048 px, under 2 MB.
+- **`testing/plugin_icon_test.py`** (TC-icon-4123) — seeds nine bad icons in a copy of the tree (too small, too large, not square as PNG and as JPEG, 2 MB or more, not an image, an SVG, a missing file, a path out of the plugin) and asserts each turns the check `FAIL`; the repo's logo and a square JPEG stay `ok`, and no `icon` field leaves the check silent.
 
 ### Files
 
@@ -27,6 +28,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 |---|---|
 | `.claude-plugin/plugin.json` | `icon`; version |
 | `testing/validate-consistency.sh` | check 1: the icon file |
+| `testing/plugin_icon_test.py`, `testing/test-cases.md` | new test; TC-icon-4123 |
 | `README.md` | «New in v4.12.3»; the Codex card paragraph names the Claude field |
 
 ### Backwards compatibility
