@@ -1,0 +1,30 @@
+{
+ "x": [
+  "05.10",
+  "12.10",
+  "19.10",
+  "26.10",
+  "02.11",
+  "09.11",
+  "16.11",
+  "23.11"
+ ],
+ "series": [
+  {
+   "values": [
+    1180,
+    1240,
+    1210,
+    1320,
+    1290,
+    1350,
+    1410,
+    560
+   ]
+  }
+ ],
+ "partial": true,
+ "headline": "Orders grow: the last full week gave 1,410.",
+ "sub": "Orders by week",
+ "note": "Source: the orders dashboard."
+}

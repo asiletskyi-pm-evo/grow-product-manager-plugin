@@ -110,7 +110,7 @@
 .gpm-block-title { margin: 0 0 8px; font: 700 16px/1.3 var(--gpm-font); }
 .gpm-card { box-sizing: border-box; max-width: 100%; margin: 0 0 12px; padding: 12px; background: var(--gpm-surface); color: var(--gpm-text); border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); }
 .gpm-card-head { margin: 0 0 8px; }
-.gpm-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font: 600 12px/1.4 var(--gpm-font); white-space: nowrap; }
+.gpm-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; background-color: var(--gpm-chip-bg, var(--gpm-muted)); color: var(--gpm-chip-fg, var(--gpm-bg)); font: 600 12px/1.4 var(--gpm-font); white-space: nowrap; }
 .gpm-empty, .gpm-placeholder, .gpm-unsupported { margin: 0; padding: 12px; color: var(--gpm-muted); background: var(--gpm-surface); border: 1px dashed var(--gpm-border); border-radius: var(--gpm-radius); font-size: 14px; }
 .gpm-card .gpm-placeholder { border: 0; padding: 0; background: transparent; }
 .gpm-products { display: inline-flex; flex-wrap: wrap; gap: 4px; }
@@ -226,3 +226,279 @@ html.gpm-has-modules, html.gpm-has-modules body { background: var(--gpm-bg); }
 .gpm-live-line { margin: 0; overflow-wrap: anywhere; }
 .gpm-live { color: var(--gpm-accent); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
 .gpm-live::before { content: "● "; font-size: 9px; }
+/* ==== the design layer (shell 2) ==================================================================================== */
+/* What the nine theme tokens do not say is derived from them, so every theme gets it: a sunken surface, a strong line
+   for controls, the neutral scale of the charts. The four series colours are fixed: they were checked as a set. */
+:root {
+  --gpm-sunken: #eceef1;
+  --gpm-line-strong: #7c8593;
+  --gpm-chart-1: var(--gpm-text);
+  --gpm-chart-2: #5f6875;
+  --gpm-chart-3: #9fa7b3;
+  --gpm-chart-axis: #b4bac4;
+  --gpm-series-1: #23538e;
+  --gpm-series-2: #008fad;
+  --gpm-series-3: #8a235e;
+  --gpm-series-4: #7e5acc;
+  --gpm-radius-bar: 3px;
+  --gpm-radius-mark: 4px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --gpm-sunken: #272b33;
+    --gpm-line-strong: #737c8a;
+    --gpm-chart-2: #a3abb8;
+    --gpm-chart-3: #5f6875;
+    --gpm-chart-axis: #454c57;
+    --gpm-series-1: #1570d1;
+    --gpm-series-2: #1aa0b9;
+    --gpm-series-3: #a84e7c;
+    --gpm-series-4: #a482f8;
+  }
+}
+:root[data-theme="dark"] {
+  --gpm-sunken: #272b33;
+  --gpm-line-strong: #737c8a;
+  --gpm-chart-2: #a3abb8;
+  --gpm-chart-3: #5f6875;
+  --gpm-chart-axis: #454c57;
+  --gpm-series-1: #1570d1;
+  --gpm-series-2: #1aa0b9;
+  --gpm-series-3: #a84e7c;
+  --gpm-series-4: #a482f8;
+}
+@supports (color: color-mix(in srgb, red, blue)) {
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]) {
+    --gpm-sunken: color-mix(in srgb, var(--gpm-text) 7%, var(--gpm-surface));
+    --gpm-line-strong: color-mix(in srgb, var(--gpm-text) 52%, var(--gpm-surface));
+    --gpm-chart-2: color-mix(in srgb, var(--gpm-text) 64%, var(--gpm-bg));
+    --gpm-chart-3: color-mix(in srgb, var(--gpm-text) 38%, var(--gpm-bg));
+    --gpm-chart-axis: color-mix(in srgb, var(--gpm-text) 28%, var(--gpm-bg));
+  }
+}
+.gpm-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* a hidden word is positioned: its scroller must hold it, or it widens the page */
+.gpm-tabs, .gpm-scroll { position: relative; }
+/* ---- controls: one height to press, one ring of focus ---- */
+.gpm-btn { min-height: 44px; padding: 0 16px; }
+@media (max-width: 480px) { .gpm-btn { min-height: 36px; } }
+.gpm-theme button { min-height: 36px; padding: 0 10px; font-size: 13px; }
+.gpm-perms-toggle, .gpm-perm button { min-height: 36px; font-size: 13px; }
+.gpm-products { gap: 4px; }
+.gpm-products button { min-height: 44px; padding: 0 14px; border-color: var(--gpm-line-strong); font-size: 14px; }
+.gpm-dot { border: 0; }
+.gpm-products button[aria-pressed="true"] .gpm-dot { box-shadow: 0 0 0 2px var(--gpm-accent-fg); }
+.gpm-tab:focus-visible, .gpm-products button:focus-visible, .gpm-scroll:focus-visible, .gpm-theme button:focus-visible,
+.gpm-btn:focus-visible, .gpm-perm button:focus-visible, .gpm-perms-toggle:focus-visible, .gpm-hit:focus-visible,
+.gpm-c-line:focus-visible, .gpm-c-table > summary:focus-visible { outline: 2px solid var(--gpm-text); outline-offset: 2px; }
+/* ---- a module: its heading, its blocks as sections under a strong line, rows in place of cards ---- */
+.gpm-modules { padding: 24px 16px 40px; font-size: 15px; line-height: 1.45; }
+.gpm-module-title { margin: 0 0 8px; font: 600 30px/1.25 var(--gpm-font); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.gpm-fresh-module { margin: 0 0 16px; }
+.gpm-module-box > .gpm-fresh-module { margin: 0; }
+.gpm-block { margin: 0 0 40px; }
+.gpm-block-title { margin: 0; padding: 0 0 8px; border-bottom: 2px solid var(--gpm-text); font: 700 16px/1.4 var(--gpm-font); }
+.gpm-card { margin: 0; padding: 0; background: transparent; border: 0; border-radius: 0; }
+.gpm-card + .gpm-card { margin-top: 16px; }
+.gpm-card-head { margin: 12px 0 0; }
+.gpm-chip { padding: 3px 10px; font: 600 12px/1.3 var(--gpm-font); }
+.gpm-empty, .gpm-placeholder, .gpm-unsupported { max-width: 640px; padding: 12px 0 16px; background: transparent; border: 0; border-bottom: 1px solid var(--gpm-border); border-radius: 0; font-size: 15px; }
+.gpm-card .gpm-placeholder { border: 0; padding: 12px 0 0; }
+.gpm-source { margin: 12px 0 0; max-width: 640px; color: var(--gpm-muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+/* the lead: the day's sentence on the home module, a plain introduction elsewhere */
+.gpm-block-lead { margin: 0 0 32px; }
+.gpm-lead { max-width: 640px; }
+.gpm-lead-text { margin: 0; color: var(--gpm-muted); overflow-wrap: anywhere; }
+.gpm-lead-note { margin: 8px 0 0; color: var(--gpm-muted); font-size: 13px; overflow-wrap: anywhere; }
+.gpm-module-home .gpm-lead-text { color: var(--gpm-text); font: 600 30px/1.25 var(--gpm-font); letter-spacing: -0.01em; }
+/* a side column beside the blocks */
+.gpm-module-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 48px; align-items: start; }
+.gpm-col-main, .gpm-col-aside { min-width: 0; }
+@media (min-width: 1040px) { .gpm-module-split { grid-template-columns: minmax(0, 1fr) 280px; } }
+/* rows */
+.gpm-attn { gap: 8px; font-size: 13px; font-weight: 600; }
+.gpm-mark { flex: none; width: 9px; height: 9px; }
+.gpm-attn-ok { color: var(--gpm-ok); }
+.gpm-attn-warn { color: var(--gpm-warn); }
+.gpm-attn-crit { color: var(--gpm-crit); }
+.gpm-attn-warn .gpm-mark { border-radius: 0; }
+.gpm-ink-warn { color: var(--gpm-warn); font-weight: 600; }
+.gpm-ink-crit { color: var(--gpm-crit); font-weight: 600; }
+.gpm-item { align-items: center; gap: 4px 8px; padding: 12px 0; }
+.gpm-item:last-child { border-bottom: 1px solid var(--gpm-border); }
+.gpm-item > .gpm-attn { order: 0; flex: 1 1 100%; }
+.gpm-item-title { order: 1; flex: 1 1 100%; min-width: 0; }
+.gpm-item > .gpm-chip, .gpm-item > .gpm-at { order: 2; }
+.gpm-item > .gpm-note { order: 3; flex: 1 1 0; min-width: 0; }
+.gpm-note, .gpm-at { font-size: 13px; line-height: 1.4; }
+.gpm-item-timed { display: grid; grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); gap: 4px 24px; align-items: baseline; }
+.gpm-item-timed > * { grid-column: 2; justify-self: start; }
+.gpm-item-timed > .gpm-at { grid-column: 1; grid-row: 1 / span 4; font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* tables */
+.gpm-table { font-size: 15px; font-variant-numeric: tabular-nums; }
+.gpm-table th, .gpm-table td { padding: 12px 24px 12px 0; vertical-align: middle; }
+.gpm-table th:last-child, .gpm-table td:last-child { padding-right: 0; }
+.gpm-table thead th { padding-bottom: 10px; color: var(--gpm-muted); font-size: 13px; font-weight: 400; }
+.gpm-table tbody th { color: var(--gpm-text); font-weight: 600; white-space: normal; }
+.gpm-table .gpm-num { text-align: right; white-space: nowrap; }
+.gpm-table .gpm-attn { margin-right: 8px; vertical-align: baseline; }
+.gpm-cell-lead { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; min-width: 160px; }
+.gpm-cell-main { order: 0; flex: 1 1 100%; font-weight: 600; overflow-wrap: anywhere; }
+.gpm-cell-lead > .gpm-chip { order: 1; }
+.gpm-cell-lead > .gpm-cell-sub { order: 2; }
+.gpm-cell-sub { display: block; color: var(--gpm-muted); font-size: 13px; line-height: 1.4; font-weight: 400; }
+.gpm-cell-sub.gpm-ink-warn, .gpm-cell-sub.gpm-ink-crit { font-weight: 600; }
+.gpm-cell-sub.gpm-ink-warn { color: var(--gpm-warn); }
+.gpm-cell-sub.gpm-ink-crit { color: var(--gpm-crit); }
+.gpm-cell { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.gpm-cell-meter { flex-direction: row; align-items: center; gap: 16px; }
+.gpm-cell-meter > .gpm-c-meter { flex: 1 1 120px; }
+.gpm-cell-meter > .gpm-cell-sub { flex: none; min-width: 72px; white-space: nowrap; }
+.gpm-table-wrap > .gpm-c-legend { margin: 12px 0 4px; }
+/* one number, and the band of a goal */
+.gpm-number { gap: 8px 16px; padding: 20px 0 8px; }
+.gpm-num-value { font: 600 40px/1 var(--gpm-font); font-variant-numeric: tabular-nums; }
+.gpm-num-unit, .gpm-num-delta, .gpm-num-label { color: var(--gpm-text); font-size: 15px; }
+.gpm-num-delta { color: var(--gpm-muted); }
+.gpm-num-note { flex: 1 1 100%; margin: 0; max-width: 640px; color: var(--gpm-muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.gpm-spark-line { stroke: var(--gpm-chart-1); }
+.gpm-goal { margin-top: 12px; padding: 24px; background: var(--gpm-surface); border: 1px solid var(--gpm-border); border-radius: 12px; }
+.gpm-goal-title { flex: 1 1 100%; margin: 0; font: 600 22px/1.3 var(--gpm-font); overflow-wrap: anywhere; }
+.gpm-goal .gpm-num-note { font-size: 15px; line-height: 1.45; }
+/* the funnel: neutral bars, a level says itself with its mark and word */
+.gpm-bar { fill: var(--gpm-chart-1); }
+.gpm-bar-ok { fill: var(--gpm-chart-1); }
+/* ---- the side rail (profile `layout: rail`): the header becomes a column beside the modules ---- */
+html.gpm-layout-rail .gpm-shell { align-items: stretch; flex-direction: column; flex-wrap: nowrap; justify-content: flex-start; gap: 0; padding: 16px; border-bottom: 1px solid var(--gpm-border); }
+html.gpm-layout-rail .gpm-title { padding: 0 12px; font: 700 17px/1.3 var(--gpm-font); }
+.gpm-today { padding: 0 12px; color: var(--gpm-muted); font: 400 13px/1.4 var(--gpm-font); }
+/* the plugin's mark (profile `icon.image`): beside the title in a row of tabs, at the head of the rail */
+.gpm-logo { flex: none; display: block; width: 28px; height: 28px; border-radius: 7px; }
+html.gpm-layout-rail .gpm-shell { position: relative; }
+html.gpm-layout-rail .gpm-logo { position: absolute; left: 28px; top: 18px; width: 36px; height: 36px; border-radius: 9px; }
+html.gpm-layout-rail .gpm-logo ~ .gpm-title, html.gpm-layout-rail .gpm-logo ~ .gpm-today { padding-left: 60px; }
+html.gpm-layout-rail .gpm-products { flex-wrap: nowrap; margin: 20px 8px 0; }
+html.gpm-layout-rail .gpm-products button { min-height: 36px; padding: 0 10px; font-size: 13px; }
+html.gpm-layout-rail .gpm-theme button { padding: 0 8px; font-size: 12px; white-space: nowrap; }
+html.gpm-layout-rail .gpm-module-title { margin-bottom: 24px; }
+/* a product in the rail layout: a dot of its colour and its name, not a filled label */
+html.gpm-layout-rail .gpm-chip { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: transparent; color: var(--gpm-muted); font: 600 13px/1.4 var(--gpm-font); }
+html.gpm-layout-rail .gpm-chip::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--gpm-chip-bg, var(--gpm-muted)); }
+html.gpm-layout-rail .gpm-tabs { flex: none; flex-direction: row; gap: 2px; margin: 16px 0 0; border: 0; }
+html.gpm-layout-rail .gpm-tab { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 12px; border: 0; border-radius: var(--gpm-radius); color: var(--gpm-text); font: 400 15px/1.3 var(--gpm-font); text-align: left; }
+html.gpm-layout-rail .gpm-tab:hover { background: var(--gpm-sunken); }
+html.gpm-layout-rail .gpm-tab[aria-selected="true"] { background: var(--gpm-sunken); font-weight: 600; }
+.gpm-tab-count { display: inline-flex; align-items: center; gap: 6px; color: var(--gpm-warn); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gpm-tab-count .gpm-mark { width: 8px; height: 8px; border-radius: 0; background: var(--gpm-warn); transform: rotate(45deg); }
+html.gpm-layout-rail .gpm-fresh { margin: 16px 12px 0; }
+html.gpm-layout-rail .gpm-actions { flex-direction: column; align-items: stretch; margin: 12px 8px 0; }
+html.gpm-layout-rail .gpm-actions .gpm-theme { align-self: flex-start; }
+html.gpm-layout-rail .gpm-modules { padding: 24px 16px 40px; }
+@media (min-width: 860px) {
+  html.gpm-layout-rail body { display: grid; grid-template-columns: 248px minmax(0, 1fr); grid-auto-rows: min-content; align-items: start; margin: 0; min-height: 100vh; }
+  html.gpm-layout-rail body > * { grid-column: 2; }
+  html.gpm-layout-rail .gpm-shell { grid-column: 1; grid-row: 1 / span 12; position: sticky; top: 0; box-sizing: border-box; height: 100vh; overflow-y: auto; padding: 24px 16px; border-bottom: 0; border-right: 1px solid var(--gpm-border); }
+  html.gpm-layout-rail .gpm-logo { top: 26px; }
+  html.gpm-layout-rail .gpm-tabs { flex-direction: column; overflow: visible; white-space: normal; }
+  html.gpm-layout-rail .gpm-fresh { margin-top: auto; padding-top: 24px; }
+  html.gpm-layout-rail .gpm-modules { padding: 40px 48px 56px; }
+  html.gpm-layout-rail .gpm-module-box { max-width: 1100px; }
+  html.gpm-layout-rail .gpm-perms, html.gpm-layout-rail .gpm-live-bar { padding-left: 48px; padding-right: 48px; }
+}
+/* ---- charts (charts.js) ---- */
+.gpm-c-chart { display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 760px; margin: 16px 0 0; }
+.gpm-c-head { display: flex; flex-direction: column; gap: 2px; }
+.gpm-c-title { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.gpm-c-sub { color: var(--gpm-muted); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.gpm-c-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 24px; color: var(--gpm-muted); font-size: 13px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.gpm-c-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; list-style: none; font-size: 13px; line-height: 1.4; }
+.gpm-c-legend-item { display: flex; align-items: center; gap: 8px; }
+.gpm-c-key { flex: none; width: 12px; height: 12px; border-radius: 2px; background: var(--gpm-chart-1); }
+.gpm-c-key-line { height: 2px; border-radius: 0; }
+.gpm-hit { position: relative; }
+.gpm-tip { display: none; position: absolute; z-index: 2; left: 0; bottom: calc(100% + 4px); padding: 6px 10px; background: var(--gpm-text); color: var(--gpm-bg); border-radius: var(--gpm-radius); font-size: 13px; line-height: 1.35; font-weight: 400; white-space: nowrap; pointer-events: none; }
+.gpm-tip-end { left: auto; right: 0; }
+.gpm-hit:hover > .gpm-tip, .gpm-hit:focus-visible > .gpm-tip { display: block; }
+.gpm-c-table > summary { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.gpm-c-table .gpm-scroll { max-height: 320px; overflow-y: auto; }
+.gpm-c-bars { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: 16px; row-gap: 12px; align-items: center; }
+.gpm-c-bars-label { font-size: 14px; line-height: 1.3; }
+.gpm-c-bars-sub { display: block; color: var(--gpm-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.gpm-c-bars-plot { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 2px 0; border-left: 1px solid var(--gpm-chart-axis); }
+.gpm-c-bar-row { display: flex; align-items: center; gap: 8px; min-height: 14px; }
+.gpm-c-hbar { flex: none; box-sizing: border-box; height: 12px; min-width: 2px; background: var(--gpm-chart-1); border-radius: 0 var(--gpm-radius-mark) var(--gpm-radius-mark) 0; }
+.gpm-c-hbar-neg { border-radius: var(--gpm-radius-mark) 0 0 var(--gpm-radius-mark); }
+.gpm-c-bar-value { font-size: 13px; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gpm-c-groups { display: flex; flex-direction: column; gap: 12px; }
+.gpm-c-group-title { margin: 0 0 4px; font-size: 14px; line-height: 1.3; font-weight: 600; }
+.gpm-c-delta { display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr) 88px; column-gap: 16px; align-items: stretch; }
+.gpm-c-delta-label { display: flex; align-items: center; font-size: 14px; line-height: 1.3; }
+.gpm-c-delta-row { display: flex; min-width: 0; }
+.gpm-c-delta-neg { position: relative; flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-end; align-items: center; padding: 7px 0; }
+.gpm-c-delta-pos { position: relative; flex: 1 1 0; min-width: 0; display: flex; justify-content: flex-start; align-items: center; padding: 7px 0; border-left: 1px solid var(--gpm-chart-axis); }
+.gpm-c-ref { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--gpm-warn); }
+.gpm-c-delta-value { display: flex; justify-content: flex-end; align-items: center; gap: 8px; font-size: 14px; line-height: 1.3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gpm-c-delta-value .gpm-attn { gap: 0; }
+.gpm-c-axis { position: relative; height: 20px; color: var(--gpm-muted); font-size: 12px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.gpm-c-axis-tick { position: absolute; top: 4px; transform: translateX(-50%); white-space: nowrap; }
+.gpm-c-cols { display: flex; align-items: stretch; gap: 8px; height: 172px; max-width: 480px; }
+.gpm-c-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.gpm-c-col-plot { flex: 1 1 0; min-height: 0; width: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; border-bottom: 1px solid var(--gpm-chart-axis); }
+.gpm-c-col-value { font-size: 13px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gpm-c-col-bar { flex: none; width: 100%; max-width: 24px; min-height: 2px; background: var(--gpm-chart-1); border-radius: var(--gpm-radius-mark) var(--gpm-radius-mark) 0 0; }
+.gpm-c-col-x { padding-top: 6px; color: var(--gpm-muted); font-size: 12px; line-height: 1.3; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; }
+.gpm-c-seg { display: flex; gap: 2px; height: 8px; min-width: 0; }
+.gpm-c-seg-part { min-width: 4px; background: var(--gpm-chart-1); }
+.gpm-c-seg-first { border-top-left-radius: var(--gpm-radius-bar); border-bottom-left-radius: var(--gpm-radius-bar); }
+.gpm-c-seg-last { border-top-right-radius: var(--gpm-radius-bar); border-bottom-right-radius: var(--gpm-radius-bar); }
+.gpm-c-meter { position: relative; height: 8px; background: var(--gpm-border); border-radius: var(--gpm-radius-bar); }
+.gpm-c-meter-fill { display: block; height: 100%; min-width: 2px; background: var(--gpm-chart-1); border-radius: var(--gpm-radius-bar); }
+.gpm-c-meter-limit { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--gpm-text); }
+.gpm-c-day-box { display: flex; flex-direction: column; gap: 4px; }
+.gpm-c-day { position: relative; height: 60px; color: var(--gpm-muted); font-size: 12px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.gpm-c-day-track { position: absolute; left: 0; right: 0; top: 22px; height: 12px; background: var(--gpm-border); border-radius: var(--gpm-radius-bar); }
+.gpm-c-day-block { position: absolute; top: 22px; height: 12px; background: var(--gpm-chart-1); border-radius: 2px; }
+.gpm-c-day-now { position: absolute; top: 16px; height: 24px; width: 2px; margin-left: -1px; background: var(--gpm-text); box-shadow: 0 0 0 2px var(--gpm-bg); }
+.gpm-c-day-now-label { position: absolute; top: 0; transform: translateX(-50%); color: var(--gpm-text); font-weight: 600; white-space: nowrap; }
+.gpm-c-day-tick { position: absolute; top: 42px; transform: translateX(-50%); white-space: nowrap; }
+.gpm-c-day-tick-first { transform: none; }
+.gpm-c-day-tick-last { transform: translateX(-100%); }
+.gpm-c-day-rows { border-top: 1px solid var(--gpm-border); }
+.gpm-c-day-row { display: grid; grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); gap: 4px 24px; align-items: baseline; }
+.gpm-c-day-row > .gpm-at { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gpm-c-day-row > .gpm-at, .gpm-c-day-body > * { order: 0; flex: none; }
+.gpm-c-day-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.gpm-c-day-row .gpm-item-title { font-weight: 400; }
+.gpm-c-day-current .gpm-item-title { font-weight: 600; }
+.gpm-c-day-nowrow { display: flex; align-items: center; gap: 12px; padding: 8px 0 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gpm-c-day-nowrow::after { content: ""; flex: 1 1 0; height: 2px; background: var(--gpm-text); }
+.gpm-c-line-wrap { position: relative; }
+.gpm-c-line-wrap > .gpm-tip { bottom: auto; top: 0; transform: translateX(-50%); white-space: pre; }
+.gpm-c-line { display: block; width: 100%; height: auto; overflow: visible; }
+.gpm-c-line-grid { stroke: var(--gpm-border); stroke-width: 1; }
+.gpm-c-line-axis { stroke: var(--gpm-chart-axis); stroke-width: 1; }
+.gpm-c-line-path { fill: none; stroke: var(--gpm-chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.gpm-c-line-part { stroke-dasharray: 2 5; }
+.gpm-c-line-dot { fill: var(--gpm-chart-1); stroke: var(--gpm-bg); stroke-width: 2; }
+.gpm-c-line-dot-open { fill: var(--gpm-bg); stroke: var(--gpm-chart-1); stroke-width: 2; }
+.gpm-c-line-text { fill: var(--gpm-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.gpm-c-line-label { fill: var(--gpm-text); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.gpm-c-line-note { fill: var(--gpm-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.gpm-c-line-cross { stroke: var(--gpm-line-strong); stroke-width: 1; }
+/* the fills that change a mark's colour stand last, so they win over the mark's own */
+.gpm-c-line-path.gpm-c-s1 { stroke: var(--gpm-series-1); }
+.gpm-c-line-path.gpm-c-s2 { stroke: var(--gpm-series-2); }
+.gpm-c-line-path.gpm-c-s3 { stroke: var(--gpm-series-3); }
+.gpm-c-line-path.gpm-c-s4 { stroke: var(--gpm-series-4); }
+.gpm-c-line-dot.gpm-c-s1 { fill: var(--gpm-series-1); }
+.gpm-c-line-dot.gpm-c-s2 { fill: var(--gpm-series-2); }
+.gpm-c-line-dot.gpm-c-s3 { fill: var(--gpm-series-3); }
+.gpm-c-line-dot.gpm-c-s4 { fill: var(--gpm-series-4); }
+.gpm-c-fill-2 { background: var(--gpm-chart-2); }
+.gpm-c-fill-3 { background: var(--gpm-chart-3); }
+.gpm-c-fill-warn { background: var(--gpm-warn); }
+.gpm-c-fill-crit { background: var(--gpm-crit); }
+.gpm-c-fill-s1 { background: var(--gpm-series-1); }
+.gpm-c-fill-s2 { background: var(--gpm-series-2); }
+.gpm-c-fill-s3 { background: var(--gpm-series-3); }
+.gpm-c-fill-s4 { background: var(--gpm-series-4); }

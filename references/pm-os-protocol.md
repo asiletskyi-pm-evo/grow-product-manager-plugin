@@ -13,22 +13,39 @@
 
 ## 2. Sections
 
-A section's data has the shape of the block that shows it (the shell's blocks: `table` — `{columns: [{key, title}], rows: [{…, product?, attention?}]}`; `list` — `{items: [{title, note?, product?, attention?}]}`; `feed` — a list whose items carry `at`; `number` — `{value, unit?, delta?, trend?}`). `attention` is `ok`, `warn` or `crit`.
+A section's data has the shape of the block that shows it; `attention` is `ok`, `warn` or `crit`. The shell's blocks:
+
+- `table` — `{columns: [{key, title, kind?, sub?}], rows: [{…, product?, attention?, marks?}], note?}`. A column's `kind` is `num` (a number, set to the right), `segments` (the cell is a list of up to four parts of a whole; the column names them in `parts`, and `last: "warn"` paints the last part as the one that asks for attention) or `meter` (the cell is a number on the column's `scale`, with a mark at its `limit`); `sub` names the row's field shown as the small second line of the cell. A row's `marks` — `{<column key>: warn|crit}` — puts the mark of attention into that very cell; a table with such rows or with a drawn cell has no separate state column.
+- `list` — `{items: [{title, note?, product?, attention?}], note?}`; `feed` — a list whose items carry `at` (a moment with its time is shown as this window's own date and time).
+- `number` — `{value, unit?, label?, delta?, trend?, note?}`; with a `title` it is the band of a goal, and stands with its `note` even while the goal has no value yet.
+- `bars` — by `kind`: `compare` `{series: [up to three names], unit?, rows: [{label, sub?, values}]}`; `delta`, a change from zero, `{unit?, ref?, refLabel?, scale?, groups: [{title?, rows: [{label, value, attention?}]}]}`; `columns`, one column per period, `{unit?, cols: [{label, value, partial?}]}`.
+- `line` — `{x: [period labels], series: [{name?, values}], unit?, partial?}`: one to four series from zero; `partial: true` says the last period is still running (one line draws it dashed with a hollow point, several lines leave it out and say so).
+- `day` — `{date, start, end, items: [{from, to, title, note?, kind?}]}`: a day as a strip of time and its rows; `kind: "focus"` is time kept free of meetings; the mark «Зараз» is this window's own clock, shown only on the day of `date`.
+- `lead` — one sentence over the module. In the pult it reads the source `@summary`: the shell counts it from the modules themselves — how many rows wait in `needs-you`, which modules have rows asking for attention — and no document holds its text.
+
+A chart takes a `headline` (what the chart shows, in a sentence), a `sub` (what is measured) and a `note` (the source and its date). A section that has nothing to show yet may say why in its own words: `{empty: "<one sentence>"}` — the shell shows that sentence in place of the block, and a `needs-you` document that only explains itself is not counted as «nothing waits». A chart block with no document takes no room at all.
 
 | Module | Section | Block | What it holds | Read from (by role, never by brand) |
 |---|---|---|---|---|
+| `today` | `@summary` | lead | the state of the pult in one sentence, counted by the shell | the modules below, nothing else |
 | `today` | `needs-you` | feed | what waits for the user's answer: a mention, a review request, an invitation with a question, a letter that passed their own filter | issue tracker, code host, mail, calendar |
+| `today` | `meetings` | day | today's meetings and the time kept for focus, on a strip from the start to the end of the working day, each row with the state of its preparation | calendar |
 | `today` | `focus` | list | one to three focuses of the day | the daily focus of `focus-advisor` |
-| `today` | `meetings` | list | today's meetings, in time order, each with the state of its preparation | calendar |
-| `today` | `signals` | list | the metric rows of `metrics` that crossed a threshold, and the directions with stale work | the sections `metrics` and `directions` of the same run |
-| `directions` | `directions` | table | a row per direction in work: its epic or release code, stage, share of closed work, open work, work with no movement for over 14 days | issue tracker (counts only), code host |
+| `today` | `signals` | list | the metric rows of `metrics` that crossed a threshold, the directions with stale work and the sources past their age; shown in the side column | the sections `metrics`, `directions` and `rhythms` of the same run |
+| `directions` | `directions` | table | a row per direction in work: its epic or release code, stage, the closed, open and stale work as parts of one bar, open work as a number | issue tracker (counts only), code host |
 | `directions` | `directions-rest` | list | the directions on hold or closed, one line each | the same |
-| `metrics` | `goal` | number | the top goal: the value now, its unit, the change | the user's tracker or dashboard |
+| `metrics` | `goal` | number | the top goal: its name, the value now, what the value counts, the change | the user's tracker or dashboard |
+| `metrics` | `metrics-change` | bars | the change of the second-level metrics to their baseline, from zero, with the attention threshold as a line | the same rows as `metrics` |
+| `metrics` | `metrics-compare` | bars | the same metric side by side across platforms or segments | the same rows as `metrics` |
+| `metrics` | `metrics-trend` | line | one metric over time, by week or by day | the user's dashboard |
+| `metrics` | `metrics-periods` | bars | a count per period — releases by week, orders by day — as columns | the user's dashboard, code host |
 | `metrics` | `metrics` | table | the second level under the goal: a row per stage and platform with the value, the change to the period before and the change year over year | the user's tracker or dashboard |
-| `rhythms` | `rhythms` | table | a row per recurring source — a tracker, a board, a scheduled run — with the date of its last update and its age | the list of the user's published results, the schedule |
+| `rhythms` | `rhythms` | table | a row per recurring source — a tracker, a board, a scheduled run — with the date of its last update and its age on a scale with the limit marked | the list of the user's published results, the schedule |
 | `rhythms` | `runs-log` | feed | the last refresh runs of the pult, written per product: when, how many of that product's sections, what was skipped and why | the `runs` documents of §3 |
 | `context` | `context-health` | number | how many records of the context store are stale | `ctx health` |
 | `context` | `context-inbox` | list | the proposals waiting in the inbox, as questions | `ctx inbox list` |
+
+The pult's profile asks for the side rail (`layout: rail` in `references/app-profiles.yaml`): the modules are a column at the left with a counter of the rows that ask for attention, `signals` stands beside the home module (`place: aside`), and the header carries the plugin's own mark (`icon.image: plugin`), which is the installed app's icon as well.
 
 Rules for every section:
 

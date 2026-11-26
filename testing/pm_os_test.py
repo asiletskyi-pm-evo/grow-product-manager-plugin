@@ -45,11 +45,33 @@ def fixture(section):
         return json.load(f)
 
 
+COLUMN_KEYS = {"key", "title", "kind", "sub", "parts", "last", "scale", "limit"}
+TIME = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def number(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def shaped(block, data):
     """True when `data` has what the block shows (references/pm-os-protocol.md §2)."""
     if block == "table":
         return (isinstance(data.get("columns"), list) and data["columns"] and isinstance(data.get("rows"), list)
-                and all(set(c) == {"key", "title"} for c in data["columns"]) and all(isinstance(r, dict) for r in data["rows"]))
+                and all({"key", "title"} <= set(c) <= COLUMN_KEYS and c.get("kind") in (None, "num", "segments", "meter") for c in data["columns"])
+                and all(isinstance(r, dict) for r in data["rows"]))
+    if block == "bars":
+        if data.get("kind") == "delta":
+            return bool(data.get("groups")) and all(g.get("rows") and all(r.get("label") and number(r.get("value")) for r in g["rows"]) for g in data["groups"])
+        if data.get("kind") == "compare":
+            return bool(data.get("rows")) and all(r.get("label") and r.get("values") and all(number(v) for v in r["values"]) for r in data["rows"])
+        return data.get("kind") == "columns" and bool(data.get("cols")) and all(c.get("label") and number(c.get("value")) for c in data["cols"])
+    if block == "line":
+        x, series = data.get("x") or [], data.get("series") or []
+        return len(x) >= 2 and 1 <= len(series) <= 4 and all(len(s.get("values") or []) == len(x) for s in series)
+    if block == "day":
+        items = data.get("items") or []
+        return (bool(re.match(r"^\d{4}-\d{2}-\d{2}$", str(data.get("date")))) and all(TIME.match(str(data.get(k))) for k in ("start", "end"))
+                and bool(items) and all(i.get("title") and TIME.match(str(i.get("from"))) and TIME.match(str(i.get("to"))) for i in items))
     if block in ("list", "feed"):
         items = data.get("items")
         ok = isinstance(items, list) and items and all(isinstance(i, dict) and i.get("title") for i in items)
@@ -78,13 +100,21 @@ check("1.2 five modules, in the protocol's order", [m.get("id") for m in mods] =
 check("1.3 today is the home module, and the only one", [m.get("id") for m in mods if m.get("home")] == ["today"])
 check("1.4 every module is composed (a blocks list), none takes a map or the page's edits",
       all(isinstance(m.get("blocks"), list) and m["blocks"] and "block" not in m for m in mods)
-      and not any(b.get("block") == "map" or str(b.get("source", "")).startswith("@") for m in mods for b in m.get("blocks") or []))
-pairs = [(m["id"], b.get("block"), b.get("source")) for m in mods for b in m.get("blocks") or []]
+      and not any(b.get("block") == "map" or b.get("source") == "@edits" for m in mods for b in m.get("blocks") or []))
+every = [(m["id"], b.get("block"), b.get("source")) for m in mods for b in m.get("blocks") or []]
+pairs = [x for x in every if not str(x[2]).startswith("@")]     # the blocks that read a section
 sources = [s for _, _, s in pairs]
 check("1.5 a section is read by one block only", len(sources) == len(set(sources)), sources)
-check("1.6 today opens with what needs the user", pairs[:1] == [("today", "feed", "needs-you")], pairs[:1])
-check("1.7 every title is in both languages",
-      all(set((x.get("title") or {})) == set(sh.LANGS) for m in mods for x in [m] + list(m.get("blocks") or [])))
+check("1.6 today opens with the sentence the shell counts, then with what needs the user",
+      every[:2] == [("today", "lead", "@summary"), ("today", "feed", "needs-you")], every[:2])
+check("1.7 every title is in both languages; only the opening sentence has none",
+      all(set((x.get("title") or {})) == set(sh.LANGS) for m in mods for x in [m] + [b for b in m.get("blocks") or [] if b.get("block") != "lead"])
+      and all("title" not in b for m in mods for b in m.get("blocks") or [] if b.get("block") == "lead"))
+check("1.11 the side rail, the signals beside the home module, the plugin's own mark with a glyph to fall back on",
+      prof.get("layout") == "rail" and [(m["id"], b["source"]) for m in mods for b in m["blocks"] if b.get("place") == "aside"] == [("today", "signals")]
+      and prof.get("icon") == {"glyph": "os", "image": "plugin"}, (prof.get("layout"), prof.get("icon")))
+bad_sum = sh.check_profile("x", dict(prof, modules=[dict(mods[0], blocks=[{"block": "list", "source": "@summary", "title": {"uk": "а", "en": "a"}}])] + mods[1:]))
+check("1.12 the source @summary under any block but lead is refused", any("@summary" in e for e in bad_sum), bad_sum)
 check("1.8 no full access, no commands, no permission beyond the shell's", prof.get("level") == "app" and prof.get("commands") == []
       and set(prof.get("permissions") or []) <= set(sh.PERMISSIONS))
 check("1.9 the menu names the modules only, then the action to open the chat",
@@ -99,9 +129,11 @@ bad = [(s, b) for _, b, s in pairs if s in have and not shaped(b, fixture(s))]
 check("2.2 every fixture has the shape of the block that shows it", not bad, bad)
 with open(PROTOCOL, encoding="utf-8") as f:
     protocol = f.read()
-rows = re.findall(r"^\| `([a-z-]+)` \| `([a-z0-9.-]+)` \| ([a-z]+) \|", protocol, re.M)
+rows = re.findall(r"^\| `([a-z-]+)` \| `(@?[a-z0-9.-]+)` \| ([a-z]+) \|", protocol, re.M)
 check("2.3 the protocol's table of sections is the profile's blocks: module, section, block, in order",
-      rows == [(m, s, b) for m, b, s in pairs], (rows, pairs))
+      rows == [(m, s, b) for m, b, s in every], (rows, every))
+check("2.8 the protocol gives the shape of every block the profile uses", all(("- `%s` — " % b) in protocol or ("`%s` — " % b) in protocol for b in {b for _, b, _ in every}),
+      sorted({b for _, b, _ in every}))
 people = [k for s in have for k, _ in walk(fixture(s)) if k in sh.PEOPLE_KEYS]
 check("2.4 no fixture holds a person's key", not people, people)
 text = json.dumps([fixture(s) for s in have], ensure_ascii=False)
@@ -190,15 +222,46 @@ const { chromium } = require('playwright'); const fs = require('fs');
   await p.setContent(html, {waitUntil: 'load'}); await p.waitForTimeout(500);
   const q = (sel) => p.$$eval(sel, e => e.map(x => x.textContent.trim()));
   const visible = (sel) => p.$$eval(sel, e => e.filter(x => x.offsetParent !== null).map(x => x.textContent.trim()));
-  out.tabs = await q('[role=tab]');
+  out.tabs = await q('[role=tab] .gpm-tab-title');
+  out.counts = await p.$$eval('[role=tab]', e => e.map(x => { const c = x.querySelector('.gpm-tab-count'); return c ? parseInt(c.textContent, 10) : 0; }));
+  out.rail = await p.evaluate(() => ({cls: document.documentElement.classList.contains('gpm-layout-rail'),
+    inHeader: !!document.querySelector('header.gpm-shell [role=tablist]'), vertical: document.querySelector('[role=tablist]').getAttribute('aria-orientation'),
+    left: document.querySelector('header.gpm-shell').getBoundingClientRect().right <= document.querySelector('.gpm-modules').getBoundingClientRect().left + 1,
+    logo: (document.querySelector('header.gpm-shell > img.gpm-logo') || {src: ''}).src.slice(0, 22)}));
   out.todayTitles = await visible('.gpm-modules h2, .gpm-modules h3');
   out.todayText = await p.$eval('.gpm-modules', e => e.innerText);
+  out.lead = await p.$eval('.gpm-lead-text', e => e.textContent).catch(() => null);
+  out.aside = await q('.gpm-col-aside .gpm-block-title');
+  out.day = await p.evaluate(() => ({blocks: document.querySelectorAll('.gpm-c-day .gpm-c-day-block').length, focus: document.querySelectorAll('.gpm-c-day .gpm-c-day-block.gpm-c-fill-3').length,
+    rows: Array.from(document.querySelectorAll('.gpm-c-day-row')).map(r => r.querySelector('.gpm-at').textContent + ' ' + r.querySelector('.gpm-item-title').textContent)}));
   out.switch = await q('.gpm-products button');
+  const tab = async (i) => { const t = (await p.$$('[role=tab]'))[i]; if (t) { await t.click(); await p.waitForTimeout(200); } };
+  await tab(2);
+  out.metrics = await p.evaluate(() => ({titles: Array.from(document.querySelectorAll('.gpm-panel:not([hidden]) .gpm-block-title')).map(x => x.textContent),
+    goal: (document.querySelector('.gpm-goal-title') || {}).textContent || null, deltaRows: document.querySelectorAll('.gpm-c-delta-row').length,
+    ref: document.querySelectorAll('.gpm-c-ref').length, warnBars: document.querySelectorAll('.gpm-c-hbar.gpm-c-fill-warn').length,
+    compareBars: document.querySelectorAll('.gpm-c-bars .gpm-c-hbar').length, lines: document.querySelectorAll('svg.gpm-c-line polyline').length,
+    open: document.querySelectorAll('svg.gpm-c-line .gpm-c-line-dot-open').length, cols: document.querySelectorAll('.gpm-c-col').length,
+    paleCols: document.querySelectorAll('.gpm-c-col-bar.gpm-c-fill-3').length, twins: document.querySelectorAll('details.gpm-c-table').length,
+    marked: Array.from(document.querySelectorAll('td.gpm-ink-warn')).map(x => x.textContent), stateCols: Array.from(document.querySelectorAll('.gpm-panel:not([hidden]) th')).filter(x => x.textContent === 'Стан').length,
+    colours: Array.from(document.querySelectorAll('.gpm-c-chart [style]')).map(x => x.getAttribute('style')).filter(v => /#|rgb|url|var\(/.test(v))}));
+  const line = await p.$('svg.gpm-c-line'); if (line) { await line.focus(); await p.keyboard.press('ArrowLeft'); await p.waitForTimeout(50); }
+  out.tip = await p.$eval('.gpm-c-line-wrap > .gpm-tip', e => getComputedStyle(e).display + '|' + e.textContent).catch(() => null);
+  await tab(3);
+  out.rhythms = await p.evaluate(() => ({meters: document.querySelectorAll('.gpm-c-meter').length, limits: document.querySelectorAll('.gpm-c-meter-limit').length,
+    warn: document.querySelectorAll('.gpm-c-meter-fill.gpm-c-fill-warn').length, when: Array.from(document.querySelectorAll('.gpm-panel:not([hidden]) .gpm-item-timed .gpm-at')).map(x => x.textContent)}));
+  await tab(0);
   const pay = await p.$('.gpm-products button[data-product="zorg-pay"]'); if (pay) { await pay.click(); await p.waitForTimeout(200); }
   out.payText = await p.$eval('.gpm-modules', e => e.innerText);
-  const tabs = await p.$$('[role=tab]'); if (tabs[1]) { await tabs[1].click(); await p.waitForTimeout(200); }
+  out.payLead = await p.$eval('.gpm-lead-text', e => e.textContent).catch(() => null);
+  out.payCounts = await p.$$eval('[role=tab]', e => e.map(x => { const c = x.querySelector('.gpm-tab-count'); return c ? parseInt(c.textContent, 10) : 0; }));
+  await tab(1);
   out.dirText = await p.$eval('.gpm-modules', e => e.innerText);
+  out.segs = await p.evaluate(() => ({bars: document.querySelectorAll('.gpm-panel:not([hidden]) .gpm-c-seg').length, legend: Array.from(document.querySelectorAll('.gpm-panel:not([hidden]) .gpm-c-legend-item')).map(x => x.textContent)}));
   out.overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  await p.setViewportSize({width: 390, height: 800}); await p.waitForTimeout(200);
+  out.narrow = await p.evaluate(() => ({overflow: document.documentElement.scrollWidth - window.innerWidth,
+    above: document.querySelector('header.gpm-shell').getBoundingClientRect().bottom <= document.querySelector('.gpm-modules').getBoundingClientRect().top + 1}));
   out.errs = errs;
   await b.close(); console.log('PW ' + JSON.stringify(out));
 })();
@@ -212,22 +275,54 @@ const { chromium } = require('playwright'); const fs = require('fs');
             if line.startswith("PW "):
                 br = json.loads(line[3:])
         check("5.1 the browser pass ran without a page error", br.get("errs") == [], pr.stdout[-600:] + pr.stderr[-600:])
-        check("5.2 five tabs, in the profile's order and in Ukrainian",
+        check("5.2 five modules in the rail, in the profile's order and in Ukrainian",
               br.get("tabs") == ["Сьогодні", "Напрямки", "Метрики", "Ритми", "Контекст"], br.get("tabs"))
+        rl = br.get("rail") or {}
+        check("5.3 the rail: the modules stand in the header as a column at the left, with the plugin's mark as a PNG of the page itself",
+              rl.get("cls") is True and rl.get("inHeader") is True and rl.get("vertical") == "vertical" and rl.get("left") is True
+              and rl.get("logo") == "data:image/png;base64,", rl)
         tt = br.get("todayTitles") or []
-        order = [t for t in tt if t in ("Потребує тебе", "Фокуси дня", "Зустрічі дня", "Сигнали метрик")]
-        check("5.3 today shows its four blocks one under another, what needs the user first",
-              order == ["Потребує тебе", "Фокуси дня", "Зустрічі дня", "Сигнали метрик"], tt)
-        check("5.4 with all products the rows of both are there",
-              "A mention in ZORG-214" in br.get("todayText", "") and "A review request on the checkout" in br.get("todayText", ""))
-        check("5.5 the switch has «Усі» and both products", br.get("switch") == ["Усі", "Zorg", "Zorg Pay"], br.get("switch"))
-        check("5.6 a product picked: its rows stay, the other product's go",
-              "A review request on the checkout" in br.get("payText", "") and "A mention in ZORG-214" not in br.get("payText", ""),
-              br.get("payText", "")[:400])
-        check("5.7 the directions tab shows the table and the list under it, for the picked product",
-              "ZPAY-40" in br.get("dirText", "") and "Gift cards" in br.get("dirText", "") and "ZORG-100" not in br.get("dirText", ""),
-              br.get("dirText", "")[:400])
-        check("5.8 the page never scrolls sideways", br.get("overflow") == 0, br.get("overflow"))
+        order = [t for t in tt if t in ("Чекає на тебе", "День за часом", "Фокуси дня", "Сигнали")]
+        check("5.4 today: what waits first, the day, the focuses; the signals stand in the side column",
+              order == ["Чекає на тебе", "День за часом", "Фокуси дня", "Сигнали"] and br.get("aside") == ["Сигнали"], (tt, br.get("aside")))
+        # every fixture is written for both products, so a count here is twice the fixture's
+        check("5.5 the opening sentence is counted from the modules: four rows wait, three modules ask for attention; the counters say the same",
+              br.get("lead") == "4 справи чекають на тебе. Уваги потребують: Напрямки (2), Метрики (2), Ритми (4)."
+              and br.get("counts") == [4, 2, 2, 4, 0], (br.get("lead"), br.get("counts")))
+        dy = br.get("day") or {}
+        check("5.6 the day, per product: three blocks on the strip, one of them focus time, the rows in time order",
+              dy.get("blocks") == 6 and dy.get("focus") == 2
+              and dy.get("rows") == ["11:00–11:45 Checkout sync", "13:00–15:00 Focus time", "15:00–16:00 Weekly planning"] * 2, dy)
+        check("5.7 with all products the rows of both are there; the switch has «Усі» and both products",
+              "A mention in ZORG-214" in br.get("todayText", "") and "A review request on the checkout" in br.get("todayText", "")
+              and br.get("switch") == ["Усі", "Zorg", "Zorg Pay"], br.get("switch"))
+        mt = br.get("metrics") or {}
+        check("5.8 metrics: the goal band, the change from zero with its threshold, the comparison, the line, the columns, the table, in the profile's order",
+              mt.get("titles") == ["Головна ціль", "Зміна до бази", "Порівняння", "Динаміка", "За періодами", "Другий рівень"]
+              and mt.get("goal") == "Orders a week", mt)
+        check("5.9 the charts draw the fixtures: 8 change rows with 2 threshold lines per product pair and one bar of attention, 8 compared bars, a line with its unfinished point, 4 columns with a pale one",
+              mt.get("deltaRows") == 8 and mt.get("ref") == 8 and mt.get("warnBars") == 2 and mt.get("compareBars") == 8
+              and mt.get("lines") == 2 and mt.get("open") == 2 and mt.get("cols") == 8 and mt.get("paleCols") == 2, mt)
+        check("5.10 every chart has the same numbers as a table; a cell says its own attention, with no state column; no colour comes from a document",
+              mt.get("twins") == 8 and mt.get("marked") == ["Увага: −12.0%"] * 2 and mt.get("stateCols") == 0 and mt.get("colours") == [], mt)
+        check("5.11 the line answers the keyboard: the arrow moves to the week before, its value in the tip",
+              (br.get("tip") or "").startswith("block|16.11") and "1 410" in (br.get("tip") or "").replace("\u00a0", " "), br.get("tip"))
+        rh = br.get("rhythms") or {}
+        check("5.12 rhythms: a meter per source with the limit marked, the stale one in the colour of attention; the journal says the day and the time",
+              rh.get("meters") == 4 and rh.get("limits") == 4 and rh.get("warn") == 2
+              and all(re.match(r"^\d{2}\.\d{2}\.\d{4}, \d{2}:\d{2}$", w) for w in rh.get("when") or [""]), rh)
+        check("5.13 a product picked: its rows stay, the other product's go; the sentence and the counters are counted again",
+              "A review request on the checkout" in br.get("payText", "") and "A mention in ZORG-214" not in br.get("payText", "")
+              and br.get("payLead") == "1 справа чекає на тебе. Сигналів уваги немає." and br.get("payCounts") == [1, 0, 0, 0, 0]
+              and "Weekly planning" not in br.get("payText", "") and "Checkout sync" in br.get("payText", ""),
+              (br.get("payLead"), br.get("payCounts"), br.get("payText", "")[:300]))
+        sg = br.get("segs") or {}
+        check("5.14 the directions module shows the table with a bar of parts and its legend, and the list under it, for the picked product",
+              "ZPAY-40" in br.get("dirText", "") and "Gift cards" in br.get("dirText", "") and "ZORG-100" not in br.get("dirText", "")
+              and sg.get("bars") == 1 and sg.get("legend") == ["Closed", "In work", "No movement over 14 days"], (sg, br.get("dirText", "")[:300]))
+        nr = br.get("narrow") or {}
+        check("5.15 the page never scrolls sideways, wide or narrow; in a narrow window the rail folds over the modules",
+              br.get("overflow") == 0 and nr.get("overflow") == 0 and nr.get("above") is True, (br.get("overflow"), nr))
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

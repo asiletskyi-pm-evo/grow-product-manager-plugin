@@ -26,7 +26,14 @@
       attentionCrit: "Критично",
       baseline: "база",
       weakest: "Найслабше",
-      trend: "Тренд"
+      trend: "Тренд",
+      needAttention: "потребує уваги",
+      waitsOne: " справа чекає на тебе.",
+      waitsFew: " справи чекають на тебе.",
+      waitsMany: " справ чекає на тебе.",
+      nothingWaits: "На тебе нічого не чекає.",
+      askAttention: "Уваги потребують: ",
+      nothingAsks: "Сигналів уваги немає."
     },
     en: {
       all: "All",
@@ -44,12 +51,20 @@
       attentionCrit: "Critical",
       baseline: "baseline",
       weakest: "Weakest",
-      trend: "Trend"
+      trend: "Trend",
+      needAttention: "need attention",
+      waitsOne: " thing waits for you.",
+      waitsFew: " things wait for you.",
+      waitsMany: " things wait for you.",
+      nothingWaits: "Nothing waits for you.",
+      askAttention: "Asking for attention: ",
+      nothingAsks: "Nothing asks for attention."
     }
   });
 
   var SVG_NS = "http://www.w3.org/2000/svg";
-  var BLOCK_NAMES = ["table", "list", "number", "chart", "feed", "map"];    // the same as BLOCKS in app_shell.py
+  var BLOCK_NAMES = ["table", "list", "number", "chart", "feed", "map", "lead", "bars", "line", "day"];    // the same as BLOCKS in app_shell.py
+  var QUIET = ["lead", "bars", "line"];       // blocks that take no room while their section has nothing to show (charts.js draws them)
   var SECTION = /^[a-z0-9][a-z0-9.-]{0,63}$/;
   var MODULE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
   var TITLE_MAX = 80, MAX_BLOCKS = 8, MAX_CUSTOM = 20, MAX_RULES = 64;      // the same limits as app_shell.py's check_config
@@ -115,8 +130,9 @@
     var i = productIndex(meta, product);
     var chip = el("span", "gpm-chip", i < 0 ? S.t.noProduct : meta.products[i].label);
     var bg = colorOf(meta, i);
-    chip.style.backgroundColor = bg;
-    chip.style.color = foreground(bg);
+    // the colour goes in as two properties the style sheet reads: a layout may show it as a dot beside the name
+    chip.style.setProperty("--gpm-chip-bg", bg);
+    chip.style.setProperty("--gpm-chip-fg", foreground(bg));
     chip.setAttribute("data-product", i < 0 ? NONE : product);
     return chip;
   }
@@ -167,19 +183,71 @@
     return span;
   }
 
-  function table(data, view) {
+  // the mark alone, with its word for a screen reader only: for a value that already says what is wrong
+  function shape(level) {
+    var span = el("span", "gpm-attn gpm-attn-" + level);
+    var dot = el("span", "gpm-mark");
+    dot.setAttribute("aria-hidden", "true");
+    span.appendChild(dot);
+    span.appendChild(el("span", "gpm-vh", labelOf(level) + ": "));
+    return span;
+  }
+
+  // One cell of a table: text by default. A column may ask for more: `kind` `num` sets a number to the right;
+  // `segments` and `meter` are marks drawn by charts.js (S.cells); `sub` names the row's field shown small beside the
+  // value. The row's `marks` {<column key>: warn | crit} put the mark of attention at that cell.
+  function cell(td, r, c, first, view, info) {
+    var has = Object.prototype.hasOwnProperty.call(r, c.key);
+    var subKey = str(c.sub, 64);
+    var sub = subKey && Object.prototype.hasOwnProperty.call(r, subKey) ? text(r[subKey]) : "";
+    var lvl = isObj(r.marks) ? attention(r.marks[c.key]) : null;
+    if (lvl === "ok") { lvl = null; }
+    var draw = S.cells && typeof S.cells[c.kind] === "function" ? S.cells[c.kind] : null;
+    var node = draw && has ? draw(r[c.key], c, lvl) : null;
+    if (node) {
+      var box = el("div", "gpm-cell gpm-cell-" + c.kind);
+      box.appendChild(node);
+      if (sub) {
+        var note = el("span", "gpm-cell-sub" + (lvl ? " gpm-ink-" + lvl : ""));
+        if (lvl) { note.appendChild(shape(lvl)); }
+        note.appendChild(document.createTextNode(sub));
+        box.appendChild(note);
+      }
+      td.appendChild(box);
+      return;
+    }
+    if (c.kind === "num") { td.className = "gpm-num"; }
+    var value = has ? text(r[c.key]) : "";
+    if (first) {
+      var lead = el("div", "gpm-cell-lead");
+      // the card's own header already names the product: the row says it only when it is another one
+      if (str(r.product, 64) && !(info && info.header && r.product === info.product)) { lead.appendChild(view.chip(r.product)); lead.appendChild(document.createTextNode(" ")); }
+      lead.appendChild(el("span", "gpm-cell-main", value));
+      if (sub) { lead.appendChild(el("span", "gpm-cell-sub", sub)); }
+      td.appendChild(lead);
+      return;
+    }
+    if (lvl) { td.classList.add("gpm-ink-" + lvl); td.appendChild(shape(lvl)); }
+    td.appendChild(document.createTextNode(value));
+    if (sub) { td.appendChild(el("span", "gpm-cell-sub", sub)); }
+  }
+
+  function table(data, view, info) {
     var cols = (Array.isArray(data.columns) ? data.columns : []).filter(function (c) { return isObj(c) && str(c.key, 64); }).slice(0, MAX_COLS);
     var rows = (Array.isArray(data.rows) ? data.rows : []).filter(function (r) {
       return isObj(r) && (!str(r.product, 64) || view.shows(r.product));
     }).slice(0, MAX_ROWS);
     if (!cols.length || !rows.length) { return null; }
-    var withState = rows.some(function (r) { return attention(r.attention); });
+    // the column «Стан» says a row's attention; rows that mark their own cells (`marks`) and tables with a drawn cell
+    // (a bar of parts, a meter) say it in the cell and need no such column
+    var marked = rows.some(function (r) { return isObj(r.marks); }) || cols.some(function (c) { return S.cells && typeof S.cells[c.kind] === "function"; });
+    var withState = !marked && rows.some(function (r) { return attention(r.attention); });
     var wrap = el("div", "gpm-scroll");
     wrap.tabIndex = 0;
     var tbl = el("table", "gpm-table");
     var head = el("tr");
     if (withState) { var th0 = el("th", null, S.t.status); th0.scope = "col"; head.appendChild(th0); }
-    cols.forEach(function (c) { var th = el("th", null, str(c.title, 80) || c.key); th.scope = "col"; head.appendChild(th); });
+    cols.forEach(function (c) { var th = el("th", c.kind === "num" ? "gpm-num" : null, str(c.title, 80) || c.key); th.scope = "col"; head.appendChild(th); });
     var thead = el("thead");
     thead.appendChild(head);
     tbl.appendChild(thead);
@@ -194,8 +262,7 @@
       }
       cols.forEach(function (c, i) {
         var td = el("td");
-        if (i === 0 && str(r.product, 64)) { td.appendChild(view.chip(r.product)); td.appendChild(document.createTextNode(" ")); }
-        td.appendChild(document.createTextNode(Object.prototype.hasOwnProperty.call(r, c.key) ? text(r[c.key]) : ""));
+        cell(td, r, c, i === 0, view, info);
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -203,12 +270,27 @@
     tbl.appendChild(tbody);
     wrap.appendChild(tbl);
     var out = el("div", "gpm-table-wrap");
+    cols.forEach(function (c) {         // a column of marks names its parts over the table
+      var lg = S.cellLegend && typeof S.cellLegend[c.kind] === "function" ? S.cellLegend[c.kind](c) : null;
+      if (lg) { out.appendChild(lg); }
+    });
     out.appendChild(wrap);
     var w = isObj(data.weakest) ? data.weakest : null;
     if (w && str(w.title, 200) && num(w.score) !== null) {
       out.appendChild(el("p", "gpm-weakest", S.t.weakest + ": " + w.title + " — " + w.score));
     }
+    if (str(data.note, 300)) { out.appendChild(el("p", "gpm-source", data.note)); }
     return out;
+  }
+
+  // a moment as this window's own day and time, 26.11.2026, 13:11; a bare date as S.showDate gives it
+  function when(at) {
+    var d = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(at) ? new Date(at) : null;
+    if (!d || isNaN(d.getTime())) { return S.showDate(at, S.lang) || at; }
+    function two(n) { return ("0" + n).slice(-2); }
+    var time = two(d.getHours()) + ":" + two(d.getMinutes());
+    return (S.lang === "en" ? d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate()) + " "
+      : two(d.getDate()) + "." + two(d.getMonth() + 1) + "." + d.getFullYear() + ", ") + time;
   }
 
   function items(data, view, withDate, info) {
@@ -224,14 +306,18 @@
       // the card's own header already names the product: the row says it only when it is another one (or there is no header)
       if (str(it.product, 64) && !(info && info.header && it.product === info.product)) { li.appendChild(view.chip(it.product)); }
       if (withDate && str(it.at, 40)) {
-        var d = S.showDate(it.at, S.lang) || it.at;
-        li.appendChild(el("span", "gpm-at", d));
+        li.classList.add("gpm-item-timed");
+        li.appendChild(el("span", "gpm-at", when(it.at)));
       }
       li.appendChild(el("span", "gpm-item-title", it.title));
       if (str(it.note, 300)) { li.appendChild(el("span", "gpm-note", it.note)); }
       ul.appendChild(li);
     });
-    return ul;
+    if (!str(data.note, 300)) { return ul; }
+    var box = el("div", "gpm-list-wrap");
+    box.appendChild(ul);
+    box.appendChild(el("p", "gpm-source", data.note));
+    return box;
   }
   function list(data, view, info) { return items(data, view, false, info); }
   function feed(data, view, info) { return items(data, view, true, info); }
@@ -251,18 +337,27 @@
     return s;
   }
 
+  // one number; with a `title` it is a band that names a goal, and stands even while the goal has no value yet
   function number(data) {
     var value = num(data.value);
-    if (value === null) { return null; }
-    var box = el("div", "gpm-number");
+    var title = str(data.title, 200), note = str(data.note, 300);
+    if (value === null && !title) { return null; }
+    var box = el("div", "gpm-number" + (title ? " gpm-goal" : ""));
+    if (title) { box.appendChild(el("p", "gpm-goal-title", title)); }
+    if (value === null) {
+      if (note) { box.appendChild(el("p", "gpm-num-note", note)); }
+      return box;
+    }
     box.appendChild(el("span", "gpm-num-value", String(value)));
     if (str(data.unit, 24)) { box.appendChild(el("span", "gpm-num-unit", data.unit)); }
+    if (str(data.label, 80)) { box.appendChild(el("span", "gpm-num-label", data.label)); }
     var delta = num(data.delta);
     if (delta !== null) {
       box.appendChild(el("span", "gpm-num-delta", (delta > 0 ? "+" : "") + delta));
     }
     var trend = (Array.isArray(data.trend) ? data.trend : []).filter(function (v) { return num(v) !== null; });
     if (trend.length >= 2) { box.appendChild(sparkline(trend)); }
+    if (note) { box.appendChild(el("p", "gpm-num-note", note)); }
     return box;
   }
 
@@ -320,6 +415,8 @@
   S.onDecorate = onDecorate;
   S.decorate = decorate;
   S.productChip = productChip;
+  S.mark = mark;
+  S.shape = shape;
   S.productSwitch = productSwitch;
   // What the window's menu and tray need of the modules: the product and the tab shown, a way to open a tab and to hear
   // of a change (the modules part below fills them in).
@@ -329,6 +426,73 @@
   S.onView = function (fn) { if (typeof fn === "function") { viewFns.push(fn); } };
   function viewChanged() { viewFns.slice().forEach(function (f) { try { f(); } catch (e) { /* one listener does not stop the others */ } }); }
   var HAS_MODULES = "gpm-has-modules";      // on <html> while the modules are shown: the host's own page colour must not show under them
+  var RAIL = "gpm-layout-rail";             // on <html> while the modules are shown and the profile asks for the side rail
+
+  // How many rows of a module ask for attention (warn or crit), for the product shown: the rows of its tables, lists and
+  // feeds in the main column. A side column repeats what other modules hold, so it is not counted.
+  function attentionCount(m, snap, view) {
+    var n = 0;
+    m.blocks.forEach(function (b) {
+      if (b.bad || b.aside || SOURCES[b.source] || ["table", "list", "feed"].indexOf(b.block) < 0) { return; }
+      docsOf(snap, b.source).forEach(function (d) {
+        if (view.filter !== "" && groupKey(snap.meta, d.sec.product) !== view.filter) { return; }
+        var rows = b.block === "table" ? d.sec.data.rows : d.sec.data.items;
+        (Array.isArray(rows) ? rows : []).slice(0, MAX_ROWS).forEach(function (r) {
+          if (!isObj(r) || (str(r.product, 64) && !view.shows(r.product))) { return; }
+          var level = attention(r.attention);
+          if (level === "warn" || level === "crit") { n++; }
+        });
+      });
+    });
+    return n;
+  }
+
+  // The source `@summary`: the app's state in a sentence, counted from what the modules show for the product picked —
+  // how many rows wait in the home module's feed (said only when that feed has a document), and which other modules
+  // have rows asking for attention. Nothing in it comes from a document's text.
+  function summary(view) {
+    var mods = view.modules || [], snap = view.snap, t = S.t;
+    if (!snap || !snap.meta) { return null; }
+    var parts = [], asking = [];
+    var home = mods.filter(function (m) { return m.home; })[0] || null;
+    var feedBlock = home ? home.blocks.filter(function (b) { return !b.bad && !b.aside && b.block === "feed" && !SOURCES[b.source]; })[0] : null;
+    if (feedBlock) {
+      // a document that says in its own words why it is empty (`empty`, no rows) is not a count of zero
+      var docs = docsOf(snap, feedBlock.source).filter(function (d) {
+        if (view.filter !== "" && groupKey(snap.meta, d.sec.product) !== view.filter) { return false; }
+        return !(str(d.sec.data.empty, 300) && !(Array.isArray(d.sec.data.items) && d.sec.data.items.length));
+      });
+      if (docs.length) {
+        var waiting = 0;
+        docs.forEach(function (d) {
+          (Array.isArray(d.sec.data.items) ? d.sec.data.items : []).slice(0, MAX_ITEMS).forEach(function (it) {
+            if (isObj(it) && str(it.title, 300) && (!str(it.product, 64) || view.shows(it.product))) { waiting++; }
+          });
+        });
+        var form = "other";
+        try { form = new Intl.PluralRules(S.lang === "en" ? "en" : "uk").select(waiting); } catch (e) { form = waiting === 1 ? "one" : "other"; }
+        parts.push(waiting === 0 ? t.nothingWaits : waiting + (form === "one" ? t.waitsOne : form === "few" ? t.waitsFew : t.waitsMany));
+      }
+    }
+    mods.forEach(function (m) {
+      if (m === home) { return; }
+      var n = attentionCount(m, snap, view);
+      if (n > 0) { asking.push(m.title + " (" + n + ")"); }
+    });
+    parts.push(asking.length ? t.askAttention + asking.join(", ") + "." : t.nothingAsks);
+    var box = el("div", "gpm-lead");
+    box.appendChild(el("p", "gpm-lead-text", parts.join(" ")));
+    return box;
+  }
+  SOURCES["@summary"] = summary;
+
+  // the day as the rail says it: «Четвер, 26 листопада»
+  function today(lang) {
+    try {
+      var text = new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "uk-UA", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    } catch (e) { return ""; }
+  }
 
   // ---- the owner's config/app ---------------------------------------------------------------------------------------
   // One block entry: {block, source, title} + `bad` when it is not one this page can show. A title is text (a profile's
@@ -338,8 +502,8 @@
     var title = custom ? (b.title === undefined ? null : plainTitle(b.title, null))
       : (isObj(b.title) ? (str(b.title[lang], TITLE_MAX) || null) : null);
     var ok = BLOCK_NAMES.indexOf(b.block) >= 0 && !(custom && b.block === "map")
-      && typeof b.source === "string" && (SECTION.test(b.source) || b.source === "@edits");
-    return { block: ok ? b.block : null, source: ok ? b.source : null, title: title, bad: !ok };
+      && typeof b.source === "string" && (SECTION.test(b.source) || b.source === "@edits" || b.source === "@summary");
+    return { block: ok ? b.block : null, source: ok ? b.source : null, title: title, bad: !ok, aside: ok && b.place === "aside" };
   }
 
   // One module -> {id, title, home, blocks: [...], composed} or null (no usable id). A module in neither form, in both
@@ -476,6 +640,8 @@
         var key = groupKey(snap.meta, d.sec.product);
         if (view.filter !== "" && key !== view.filter) { return; }
         var node = RENDER[b.block](d.sec.data, view, { id: d.id, product: d.sec.product, section: d.sec.section, made: d.sec.made, header: key !== "" });
+        // a section may say in its own words why it has nothing to show yet
+        if (!node && str(d.sec.data.empty, 300)) { node = el("p", "gpm-empty", d.sec.data.empty); }
         if (!node) { return; }
         cards.push({ key: key, node: node, product: d.sec.product });
         dates.push(snap.meta.sections[d.id] || d.sec.made);
@@ -483,7 +649,11 @@
       var order = snap.meta.products.map(function (p) { return p.id; }).concat([NONE]);
       cards.sort(function (a, b2) { return order.indexOf(a.key) - order.indexOf(b2.key); });
     }
-    if (!cards.length) { box.appendChild(el("p", "gpm-empty", S.t.empty)); return { node: box, dates: dates }; }
+    if (!cards.length) {
+      if (QUIET.indexOf(b.block) >= 0) { return { node: null, dates: dates }; }
+      box.appendChild(el("p", "gpm-empty", S.t.empty));
+      return { node: box, dates: dates };
+    }
     cards.forEach(function (c) {
       var card = el("div", "gpm-card");
       card.setAttribute("data-product", c.key);
@@ -498,23 +668,45 @@
     return { node: box, dates: dates };
   }
 
-  function renderModule(m, snap, view) {
-    var panel = el("div", "gpm-module");
+  // The blocks of a module one under another; a block with `place: aside` stands in a side column beside them. With the
+  // side rail the panel names its module itself (the rail's entry is not over it); a `lead` that opens the home module
+  // is that module's heading, so its title is kept for a screen reader only.
+  function renderModule(m, snap, view, rail) {
+    var panel = el("div", "gpm-module" + (m.home ? " gpm-module-home" : ""));
     var dates = [];
-    m.blocks.forEach(function (b) {
-      var sec = el("section", "gpm-block");
-      if (m.composed && b.title) { sec.appendChild(el("h3", "gpm-block-title", b.title)); }
+    var split = m.blocks.some(function (b) { return b.aside; });
+    var main = split ? el("div", "gpm-col-main") : panel, aside = split ? el("aside", "gpm-col-aside") : null;
+    var leads = false;
+    m.blocks.forEach(function (b, i) {
       var r = renderBlock(b, snap, view);
-      sec.appendChild(r.node);
       dates = dates.concat(r.dates);
-      panel.appendChild(sec);
+      if (!r.node) { return; }
+      var sec = el("section", "gpm-block gpm-block-" + (b.block || "none"));
+      if (m.composed && b.title) { sec.appendChild(el("h3", "gpm-block-title", b.title)); }
+      sec.appendChild(r.node);
+      if (i === 0 && b.block === "lead") { leads = true; }
+      (b.aside ? aside : main).appendChild(sec);
     });
+    if (split) {
+      panel.classList.add("gpm-module-split");
+      panel.appendChild(main);
+      panel.appendChild(aside);
+    }
+    var fresh = null;
     if (dates.length) {
       var oldest = dates.slice().sort()[0];
       var shown = S.showDate(oldest, S.lang);
-      if (shown) { panel.insertBefore(el("p", "gpm-fresh-module", S.t.freshness + shown), panel.firstChild); }
+      if (shown) { fresh = el("p", "gpm-fresh-module", S.t.freshness + shown); }
     }
-    return panel;
+    if (!rail) {
+      if (fresh) { panel.insertBefore(fresh, panel.firstChild); }
+      return panel;
+    }
+    var box = el("div", "gpm-module-box");
+    box.appendChild(el("h2", "gpm-module-title" + (m.home && leads ? " gpm-vh" : ""), m.title));
+    box.appendChild(panel);
+    if (fresh) { box.appendChild(fresh); }
+    return box;
   }
 
   // renderModules(profile, config, data, product, active) -> {modules, active, tabs, panel}: the tabs and the panel of the
@@ -526,11 +718,11 @@
     if (!open) { open = mods.filter(function (m) { return m.home; })[0] || mods[0] || null; }
     var meta = data.meta;
     var view = {
-      meta: meta, filter: product,
+      meta: meta, filter: product, modules: mods, snap: data,
       chip: function (id) { return meta.products.length ? productChip(id, meta) : document.createTextNode(""); },
       shows: function (id) { return product === "" || groupKey(meta, id) === product; }
     };
-    return { modules: mods, active: open ? open.id : null, panel: open ? renderModule(open, data, view) : null };
+    return { modules: mods, active: open ? open.id : null, panel: open ? renderModule(open, data, view, profile.layout === "rail") : null, view: view };
   }
   S.renderModules = renderModules;
 
@@ -542,6 +734,7 @@
     var page = document.querySelector(".gpm-page");
     if (!root) { return; }
     var config = null, active = stored(STORE_TAB), product = null, switchEl = null;
+    var rail = profile.layout === "rail", navEl = null, dayEl = null;
 
     var shownTab = null;
     S.view = function () { return { product: product || "", tab: shownTab }; };
@@ -549,6 +742,11 @@
 
     function showPage() {
       document.documentElement.classList.remove(HAS_MODULES);
+      document.documentElement.classList.remove(RAIL);
+      if (navEl && navEl.parentNode) { navEl.parentNode.removeChild(navEl); }
+      if (dayEl && dayEl.parentNode) { dayEl.parentNode.removeChild(dayEl); }
+      navEl = null;
+      dayEl = null;
       shownTab = null;
       root.hidden = true;
       if (page) { page.hidden = false; }
@@ -565,7 +763,7 @@
       // a snapshot was read: its meta holds a date. Without one the page stays as it was.
       if (!snap || !snap.meta || !S.showDate(snap.meta.made, "en")) { showPage(); return; }
       var focus = document.activeElement && root.contains(document.activeElement) || (switchEl && switchEl.contains(document.activeElement))
-        ? document.activeElement : null;
+        || (navEl && navEl.contains(document.activeElement)) ? document.activeElement : null;
       var focusKey = focus ? (focus.getAttribute("data-tab") !== null ? "tab:" + focus.getAttribute("data-tab")
         : focus.getAttribute("data-product") !== null ? "product:" + focus.getAttribute("data-product") : null) : null;
       if (product === null) { product = stored(STORE_PRODUCT) || ""; }
@@ -575,8 +773,22 @@
       var tabs = el("div", "gpm-tabs");
       tabs.setAttribute("role", "tablist");
       tabs.setAttribute("aria-label", ctx.t.modules);
+      if (rail) { tabs.setAttribute("aria-orientation", "vertical"); }
       r.modules.forEach(function (m) {
-        var b = el("button", "gpm-tab", m.title);
+        var b = el("button", "gpm-tab", rail ? null : m.title);
+        if (rail) {         // the rail's entry: the module, and how many of its rows ask for attention
+          b.appendChild(el("span", "gpm-tab-title", m.title));
+          var asking = attentionCount(m, snap, r.view);
+          if (asking > 0) {
+            var count = el("span", "gpm-tab-count");
+            var dot = el("span", "gpm-mark");
+            dot.setAttribute("aria-hidden", "true");
+            count.appendChild(dot);
+            count.appendChild(document.createTextNode(String(asking)));
+            count.appendChild(el("span", "gpm-vh", " " + ctx.t.needAttention));
+            b.appendChild(count);
+          }
+        }
         b.type = "button";
         b.id = "gpm-tab-" + m.id;
         b.setAttribute("role", "tab");
@@ -590,8 +802,8 @@
       tabs.addEventListener("keydown", function (e) {
         var ids = r.modules.map(function (m) { return m.id; });
         var at = ids.indexOf(r.active), to = -1;
-        if (e.key === "ArrowRight") { to = (at + 1) % ids.length; }
-        else if (e.key === "ArrowLeft") { to = (at - 1 + ids.length) % ids.length; }
+        if (e.key === "ArrowRight" || (rail && e.key === "ArrowDown")) { to = (at + 1) % ids.length; }
+        else if (e.key === "ArrowLeft" || (rail && e.key === "ArrowUp")) { to = (at - 1 + ids.length) % ids.length; }
         else if (e.key === "Home") { to = 0; }
         else if (e.key === "End") { to = ids.length - 1; }
         if (to >= 0 && ids.length) { e.preventDefault(); focusKey = "tab:" + ids[to]; pickTab(ids[to]); refocus(); }
@@ -604,23 +816,35 @@
       body.appendChild(r.panel || el("p", "gpm-empty", ctx.t.noModules));
 
       while (root.firstChild) { root.removeChild(root.firstChild); }
-      root.appendChild(tabs);
+      if (navEl && navEl.parentNode) { navEl.parentNode.removeChild(navEl); }
+      navEl = null;
+      if (!rail) { root.appendChild(tabs); }
       root.appendChild(body);
 
       if (switchEl && switchEl.parentNode) { switchEl.parentNode.removeChild(switchEl); }
       switchEl = productSwitch(snap.meta, product, pickProduct);
-      if (switchEl) { ctx.header.insertBefore(switchEl, ctx.actions); }
+      // the side rail: the header is the rail — the title and the day, the products, the modules, then whatever else it holds
+      var after = rail ? ctx.header.querySelector(".gpm-title") : null;
+      var before = rail ? (after ? after.nextSibling : ctx.header.firstChild) : ctx.actions;
+      if (rail) {
+        if (!dayEl) { var words = today(ctx.lang); if (words) { dayEl = el("span", "gpm-today", words); } }
+        if (dayEl && dayEl.parentNode !== ctx.header) { ctx.header.insertBefore(dayEl, before); }
+        if (dayEl) { before = dayEl.nextSibling; }
+      }
+      if (switchEl) { ctx.header.insertBefore(switchEl, before); }
+      if (rail) { navEl = tabs; ctx.header.insertBefore(tabs, switchEl ? switchEl.nextSibling : before); }
 
       root.hidden = false;
       if (page) { page.hidden = true; }
       document.documentElement.classList.add(HAS_MODULES);
+      if (rail) { document.documentElement.classList.add(RAIL); }
       shownTab = r.active;
       refocus();
       viewChanged();
       function refocus() {
         if (!focusKey) { return; }
         var sel = focusKey.indexOf("tab:") === 0 ? '[data-tab="' + focusKey.slice(4) + '"]' : '[data-product="' + focusKey.slice(8) + '"]';
-        var scope = focusKey.indexOf("tab:") === 0 ? root : switchEl;
+        var scope = focusKey.indexOf("tab:") === 0 ? (navEl || root) : switchEl;
         var node = scope ? scope.querySelector(sel) : null;
         if (node) { try { node.focus(); } catch (e) { /* nothing to focus */ } }
       }

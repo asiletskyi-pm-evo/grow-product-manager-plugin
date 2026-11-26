@@ -10,23 +10,32 @@
   },
   {
    "key": "age",
-   "title": "Age"
+   "title": "Age",
+   "kind": "meter",
+   "scale": 14,
+   "limit": 7,
+   "sub": "ageText"
   }
  ],
  "rows": [
   {
    "title": "Funnel tracker",
    "updated": "2026-11-16",
-   "age": "10 d",
+   "age": 10,
+   "ageText": "10 d",
    "product": "zorg",
-   "attention": "warn"
+   "attention": "warn",
+   "marks": {
+    "age": "warn"
+   }
   },
   {
    "title": "Payments tracker",
    "updated": "2026-11-25",
-   "age": "1 d",
-   "product": "zorg-pay",
-   "attention": "ok"
+   "age": 1,
+   "ageText": "1 d",
+   "product": "zorg-pay"
   }
- ]
+ ],
+ "note": "The mark on the scale: 7 days."
 }

@@ -176,6 +176,12 @@
     } catch (e) { return null; }
   }
   S.drawIcon = drawIcon;
+  // the plugin's own mark, when the page carries it in its header (profile `icon.image`): the PNG as it is, never drawn on
+  function markIcon() {
+    var img = document.querySelector("header.gpm-shell > img.gpm-logo");
+    var url = img ? img.getAttribute("src") : null;
+    return typeof url === "string" && url.indexOf("data:image/png;base64,") === 0 && url.length * 3 / 4 <= MAX_ICON_BYTES ? url : null;
+  }
 
   // ---- what the snapshot says to the tray and the notifications --------------------------------------------------------
   function sectionsOf(snap, test) {
@@ -359,8 +365,9 @@
     var lastTray = null, trayUp = false, iconCache = { key: "", url: null };
     function trayIcon() {
       var glyph = profile.icon && profile.icon.glyph, theme = ctx.data ? ctx.data.theme : null;
-      var key = glyph + "|" + accentOf(theme);
-      if (iconCache.key !== key) { iconCache = { key: key, url: drawIcon(glyph, theme) }; }
+      var own = markIcon();
+      var key = own ? "mark" : glyph + "|" + accentOf(theme);
+      if (iconCache.key !== key) { iconCache = { key: key, url: own || drawIcon(glyph, theme) }; }
       return iconCache.url;
     }
     function updateTray() {
@@ -499,9 +506,9 @@
     function setIcon() {
       var dock = desktop.app && desktop.app.dock;
       if (!dock || typeof dock.setIcon !== "function") { return; }
-      var theme = ctx.data ? ctx.data.theme : null, accent = accentOf(theme);
+      var theme = ctx.data ? ctx.data.theme : null, own = markIcon(), accent = own ? "mark" : accentOf(theme);
       if (accent === iconAccent) { return; }
-      var url = drawIcon(profile.icon && profile.icon.glyph, theme);
+      var url = own || drawIcon(profile.icon && profile.icon.glyph, theme);
       if (!url) { return; }
       iconAccent = accent;
       guard(function () {

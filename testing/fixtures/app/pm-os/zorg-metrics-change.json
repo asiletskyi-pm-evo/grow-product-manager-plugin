@@ -1,0 +1,38 @@
+{
+ "kind": "delta",
+ "unit": "%",
+ "ref": -10,
+ "refLabel": "Attention threshold",
+ "headline": "Listing on the web lost 12% against the four weeks before.",
+ "sub": "Conversion, the last 4 weeks to the 4 weeks before",
+ "groups": [
+  {
+   "title": "Listing",
+   "rows": [
+    {
+     "label": "Web",
+     "value": -12,
+     "attention": "warn"
+    },
+    {
+     "label": "App",
+     "value": 2.5
+    }
+   ]
+  },
+  {
+   "title": "Product page",
+   "rows": [
+    {
+     "label": "Web",
+     "value": 1.5
+    },
+    {
+     "label": "App",
+     "value": -0.4
+    }
+   ]
+  }
+ ],
+ "note": "Source: the funnel tracker, 2026-11-24."
+}

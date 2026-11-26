@@ -1,12 +1,16 @@
 {
- "value": 7,
- "unit": "%",
- "delta": 2,
+ "title": "Orders a week",
+ "value": 1410,
+ "label": "orders in the last full week",
+ "delta": 60,
  "trend": [
-  1,
-  3,
-  4,
-  5,
-  7
- ]
+  1180,
+  1240,
+  1210,
+  1320,
+  1290,
+  1350,
+  1410
+ ],
+ "note": "Goal for the quarter: 1,500. Source: the orders dashboard."
 }

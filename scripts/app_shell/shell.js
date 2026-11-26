@@ -305,7 +305,7 @@
     var link = document.getElementById(FONT_LINK);
     var i = FONTS.indexOf(name);
     if (i < 0) { if (link) { link.parentNode.removeChild(link); } return false; }
-    var href = "https://fonts.googleapis.com/css2?family=" + FONTS[i].split(" ").join("+") + ":wght@400;700&display=swap";
+    var href = "https://fonts.googleapis.com/css2?family=" + FONTS[i].split(" ").join("+") + ":wght@400;600;700&display=swap";
     if (!link) {
       link = document.createElement("link");
       link.rel = "stylesheet";

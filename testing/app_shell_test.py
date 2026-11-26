@@ -169,18 +169,18 @@ with tempfile.TemporaryDirectory() as d:
     check("6.1 wrap succeeds; the manifest is in <head>, exactly one, permissions as the profile's in order",
           rc == 0 and res.get("ok") is True and len(mans) == 1 and json.loads(mans[0]) == {"permissions": cjm["permissions"]}
           and html.index("claude-artifacts-manifest") < html.index("</head>"), (text[-300:], mans))
-    check("6.2 the meta and the shell header", '<meta name="grow-pm-app" content="cjm;shell=1">' in html
+    check("6.2 the meta and the shell header", '<meta name="grow-pm-app" content="cjm;shell=2">' in html
           and '<header class="gpm-shell">' in html and '<main class="gpm-modules" hidden></main>' in html, html[:600])
     check("6.3 the page's own body sits in .gpm-page, after the header and the empty modules",
           re.search(r'<body class="z"><header class="gpm-shell">.*?</header><main class="gpm-modules" hidden></main>'
                     r'<div class="gpm-page"><h1>Zorg карта</h1><p id="keep">вміст сторінки</p></div>', html, re.S) is not None, html)
     check("6.4 the result line", res.get("out") == o and res.get("bytes") == len(html.encode("utf-8"))
-          and res.get("profile") == "cjm" and res.get("shell") == 1 and res.get("permissions") == cjm["permissions"]
+          and res.get("profile") == "cjm" and res.get("shell") == 2 and res.get("permissions") == cjm["permissions"]
           and res.get("capabilities") == CJM_CAPS, res)
     pj = re.findall(r'<script id="gpm-profile" type="application/json">(.*?)</script>', html, re.S)
     prof_in = json.loads(pj[0]) if pj else {}
     check("6.5 gpm-profile: the profile without the needs of its connectors, plus name, lang, shell; safe in <script>",
-          len(pj) == 1 and prof_in.get("name") == "cjm" and prof_in.get("lang") == "uk" and prof_in.get("shell") == 1
+          len(pj) == 1 and prof_in.get("name") == "cjm" and prof_in.get("lang") == "uk" and prof_in.get("shell") == 2
           and prof_in.get("connectors") == [{"role": "issue-status"}, {"role": "funnel-numbers"}]
           and "<jira_project>" not in pj[0] and "<" not in pj[0] and ">" not in pj[0] and "&" not in pj[0]
           and prof_in.get("title") == cjm["title"], pj)
@@ -976,11 +976,11 @@ const fakeDesktop = `
         check("10.25 the header is painted with the theme's surface; the wrapped page keeps its own colours (R5), in light and in dark",
               sl.get("headBg") == "rgb(254, 254, 254)" and pl.get("keep") == pd.get("keep") == n0.get("keep"), (sl.get("headBg"), pl.get("keep"), pd.get("keep")))
         check("10.26 one <link rel=stylesheet> to Google Fonts, built from the list's spelling; it is the only request outside the page",
-              sl.get("links") == ["https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap"]
+              sl.get("links") == ["https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"]
               and br.get("th_reqs") == sl.get("links"), (sl.get("links"), br.get("th_reqs")))
         lv, ls = br.get("th_live") or {}, br.get("th_live_sys") or {}
         check("10.27 a new snapshot/theme changes the variables live: another font replaces the link (still one), radius follows; font '' removes the link",
-              lv.get("links") == ["https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap"] and lv.get("radius") == "4px"
+              lv.get("links") == ["https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;600;700&display=swap"] and lv.get("radius") == "4px"
               and lv.get("font", "").startswith('"PT Sans"') and ls.get("links") == [] and ls.get("radius") == "0px" and "system-ui" in ls.get("font", ""), (lv, ls))
         ev, evd = br.get("th_evil") or {}, br.get("th_evil_dark") or {}
         check("10.28 test_theme_rejects_foreign_values: accent 'red; background:url(x)', font 'Evil', radius '9999' -> the default values, no request, no error",
@@ -1335,7 +1335,7 @@ with tempfile.TemporaryDirectory() as d:
     # test_wrap_embeds_every_file: shell.js, then blocks.js (each its own inline <script>), byte for byte
     rc, text, res, o = wrap(d, ZORG, out="t5.html")
     html5 = body_of(o) if os.path.exists(o) else ""
-    names = [n for n in ("shell.js", "blocks.js", "map.js", "desk.js") if os.path.exists(os.path.join(SHELL_DIR, n))]
+    names = [n for n in ("shell.js", "blocks.js", "charts.js", "map.js", "desk.js") if os.path.exists(os.path.join(SHELL_DIR, n))]
     srcs = {n: open(os.path.join(SHELL_DIR, n), encoding="utf-8", newline="").read() for n in names}
     scripts5 = re.findall(r'<script id="gpm-(\w+)">\n(.*?)</script>', html5, re.S)
     check("13.1 blocks.js exists and is embedded right after shell.js, each as its own inline <script>, byte for byte",
@@ -1358,6 +1358,18 @@ with tempfile.TemporaryDirectory() as d:
     check("13.6 blocks.js: only the SVG namespace as an address; storage only in try/catch under gpm-tab and gpm-product; no innerHTML",
           len(re.findall(r"https?://", bj)) == 1 and "http://www.w3.org/2000/svg" in bj and '"gpm-tab"' in bj and '"gpm-product"' in bj
           and "innerHTML" not in bj and "insertAdjacentHTML" not in bj and "createElementNS" in bj and "eval(" not in bj, len(bj))
+    cj = srcs.get("charts.js", "")
+    check("13.6a charts.js (shell 2) comes right after blocks.js; only the SVG namespace as an address; no innerHTML, no storage, no colour from a document",
+          [n for n, _ in scripts5][:3] == ["shell", "blocks", "charts"] and len(re.findall(r"https?://", cj)) == 1 and "http://www.w3.org/2000/svg" in cj
+          and not any(x in cj for x in ("innerHTML", "insertAdjacentHTML", "eval(", "localStorage", "style.color", "style.background", "style.fill", "style.stroke", "setAttribute(\"style\"")),
+          [n for n, _ in scripts5])
+    check("13.6b the plugin's mark: a PNG of 256×256 under the limit; a profile names it by a word, and an unknown word is refused",
+          open(os.path.join(ROOT, sh.ICON_IMAGES["plugin"]), "rb").read(24)[:8] == b"\x89PNG\r\n\x1a\n"
+          and open(os.path.join(ROOT, sh.ICON_IMAGES["plugin"]), "rb").read(24)[16:24] == (256).to_bytes(4, "big") * 2
+          and os.path.getsize(os.path.join(ROOT, sh.ICON_IMAGES["plugin"])) <= sh.ICON_IMAGE_MAX
+          and 'class="gpm-logo"' not in html5
+          and any("icon image" in e for e in sh.check_profile("x", dict(cjm, icon={"glyph": "journey", "image": "https-somewhere"})))
+          and any("unknown key" in e for e in sh.check_profile("x", dict(cjm, icon={"glyph": "journey", "src": "x"}))), "")
     check("13.7 blocks.js: the block names are the same as app_shell.py's BLOCKS",
           re.findall(r'"([a-z]+)"', (re.search(r"var BLOCK_NAMES = \[([^\]]*)\]", bj) or re.search("(x)", "x")).group(1)) == list(sh.BLOCKS), "")
 
