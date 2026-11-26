@@ -891,10 +891,11 @@ def _build(sections, products, theme, made, connectors=None, prev=None):
             continue
         docs["snapshot/" + did] = doc
         written[did] = made
-    # the sections of the previous meta that this run did not write stay, while their product is still one of the products
+    # the sections of the previous meta that this run did not touch stay, while their product is still one of the products;
+    # a section given now but over the limit leaves the index (the app shows no stale version of it)
     kept = {}
     for sid, when in ((prev or {}).get("sections") or {}).items():
-        if sid not in written and SECTION_ID.match(sid) and any(sid.endswith("--" + i) for i in ids):
+        if sid not in seen and SECTION_ID.match(sid) and any(sid.endswith("--" + i) for i in ids):
             kept[sid] = when
     meta = {"v": 1, "made": made,
             "products": [{"id": p["id"], "label": p["label"], "color": p.get("color")} for p in products],
@@ -937,6 +938,14 @@ def build_snapshot(sections, products, theme, made, connectors=None, prev_meta=N
     return _build(sections, products, theme, made, connectors, prev)[0]
 
 
+def _outside_plugin(path):
+    """Bad when `path` resolves (symlinks followed) inside the plugin's own folder: the script never writes there."""
+    root = os.path.realpath(os.path.dirname(HERE))
+    real = os.path.realpath(path)
+    if real == root or real.startswith(root + os.sep):
+        raise Bad("--out %s is inside the plugin's own folder (%s): write into a scratch folder of the session" % (path, root))
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -970,6 +979,10 @@ def _read_json(path, what):
 
 
 def cmd_snapshot(a):
+    _outside_plugin(a.out)
+    if os.path.isdir(a.out) and os.listdir(a.out):
+        raise Bad("--out %s: the folder is not empty — give a new or an empty folder, so that files of an earlier run are "
+                  "never written into the database again" % a.out)
     doc = load_profiles(a.profiles)
     prof = (doc.get("profiles") or {}).get(a.profile)
     if prof is None:
@@ -999,6 +1012,7 @@ def cmd_snapshot(a):
 
 
 def cmd_theme(a):
+    _outside_plugin(a.out)
     cands = theme_candidates(a.tokens)
     if a.pick is None:
         data = {"candidates": cands}
@@ -1039,6 +1053,7 @@ def cmd_check(a):
 
 
 def cmd_wrap(a):
+    _outside_plugin(a.out)
     doc = load_profiles(a.profiles)
     prof = (doc.get("profiles") or {}).get(a.profile)
     if prof is None:

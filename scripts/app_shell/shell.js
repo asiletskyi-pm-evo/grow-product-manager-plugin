@@ -219,6 +219,13 @@
         } catch (e) { /* one malformed document is skipped */ }
       });
     } catch (e) { return emptySnapshot(); }
+    // The index decides (R22): a section document that meta.sections does not list — left by an earlier run, a map
+    // renamed, removed or grown past the limit — reaches no module. Without a meta nothing is shown anyway (as before).
+    if (out.meta) {
+      Object.keys(out.sections).forEach(function (id) {
+        if (!Object.prototype.hasOwnProperty.call(out.meta.sections, id)) { delete out.sections[id]; }
+      });
+    }
     return out;
   }
 

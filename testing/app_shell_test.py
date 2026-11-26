@@ -572,6 +572,7 @@ const fakeDesktop = `
   [p, errs] = await open(APP(snapDocs({}, null), EVILCFG), null, process.argv[4]); out.t5_en = await mod(p); await tab(p, 'm1'); out.t5_en_unsup = (await mod(p)).unsupported; await tab(p, 'edits'); out.t5_en_edits = (await mod(p)).placeholders; await p.close();
   [p, errs] = await open(APP(snapDocs({}, null), null), null, process.argv[4]); await tab(p, 'map'); out.t5_en_empty = (await mod(p)).empties;
   out.t5_en_sw = await p.evaluate(() => document.querySelector('.gpm-products').getAttribute('aria-label')); await p.close();
+  let D7g = null;           // D7 for the later blocks (R22)
   try {
   // ---- Task 7: menu, badge, tray, notifications, permissions, icon (fake desktop that records every call)
   const TIMER7 = `window.__timers = []; window.__retries = []; window.__retryFns = []; window.__fireRetry = () => { const f = window.__retryFns.shift(); if (f) { f(); } }; const __st = window.setTimeout;
@@ -597,6 +598,7 @@ const fakeDesktop = `
       + (o.seen ? 'try { localStorage.setItem("gpm-seen", ' + JSON.stringify(JSON.stringify(o.seen)) + '); } catch (e) {};' : '')
       + TIMER7 + fakeDesktop + fakeDb2({snapshot: docs, config: {}, edits: o.edits || {}}, 'ok') + EXTRA7(o); };
   const GRANTED = {notifications: 'granted', 'menu-bar': 'granted'};
+  D7g = D7;
   const MAPDOC = D5('map.first-order', 'zorg', fx('zorg-map.json'));
   const PAYW = Object.assign({}, payTable, {weakest: {title: 'Top up', score: 70}});
   const docs7 = (extra) => snapDocs(Object.assign({'map.first-order--zorg': MAPDOC, 'portfolio--zorg-pay': D5('portfolio', 'zorg-pay', PAYW)}, extra || {}));
@@ -905,6 +907,20 @@ const fakeDesktop = `
   const STEPS21 = {v: 1, custom: [{id: 'steps', title: 'Steps', block: 'chart', source: 'steps'}]};
   [p, errs] = await open(APP(two21({'funnel-numbers': BOARD8}, {'funnel--zorg-pay': null, 'steps--zorg': D5('steps', 'zorg', fx('zorg-funnel.json'))}), STEPS21) + MCP8(BOTH_OK));
   await tab(p, 'funnel'); out.t21_one = {cards: await cards21(p), live: await live8(p)}; await tab(p, 'steps'); out.t21_steps = {cards: await cards21(p), errs}; await p.close();
+  // R22: the index decides — a section document that snapshot/meta.sections does not list reaches no module
+  const gone22 = (() => { const m = JSON.parse(JSON.stringify(fx('zorg-map.json'))); m.map = 'journey-gone'; m.journey = 'Gone map';
+    m.rows.forEach((r, i) => { r.code = i === 0 ? 'ZRG-77' : ''; }); return m; })();
+  const docs22 = (() => { const dd = docs8(['ZRG-1'], {'issue-status': TRACKER8});
+    dd['map.gone--zorg'] = D5('map.gone', 'zorg', gone22);                   // left in the database by an earlier run, not in the index
+    delete dd.meta.sections['portfolio--zorg-pay'];                           // a product's portfolio the new index no longer lists
+    return dd; })();
+  [p, errs] = await open(D7g(docs22, {perm: {notifications: 'granted', 'menu-bar': 'granted'}}) + MCP8({search_items: {w: STAT8([{key: 'ZRG-1', state: {name: 'Open'}}, {key: 'ZRG-77', state: {name: 'Stale'}}])}}));
+  await p.waitForTimeout(200);
+  out.t22_home = await mod(p); out.t22_live = await live8(p); out.t22_tray = await p.evaluate(() => (window.__tray[window.__tray.length - 1] || {menu: []}).menu.map(m => m.label || m.type));
+  out.t22_held = await p.evaluate(() => Object.keys(window.__gpm.data.sections).sort());
+  await tab(p, 'map'); out.t22_map = await p.evaluate(() => ({boxes: Array.from(document.querySelectorAll('.gpm-map[data-section]')).map(b => b.getAttribute('data-section')),
+    picks: Array.from(document.querySelectorAll('.gpm-map-pick button')).map(b => b.textContent), text: document.querySelector('.gpm-panel').textContent.indexOf('Gone map') >= 0}));
+  out.t22_errs = errs; await p.close();
   } catch (e) { out.t8_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
@@ -1813,6 +1829,17 @@ if have_pw:
           o21.get("cards") and o21["cards"][0]["live"][0] == ["наживо: 990 · " + T8] and s21.get("cards")
           and all(all(x == [] for x in c["live"]) for c in s21["cards"]) and not s21.get("errs"), (o21, s21))
 
+    # ---- R22 (final review I-2): the index decides what is shown ----------------------------------------------------------
+    h22, l22, m22 = g("t22_home"), g("t22_live"), g("t22_map")
+    check("22.1 a section document absent from meta.sections is not held for any module (the one door in shell.js)",
+          br.get("t22_held") and "map.gone--zorg" not in br["t22_held"] and "portfolio--zorg-pay" not in br["t22_held"] and "map.first-order--zorg" in br["t22_held"], br.get("t22_held"))
+    check("22.2 ... not rendered: the portfolio shows only the listed product's card",
+          [c["product"] for c in h22.get("cards", [])] == ["zorg"] and "Top up" not in h22.get("panel", ""), h22.get("cards"))
+    check("22.3 ... not in the map picker", m22.get("boxes") == ["map.first-order--zorg"] and m22.get("text") is False, m22)
+    check("22.4 ... not in the tray", br.get("t22_tray") and "Gone map" not in br["t22_tray"] and "Перше замовлення" in br["t22_tray"], br.get("t22_tray"))
+    check("22.5 ... not asked for live: its code is never sent", [w["input"]["ids"] for w in (l22.get("m") or {}).get("watches", [])] == [["ZRG-1"]] and not br.get("t22_errs"),
+          (l22.get("m"), br.get("t22_errs")))
+
 # ---- Task 8: live numbers through the viewer's connectors (Python half) ---------------------------------------------------
 TRACKER = {"server": "Zorg Tracker", "tool": "search_items", "input": {"query": "key in ({codes})", "limit": 50},
            "pick": {"items": "data.items", "key": "key", "value": "state.name"}}
@@ -1959,6 +1986,41 @@ with tempfile.TemporaryDirectory() as d:
     check("16.20 --prev-meta with a missing file: refused", rc == 1 and not os.path.exists(os.path.join(d, "pbadx")), text)
     api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None, {"sections": {"x--zorg": MADE}})
     check("16.21 build_snapshot(..., prev_meta) carries sections the same way", api["snapshot/meta"]["sections"] == {"portfolio--zorg": LATER_AT, "x--zorg": MADE}, api["snapshot/meta"])
+
+    # R22: a reused --out folder is refused (files of an earlier run are never written again); no --out in the plugin
+    reused = os.path.join(d, "reused")
+    os.makedirs(os.path.join(reused, "snapshot"))
+    with open(os.path.join(reused, "snapshot", "map.old--zorg.json"), "w") as f:
+        f.write("{}")
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, out="reused")
+    check("22.10 snapshot --out a folder that exists and is not empty: refused («not empty»), nothing written into it",
+          rc == 1 and "not empty" in res.get("error", "") and sorted(os.listdir(reused)) == ["snapshot"]
+          and os.listdir(os.path.join(reused, "snapshot")) == ["map.old--zorg.json"], text)
+    os.makedirs(os.path.join(d, "empty-out"))
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, out="empty-out")
+    check("22.11 an existing empty folder is fine", rc == 0 and os.path.exists(os.path.join(o, "snapshot", "meta.json")), text)
+    inside = os.path.join(ROOT, "testing", "r22-must-not-exist")
+    link = os.path.join(d, "into-plugin")
+    os.symlink(os.path.join(ROOT, "testing"), link)
+    zp = os.path.join(d, "in.html")
+    with open(zp, "w", encoding="utf-8") as f:
+        f.write(ZORG)
+    tz = os.path.join(FIX, "zorg-tokens.json")
+    for label, args, target in (
+            ("snapshot --out", ["snapshot", "--profile", "cjm", *ZP, "--section", "portfolio:zorg:" + PORT, "--out", inside], inside),
+            ("snapshot --out through a symlink", ["snapshot", "--profile", "cjm", *ZP, "--section", "portfolio:zorg:" + PORT, "--out", os.path.join(link, "r22-must-not-exist")], inside),
+            ("wrap --out", ["wrap", "--page", zp, "--profile", "cjm", "--out", inside + ".html"], inside + ".html"),
+            ("theme --out", ["theme", "--tokens", tz, "--out", inside + ".json"], inside + ".json")):
+        rc, text, res = run(*args)
+        check("22.12 %s inside the plugin's own folder: refused, nothing written" % label, rc == 1 and "plugin" in res.get("error", "")
+              and not os.path.exists(target), text)
+    big2 = os.path.join(d, "big2.json")
+    with open(big2, "w") as f:
+        json.dump({"rows": [{"t": "x" * 1000} for _ in range(300)]}, f)
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", os.path.join(d, "r22over"), "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT,
+                        "--section", "feed:zorg:" + big2, "--prev-meta", wjson(d, "r22pm.json", {"v": 1, "made": MADE, "sections": {"portfolio--zorg": MADE, "feed--zorg": MADE}}))
+    check("22.13 a section over 256 KiB now is not carried from --prev-meta either: it leaves the index, so the app does not show its old version",
+          rc == 1 and "feed--zorg" not in jread(d, "r22over", "snapshot", "meta.json")["sections"], text)
 
     # R21: a funnel-numbers binding may name the product whose funnel it feeds
     rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "r21.json", {"funnel-numbers": dict(BOARD, product="zorg-pay")}), out="r21ok")
