@@ -1,0 +1,6 @@
+{"columns": [{"key": "journey", "title": "Journey"}, {"key": "health", "title": "Health"}, {"key": "delta", "title": "Delta"}],
+ "rows": [
+  {"journey": "First order", "health": 82, "delta": 3, "product": "zorg", "attention": "ok"},
+  {"journey": "Refund", "health": 61, "delta": -9, "product": "zorg", "attention": "warn"},
+  {"journey": "Pay by card", "health": 44, "delta": -14, "product": "zorg-pay", "attention": "crit"}],
+ "weakest": {"title": "Pay by card", "score": 44}}

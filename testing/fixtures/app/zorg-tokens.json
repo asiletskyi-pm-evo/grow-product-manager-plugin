@@ -1,0 +1,4 @@
+{"product": "zorg",
+ "bg": "#f7f6f2", "surface": "#ffffff", "text": "#1d2127", "muted": "#5f6770", "accent": "#2f6fde", "border": "#d8dce1",
+ "ok": "#1f8a4c", "warn": "#a8691a", "crit": "#c53030",
+ "font": "Inter", "radius": 8}
