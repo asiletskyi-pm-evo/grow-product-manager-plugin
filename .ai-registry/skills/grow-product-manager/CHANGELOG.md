@@ -38,14 +38,14 @@ When a skill changes, its version is bumped independently. The plugin version is
 ### Fixed (the re-audit of the same day — no high findings, three medium)
 
 - **Medium — the agent could switch the write gate off itself** (`setup.py --write-gate off|pause`, or a write to the gate's config). The trust and the destructive questions sat behind that switch.
-  - The questions no setting covers are now asked before the config is read: an address approval, an Atlassian `executeDestructive`, a Bash command that changes the gate or writes its config or the trust file, and a Write/Edit of those files.
-  - `--code` is caught abbreviated (`--cod`, `--co`, `--c=`) and on another line.
+  - The questions that neither a pause nor `--write-gate off` covers are now asked before the config is read: an address approval, an Atlassian `executeDestructive`, a Bash command that changes the gate (`setup.py --write-gate …`, or `setup` imported) or writes its config, the trust store (`~/.grow-pm/trust`, `.trust-seeded`) or the gate's own files, and a Write/Edit of those files (relative paths and case folded).
+  - `--code` is caught abbreviated (`--cod`, `--co`, `--c=`), quoted and on another line.
 - **Medium — text from notes still went into a few command lines.**
   - `ctx propose --file -` reads the deltas from stdin; `context-protocol.md` §5i uses it instead of `--delta '<json>'`.
   - `--reason`, `--name` and the tools registry's values go in single quotes (`search-protocol.md` §3a covers every text you write into a command).
-  - The `same|not-same` hints of `ctx entity` and `ctx explain`, and the `--team` hint, print single quotes too.
+  - The `same|not-same` hints of `ctx entity` and `ctx explain`, the `--team` hint and the `ctx slot map` hint print single quotes too; so do the builder's `--name`, `--existing-context`, `--proposal-dir`, `ctx get --section` and the tools registry's `--from-team` in the docs.
 - **Medium — a manual `ctx provider apply` took a changed core rule (`~`) without a question.** It now holds it (`утримано … (правило ядра — лише на твою згоду)`) until `--choose <block>=theirs`; `connect-steps.md` asks about it.
-- **Low** — the sync's report names a new block and a held rule under «Чекає твоєї згоди», with the command that takes each. `local-context-protocol.md` reads a core's rule as the team's convention, not an order. The docs no longer call a playbook «rules for the agent». `connect-steps.md` reads a core's builder version as text and never runs it. `ctx_kit` refuses a line break in `contract` and `authority`.
+- **Low** — the sync's report names a new block and a held rule under «Чекає твоєї згоди», with the command that takes each. `local-context-protocol.md` reads a core's rule as the team's convention, not an order. The docs no longer call a playbook «rules for the agent». `connect-steps.md` reads a core's builder version as text and never runs it. `ctx_kit` refuses a line break in `contract` and `authority`. The example core's playbook is titled «Team conventions». `--choose <rule>=theirs` is no longer reported as «не потрібне».
 
 ### Hardening
 
@@ -58,8 +58,8 @@ When a skill changes, its version is bumped independently. The plugin version is
 ### Added — checks
 
 - `testing/validate-consistency.sh` check 32: every path a core names is confined, and every write of the builder is guarded.
-- `testing/skill_lint.py` check 32 `core-is-data`, with six seeds in `seeded_leak_test.py`. It refuses a doc that does any of these:
-  - puts a placeholder in double quotes in a command of the plugin's scripts;
+- `testing/skill_lint.py` check 32 `core-is-data`, with seven seeds in `seeded_leak_test.py`. It refuses a doc that does any of these:
+  - puts any value in double quotes in a command of the plugin's scripts;
   - puts a delta in the command line;
   - runs `people_resolver`;
   - prefers a core's copy of the builder;
@@ -114,6 +114,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 ### Known limits
 
 - `executeWrite` (comments, links, transitions on Atlassian MCP v2) stays ungated, as v4.11.0 decided.
+- The write gate reads a command's text: it confirms what the agent does, it is not a sandbox. A command built to hide what it does, or a file tool other than Bash and `Write`/`Edit`/`MultiEdit`/`NotebookEdit` (another plugin's MCP file server, say), is not caught.
 - Observations of the re-audit left for later: a core's `exclude` patterns are regular expressions it chooses, `atomic_write` does not refuse a link at the target, and `journey_portfolio render-html --out` writes where it is told.
 
 ---
