@@ -8,7 +8,8 @@
   theme    token files of the products' design systems -> theme candidates (light, dark, contrast check, the built-in
            `neutral`); --pick ID writes the one theme that `snapshot --theme` takes
   snapshot sections + `--products FILE` (+ a theme, + `--connectors FILE` role bindings {server, tool, input, pick}, + `--prev-meta FILE`
-           to keep the dates of the sections not written now) -> one JSON file per database document under
+           to keep the dates of the sections not written now — a partial update; with `--full` only the connectors are
+           kept and the index is exactly the sections written now) -> one JSON file per database document under
            DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
 A profile holds shell code and placeholders only (`<jira_project>`, `<dashboard_id>`) — never a user's value. Only the
@@ -854,7 +855,7 @@ def check_prev_meta(doc, roles, profile):
     return {"sections": sections, "connectors": connectors}
 
 
-def _build(sections, products, theme, made, connectors=None, prev=None):
+def _build(sections, products, theme, made, connectors=None, prev=None, full=False):
     """-> (documents {path: doc}, over [{path, bytes}], dropped [text]). Bad before anything is built on a wrong id."""
     if not isinstance(made, str) or not made.strip():
         raise Bad("made is missing")
@@ -891,10 +892,11 @@ def _build(sections, products, theme, made, connectors=None, prev=None):
             continue
         docs["snapshot/" + did] = doc
         written[did] = made
-    # the sections of the previous meta that this run did not touch stay, while their product is still one of the products;
-    # a section given now but over the limit leaves the index (the app shows no stale version of it)
+    # a partial update: the sections of the previous meta that this run did not touch stay, while their product is still
+    # one of the products; a section given now but over the limit leaves the index (the app shows no stale version of it).
+    # A full update (`full`) carries no section: the new index is exactly what this run wrote (only the connectors carry).
     kept = {}
-    for sid, when in ((prev or {}).get("sections") or {}).items():
+    for sid, when in ({} if full else ((prev or {}).get("sections") or {})).items():
         if sid not in seen and SECTION_ID.match(sid) and any(sid.endswith("--" + i) for i in ids):
             kept[sid] = when
     meta = {"v": 1, "made": made,
@@ -926,16 +928,16 @@ def _build(sections, products, theme, made, connectors=None, prev=None):
     return docs, over, dropped
 
 
-def build_snapshot(sections, products, theme, made, connectors=None, prev_meta=None):
+def build_snapshot(sections, products, theme, made, connectors=None, prev_meta=None, full=False):
     """The database documents of one snapshot: {path: document}. `sections` = [(name, product id, data)], `products` =
     [{id, label, color|None}]. A section over 256 KiB is left out (and out of meta.sections); people's keys are dropped.
     `prev_meta` = the previous snapshot/meta: the dates of the sections not written now are carried over (and its
-    connectors, when none are given)."""
+    connectors, when none are given); with `full` only the connectors are carried, never a section."""
     prev = None
     if prev_meta is not None:
         prev = {"sections": {i: m for i, m in (prev_meta.get("sections") or {}).items() if isinstance(m, str)},
                 "connectors": prev_meta.get("connectors")}
-    return _build(sections, products, theme, made, connectors, prev)[0]
+    return _build(sections, products, theme, made, connectors, prev, full)[0]
 
 
 def _outside_plugin(path):
@@ -1006,7 +1008,7 @@ def cmd_snapshot(a):
     made = a.at or _now()
     if a.at and not re.fullmatch(r"\d{4}-\d\d-\d\dT[0-9:.]+(Z|[+-]\d\d:\d\d)?", a.at):
         raise Bad("--at must be an ISO time, e.g. 2026-11-26T10:00:00Z")
-    docs, over, dropped = _build(sections, products, theme, made, connectors, prev)
+    docs, over, dropped = _build(sections, products, theme, made, connectors, prev, a.full)
     out = []
     try:
         for path, d in docs.items():
@@ -1107,6 +1109,7 @@ def main(argv=None):
     n.add_argument("--products", default=None, metavar="FILE", help="JSON [{id, label, color?}]")
     n.add_argument("--connectors", default=None, metavar="FILE", help="JSON {role: {server, tool, input, pick}}")
     n.add_argument("--prev-meta", default=None, metavar="FILE", help="the previous snapshot/meta document")
+    n.add_argument("--full", action="store_true", help="a full update: --prev-meta carries only the connectors, never a section")
     n.add_argument("--theme", default=None)
     n.add_argument("--at", default=None)
     n.add_argument("--out", required=True)
