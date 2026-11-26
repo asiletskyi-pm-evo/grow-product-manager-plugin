@@ -97,7 +97,8 @@
         button.type = "button";
         ctx.actions.appendChild(button);
         button.addEventListener("click", function () {
-          var asked = desktop.install.request().then(function (answer) {
+          // inside the promise: a request() that throws at once is a refusal in words, never an error on the page
+          var asked = Promise.resolve().then(function () { return desktop.install.request(); }).then(function (answer) {
             if (answer === "installed") { return; }
             if (answer === "cancelled") { throw refusal(t.cancelled); }
             throw refusal(answer === "unavailable" ? t.unavailable : t.failed);
@@ -360,9 +361,11 @@
     if (title && profile.title && profile.title[lang]) { title.textContent = profile.title[lang]; }
     if (!actions) { actions = el("div", "gpm-actions"); header.appendChild(actions); }
     var desktopPromise = null, dbPromise = null, last = emptySnapshot(), listeners = [];
+    var editsList = null, editsFns = [], editsStarted = false;
     // The last read, for tests and nothing else: a getter, so the page cannot assign it.
     try { Object.defineProperty(window, "__gpm", { value: Object.freeze({ get data() { return last; } }) }); } catch (e) { /* kept */ }
-    var ctx = {
+    var ctx;
+    ctx = {
       profile: profile, lang: lang, t: t, header: header, actions: actions,
       // the last snapshot read, and a way to hear the next ones: ctx.onData(fn) calls fn(snapshot) on every change
       get data() { return last; },
@@ -370,6 +373,32 @@
       setData: function (snap) {
         last = snap;
         listeners.slice().forEach(function (fn) { try { fn(snap); } catch (e) { /* one listener does not stop the others */ } });
+      },
+      // The shared edits (collection `edits`) are read once for everyone: ctx.watchEdits(fn) calls fn(list) now (when
+      // there is an answer already) and on every change; list = [{id, x, local}], x the document's own object, local
+      // true while it is this window's own write not yet confirmed. Whoever reads the documents checks their shape.
+      watchEdits: function (fn) {
+        if (typeof fn !== "function") { return; }
+        editsFns.push(fn);
+        if (editsList) { try { fn(editsList); } catch (e) { /* a listener must not break the others */ } }
+        if (editsStarted) { return; }
+        editsStarted = true;
+        ctx.db().then(function (db) {
+          if (!db || typeof db.collection !== "function") { return; }
+          try {
+            db.collection("edits").onSnapshot(function (qs) {
+              var list = [];
+              try {
+                Array.prototype.slice.call(qs && qs.docs ? qs.docs : []).forEach(function (d) {
+                  var x = d && typeof d.data === "function" ? d.data() : null;
+                  if (isObj(x) && typeof d.id === "string") { list.push({ id: d.id, x: x, local: !!(d.metadata && d.metadata.hasPendingWrites) }); }
+                });
+              } catch (e) { list = []; }
+              editsList = list;
+              editsFns.slice().forEach(function (f) { try { f(list); } catch (e) { /* one listener does not stop the others */ } });
+            }, function () { /* no edits without the database's leave */ });
+          } catch (e) { /* no edits */ }
+        });
       },
       db: function () {
         if (!dbPromise) {

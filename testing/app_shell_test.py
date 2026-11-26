@@ -63,9 +63,14 @@ check("1.3 schema prints the constants", res.get("levels") == ["page", "app"] an
 doc = sh.load_profiles()
 cjm = doc["profiles"]["cjm"]
 check("1.4 the reader reads flow mappings and lists", cjm["title"] == {"uk": "CJM", "en": "CJM"} and cjm["menu"][3] ==
-      {"action": "edit", "accel": "CmdOrCtrl+E"} and cjm["modules"][0]["home"] is True and cjm["commands"] == []
-      and doc["profiles"]["pm-os"]["modules"] == [], cjm)
+      {"action": "edit", "accel": "CmdOrCtrl+E"} and cjm["modules"][0]["home"] is True and cjm["commands"] == [], cjm)
+BARE = ("version: 1\nprofiles:\n  bare:\n    level: app\n    title: {uk: \"Bare\", en: \"Bare\"}\n    icon: {glyph: os}\n"
+        "    permissions: [notifications, menu-bar]\n    modules: []\n    commands: []\n")     # a profile of this test's own: no module, no map
 with tempfile.TemporaryDirectory() as d:
+    bare_path = os.path.join(d, "bare.yaml")
+    with open(bare_path, "w") as f:
+        f.write(BARE)
+    check("1.4b the reader reads an empty list (a hand-made profile file)", sh.load_profiles(bare_path)["profiles"]["bare"]["modules"] == [], "")
     bad = os.path.join(d, "p.yaml")
     with open(bad, "w") as f:
         f.write("version: 1\nprofiles:\n  x:\n    level: [app\n")
@@ -267,7 +272,7 @@ const fakeDesktop = `
   const out = {};
   async function open(init, viewport, file) {
     const p = await b.newPage({viewport: viewport || {width: 1000, height: 700}}); const errs = [];
-    p.__reqs = []; p.__url = 'file://' + (file || process.argv[2]);
+    p.setDefaultTimeout(8000); p.__reqs = []; p.__url = 'file://' + (file || process.argv[2]);
     p.on('pageerror', e => errs.push(String(e))); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
     p.on('request', r => p.__reqs.push(r.url()));
     await p.route(/^https?:/, r => r.fulfill({status: 200, contentType: 'text/css', body: ''}));
@@ -439,7 +444,7 @@ const fakeDesktop = `
   }
   const fakeDb2 = (colls, mode) => `
     window.__colls = ${JSON.stringify(colls)}; window.__subs2 = {};
-    const qs2 = (c) => { const m = window.__colls[c] || {}; return {docs: Object.keys(m).sort().map(id => ({id, exists: true, data: () => m[id]})), size: Object.keys(m).length, empty: false, docChanges: () => []}; };
+    const qs2 = (c) => { const m = window.__colls[c] || {}; return {metadata: {fromCache: false, hasPendingWrites: false}, docs: Object.keys(m).sort().map(id => ({id, exists: true, data: () => m[id]})), size: Object.keys(m).length, empty: false, docChanges: () => []}; };
     window.__push2 = (c, id, data) => { window.__colls[c] = window.__colls[c] || {}; if (data === null) { delete window.__colls[c][id]; } else { window.__colls[c][id] = data; } (window.__subs2[c] || []).forEach(f => f(qs2(c))); };
     const db2 = {collection: (c) => ({onSnapshot: (next, err) => {
       if ('${mode}' === 'throws') { throw new Error('boom'); }
@@ -567,10 +572,170 @@ const fakeDesktop = `
   [p, errs] = await open(APP(snapDocs({}, null), EVILCFG), null, process.argv[4]); out.t5_en = await mod(p); await tab(p, 'm1'); out.t5_en_unsup = (await mod(p)).unsupported; await tab(p, 'edits'); out.t5_en_edits = (await mod(p)).placeholders; await p.close();
   [p, errs] = await open(APP(snapDocs({}, null), null), null, process.argv[4]); await tab(p, 'map'); out.t5_en_empty = (await mod(p)).empties;
   out.t5_en_sw = await p.evaluate(() => document.querySelector('.gpm-products').getAttribute('aria-label')); await p.close();
+  try {
+  // ---- Task 7: menu, badge, tray, notifications, permissions, icon (fake desktop that records every call)
+  const TIMER7 = `window.__timers = []; const __st = window.setTimeout;
+    window.setTimeout = function (fn, ms, ...a) { if (ms === 30000) { window.__timers.push(fn); return 0; } return __st.call(window, fn, ms, ...a); };
+    window.__fire30 = () => { window.__timers.splice(0).forEach(f => f()); };`;
+  const EXTRA7 = (o) => `
+    window.__perm = Object.assign({notifications: 'prompt', 'menu-bar': 'prompt'}, window.__permInit || {});
+    window.__reqs7 = []; window.__badges = []; window.__icons = []; window.__notes = []; window.__tray = []; window.__menus = []; window.__shown = 0; window.__managed = 0;
+    desktop.permissions = {state: async (n) => (n ? window.__perm[n] : Object.assign({}, window.__perm)),
+      request: (names) => { window.__reqs7.push(names); const n = names && names[0]; if ((window.__hang || {})[n]) { return new Promise(() => {}); }
+        window.__perm[n] = (window.__answer || {})[n] || 'granted'; return Promise.resolve(Object.assign({}, window.__perm)); },
+      manage: async () => { window.__managed++; }};
+    desktop.app = {dock: {setBadge: async (t) => { window.__badges.push(t); return true; }, setIcon: async (u) => { window.__icons.push(u); return {written: window.__written !== false}; }}};
+    desktop.notification = {show: async (x) => { window.__notes.push(x.body); }};
+    desktop.tray = {set: async (x) => { window.__tray.push(x); return true; }, remove: async () => {}};
+    desktop.Menu = {setApplicationMenu: async (t) => { window.__menus.push(t); }};
+    desktop.window = {show: async () => { window.__shown++; }};
+    const __u7 = window.claude.use; window.claude.use = async (n) => (n === 'user' ? ${o.user === false ? 'null' : "{id: async () => 'me-1', canEdit: async () => true, profiles: async () => ({})}"} : __u7(n));`;
+  const D7 = (docs, o) => { o = o || {};
+    return 'window.__permInit = ' + JSON.stringify(o.perm || {}) + '; window.__hang = ' + JSON.stringify(o.hang || {}) + '; window.__written = ' + (o.written === false ? 'false' : 'true') + ';'
+      + (o.seen ? 'try { localStorage.setItem("gpm-seen", ' + JSON.stringify(JSON.stringify(o.seen)) + '); } catch (e) {};' : '')
+      + TIMER7 + fakeDesktop + fakeDb2({snapshot: docs, config: {}, edits: o.edits || {}}, 'ok') + EXTRA7(o); };
+  const GRANTED = {notifications: 'granted', 'menu-bar': 'granted'};
+  const MAPDOC = D5('map.first-order', 'zorg', fx('zorg-map.json'));
+  const PAYW = Object.assign({}, payTable, {weakest: {title: 'Top up', score: 70}});
+  const docs7 = (extra) => snapDocs(Object.assign({'map.first-order--zorg': MAPDOC, 'portfolio--zorg-pay': D5('portfolio', 'zorg-pay', PAYW)}, extra || {}));
+  const rowEdit = (map, by, at) => ({kind: 'row', map, row: 'p1', digest: 'd1', edit: {text: 'x'}, by, at: at || '2026-11-26T11:00:00Z'});
+  const st7 = (pg) => pg.evaluate(() => ({reqs: window.__reqs7, badges: window.__badges, notes: window.__notes, tray: window.__tray.map(t => ({title: t.title, toolTip: t.toolTip, icon: typeof t.icon, menu: (t.menu || []).map(m => m.label || m.type)})),
+    menus: window.__menus.length, shown: window.__shown, icons: window.__icons.length, perm: window.__perm,
+    seen: (() => { try { return JSON.parse(localStorage.getItem('gpm-seen') || 'null'); } catch (e) { return 'ERR'; } })()}));
+  const panel7 = (pg) => pg.evaluate(() => ({toggle: !!document.querySelector('.gpm-perms-toggle'), open: !!document.querySelector('.gpm-perms') && !document.querySelector('.gpm-perms').hidden,
+    rows: Array.from(document.querySelectorAll('.gpm-perm')).map(r => ({id: r.getAttribute('data-perm'), text: r.textContent.trim().replace(/\s+/g, ' '), btn: (r.querySelector('button') || {textContent: null}).textContent, dis: r.querySelector('button') ? r.querySelector('button').disabled : null})),
+    all: Array.from(document.querySelectorAll('.gpm-perms button')).map(b => b.textContent), text: (document.querySelector('.gpm-perms') || {innerText: ''}).innerText.replace(/\s+/g, ' ')}));
+  const openPerms = async (pg) => { await pg.click('.gpm-perms-toggle'); await pg.waitForTimeout(60); };
+  // permissions one at a time
+  [p, errs] = await open(D7(docs7())); await p.waitForTimeout(150);
+  out.t7_idle = await st7(p); out.t7_p0 = await panel7(p); await openPerms(p); out.t7_p1 = await panel7(p);
+  await p.click('.gpm-perm[data-perm="notifications"] button'); await p.waitForTimeout(100); out.t7_after1 = await st7(p); out.t7_p2 = await panel7(p);
+  await p.click('.gpm-perm[data-perm="menu-bar"] button'); await p.waitForTimeout(100); out.t7_after2 = await st7(p); out.t7_p3 = await panel7(p); out.t7_errs = errs; await p.close();
+  // no answer within 30 s (a replaced timer): a button again, a line next to it, nothing else asked
+  [p, errs] = await open(D7(docs7(), {hang: {notifications: true}})); await p.waitForTimeout(150); await openPerms(p);
+  await p.click('.gpm-perm[data-perm="notifications"] button'); await p.waitForTimeout(60);
+  out.t7_hang_during = await panel7(p); out.t7_hang_timers = await p.evaluate(() => window.__timers.length);
+  await p.evaluate(() => window.__fire30()); await p.waitForTimeout(100);
+  out.t7_hang_after = await panel7(p); out.t7_hang_st = await st7(p); out.t7_hang_errs = errs; await p.close();
+  // denied / unavailable
+  [p, errs] = await open(D7(docs7(), {perm: {notifications: 'denied', 'menu-bar': 'unavailable'}})); await p.waitForTimeout(150); await openPerms(p);
+  out.t7_denied = await panel7(p); await p.click('.gpm-perm[data-perm="notifications"] button'); await p.waitForTimeout(80);
+  out.t7_denied_st = await st7(p); out.t7_managed = await p.evaluate(() => window.__managed); await p.close();
+  // the badge
+  [p, errs] = await open(D7(docs7(), {edits: {a: rowEdit('M1', 'u1'), b: rowEdit('M2', 'u2'), c: {kind: 'add', map: 'M3', digest: 'd', add: {stage: 's', lane: 'l', text: 't'}, by: 'u3', at: '2026-11-26T12:00:00Z'}}})); await p.waitForTimeout(150);
+  out.t7_badge3 = (await st7(p)).badges;
+  await p.evaluate(() => { ['a', 'b', 'c'].forEach(i => window.__push2('edits', i, null)); }); await p.waitForTimeout(100); out.t7_badge0 = (await st7(p)).badges;
+  await p.evaluate(() => { for (let i = 0; i < 100; i++) { window.__push2('edits', 'x' + i, {kind: 'row', map: 'M', row: 'r' + i, digest: 'd', edit: {text: 't'}, by: 'u9', at: '2026-11-26T12:00:00Z'}); } }); await p.waitForTimeout(100);
+  out.t7_badge100 = (await st7(p)).badges; await p.evaluate(() => window.__push2('edits', 'x0', null)); await p.waitForTimeout(80); out.t7_badge99 = (await st7(p)).badges; out.t7_badge_errs = errs; await p.close();
+  // a threshold crossed: warning, the same event again, then critical; first sight and remembered levels
+  [p, errs] = await open(D7(docs7(), {perm: GRANTED})); await p.waitForTimeout(150);
+  out.t7_th0 = (await st7(p));
+  const fall = (visit) => ({stages: fx('zorg-funnel.json').stages.map(s => s.id === 'visit' ? Object.assign({}, s, {value: visit}) : s)});
+  await p.evaluate((f) => window.__push2('snapshot', 'funnel--zorg', {v: 1, product: 'zorg', section: 'funnel', made: '2026-11-27T10:00:00Z', data: f}), fall(880)); await p.waitForTimeout(100);
+  out.t7_th1 = (await st7(p)).notes;
+  await p.evaluate((f) => window.__push2('snapshot', 'funnel--zorg', {v: 1, product: 'zorg', section: 'funnel', made: '2026-11-27T11:00:00Z', data: f}), fall(880)); await p.waitForTimeout(100);
+  out.t7_th2 = (await st7(p)).notes;
+  await p.evaluate((f) => window.__push2('snapshot', 'funnel--zorg', {v: 1, product: 'zorg', section: 'funnel', made: '2026-11-27T12:00:00Z', data: f}), fall(700)); await p.waitForTimeout(100);
+  out.t7_th3 = (await st7(p)); out.t7_th_errs = errs; await p.close();
+  [p, errs] = await open(D7(docs7(), {perm: GRANTED, seen: {'zorg|cart': 'ok', 'zorg|pay': 'crit'}})); await p.waitForTimeout(150);
+  out.t7_seen = await st7(p); await p.close();
+  // own edit / another's edit / not permitted / permission granted later / viewer unknown
+  const E0 = {a: rowEdit('Old map', 'u_other')};
+  [p, errs] = await open(D7(docs7(), {perm: GRANTED, edits: E0})); await p.waitForTimeout(150);
+  out.t7_e0 = (await st7(p)).notes;
+  await p.evaluate((x) => window.__push2('edits', 'mine', x), rowEdit('Own map', 'me-1')); await p.waitForTimeout(100); out.t7_e_own = (await st7(p)).notes;
+  await p.evaluate((x) => window.__push2('edits', 'theirs', x), rowEdit('Checkout', 'u_Ivan_secret')); await p.waitForTimeout(100); out.t7_e_other = (await st7(p)).notes; out.t7_e_errs = errs; await p.close();
+  [p, errs] = await open(D7(docs7(), {edits: E0})); await p.waitForTimeout(150);
+  await p.evaluate((x) => window.__push2('edits', 'theirs', x), rowEdit('Checkout', 'u_other')); await p.waitForTimeout(100); out.t7_e_noperm = (await st7(p)).notes;
+  await openPerms(p); await p.click('.gpm-perm[data-perm="notifications"] button'); await p.waitForTimeout(100);
+  await p.evaluate((x) => window.__push2('edits', 'theirs2', x), rowEdit('Checkout 2', 'u_other')); await p.waitForTimeout(100); out.t7_e_later = (await st7(p)).notes; await p.close();
+  [p, errs] = await open(D7(docs7(), {perm: GRANTED, edits: E0, user: false})); await p.waitForTimeout(150);
+  await p.evaluate((x) => window.__push2('edits', 'theirs', x), rowEdit('Checkout', 'u_other')); await p.waitForTimeout(100); out.t7_e_nouser = (await st7(p)).notes; await p.close();
+  // the feed of team edits: map name, kind in words, newest first, never a person
+  const FE = {a: rowEdit('Old map', 'u_Olya_secret', '2026-11-25T09:00:00Z'), b: {kind: 'add', map: 'Newer map', digest: 'd', add: {stage: 's', lane: 'l', text: 't'}, by: 'u_Ivan_secret', at: '2026-11-26T09:00:00Z', name: 'Ivan Secret', avatarUrl: 'https://x'},
+              c: {kind: 'row', map: 'Gone map', row: 'r', digest: 'd', edit: {remove: true}, by: 'u_x', at: '2026-11-24T09:00:00Z'}, d: {kind: 'weird'}};
+  [p, errs] = await open(D7(docs7(), {edits: FE})); await p.waitForTimeout(150); await tab(p, 'edits');
+  out.t7_feed = await p.evaluate(() => ({items: Array.from(document.querySelectorAll('.gpm-panel .gpm-item')).map(i => i.textContent.trim().replace(/\s+/g, ' ')), ph: document.querySelectorAll('.gpm-placeholder').length, imgs: document.querySelectorAll('.gpm-panel img').length}));
+  await p.evaluate((x) => window.__push2('edits', 'e', x), rowEdit('Live map', 'u_z', '2026-11-27T09:00:00Z')); await p.waitForTimeout(100);
+  out.t7_feed_live = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-panel .gpm-item-title')).map(i => i.textContent));
+  await p.evaluate(() => ['a', 'b', 'c', 'd', 'e'].forEach(i => window.__push2('edits', i, null))); await p.waitForTimeout(100);
+  out.t7_feed_empty = await p.evaluate(() => ({items: document.querySelectorAll('.gpm-panel .gpm-item').length, ph: Array.from(document.querySelectorAll('.gpm-placeholder')).map(x => x.textContent)})); out.t7_feed_errs = errs; await p.close();
+  // one subscription to `edits` for the badge, the feed and the map
+  [p, errs] = await open(D7(docs7(), {edits: E0})); await p.waitForTimeout(150); await tab(p, 'edits');
+  out.t7_subs = await p.evaluate(() => (window.__subs2.edits || []).length);
+  await tab(p, 'map'); await p.waitForTimeout(100); await tab(p, 'edits'); await tab(p, 'map');
+  out.t7_subs_map = await p.evaluate(() => (window.__subs2.edits || []).length); await p.close();
+  // the application menu and the tray
+  [p, errs] = await open(D7(docs7(), {perm: GRANTED})); await p.waitForTimeout(200);
+  const menuOf = (pg) => pg.evaluate(() => { const t = window.__menus[window.__menus.length - 1] || []; const top = t.find(x => x.submenu) || {submenu: []};
+    return {n: window.__menus.length, top: t.map(x => x.label || x.role), labels: top.submenu.map(x => x.label), accel: top.submenu.map(x => x.accelerator || null), enabled: top.submenu.map(x => x.enabled !== false)}; });
+  out.t7_menu0 = await menuOf(p);
+  await p.evaluate(() => { const t = window.__menus[window.__menus.length - 1]; t.find(x => x.submenu).submenu.find(x => x.label === 'Карти').click({}); }); await p.waitForTimeout(150);
+  out.t7_menu_tab = (await mod(p)).selected; out.t7_menu1 = await menuOf(p);
+  await p.evaluate(() => { const t = window.__menus[window.__menus.length - 1]; t.find(x => x.submenu).submenu.find(x => x.accelerator === 'CmdOrCtrl+E').click({}); }); await p.waitForTimeout(150);
+  out.t7_editing = await p.evaluate(() => document.body.classList.contains('editing'));
+  out.t7_tray = await st7(p); out.t7_menu_errs = errs;
+  await p.evaluate(() => window.__tray[window.__tray.length - 1].menu.find(m => m.label === 'Перше замовлення').click({})); await p.waitForTimeout(100);
+  out.t7_tray_click = {shown: await p.evaluate(() => window.__shown), tab: (await mod(p)).selected};
+  out.t7_tray_items = await p.evaluate(() => window.__tray[window.__tray.length - 1].menu.map(m => m.label || m.type));
+  await p.click('.gpm-products [data-product="zorg-pay"]'); await p.waitForTimeout(100); out.t7_tray_pay = (await st7(p)).tray.slice(-1)[0].title;
+  await p.close();
+  [p, errs] = await open(D7(docs7({'portfolio--zorg': null, 'portfolio--zorg-pay': null}), {perm: GRANTED})); await p.waitForTimeout(200);
+  out.t7_tray_noportfolio = (await st7(p)).tray.slice(-1)[0]; await p.close();
+  [p, errs] = await open(D7(docs7(), {})); await p.waitForTimeout(200);       // nothing granted: no tray, no notification; granting switches the tray on at once
+  out.t7_tray_off = (await st7(p)).tray.length; await openPerms(p); await p.click('.gpm-perm[data-perm="menu-bar"] button'); await p.waitForTimeout(150);
+  out.t7_tray_on = (await st7(p)).tray.length; out.t7_tray_off_errs = errs; await p.close();
+  // the icon
+  [p, errs] = await open(D7(docs7(), {written: false})); await p.waitForTimeout(200);
+  out.t7_icon = await p.evaluate(async () => { const u = window.__icons[0] || ''; const img = new Image(); img.src = u; await img.decode().catch(() => {});
+    return {n: window.__icons.length, png: u.indexOf('data:image/png;base64,') === 0, kb: Math.ceil(u.length * 3 / 4 / 1024), w: img.naturalWidth, h: img.naturalHeight}; });
+  out.t7_icon_panel_closed = (await panel7(p)).text; await openPerms(p); out.t7_icon_note = (await panel7(p)).text; await p.close();
+  [p, errs] = await open(D7(docs7(), {written: true})); await p.waitForTimeout(200); await openPerms(p); out.t7_icon_ok = (await panel7(p)).text; await p.close();
+  out.t7_draw = await (async () => { [p, errs] = await open(D7(docs7(), {})); await p.waitForTimeout(150);
+    const r = await p.evaluate(() => { const S = window.__gpmShell; return ['journey', 'os', 'chart', 'zzz'].map(g => { try { const u = S.drawIcon(g, null); return u ? {png: u.indexOf('data:image/png;base64,') === 0, kb: Math.ceil(u.length * 3 / 4 / 1024)} : null; } catch (e) { return 'ERR'; } }); }); await p.close(); return r; })();
+  // browser / no desktop: nothing renders, nothing errors; a desktop with only `install`
+  [p, errs] = await open('window.__noDesktop = true;' + D7(docs7(), {})); await p.waitForTimeout(150);
+  out.t7_nodesk = {panel: await p.$$eval('.gpm-perms-toggle, .gpm-perms', e => e.length), errs, mod: (await mod(p)).modulesShown}; await p.close();
+  [p, errs] = await open(fakeDesktop + fakeDb2({snapshot: docs7(), config: {}, edits: {a: rowEdit('M', 'u')}}, 'ok')); await p.waitForTimeout(150);
+  out.t7_installonly = {panel: await p.$$eval('.gpm-perms-toggle, .gpm-perms', e => e.length), errs}; await p.close();
+  [p, errs] = await open(''); out.t7_plain = {panel: await p.$$eval('.gpm-perms-toggle, .gpm-perms', e => e.length), errs}; await p.close();
+  // English
+  [p, errs] = await open(D7(docs7(), {perm: {notifications: 'granted'}, written: false, hang: {'menu-bar': true}}), null, process.argv[4]); await p.waitForTimeout(200);
+  await openPerms(p); out.t7_en = await panel7(p);
+  await p.click('.gpm-perm[data-perm="menu-bar"] button'); await p.waitForTimeout(60); await p.evaluate(() => window.__fire30()); await p.waitForTimeout(100); out.t7_en_hang = await panel7(p);
+  await p.evaluate((x) => window.__push2('edits', 'theirs', x), rowEdit('Checkout', 'u_other')); await p.waitForTimeout(100); out.t7_en_notes = (await st7(p)).notes; await p.close();
+  // phone width with the panel open
+  [p, errs] = await open(D7(docs7(), {}), {width: 360, height: 640}); await p.waitForTimeout(150); await openPerms(p);
+  out.t7_phone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth, right: document.querySelector('.gpm-perms').getBoundingClientRect().right})); await p.close();
+  // D1: the host's white skeleton behind the modules in the dark theme; the page keeps its own colours
+  const HOSTSKEL = 'document.addEventListener("DOMContentLoaded", () => { const st = document.createElement("style"); st.textContent = "body{background:#fff}"; document.head.appendChild(st); });';
+  const HOSTBG = (pg) => pg.evaluate(() => { const cs = (e) => getComputedStyle(e);
+    return {cls: document.documentElement.classList.contains('gpm-has-modules'), body: cs(document.body).backgroundColor, html: cs(document.documentElement).backgroundColor, text: cs(document.body).color, bgVar: cs(document.documentElement).getPropertyValue('--gpm-bg').trim()}; });
+  [p, errs] = await open(HOSTSKEL + APP(snapDocs(), null));
+  await p.emulateMedia({colorScheme: 'dark'}); await p.waitForTimeout(100); out.t7_d1_dark = await HOSTBG(p); out.t7_d1_probe = await p.evaluate(() => { const m = document.createElement('div'); m.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;background:var(--gpm-bg)'; document.body.appendChild(m); const c = getComputedStyle(m).backgroundColor; m.remove(); return c; }); await p.close();
+  [p, errs] = await open(HOSTSKEL + APP({}, null)); await p.emulateMedia({colorScheme: 'dark'}); await p.waitForTimeout(100); out.t7_d1_page = await HOSTBG(p); await p.close();
+  // D2: one chip per row in a card of the same product; kept when it differs or there is no card header
+  const D2DOCS = snapDocs({'risks--zorg': D5('risks', 'zorg', {items: [{title: 'Same product row', product: 'zorg'}, {title: 'Other product row', product: 'zorg-pay'}]}),
+                           'news--zorg': D5('news', 'zorg', {items: [{at: '2026-11-25T09:30:00Z', title: 'Feed same', product: 'zorg'}]})});
+  [p, errs] = await open(APP(D2DOCS, FIXCFG)); await tab(p, 'watch');
+  out.t7_d2_all = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-panel .gpm-card')).map(c => ({head: !!c.querySelector('.gpm-card-head .gpm-chip'), rows: Array.from(c.querySelectorAll('.gpm-item')).map(i => ({t: i.querySelector('.gpm-item-title').textContent, chip: (i.querySelector('.gpm-chip') || {textContent: null}).textContent}))})));
+  await p.close();
+  [p, errs] = await open(APP(D2DOCS, FIXCFG));      // the renderer itself: the chip is dropped only for a row of the card's own product under a header
+  out.t7_d2_unit = await p.evaluate(() => { const S = window.__gpmShell; const view = {chip: (id) => { const c = document.createElement('span'); c.className = 'gpm-chip'; c.textContent = id; return c; }, shows: () => true};
+    const data = {items: [{title: 'a', product: 'zorg'}, {title: 'b', product: 'zorg-pay'}]};
+    const chips = (info) => Array.from(S.blocks.list(data, view, info).querySelectorAll('li')).map(li => (li.querySelector('.gpm-chip') || {textContent: null}).textContent);
+    return {header: chips({product: 'zorg', header: true}), noHeader: chips({product: 'zorg', header: false}), noInfo: chips(undefined)}; });
+  out.t7_d2_nohead = await (async () => { await p.close(); const NOPROD = Object.assign({}, D2DOCS); NOPROD.meta = Object.assign({}, D2DOCS.meta, {products: []});
+    [p, errs] = await open(APP(NOPROD, FIXCFG)); await tab(p, 'watch');
+    const r = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-panel .gpm-card')).map(c => ({head: !!c.querySelector('.gpm-card-head'), chips: c.querySelectorAll('.gpm-chip').length, rows: c.querySelectorAll('.gpm-item').length}))); await p.close(); return r; })();
+  } catch (e) { out.t7_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
-        _, _, _, pg_pm = wrap(d, ZORG, name="pm-os", out="pmos-app.html")
-        pr = subprocess.run(["node", js, pg, "x", pg_en, os.path.join(ROOT, "testing", "fixtures", "app"), pg_pm], capture_output=True, text=True, timeout=180, env=dict(os.environ, NODE_PATH=npm))
+        bare_prof = os.path.join(d, "bare.yaml")
+        with open(bare_prof, "w") as f:
+            f.write(BARE)
+        _, _, _, pg_pm = wrap(d, ZORG, "--profiles", bare_prof, name="bare", out="bare-app.html")
+        pr = subprocess.run(["node", js, pg, "x", pg_en, os.path.join(ROOT, "testing", "fixtures", "app"), pg_pm], capture_output=True, text=True, timeout=420, env=dict(os.environ, NODE_PATH=npm))
         try:
             br = json.loads(pr.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
@@ -1028,7 +1193,10 @@ with tempfile.TemporaryDirectory() as d:
           all(s.lstrip().startswith("(function") and "</script" not in s.lower() for s in srcs.values())
           and not re.search(r"<script\b[^>]*\bsrc\s*=", html5, re.I)
           and "map.js" in srcs and '<script id="gpm-map">' in html5, names)
-    pm = wrap(d, ZORG, name="pm-os", out="pmos.html")
+    bare5 = os.path.join(d, "bare5.yaml")
+    with open(bare5, "w") as f:
+        f.write(BARE)
+    pm = wrap(d, ZORG, "--profiles", bare5, name="bare", out="bare.html")
     check("13.3 a profile without a map block does not get map.js", '<script id="gpm-map">' not in body_of(pm[3]) and pm[0] == 0, pm[1])
     two = wrap(d, ZORG, out="t5b.html")
     check("13.4 two runs give the same bytes with every file", body_of(two[3]) == html5, "")
@@ -1235,6 +1403,106 @@ if have_pw:
           br.get("t5_en_unsup") == ["this block is not supported"] and br.get("t5_en_edits") == ["Team edits will appear here"]
           and br.get("t5_en_empty") == ["No data yet — Claude will add it after the next run"] and br.get("t5_en_sw") == "Product"
           and [b["text"] for b in en.get("switchBtns", [])][:1] == ["All"], (en, br.get("t5_en_unsup"), br.get("t5_en_empty")))
+
+    # ---- Task 7: menu, badge, tray, notifications, permissions, icon; D1 and D2 --------------------------------------------
+    def rows7(k):
+        import collections
+        out_ = collections.defaultdict(lambda: {"id": None, "text": "", "btn": None, "dis": None})
+        out_.update({r["id"]: r for r in g(k).get("rows", [])})
+        return out_
+    pr = rows7("t7_p1")
+    pr_ids = [r["id"] for r in g("t7_p1").get("rows", [])]
+    check("15.0 the Task 7 browser pass ran to its end", not br.get("t7_crash"), br.get("t7_crash"))
+    check("15.1 pw_permissions_one_by_one: nothing is requested on load; the panel lists the profile's two permissions, each with one button; no «allow all»",
+          g("t7_idle").get("reqs") == [] and g("t7_p0").get("toggle") is True and g("t7_p0").get("open") is False and g("t7_p1").get("open") is True
+          and pr_ids == ["notifications", "menu-bar"] and all(r["btn"] == "Дозволити" for r in pr.values())
+          and len(g("t7_p1").get("all", [])) == 2 and not any("все" in b.lower() for b in g("t7_p1").get("all", [])) and "ще не запитано" in pr["notifications"]["text"], (g("t7_idle"), g("t7_p1")))
+    check("15.2 …each button calls permissions.request with exactly one name, from its own press; the state shows in words at once",
+          g("t7_after1").get("reqs") == [["notifications"]] and g("t7_after2").get("reqs") == [["notifications"], ["menu-bar"]]
+          and "дозволено" in rows7("t7_p2")["notifications"]["text"] and rows7("t7_p2")["notifications"]["btn"] is None
+          and "дозволено" in rows7("t7_p3")["menu-bar"]["text"] and not br.get("t7_errs"), (g("t7_after2"), g("t7_p2")))
+    hd, ha = rows7("t7_hang_during"), rows7("t7_hang_after")
+    check("15.3 pw_permission_timeout: no answer -> «Виконується…» while waiting (the other button off), a timer of 30 s; after it the button «Дозволити» is back with «немає відповіді — спробуй ще раз»; the next permission is not asked",
+          hd["notifications"]["btn"] == "Виконується…" and hd["notifications"]["dis"] is True and hd["menu-bar"]["dis"] is True and g("t7_hang_timers") == 1
+          and ha["notifications"]["btn"] == "Дозволити" and ha["notifications"]["dis"] is False and "немає відповіді — спробуй ще раз" in ha["notifications"]["text"]
+          and ha["menu-bar"]["dis"] is False and g("t7_hang_st").get("reqs") == [["notifications"]] and not br.get("t7_hang_errs"), (hd, ha, g("t7_hang_st")))
+    dn = rows7("t7_denied")
+    check("15.4 a refused permission says so and offers the settings; one unavailable here says so and has no button",
+          "не дозволено" in dn["notifications"]["text"] and dn["notifications"]["btn"] and "недоступно тут" in dn["menu-bar"]["text"] and dn["menu-bar"]["btn"] is None
+          and g("t7_denied_st").get("reqs") == [] and br.get("t7_managed") == 1, (dn, br.get("t7_managed")))
+    last = lambda k: (br.get(k) or [None])[-1]
+    check("15.5 pw_badge_counts: three documents of `edits` -> setBadge(\"3\"); none -> \"\"; 100 -> \"99+\"; 99 -> \"99\"",
+          last("t7_badge3") == "3" and last("t7_badge0") == "" and last("t7_badge100") == "99+" and last("t7_badge99") == "99" and not br.get("t7_badge_errs"),
+          (br.get("t7_badge3"), br.get("t7_badge0"), br.get("t7_badge100"), br.get("t7_badge99")))
+    n1, n3 = br.get("t7_th1") or [], g("t7_th3")
+    check("15.6 pw_notify_threshold: first sight notifies nothing; a stage 12% under its baseline -> one «увага» naming the stage; the same event again -> no new one; −30% -> «критично»",
+          g("t7_th0").get("notes") == [] and len(n1) == 1 and "Visit" in n1[0] and "увага" in n1[0].lower() and len(n1[0]) <= 300
+          and br.get("t7_th2") == n1 and len(n3.get("notes", [])) == 2 and "Visit" in n3["notes"][1] and "критично" in n3["notes"][1].lower()
+          and (n3.get("seen") or {}).get("zorg|visit") == "crit" and not br.get("t7_th_errs"), (n1, br.get("t7_th2"), n3))
+    sn = g("t7_seen").get("notes", [])
+    check("15.7 the level is compared with the one remembered in gpm-seen: cart ok -> warn notifies, pay crit -> crit does not",
+          len(sn) == 1 and "Cart" in sn[0], sn)
+    check("15.8 pw_notify_own_edit: edits that were there at load and the viewer's own edit notify nothing; another's edit -> «Нова правка на карті «Checkout»», no person",
+          br.get("t7_e0") == [] and br.get("t7_e_own") == [] and br.get("t7_e_other") == ["Нова правка на карті «Checkout»"] and not br.get("t7_e_errs"),
+          (br.get("t7_e0"), br.get("t7_e_own"), br.get("t7_e_other")))
+    check("15.9 without the permission nothing is shown; granted later, the next edit notifies with no reload; with no viewer id, none at all",
+          br.get("t7_e_noperm") == [] and br.get("t7_e_later") == ["Нова правка на карті «Checkout 2»"] and br.get("t7_e_nouser") == [],
+          (br.get("t7_e_noperm"), br.get("t7_e_later"), br.get("t7_e_nouser")))
+    fd = g("t7_feed")
+    check("15.10 the @edits feed: newest first, the map's name, the kind in words, a date; a document of no known kind is skipped; no person, id or picture",
+          len(fd.get("items", [])) == 3 and (fd.get("items") or [""])[0].startswith("26.11.2026") and "Newer map" in fd["items"][0] and "додано рядок" in fd["items"][0]
+          and "Old map" in fd["items"][1] and "змінено рядок" in fd["items"][1] and "Gone map" in fd["items"][2] and "рядок прибрано" in fd["items"][2]
+          and not any(x in " ".join(fd["items"]) for x in ("Secret", "u_", "Ivan", "Olya")) and fd.get("ph") == 0 and fd.get("imgs") == 0, fd)
+    fl, fe = br.get("t7_feed_live") or [], g("t7_feed_empty")
+    check("15.11 the feed is live (a new document shows first, no reload); with none left it shows the placeholder again; no error",
+          fl[:1] == ["Live map"] and fe.get("items") == 0 and fe.get("ph") == ["Правки команди з'являться тут"] and not br.get("t7_feed_errs"), (fl, fe))
+    check("15.12 one subscription of the shell to `edits` serves the badge, the feed, the notifications and the map's lock; the map's own v4.12.0 editor (fixed bytes) adds its own only once the map is open",
+          br.get("t7_subs") == 1 and br.get("t7_subs_map") == 2, (br.get("t7_subs"), br.get("t7_subs_map")))
+    m0, m1 = g("t7_menu0"), g("t7_menu1")
+    check("15.13 pw_menu_items: the application menu holds the profile's items in order (module titles, «Редагувати» with CmdOrCtrl+E, the Edit menu role kept); «open in Claude» left out; edit is off while no map is shown",
+          m0.get("top") == ["CJM", "editMenu"] and m0.get("labels") == ["Портфель", "Карти", "Воронка", "Редагувати", "Правки команди"]
+          and (m0.get("accel") or [None] * 4)[3] == "CmdOrCtrl+E" and m0.get("enabled") == [True, True, True, False, True], m0)
+    check("15.14 …a module item opens its tab; with a map shown «Редагувати» is on and toggles the map's edit mode",
+          br.get("t7_menu_tab") == ["map"] and m1.get("enabled", [])[3:4] == [True] and br.get("t7_editing") is True and not br.get("t7_menu_errs"), (br.get("t7_menu_tab"), m1, br.get("t7_editing"), br.get("t7_menu_errs")))
+    tr = g("t7_tray").get("tray", [])
+    check("15.15 the tray: the title is the weakest journey and its score (the lowest across products in «Усі»), the menu lists the maps and the profile's items; a map click shows the window and opens it",
+          tr and tr[-1]["title"] == "Pay by card — 44" and tr[-1]["menu"][0] == "Перше замовлення"
+          and all(x in tr[-1]["menu"] for x in ("Портфель", "Карти", "Воронка", "Редагувати", "Правки команди"))
+          and (g("t7_tray_click").get("shown") or 0) >= 1 and g("t7_tray_click").get("tab") == ["map"], (tr, g("t7_tray_click")))
+    check("15.16 choosing a product moves the tray's title to that product's weakest; with no portfolio the title is the app's name alone",
+          br.get("t7_tray_pay") == "Top up — 70" and (br.get("t7_tray_noportfolio") or {}).get("title") == "CJM", (br.get("t7_tray_pay"), br.get("t7_tray_noportfolio")))
+    check("15.17 without the menu-bar permission there is no tray; granting it puts the tray up at once", br.get("t7_tray_off") == 0 and (br.get("t7_tray_on") or 0) >= 1 and not br.get("t7_tray_off_errs"),
+          (br.get("t7_tray_off"), br.get("t7_tray_on")))
+    ic = g("t7_icon")
+    check("15.18 pw_icon_written_reported: a 256×256 PNG data URL under 256 KB goes to dock.setIcon; {written: false} -> the line «іконка застосується після перевстановлення» in the permissions panel; {written: true} -> no line",
+          (ic.get("n") or 0) >= 1 and ic.get("png") is True and (ic.get("kb") or 999) <= 256 and ic.get("w") == 256 and ic.get("h") == 256
+          and "іконка застосується після перевстановлення" in br.get("t7_icon_note", "") and "іконка застосується після перевстановлення" not in br.get("t7_icon_ok", ""), (ic, br.get("t7_icon_note")))
+    dr = br.get("t7_draw") or []
+    check("15.19 drawIcon draws the three glyphs (journey, os, chart) as PNG ≤ 256 KB; an unknown glyph draws nothing",
+          len(dr) == 4 and all(isinstance(x, dict) and x["png"] and x["kb"] <= 256 for x in dr[:3]) and dr[3] is None, dr)
+    check("15.20 in a browser, with a desktop that has only `install`, and with no window.claude: no panel, no error, the modules as before",
+          g("t7_nodesk").get("panel") == 0 and g("t7_nodesk").get("errs") == [] and g("t7_nodesk").get("mod") is True
+          and g("t7_installonly").get("panel") == 0 and g("t7_installonly").get("errs") == [] and g("t7_plain").get("panel") == 0 and g("t7_plain").get("errs") == [], 
+          (g("t7_nodesk"), g("t7_installonly"), g("t7_plain")))
+    en7, enh = rows7("t7_en"), rows7("t7_en_hang")
+    check("15.21 an English page: the permission names, states, the timeout line, the icon line and the notification are in English",
+          "Notifications" in en7["notifications"]["text"] and "allowed" in en7["notifications"]["text"] and en7["menu-bar"]["btn"] == "Allow" and "not asked yet" in en7["menu-bar"]["text"]
+          and "no answer — try again" in enh["menu-bar"]["text"] and "the icon applies after reinstalling" in g("t7_en").get("text", "")
+          and br.get("t7_en_notes") == ["New edit on the map «Checkout»"], (en7, enh, br.get("t7_en_notes")))
+    ph7 = g("t7_phone")
+    check("15.22 at phone width the open panel never scrolls the page sideways", ph7 and ph7["sw"] <= ph7["cw"] and ph7["right"] <= ph7["cw"], ph7)
+    d1, d1p = g("t7_d1_dark"), g("t7_d1_page")
+    check("15.23 D1: with modules shown the class gpm-has-modules is on <html> and body paints --gpm-bg (dark theme); with the page shown the page's own colours are untouched",
+          d1.get("cls") is True and d1.get("body") == br.get("t7_d1_probe") and d1.get("body") != "rgb(255, 255, 255)"
+          and d1p.get("cls") is False and d1p.get("body") == "rgb(255, 255, 255)", (d1, br.get("t7_d1_probe"), d1p))
+    d2, d2n = br.get("t7_d2_all") or [], br.get("t7_d2_nohead") or []
+    rows_all = [r for c in d2 for r in c["rows"]]
+    check("15.24 D2: in a card of its own product a row carries no chip (list and feed); a row of another product keeps its chip",
+          d2 and all(c["head"] for c in d2) and {r["t"]: r["chip"] for r in rows_all} == {"Same product row": None, "Other product row": "Zorg Pay", "Feed same": None}, d2)
+    du = g("t7_d2_unit")
+    check("15.25 D2: the renderer drops the chip only for the card's own product under a header; with no header (or no info) it stays; with no products declared there is no header and no chip at all",
+          du.get("header") == [None, "zorg-pay"] and du.get("noHeader") == ["zorg", "zorg-pay"] and du.get("noInfo") == ["zorg", "zorg-pay"]
+          and d2n and all(not c["head"] and c["chips"] == 0 and c["rows"] >= 1 for c in d2n), (du, d2n))
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

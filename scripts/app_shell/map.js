@@ -369,22 +369,15 @@
   // of it is not edited here until the PM has taken or cleared them.
   function watchEdits() {
     if (!ctx) { return; }
-    ctx.db().then(function (db) {
-      if (!db || typeof db.collection !== "function") { return; }
-      try {
-        db.collection("edits").onSnapshot(function (qs) {
-          var by = {};
-          try {
-            Array.prototype.slice.call(qs && qs.docs ? qs.docs : []).forEach(function (d) {
-              var x = d && typeof d.data === "function" ? d.data() : null;
-              if (!isObj(x) || typeof x.map !== "string" || typeof x.digest !== "string" || (x.kind !== "row" && x.kind !== "add")) { return; }
-              (by[x.map] = by[x.map] || []).push(x.digest);
-            });
-          } catch (e) { by = {}; }
-          state.stale = by;
-          applyStale();
-        }, function () { /* no lock without the edits */ });
-      } catch (e) { /* no lock without the edits */ }
+    ctx.watchEdits(function (list) {
+      var by = {};
+      list.forEach(function (d) {
+        var x = d.x;
+        if (typeof x.map !== "string" || typeof x.digest !== "string" || (x.kind !== "row" && x.kind !== "add")) { return; }
+        (by[x.map] = by[x.map] || []).push(x.digest);
+      });
+      state.stale = by;
+      applyStale();
     });
   }
 
@@ -501,4 +494,11 @@
   function map(data, view, info) { return all([{ data: data, info: info }], view); }
   map.all = all;
   S.blocks.map = map;
+  // Shows one map of the block by its section id (the tray's click); false when it is not drawn or not shown now.
+  S.selectMap = function (id) {
+    if (!state.root || !state.maps.some(function (mp) { return mp.id === id && visible.indexOf(id) >= 0; })) { return false; }
+    state.selected = id;
+    show();
+    return true;
+  };
 })();
