@@ -7,7 +7,7 @@
            the profile as JSON; the page's own body goes into <div class="gpm-page">. Writes nothing on a refusal.
   theme    token files of the products' design systems -> theme candidates (light, dark, contrast check, the built-in
            `neutral`); --pick ID writes the one theme that `snapshot --theme` takes
-  snapshot sections + products (+ a theme, + `--connectors FILE` role bindings {server, tool, input, pick}, + `--prev-meta FILE`
+  snapshot sections + `--products FILE` (+ a theme, + `--connectors FILE` role bindings {server, tool, input, pick}, + `--prev-meta FILE`
            to keep the dates of the sections not written now) -> one JSON file per database document under
            DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
@@ -28,7 +28,7 @@ PERMISSIONS = ("notifications", "menu-bar")
 LATER = ("full-access", "shortcuts", "overlay")
 BLOCKS = ("table", "list", "number", "chart", "feed", "map")
 GLYPHS = ("journey", "os", "chart")
-ACTIONS = ("edit", "open-in-claude")
+ACTIONS = ("edit",)
 LANGS = ("uk", "en")
 LATER_TEXT = "arrives in v4.13.1"
 PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "badge", "tray", "notify", "connectors",
@@ -752,7 +752,8 @@ def _path_safe(made):
     return re.sub(r"[^A-Za-z0-9._-]", "-", made)
 
 
-BINDING_KEYS = ("server", "tool", "input", "pick")
+BINDING_KEYS = ("server", "tool", "input", "pick", "product")
+PRODUCT_ROLES = ("funnel-numbers",)   # a binding that may name the one product whose section it feeds (R21)
 PICK_KEYS = ("items", "key", "value")
 PICK_PATH = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$")
 INPUT_MAX = 4096              # a binding's input, serialized, in bytes
@@ -786,7 +787,9 @@ def _input_errors(v, depth, errs):
 
 
 def check_binding(role, b, roles, profile):
-    """One role's binding {server, tool, input, pick} -> the cleaned copy. Bad on anything that does not fit."""
+    """One role's binding {server, tool, input, pick, product?} -> the cleaned copy. Bad on anything that does not fit.
+    `product` (funnel-numbers only) names the product whose funnel the live numbers are painted on; that it is one of
+    the snapshot's products is checked where the products are known (_build)."""
     w = "connectors.%s" % role
     if role not in roles:
         raise Bad("connector role '%s' is not declared by profile '%s' (it declares: %s)" % (role, profile, ", ".join(roles) or "none"))
@@ -819,7 +822,14 @@ def check_binding(role, b, roles, profile):
         v = pick[k]
         if not isinstance(v, str) or not (PICK_PATH.match(v) or (k == "items" and v == "")):
             raise Bad("%s: pick.%s must be a dot-path of up to 8 names (letters, digits, _)%s" % (w, k, "; items may be empty" if k == "items" else ""))
-    return {"server": b["server"].strip(), "tool": b["tool"].strip(), "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
+    out = {"server": b["server"].strip(), "tool": b["tool"].strip(), "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
+    if "product" in b:
+        if role not in PRODUCT_ROLES:
+            raise Bad("%s: product is for %s only" % (w, ", ".join(PRODUCT_ROLES)))
+        if not isinstance(b["product"], str) or not PRODUCT.match(b["product"]):
+            raise Bad("%s: product must be a product id (%s)" % (w, PRODUCT.pattern))
+        out["product"] = b["product"]
+    return out
 
 
 def check_connectors(doc, roles, profile):
@@ -881,10 +891,11 @@ def _build(sections, products, theme, made, connectors=None, prev=None):
             continue
         docs["snapshot/" + did] = doc
         written[did] = made
-    # the sections of the previous meta that this run did not write stay, while their product is still one of the products
+    # the sections of the previous meta that this run did not touch stay, while their product is still one of the products;
+    # a section given now but over the limit leaves the index (the app shows no stale version of it)
     kept = {}
     for sid, when in ((prev or {}).get("sections") or {}).items():
-        if sid not in written and SECTION_ID.match(sid) and any(sid.endswith("--" + i) for i in ids):
+        if sid not in seen and SECTION_ID.match(sid) and any(sid.endswith("--" + i) for i in ids):
             kept[sid] = when
     meta = {"v": 1, "made": made,
             "products": [{"id": p["id"], "label": p["label"], "color": p.get("color")} for p in products],
@@ -892,6 +903,9 @@ def _build(sections, products, theme, made, connectors=None, prev=None):
     if connectors is None and prev:
         connectors = prev.get("connectors")
     if connectors:
+        for role, b in connectors.items():
+            if "product" in b and b["product"] not in ids:
+                raise Bad("connectors.%s: product '%s' is not one of the snapshot's products" % (role, b["product"]))
         meta["connectors"] = {role: dict(b) for role, b in connectors.items()}
     docs["snapshot/meta"] = meta
     if theme is not None:
@@ -924,19 +938,37 @@ def build_snapshot(sections, products, theme, made, connectors=None, prev_meta=N
     return _build(sections, products, theme, made, connectors, prev)[0]
 
 
+def _outside_plugin(path):
+    """Bad when `path` resolves (symlinks followed) inside the plugin's own folder: the script never writes there."""
+    root = os.path.realpath(os.path.dirname(HERE))
+    real = os.path.realpath(path)
+    if real == root or real.startswith(root + os.sep):
+        raise Bad("--out %s is inside the plugin's own folder (%s): write into a scratch folder of the session" % (path, root))
+
+
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def parse_product(spec):
-    """`ID:LABEL[:#rrggbb]` -> {id, label, color}."""
-    parts = (spec or "").split(":")
-    if len(parts) not in (2, 3) or not parts[0] or not parts[1]:
-        raise Bad("product '%s': expected ID:LABEL[:#rrggbb] (a label has no colon)" % spec)
-    color = parts[2] if len(parts) == 3 else None
-    if color is not None and not COLOR.match(color):
-        raise Bad("product '%s': color must be #rrggbb" % parts[0])
-    return {"id": parts[0], "label": parts[1], "color": color}
+PRODUCT_KEYS = ("id", "label", "color")
+
+
+def read_products(path):
+    """The file of `snapshot --products`: a JSON list of {id, label, color?} -> [{id, label, color|None}]. A label comes
+    from the user's context, so it travels as a file, never as a command-line value (search-protocol §3a). The id, the
+    label and the colour are checked by _build."""
+    raw = _read_json(path, "products")
+    if not isinstance(raw, list):
+        raise Bad("products: the file must be a list [{id, label, color?}]")
+    out = []
+    for i, p in enumerate(raw):
+        if not isinstance(p, dict):
+            raise Bad("products[%d]: must be an object {id, label, color?}" % i)
+        for k in p:
+            if k not in PRODUCT_KEYS:
+                raise Bad("products[%d]: unknown key '%s'" % (i, k))
+        out.append({"id": p.get("id"), "label": p.get("label"), "color": p.get("color")})
+    return out
 
 
 def parse_section(spec):
@@ -957,6 +989,10 @@ def _read_json(path, what):
 
 
 def cmd_snapshot(a):
+    _outside_plugin(a.out)
+    if os.path.isdir(a.out) and os.listdir(a.out):
+        raise Bad("--out %s: the folder is not empty — give a new or an empty folder, so that files of an earlier run are "
+                  "never written into the database again" % a.out)
     doc = load_profiles(a.profiles)
     prof = (doc.get("profiles") or {}).get(a.profile)
     if prof is None:
@@ -964,7 +1000,7 @@ def cmd_snapshot(a):
     roles = [c.get("role") for c in prof.get("connectors") or [] if isinstance(c, dict)]
     connectors = check_connectors(_read_json(a.connectors, "connectors"), roles, a.profile) if a.connectors else None
     prev = check_prev_meta(_read_json(a.prev_meta, "prev-meta"), roles, a.profile) if a.prev_meta else None
-    products = [parse_product(x) for x in a.product]
+    products = read_products(a.products) if a.products else []
     sections = [parse_section(x) for x in a.section]
     theme = _read_json(a.theme, "theme") if a.theme else None
     made = a.at or _now()
@@ -986,6 +1022,7 @@ def cmd_snapshot(a):
 
 
 def cmd_theme(a):
+    _outside_plugin(a.out)
     cands = theme_candidates(a.tokens)
     if a.pick is None:
         data = {"candidates": cands}
@@ -1026,6 +1063,7 @@ def cmd_check(a):
 
 
 def cmd_wrap(a):
+    _outside_plugin(a.out)
     doc = load_profiles(a.profiles)
     prof = (doc.get("profiles") or {}).get(a.profile)
     if prof is None:
@@ -1063,10 +1101,10 @@ def main(argv=None):
     w.add_argument("--connector", action="append", default=[], metavar="SERVER:TOOL[,TOOL]")
     w.add_argument("--profiles", default=None)
     w.set_defaults(fn=cmd_wrap)
-    n = sub.add_parser("snapshot")
+    n = sub.add_parser("snapshot", allow_abbrev=False)     # the gone --product is not taken for --products
     n.add_argument("--profile", required=True)
     n.add_argument("--section", action="append", default=[], metavar="NAME:PRODUCT:FILE")
-    n.add_argument("--product", action="append", default=[], metavar="ID:LABEL[:#rrggbb]")
+    n.add_argument("--products", default=None, metavar="FILE", help="JSON [{id, label, color?}]")
     n.add_argument("--connectors", default=None, metavar="FILE", help="JSON {role: {server, tool, input, pick}}")
     n.add_argument("--prev-meta", default=None, metavar="FILE", help="the previous snapshot/meta document")
     n.add_argument("--theme", default=None)

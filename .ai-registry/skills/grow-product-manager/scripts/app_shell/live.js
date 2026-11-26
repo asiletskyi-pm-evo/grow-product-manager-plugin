@@ -5,7 +5,9 @@
   // role to a connector tool (meta.connectors[role] = {server, tool, input, pick}, written by `snapshot --connectors`),
   // this file asks that tool — with `watchTool`, the display arm of the `mcp` capability — for
   //   issue-status    a short status per code the maps already show, put beside each map row that carries the code;
-  //   funnel-numbers  a live number per stage of the funnel chart already in the snapshot, put beside the snapshot's value.
+  //   funnel-numbers  a live number per stage of ONE funnel chart already in the snapshot, put beside the snapshot's value:
+  //                   the funnel of the binding's `product`, or — with no product — the snapshot's only funnel. With
+  //                   several funnels and no product nothing live is shown for the funnel, and the line says why.
   // Nothing is asked that the snapshot does not already show: only those codes, only those stage ids, no new queries.
   // One fetch when the data arrives (and again only when the codes change), one more per press of the button «Оновити»
   // (through busy) — no refetchInterval, no polling, no retry by itself. The shape of a tool's arguments and answer is the
@@ -37,7 +39,8 @@
       reUpstream: "%s: конектор зараз не відповідає",
       reOther: "%s: запит не вдався",
       reNoMatch: "%s: у відповіді немає потрібних чисел",
-      reChanged: "обліковий запис змінився — онови сторінку"
+      reChanged: "обліковий запис змінився — онови сторінку",
+      reManyFunnels: "у знімку кілька воронок, а прив'язка не називає продукт — Claude додасть його в наступному прогоні"
     },
     en: {
       liveLine: "Live numbers",
@@ -58,7 +61,8 @@
       reUpstream: "%s: the connector is not answering right now",
       reOther: "%s: the request failed",
       reNoMatch: "%s: the answer holds none of the numbers needed",
-      reChanged: "the account changed — reload the page"
+      reChanged: "the account changed — reload the page",
+      reManyFunnels: "the snapshot holds several funnels and the binding names no product — Claude adds it in the next run"
     }
   });
 
@@ -131,17 +135,22 @@
     return out.slice(0, MAX_CODES);
   }
 
-  function stagesOf(snap) {
-    var out = [], set = Object.create(null);
-    Object.keys(snap.sections).sort().forEach(function (id) {
+  // The one funnel the binding feeds -> {asked: [stage id], target: its document id} ({many: true} when the snapshot
+  // holds several funnels and the binding names no product: nothing is asked then).
+  function stagesOf(snap, binding) {
+    var funnels = Object.keys(snap.sections).sort().filter(function (id) {
       var sec = snap.sections[id];
-      if (sec.section !== "funnel" || !Array.isArray(sec.data.stages)) { return; }
-      sec.data.stages.forEach(function (s) {
-        // the same rule as for a map's code: an id that does not fit is never sent (its stage keeps the snapshot's value)
-        if (isObj(s) && typeof s.id === "string" && CODE.test(s.id) && !set[s.id]) { set[s.id] = true; out.push(s.id); }
-      });
+      return sec.section === "funnel" && Array.isArray(sec.data.stages)
+        && (typeof binding.product !== "string" || sec.product === binding.product);
     });
-    return out.slice(0, MAX_CODES);
+    if (funnels.length > 1 && typeof binding.product !== "string") { return { asked: [], target: null, many: true }; }
+    if (!funnels.length) { return { asked: [], target: null }; }
+    var out = [], set = Object.create(null);
+    snap.sections[funnels[0]].data.stages.forEach(function (s) {
+      // the same rule as for a map's code: an id that does not fit is never sent (its stage keeps the snapshot's value)
+      if (isObj(s) && typeof s.id === "string" && CODE.test(s.id) && !set[s.id]) { set[s.id] = true; out.push(s.id); }
+    });
+    return { asked: out.slice(0, MAX_CODES), target: funnels[0] };
   }
 
   // The arguments of the call: the binding's input with {codes} (inside a string) -> the codes joined with «, » and a
@@ -181,7 +190,7 @@
   // ---- the part -----------------------------------------------------------------------------------------------------------
   S.part("live", function (ctx) {
     var roles = {};               // role -> {role, binding, asked, key, seq, unsub, status, values, at, err, settle, timer}
-    var mcpP = null, theMcp = null, absent = false, halted = false;
+    var mcpP = null, theMcp = null, absent = false, halted = false, many = false;
     var bar = null, linesBox = null, button = null;
 
     function t() { return S.t; }
@@ -194,18 +203,20 @@
       return mcpP;
     }
 
-    // what is to be asked now: role -> {binding, asked}
+    // what is to be asked now: {roles: {role -> {binding, asked, target}}, many} — `target` the one funnel document
+    // whose chart gets the funnel's numbers; `many` when the funnel is not asked because it is not known which one
     function plan() {
-      var snap = ctx.data, out = {};
+      var snap = ctx.data, out = {}, isMany = false;
       var meta = snap && snap.meta ? snap.meta : null;
-      if (!meta || !isObj(meta.connectors)) { return out; }
+      if (!meta || !isObj(meta.connectors)) { return { roles: out, many: false }; }
       ROLES.forEach(function (role) {
         var b = meta.connectors[role];
         if (!isObj(b)) { return; }
-        var asked = role === "issue-status" ? codesOf(snap) : stagesOf(snap);
-        if (asked.length) { out[role] = { binding: b, asked: asked }; }
+        var f = role === "issue-status" ? { asked: codesOf(snap), target: null } : stagesOf(snap, b);
+        if (f.many) { isMany = true; }
+        if (f.asked.length) { out[role] = { binding: b, asked: f.asked, target: f.target }; }
       });
-      return out;
+      return { roles: out, many: isMany };
     }
 
     function stop(st) {
@@ -323,12 +334,17 @@
       return meta ? S.showDate(meta.made, ctx.lang) : "";
     }
 
+    // a stage's key is "<section document id>|<stage id>": a value is painted only on the funnel it was asked for
     function textFor(kind, key) {
       var st = roles[kind === "code" ? "issue-status" : "funnel-numbers"];
       var vals = st ? shown(st) : null;
-      if (!vals || !(key in vals)) { return ""; }
-      if (kind === "code") { return CODE.test(key) ? vals[key] : ""; }
-      return t().liveWord + ": " + vals[key] + " · " + hhmm(st.at);
+      if (!vals) { return ""; }
+      if (kind === "code") { return CODE.test(key) && key in vals ? vals[key] : ""; }
+      var cut = key.lastIndexOf("|");
+      if (cut < 0 || !st.target || key.slice(0, cut) !== st.target) { return ""; }
+      var stage = key.slice(cut + 1);
+      if (!(stage in vals)) { return ""; }
+      return t().liveWord + ": " + vals[stage] + " · " + hhmm(st.at);
     }
 
     function refreshable(st) {
@@ -354,6 +370,7 @@
       var date = snapDate();
       var tail = date ? " · " + t().liveSnap + date : "";
       if (absent) { return [t().liveOff + t().reAbsent + tail]; }
+      if (many) { out.push(t().liveOff + t().reManyFunnels + tail); }
       var groups = [], byKey = {};
       Object.keys(roles).forEach(function (role) {
         var st = roles[role];
@@ -375,7 +392,7 @@
 
     function paint() {
       try {
-        var want = Object.keys(roles).length > 0 || absent;
+        var want = Object.keys(roles).length > 0 || absent || many;
         if (want && !bar) { buildBar(); }
         if (bar) {
           var texts = lines();
@@ -412,7 +429,8 @@
 
     // ---- the flow -----------------------------------------------------------------------------------------------------------
     function apply(mcp) {
-      var want = plan();
+      var p = plan(), want = p.roles;
+      many = p.many;
       Object.keys(roles).forEach(function (role) {
         if (!want[role]) { stop(roles[role]); delete roles[role]; }
       });
@@ -421,11 +439,11 @@
       absent = false;
       theMcp = mcp;
       Object.keys(want).forEach(function (role) {
-        var key = JSON.stringify([want[role].binding, want[role].asked]);
+        var key = JSON.stringify([want[role].binding, want[role].asked, want[role].target]);
         var st = roles[role];
         if (st && st.key === key) { return; }
         if (st) { stop(st); }
-        st = roles[role] = { role: role, binding: want[role].binding, asked: want[role].asked, key: key, seq: 0, unsub: null, status: "pending", values: null, at: 0, err: null, keep: false, settle: null, timer: null };
+        st = roles[role] = { role: role, binding: want[role].binding, asked: want[role].asked, target: want[role].target, key: key, seq: 0, unsub: null, status: "pending", values: null, at: 0, err: null, keep: false, settle: null, timer: null };
         start(st);
       });
       paint();
@@ -434,7 +452,7 @@
     function sync() {
       try {
         if (halted) { return; }
-        if (!Object.keys(plan()).length) { apply(null); return; }
+        if (!Object.keys(plan().roles).length) { apply(null); return; }
         getMcp().then(function (m) { if (!halted) { apply(m); } }).catch(function () { /* the page stays as it was */ });
       } catch (e) { /* the page stays as it was */ }
     }
