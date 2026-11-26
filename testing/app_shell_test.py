@@ -1042,7 +1042,16 @@ const fakeDesktop = `
 FIX = os.path.join(ROOT, "testing", "fixtures", "app")
 PORT, MAP, THEME = (os.path.join(FIX, n) for n in ("zorg-portfolio.json", "zorg-map.json", "zorg-theme.json"))
 MADE = "2026-11-26T10:00:00Z"
-ZP = ["--product", "zorg:Zorg:#2f6fde", "--product", "zorg-pay:Zorg Pay"]
+PRODUCTS = os.path.join(FIX, "zorg-products.json")       # [{id, label, color?}] — the products travel as a file (R23)
+ZP = ["--products", PRODUCTS]
+
+
+def pfile(d, name, products):
+    """A `--products` file of this test's own -> the two arguments."""
+    path = os.path.join(d, name)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(products, f, ensure_ascii=False)
+    return ["--products", path]
 
 
 def snap(d, *args, out="snap"):
@@ -1087,8 +1096,15 @@ with tempfile.TemporaryDirectory() as d:
     api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, MADE)
     check("11.7 build_snapshot(sections, products, theme, made) -> {path: document}; no theme -> no theme document",
           sorted(api) == ["runs/2026-11-26T10-00-00Z", "snapshot/meta", "snapshot/portfolio--zorg"], sorted(api))
-    rc, text, res, o2 = snap(d, "--product", "zorg:Зорг:#2f6fde", "--section", "portfolio:zorg:" + PORT, out="uk")
+    rc, text, res, o2 = snap(d, *pfile(d, "uk.json", [{"id": "zorg", "label": "Зорг", "color": "#2f6fde"}]), "--section", "portfolio:zorg:" + PORT, out="uk")
     check("11.8 a label may be non-Latin and have spaces", rc == 0 and jread(o2, "snapshot", "meta.json")["products"][0]["label"] == "Зорг", text)
+
+    # R23: no free text on the command line — the products come as a file; the old flag is gone
+    rc, text, res, o3 = snap(d, *pfile(d, "shellish.json", [{"id": "zorg", "label": "Zorg $(x) `y`"}]), "--section", "portfolio:zorg:" + PORT, out="shellish")
+    check("23.1 --products FILE: a label with $(…) and a backtick is data, stored as text exactly",
+          rc == 0 and jread(o3, "snapshot", "meta.json")["products"] == [{"id": "zorg", "label": "Zorg $(x) `y`", "color": None}], text)
+    rc, text, res, o4 = snap(d, "--product", "zorg:Zorg", "--section", "portfolio:zorg:" + PORT, out="oldflag")
+    check("23.2 the old --product ID:LABEL flag is gone: argparse refuses it (exit 2), nothing written", rc == 2 and not os.path.exists(o4), text)
 
     # test_snapshot_size
     big = os.path.join(d, "big.json")
@@ -1104,14 +1120,20 @@ with tempfile.TemporaryDirectory() as d:
 
     # test_snapshot_ids
     cases = (
-        ("a product id with a capital", ["--product", "Zorg:Zorg"], ["--section", "portfolio:Zorg:" + PORT], "product"),
-        ("a product id with an underscore", ["--product", "zorg_pay:Zorg"], ["--section", "portfolio:zorg_pay:" + PORT], "product"),
+        ("a product id with a capital", pfile(d, "p1.json", [{"id": "Zorg", "label": "Zorg"}]), ["--section", "portfolio:Zorg:" + PORT], "product"),
+        ("a product id with an underscore", pfile(d, "p2.json", [{"id": "zorg_pay", "label": "Zorg"}]), ["--section", "portfolio:zorg_pay:" + PORT], "product"),
         ("a section name with a slash", ZP, ["--section", "a/b:zorg:" + PORT], "section"),
         ("a section name over 64", ZP, ["--section", "a" * 65 + ":zorg:" + PORT], "section"),
         ("a section name starting with a dot", ZP, ["--section", ".x:zorg:" + PORT], "section"),
         ("a section of an unknown product", ZP, ["--section", "portfolio:ghost:" + PORT], "ghost"),
-        ("a label with 25 characters", ["--product", "zorg:" + "я" * 25], ["--section", "portfolio:zorg:" + PORT], "label"),
-        ("a bad colour", ["--product", "zorg:Zorg:red"], ["--section", "portfolio:zorg:" + PORT], "color"),
+        ("a label with 25 characters", pfile(d, "p3.json", [{"id": "zorg", "label": "я" * 25}]), ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a bad colour", pfile(d, "p4.json", [{"id": "zorg", "label": "Zorg", "color": "red"}]), ["--section", "portfolio:zorg:" + PORT], "color"),
+        ("--products that is not a list", pfile(d, "p5.json", {"id": "zorg", "label": "Zorg"}), ["--section", "portfolio:zorg:" + PORT], "list"),
+        ("a product that is not an object", pfile(d, "p6.json", ["zorg:Zorg"]), ["--section", "portfolio:zorg:" + PORT], "object"),
+        ("a product with an unknown key", pfile(d, "p7.json", [{"id": "zorg", "label": "Zorg", "logo": "x"}]), ["--section", "portfolio:zorg:" + PORT], "logo"),
+        ("a product with no label", pfile(d, "p8.json", [{"id": "zorg"}]), ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a label that is not text", pfile(d, "p9.json", [{"id": "zorg", "label": 7}]), ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a missing --products file", ["--products", os.path.join(d, "nope-products.json")], ["--section", "portfolio:zorg:" + PORT], "nope-products.json"),
         ("the same section twice", ZP, ["--section", "portfolio:zorg:" + PORT, "--section", "portfolio:zorg:" + PORT], "twice"),
         ("a missing data file", ZP, ["--section", "portfolio:zorg:" + os.path.join(d, "nope.json")], "nope.json"),
     )
@@ -1971,7 +1993,7 @@ with tempfile.TemporaryDirectory() as d:
                         "--connectors", wjson(d, "new.json", {"funnel-numbers": BOARD}))
     check("16.17 --connectors given with --prev-meta: the new bindings replace the old ones", jread(o4, "snapshot", "meta.json")["connectors"] == {"funnel-numbers": BOARD}, text)
     o5 = os.path.join(d, "p5")
-    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o5, "--at", LATER_AT, "--product", "zorg:Zorg", "--section", "portfolio:zorg:" + PORT, "--prev-meta",
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o5, "--at", LATER_AT, *pfile(d, "only-zorg.json", [{"id": "zorg", "label": "Zorg"}]), "--section", "portfolio:zorg:" + PORT, "--prev-meta",
                         wjson(d, "pm.json", {"v": 1, "made": MADE, "sections": {"portfolio--zorg": MADE, "map.a--zorg-pay": MADE, "map.b--zorg": MADE, "BAD ID--zorg": MADE, "x--zorg": 5}}))
     check("16.18 an entry is carried only when its product is still among --product and its id is well-formed",
           jread(o5, "snapshot", "meta.json")["sections"] == {"portfolio--zorg": LATER_AT, "map.b--zorg": MADE}, text)

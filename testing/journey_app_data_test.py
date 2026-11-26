@@ -295,7 +295,7 @@ try:
     check("2.8 without a funnel snapshot: no funnel.json, funnel false", rc == 0 and res.get("funnel") is False
           and os.path.exists(os.path.join(d, "port3", "portfolio.json")) and not os.path.exists(os.path.join(d, "port3", "funnel.json")), out[-300:])
     check("2.9 the sections go through the snapshot command", run(SH, "APP_RESULT", "snapshot", "--profile", "cjm", "--out", os.path.join(d, "snap"),
-          "--at", "2026-11-26T10:00:00Z", "--product", "zorg:Zorg", "--section", "portfolio:zorg:" + os.path.join(pdir, "portfolio.json"),
+          "--at", "2026-11-26T10:00:00Z", "--products", os.path.join(ROOT, "testing", "fixtures", "app", "zorg-products.json"), "--section", "portfolio:zorg:" + os.path.join(pdir, "portfolio.json"),
           "--section", "funnel:zorg:" + os.path.join(pdir, "funnel.json"), "--section", "map.first-order:zorg:" + out1)[2].get("ok") is True, "")
 
     # 3. wrap: the edit mode goes into the app only with a map block

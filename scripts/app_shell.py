@@ -7,7 +7,7 @@
            the profile as JSON; the page's own body goes into <div class="gpm-page">. Writes nothing on a refusal.
   theme    token files of the products' design systems -> theme candidates (light, dark, contrast check, the built-in
            `neutral`); --pick ID writes the one theme that `snapshot --theme` takes
-  snapshot sections + products (+ a theme, + `--connectors FILE` role bindings {server, tool, input, pick}, + `--prev-meta FILE`
+  snapshot sections + `--products FILE` (+ a theme, + `--connectors FILE` role bindings {server, tool, input, pick}, + `--prev-meta FILE`
            to keep the dates of the sections not written now) -> one JSON file per database document under
            DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
@@ -950,15 +950,25 @@ def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def parse_product(spec):
-    """`ID:LABEL[:#rrggbb]` -> {id, label, color}."""
-    parts = (spec or "").split(":")
-    if len(parts) not in (2, 3) or not parts[0] or not parts[1]:
-        raise Bad("product '%s': expected ID:LABEL[:#rrggbb] (a label has no colon)" % spec)
-    color = parts[2] if len(parts) == 3 else None
-    if color is not None and not COLOR.match(color):
-        raise Bad("product '%s': color must be #rrggbb" % parts[0])
-    return {"id": parts[0], "label": parts[1], "color": color}
+PRODUCT_KEYS = ("id", "label", "color")
+
+
+def read_products(path):
+    """The file of `snapshot --products`: a JSON list of {id, label, color?} -> [{id, label, color|None}]. A label comes
+    from the user's context, so it travels as a file, never as a command-line value (search-protocol §3a). The id, the
+    label and the colour are checked by _build."""
+    raw = _read_json(path, "products")
+    if not isinstance(raw, list):
+        raise Bad("products: the file must be a list [{id, label, color?}]")
+    out = []
+    for i, p in enumerate(raw):
+        if not isinstance(p, dict):
+            raise Bad("products[%d]: must be an object {id, label, color?}" % i)
+        for k in p:
+            if k not in PRODUCT_KEYS:
+                raise Bad("products[%d]: unknown key '%s'" % (i, k))
+        out.append({"id": p.get("id"), "label": p.get("label"), "color": p.get("color")})
+    return out
 
 
 def parse_section(spec):
@@ -990,7 +1000,7 @@ def cmd_snapshot(a):
     roles = [c.get("role") for c in prof.get("connectors") or [] if isinstance(c, dict)]
     connectors = check_connectors(_read_json(a.connectors, "connectors"), roles, a.profile) if a.connectors else None
     prev = check_prev_meta(_read_json(a.prev_meta, "prev-meta"), roles, a.profile) if a.prev_meta else None
-    products = [parse_product(x) for x in a.product]
+    products = read_products(a.products) if a.products else []
     sections = [parse_section(x) for x in a.section]
     theme = _read_json(a.theme, "theme") if a.theme else None
     made = a.at or _now()
@@ -1091,10 +1101,10 @@ def main(argv=None):
     w.add_argument("--connector", action="append", default=[], metavar="SERVER:TOOL[,TOOL]")
     w.add_argument("--profiles", default=None)
     w.set_defaults(fn=cmd_wrap)
-    n = sub.add_parser("snapshot")
+    n = sub.add_parser("snapshot", allow_abbrev=False)     # the gone --product is not taken for --products
     n.add_argument("--profile", required=True)
     n.add_argument("--section", action="append", default=[], metavar="NAME:PRODUCT:FILE")
-    n.add_argument("--product", action="append", default=[], metavar="ID:LABEL[:#rrggbb]")
+    n.add_argument("--products", default=None, metavar="FILE", help="JSON [{id, label, color?}]")
     n.add_argument("--connectors", default=None, metavar="FILE", help="JSON {role: {server, tool, input, pick}}")
     n.add_argument("--prev-meta", default=None, metavar="FILE", help="the previous snapshot/meta document")
     n.add_argument("--theme", default=None)
