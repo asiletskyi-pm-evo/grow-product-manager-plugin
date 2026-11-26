@@ -867,6 +867,22 @@ const fakeDesktop = `
   [p, errs] = await open(APP(docs8(CODES8, {'funnel-numbers': BOARD8}), null) + MCP8({stage_counts: {w: ERR8('approval_required'), c: FUN_OK}}));
   await tab(p, 'funnel'); out.t8_ap0 = await live8(p);
   await p.click('.gpm-live-bar button'); await p.waitForTimeout(250); out.t8_ap1 = await live8(p); out.t8_ap_errs = errs; await p.close();
+  // stage ids that do not fit the code regex are never sent; the stage keeps its snapshot value
+  const FUNBAD = {stages: [{id: 'visit', title: 'Visit', value: 1000, baseline: 1000}, {id: 'visit) OR x', title: 'Evil one', value: 5, baseline: 5}, {id: 'a, b', title: 'Comma', value: 6, baseline: 6}, {id: 'cart', title: 'Cart', value: 700, baseline: 800}]};
+  const BADB = [Object.assign({}, BOARD8, {input: {board: 'main', stages: '{codes[]}'}}), Object.assign({}, BOARD8, {input: {board: 'main', q: 'id in ({codes})'}})];
+  out.t8_badstage = [];
+  for (const b of BADB) {
+    const dd = snapDocs({'funnel--zorg': D5('funnel', 'zorg', FUNBAD), 'funnel--zorg-pay': null}); dd.meta.connectors = {'funnel-numbers': b};
+    [p, errs] = await open(APP(dd, null) + MCP8({stage_counts: {w: FUN8([{stage: 'visit', count: 990}, {stage: 'visit) OR x', count: 1}, {stage: 'a, b', count: 2}, {stage: 'cart', count: 701}])}}));
+    await tab(p, 'funnel'); const r = await live8(p);
+    out.t8_badstage.push({input: r.m.watches.map(w => w.input), stages: r.stages.map(x => [x.title, x.value, x.live.length]), errs}); await p.close();
+  }
+  // user_changed: every watch is dropped, nothing live stays, nothing is painted afterwards
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK)); await tab(p, 'funnel');
+  await p.evaluate(() => window.__send8('stage_counts', {type: 'error', error: {code: 'user_changed', message: 'x'}})); await p.waitForTimeout(100);
+  out.t8_changed = await live8(p);
+  await p.evaluate(() => { window.__m8.hs.forEach(h => h.handler({type: 'data', result: {content: [], payload: {rows: [{stage: 'visit', count: 1}]}}})); }); await p.waitForTimeout(100);
+  out.t8_changed2 = await live8(p); out.t8_changed_errs = errs; await p.close();
   // phone width and English
   [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: ERR8('needs_reauth')}, stage_counts: {w: ERR8('server_not_connected')}}), {width: 360, height: 640}); await tab(p, 'funnel');
   out.t8_phone = await live8(p); await p.close();
@@ -1714,8 +1730,8 @@ if have_pw:
     bad = {c: e for c, e in errs8.items() if not (len(e["lines"] or []) == 1 and e["lines"][0].startswith("живі числа недоступні:") and WHY[c] in e["lines"][0] and "26.11.2026" in e["lines"][0])}
     check("16.45 each documented error code (and an unknown one) shows its own reason in words after «живі числа недоступні:» with the snapshot's date; the same reason of both roles is one line", len(errs8) == len(WHY) and not bad, bad)
     check("16.46 and the snapshot's numbers stay, no live value, no error, no retry by itself, no unsubscribe, no callTool",
-          all(all(v[0].startswith(("1000", "700", "400", "380", "12")) and v[1] == 0 for v in e["stages"]) and e["errs"] == [] and e["watches"] == 2 and e["unsubs"] == 0 and e["calls"] == 0
-              for e in errs8.values()), {c: (e["stages"], e["errs"], e["watches"]) for c, e in errs8.items()})
+          all(all(v[0].startswith(("1000", "700", "400", "380", "12")) and v[1] == 0 for v in e["stages"]) and e["errs"] == [] and e["watches"] == 2 and e["unsubs"] == (2 if c == "user_changed" else 0) and e["calls"] == 0
+              for c, e in errs8.items()), {c: (e["stages"], e["errs"], e["watches"]) for c, e in errs8.items()})
     check("16.47 the reasons differ where the fix differs (reconnect, add, choose, not allowed, policy, approval, tool, unreachable)",
           len({WHY[c] for c in errs8}) >= 9 and errs8["needs_reauth"]["lines"] != errs8["server_not_connected"]["lines"] != errs8["blocked_by_policy"]["lines"], "")
     check("16.48 a refresh button is offered only where the API says a repeat may help (approval_required: the button asks; everything else here: off)",
@@ -1749,6 +1765,14 @@ if have_pw:
     ph8 = g("t8_phone")
     check("16.56 at phone width the live bar never scrolls the page sideways", ph8["sw"] <= ph8["cw"] and ph8["bar"] is not None, (ph8["sw"], ph8["cw"]))
     en8 = g("t8_en")
+    bs = br.get("t8_badstage") or []
+    check("16.58 stage ids that fail the code regex are never sent ({codes[]} and {codes}); the bad stages keep their snapshot value and show nothing live; no error",
+          len(bs) == 2 and bs[0]["input"] == [{"board": "main", "stages": ["visit", "cart"]}] and bs[1]["input"] == [{"board": "main", "q": "id in (visit, cart)"}]
+          and all(x["errs"] == [] and ["Evil one", "5", 0] in x["stages"] and ["Comma", "6", 0] in x["stages"] and x["stages"][0][2] == 1 for x in bs), bs)
+    c1, c2 = g("t8_changed"), g("t8_changed2")
+    check("16.59 user_changed: every watch is unsubscribed, no live value stays, later events paint nothing, no error",
+          c1["m"]["unsubs"] == 2 and all(x["live"] == [] for x in c1["stages"]) and all(x["live"] == [] for x in c2["stages"]) and c2["bar"]["btnHidden"] is True
+          and any("онови сторінку" in x for x in c2["bar"]["lines"]) and not br.get("t8_changed_errs"), (c1["m"], c2["stages"], c2["bar"]))
     check("16.57 an English page: «Live numbers», «live: 990 · hh:mm», «Refresh»", any(x.startswith("Live numbers") and "Zorg Board" in x for x in en8["bar"]["lines"]) and en8["bar"]["btn"] == "Refresh"
           and en8["stages"][0]["live"] == ["live: 990 · " + T8] and not br.get("t8_en_errs"), (en8["bar"], en8["stages"][0]))
 
@@ -1839,6 +1863,14 @@ with tempfile.TemporaryDirectory() as d:
     deep6 = {"a": {"a": {"a": {"a": {"a": {"a": 1}}}}}}
     rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "d6.json", put(input=deep6)), out="cbd")
     check("16.10b input with 6 levels (the input itself is the first) is accepted", rc == 0, text)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "pad.json", put(server="  Zorg Tracker ", tool=" search_items ")), out="cbpad")
+    mb = jread(o, "snapshot", "meta.json")["connectors"]["issue-status"] if rc == 0 else {}
+    check("16.10c a padded server and tool are stored stripped (as wrap --connector strips them)", mb.get("server") == "Zorg Tracker" and mb.get("tool") == "search_items", text)
+    nanp = os.path.join(d, "nan.json")
+    with open(nanp, "w") as f:
+        f.write('{"issue-status": {"server": "Zorg Tracker", "tool": "t", "input": {"n": NaN, "m": Infinity}, "pick": {"items": "", "key": "a", "value": "b"}}}')
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", nanp, out="cbnan")
+    check("16.10d NaN / Infinity in input is refused, nothing written", rc == 1 and "input" in res.get("error", "") and not os.path.exists(o), text)
 
     # test_connector_in_capabilities_only
     rc, text, res, o = wrap(d, ZORG, "--connector", "Zorg Tracker:search_items", "--connector", "Zorg Board:stage_counts", out="cap.html")

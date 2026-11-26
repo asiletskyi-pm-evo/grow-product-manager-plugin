@@ -802,6 +802,10 @@ def check_binding(role, b, roles, profile):
     inp = b.get("input")
     if not isinstance(inp, dict):
         raise Bad("%s: input must be an object (the tool's arguments)" % w)
+    try:
+        json.dumps(inp, allow_nan=False)
+    except ValueError:
+        raise Bad("%s: input holds NaN or Infinity, which is not JSON" % w)
     if _size(inp) > INPUT_MAX:
         raise Bad("%s: input is over %d bytes (4 KiB)" % (w, INPUT_MAX))
     errs = []
@@ -815,7 +819,7 @@ def check_binding(role, b, roles, profile):
         v = pick[k]
         if not isinstance(v, str) or not (PICK_PATH.match(v) or (k == "items" and v == "")):
             raise Bad("%s: pick.%s must be a dot-path of up to 8 names (letters, digits, _)%s" % (w, k, "; items may be empty" if k == "items" else ""))
-    return {"server": b["server"], "tool": b["tool"], "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
+    return {"server": b["server"].strip(), "tool": b["tool"].strip(), "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
 
 
 def check_connectors(doc, roles, profile):

@@ -137,7 +137,8 @@
       var sec = snap.sections[id];
       if (sec.section !== "funnel" || !Array.isArray(sec.data.stages)) { return; }
       sec.data.stages.forEach(function (s) {
-        if (isObj(s) && str(s.id, 64) && !set[s.id]) { set[s.id] = true; out.push(s.id); }
+        // the same rule as for a map's code: an id that does not fit is never sent (its stage keeps the snapshot's value)
+        if (isObj(s) && typeof s.id === "string" && CODE.test(s.id) && !set[s.id]) { set[s.id] = true; out.push(s.id); }
       });
     });
     return out.slice(0, MAX_CODES);
@@ -213,6 +214,18 @@
       settleWith(st, false);
     }
 
+    // user_changed: the page is about to be replaced — drop every watch and show nothing live from now on
+    function halt() {
+      halted = true;
+      Object.keys(roles).forEach(function (role) {
+        var st = roles[role];
+        st.seq++;       // a handler that still fires is ignored
+        if (st.unsub) { try { st.unsub(); } catch (e) { /* gone anyway */ } st.unsub = null; }
+        st.values = null;
+        st.keep = false;
+      });
+    }
+
     function shown(st) { return st.values && (st.status === "ok" || (st.status === "err" && st.keep)) ? st.values : null; }
 
     // ---- the reasons --------------------------------------------------------------------------------------------------------
@@ -266,7 +279,7 @@
           if (r.deny) { st.values = null; st.keep = false; }
           else { st.keep = !!(st.values && Object.keys(st.values).length); }
           st.status = "err";
-          if (st.err.changed) { halted = true; }
+          if (st.err.changed) { halt(); }
           settleWith(st, false);
         }
         paint();
