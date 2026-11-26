@@ -574,13 +574,15 @@ const fakeDesktop = `
   out.t5_en_sw = await p.evaluate(() => document.querySelector('.gpm-products').getAttribute('aria-label')); await p.close();
   try {
   // ---- Task 7: menu, badge, tray, notifications, permissions, icon (fake desktop that records every call)
-  const TIMER7 = `window.__timers = []; const __st = window.setTimeout;
-    window.setTimeout = function (fn, ms, ...a) { if (ms === 30000) { window.__timers.push(fn); return 0; } return __st.call(window, fn, ms, ...a); };
+  const TIMER7 = `window.__timers = []; window.__retries = []; window.__retryFns = []; window.__fireRetry = () => { const f = window.__retryFns.shift(); if (f) { f(); } }; const __st = window.setTimeout;
+    window.setTimeout = function (fn, ms, ...a) { if (ms === 30000) { window.__timers.push(fn); return 0; }
+      if ([1000, 2000, 4000, 8000, 16000].indexOf(ms) >= 0) { window.__retries.push(ms); window.__retryFns.push(fn); return 0; } return __st.call(window, fn, ms, ...a); };
     window.__fire30 = () => { window.__timers.splice(0).forEach(f => f()); };`;
   const EXTRA7 = (o) => `
     window.__perm = Object.assign({notifications: 'prompt', 'menu-bar': 'prompt'}, window.__permInit || {});
     window.__reqs7 = []; window.__badges = []; window.__icons = []; window.__notes = []; window.__tray = []; window.__menus = []; window.__shown = 0; window.__managed = 0;
-    desktop.permissions = {state: async (n) => (n ? window.__perm[n] : Object.assign({}, window.__perm)),
+    window.__stateCalls = 0;
+    desktop.permissions = {state: async (n) => (window.__stateCalls++, n ? window.__perm[n] : Object.assign({}, window.__perm)),
       request: (names) => { window.__reqs7.push(names); const n = names && names[0]; if ((window.__hang || {})[n]) { return new Promise(() => {}); }
         window.__perm[n] = (window.__answer || {})[n] || 'granted'; return Promise.resolve(Object.assign({}, window.__perm)); },
       manage: async () => { window.__managed++; }};
@@ -728,6 +730,23 @@ const fakeDesktop = `
   out.t7_d2_nohead = await (async () => { await p.close(); const NOPROD = Object.assign({}, D2DOCS); NOPROD.meta = Object.assign({}, D2DOCS.meta, {products: []});
     [p, errs] = await open(APP(NOPROD, FIXCFG)); await tab(p, 'watch');
     const r = await p.evaluate(() => Array.from(document.querySelectorAll('.gpm-panel .gpm-card')).map(c => ({head: !!c.querySelector('.gpm-card-head'), chips: c.querySelectorAll('.gpm-chip').length, rows: c.querySelectorAll('.gpm-item').length}))); await p.close(); return r; })();
+  // R1 fix: states are re-read (never asked) when they change outside the panel
+  const reqsOf = (pg) => pg.evaluate(() => window.__reqs7);
+  [p, errs] = await open(D7(docs7(), {perm: {notifications: 'unavailable', 'menu-bar': 'unavailable'}})); await p.waitForTimeout(150); await openPerms(p);
+  out.t7_r1a0 = {panel: await panel7(p), st: await st7(p)};
+  await p.evaluate(() => { window.__perm['menu-bar'] = 'granted'; window.__perm.notifications = 'granted'; window.__fireRetry(); }); await p.waitForTimeout(150);
+  out.t7_r1a1 = {panel: await panel7(p), st: await st7(p), reqs: await reqsOf(p)};
+  await p.evaluate((x) => window.__push2('edits', 'late', x), rowEdit('Late map', 'u_other')); await p.waitForTimeout(100); out.t7_r1a_note = (await st7(p)).notes; await p.close();
+  [p, errs] = await open(D7(docs7(), {perm: {notifications: 'prompt', 'menu-bar': 'prompt'}})); await p.waitForTimeout(150); await openPerms(p);
+  out.t7_r1b0 = (await st7(p)).tray.length;
+  await p.evaluate(() => { window.__perm['menu-bar'] = 'granted'; window.dispatchEvent(new Event('focus')); }); await p.waitForTimeout(150);
+  out.t7_r1b1 = {panel: await panel7(p), st: await st7(p), reqs: await reqsOf(p)};
+  await p.evaluate(() => { window.__perm.notifications = 'granted'; Object.defineProperty(document, 'visibilityState', {value: 'visible', configurable: true}); document.dispatchEvent(new Event('visibilitychange')); }); await p.waitForTimeout(150);
+  out.t7_r1b2 = (await panel7(p)).rows; await p.close();
+  [p, errs] = await open(D7(docs7(), {perm: {notifications: 'unavailable', 'menu-bar': 'granted'}})); await p.waitForTimeout(150);
+  const calls = [];
+  for (let i = 0; i < 9; i++) { await p.evaluate(() => window.__fireRetry()); await p.waitForTimeout(60); calls.push(await p.evaluate(() => window.__stateCalls)); }
+  out.t7_r1c = {calls, delays: await p.evaluate(() => window.__retries), reqs: await reqsOf(p), errs}; await p.close();
   } catch (e) { out.t7_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
@@ -1503,6 +1522,19 @@ if have_pw:
     check("15.25 D2: the renderer drops the chip only for the card's own product under a header; with no header (or no info) it stays; with no products declared there is no header and no chip at all",
           du.get("header") == [None, "zorg-pay"] and du.get("noHeader") == ["zorg", "zorg-pay"] and du.get("noInfo") == ["zorg", "zorg-pay"]
           and d2n and all(not c["head"] and c["chips"] == 0 and c["rows"] >= 1 for c in d2n), (du, d2n))
+
+    a0, a1 = g("t7_r1a0"), g("t7_r1a1")
+    check("15.26 R1a: a permission 'unavailable' at load (sign-in) that later reads 'granted' switches the tray and the notifications on and repaints the row — no reload, no request",
+          "недоступно тут" in a0["panel"]["rows"][0]["text"] and a0["st"]["tray"] == [] and a1["st"]["tray"] and "дозволено" in a1["panel"]["rows"][0]["text"]
+          and a1["reqs"] == [] and len(br.get("t7_r1a_note") or []) == 1, (a0, a1, br.get("t7_r1a_note")))
+    b0, b1 = br.get("t7_r1b0"), g("t7_r1b1")
+    check("15.27 R1b: a permission granted outside the panel shows after window focus (tray on, row repainted) and after visibilitychange; nothing is requested",
+          b0 == 0 and b1["st"]["tray"] and "дозволено" in [r["text"] for r in b1["panel"]["rows"] if r["id"] == "menu-bar"][0]
+          and b1["reqs"] == [] and all("дозволено" in r["text"] for r in br.get("t7_r1b2") or [{"text": ""}]), (b0, b1, br.get("t7_r1b2")))
+    rc_ = g("t7_r1c")
+    check("15.28 R1c: the retry is bounded (5 attempts, doubling delays), then state() is no longer read; no request throughout",
+          rc_.get("delays") == [1000, 2000, 4000, 8000, 16000] and rc_["calls"][4] > rc_["calls"][0] and len(set(rc_["calls"][4:])) == 1
+          and rc_["reqs"] == [] and not rc_["errs"], rc_)
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

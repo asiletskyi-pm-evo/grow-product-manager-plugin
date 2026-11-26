@@ -478,6 +478,22 @@
     }
     buildPanel();
 
+    // ---- states are read again, never asked: "unavailable" can mean "not known yet" (sign-in), and the person can grant
+    // a permission from Claude's own menu. On focus and when the window shows again; while one reads "unavailable", a
+    // bounded retry (5 attempts, 1 s doubling to 16 s), then no timer at all.
+    var attempts = 0, retryTimer = null;
+    function scheduleRetry() {
+      if (retryTimer || attempts >= 5 || !wanted.some(function (n) { return perm[n] === "unavailable"; })) { return; }
+      retryTimer = setTimeout(function () { retryTimer = null; attempts++; resync(); }, 1000 * Math.pow(2, attempts));
+    }
+    function resync() {
+      if (pending) { return; }
+      refresh().then(function () { paintRows(); scheduleRetry(); }, function () {});
+    }
+    window.addEventListener("focus", resync);
+    document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") { resync(); } });
+    scheduleRetry();
+
     // ---- the icon: drawn on the theme's accent, handed to the Dock; an installed copy that did not take it is told
     var iconAccent = null;
     function setIcon() {
