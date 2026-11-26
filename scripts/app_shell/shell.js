@@ -143,13 +143,46 @@
     }
     if (isObj(raw.connectors)) {
       Object.keys(raw.connectors).forEach(function (role) {
-        var b = raw.connectors[role];
-        if (/^[a-z0-9][a-z0-9-]{0,63}$/.test(role) && isObj(b) && str(b.server, 100) && str(b.tool, 100)) {
-          meta.connectors[role] = { server: b.server, tool: b.tool };
-        }
+        var b = /^[a-z0-9][a-z0-9-]{0,63}$/.test(role) ? cleanBinding(raw.connectors[role]) : null;
+        if (b) { meta.connectors[role] = b; }
       });
     }
     return meta;
+  }
+
+  // A role's binding {server, tool, input, pick} (the same rules as `snapshot --connectors` in app_shell.py): the
+  // connector's display name and tool, the tool's arguments (plain JSON, at most 4 KiB and 6 levels, the placeholders
+  // {codes} / "{codes[]}" only) and three dot-paths that read the answer. A binding that does not fit is dropped.
+  var PICK_PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$/;
+  var INPUT_MAX = 4096, INPUT_DEPTH = 6;
+  function inputFits(v, depth) {
+    if (Array.isArray(v) || isObj(v)) {
+      if (depth > INPUT_DEPTH) { return false; }
+      var keys = Array.isArray(v) ? null : Object.keys(v);
+      if (keys && keys.some(function (k) { return k.indexOf("{") >= 0 || k.indexOf("}") >= 0; })) { return false; }
+      return (keys ? keys.map(function (k) { return v[k]; }) : v).every(function (x) { return inputFits(x, depth + 1); });
+    }
+    if (typeof v === "string") {
+      var rest = v.split("{codes}").join("");
+      return v === "{codes[]}" || (rest.indexOf("{") < 0 && rest.indexOf("}") < 0);
+    }
+    return v === null || typeof v === "boolean" || num(v) !== null;
+  }
+  function cleanBinding(b) {
+    try {
+      if (!isObj(b) || !str(b.server, 100) || !str(b.tool, 100) || !isObj(b.input) || !isObj(b.pick)) { return null; }
+      var text = JSON.stringify(b.input);
+      if (unescape(encodeURIComponent(text)).length > INPUT_MAX || !inputFits(b.input, 1)) { return null; }
+      var keys = Object.keys(b.pick).sort().join(",");
+      if (keys !== "items,key,value") { return null; }
+      var pick = {};
+      var ok = ["items", "key", "value"].every(function (k) {
+        var v = b.pick[k];
+        pick[k] = v;
+        return typeof v === "string" && (PICK_PATH.test(v) || (k === "items" && v === ""));
+      });
+      return ok ? { server: b.server, tool: b.tool, input: JSON.parse(text), pick: pick } : null;
+    } catch (e) { return null; }
   }
 
   function cleanSection(id, raw) {

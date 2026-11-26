@@ -7,7 +7,8 @@
            the profile as JSON; the page's own body goes into <div class="gpm-page">. Writes nothing on a refusal.
   theme    token files of the products' design systems -> theme candidates (light, dark, contrast check, the built-in
            `neutral`); --pick ID writes the one theme that `snapshot --theme` takes
-  snapshot sections + products (+ a theme, + connector bindings) -> one JSON file per database document under
+  snapshot sections + products (+ a theme, + `--connectors FILE` role bindings {server, tool, input, pick}, + `--prev-meta FILE`
+           to keep the dates of the sections not written now) -> one JSON file per database document under
            DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
 A profile holds shell code and placeholders only (`<jira_project>`, `<dashboard_id>`) — never a user's value. Only the
@@ -34,7 +35,7 @@ PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "bad
                 "commands")
 MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks")
 BLOCK_ENTRY_KEYS = ("block", "source", "title")
-SHELL_FILES = ("shell.js", "blocks.js", "map.js", "desk.js")   # embedded in this order, each only if it exists (map.js: only with a map block)
+SHELL_FILES = ("shell.js", "blocks.js", "map.js", "desk.js", "live.js")   # embedded in this order, each only if it exists (map.js: only with a map block)
 TITLE_MAX = 80                # a title in the owner's config/app, in characters
 MAX_BLOCKS = 8                # blocks in one composed module
 MAX_CUSTOM = 20               # custom modules in config/app
@@ -445,12 +446,14 @@ DB_RULES = [{"path": "", "read": "view", "write": "admin"},
 
 
 def parse_connector(spec):
-    """`SERVER:TOOL[,TOOL]` -> {server, tools}. Bad -> Bad."""
-    server, sep, tools = (spec or "").partition(":")
-    names = [x.strip() for x in tools.split(",")] if sep else []
-    if not server.strip() or not names or not all(names):
+    """`SERVER:TOOL[,TOOL]` -> {server, tools}. SERVER may hold spaces and be `host:<name>`: the tools follow the LAST
+    colon. Bad -> Bad."""
+    server, sep, tools = (spec or "").rpartition(":")
+    names = [x.strip() for x in tools.split(",")]
+    server = server.strip()
+    if not sep or not server or not all(names) or (server.startswith("host:") and not server[5:].strip()) or server == "host":
         raise Bad("connector '%s': expected SERVER:TOOL[,TOOL]" % spec)
-    return {"server": server.strip(), "tools": names}
+    return {"server": server, "tools": names}
 
 
 def capabilities(prof, connectors):
@@ -749,7 +752,95 @@ def _path_safe(made):
     return re.sub(r"[^A-Za-z0-9._-]", "-", made)
 
 
-def _build(sections, products, theme, made, connectors=None):
+BINDING_KEYS = ("server", "tool", "input", "pick")
+PICK_KEYS = ("items", "key", "value")
+PICK_PATH = re.compile(r"^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$")
+INPUT_MAX = 4096              # a binding's input, serialized, in bytes
+INPUT_DEPTH = 6               # containers on the way down to a value, the input itself being the first
+CODES_ARRAY = "{codes[]}"
+SECTION_ID = re.compile(r"^[a-z0-9][a-z0-9.-]{0,63}--[a-z0-9][a-z0-9-]{0,63}$")
+
+
+def _input_errors(v, depth, errs):
+    """The input of a binding: plain JSON, at most INPUT_DEPTH containers deep; a string holds the placeholder {codes}
+    only, and a value that is exactly {codes[]} stands for the array of codes; no other brace in any string or key."""
+    if isinstance(v, dict):
+        if depth > INPUT_DEPTH:
+            errs.append("input depth is over %d levels" % INPUT_DEPTH)
+            return
+        for k, x in v.items():
+            if "{" in k or "}" in k:
+                errs.append("input: a placeholder in a key is not allowed")
+            _input_errors(x, depth + 1, errs)
+    elif isinstance(v, list):
+        if depth > INPUT_DEPTH:
+            errs.append("input depth is over %d levels" % INPUT_DEPTH)
+            return
+        for x in v:
+            _input_errors(x, depth + 1, errs)
+    elif isinstance(v, str):
+        if v != CODES_ARRAY and ("{" in v.replace("{codes}", "") or "}" in v.replace("{codes}", "")):
+            errs.append("input: an unknown placeholder in '%s' (only {codes} and a value that is exactly {codes[]})" % v[:40])
+    elif not (v is None or isinstance(v, (bool, int, float))):
+        errs.append("input holds a value that is not JSON")
+
+
+def check_binding(role, b, roles, profile):
+    """One role's binding {server, tool, input, pick} -> the cleaned copy. Bad on anything that does not fit."""
+    w = "connectors.%s" % role
+    if role not in roles:
+        raise Bad("connector role '%s' is not declared by profile '%s' (it declares: %s)" % (role, profile, ", ".join(roles) or "none"))
+    if not isinstance(b, dict):
+        raise Bad("%s must be an object {server, tool, input, pick}" % w)
+    for k in b:
+        if k not in BINDING_KEYS:
+            raise Bad("%s: unknown key '%s'" % (w, k))
+    for k in ("server", "tool"):
+        v = b.get(k)
+        if not isinstance(v, str) or not v.strip() or len(v) > 100:
+            raise Bad("%s: %s must be text of 1-100 characters" % (w, k))
+    inp = b.get("input")
+    if not isinstance(inp, dict):
+        raise Bad("%s: input must be an object (the tool's arguments)" % w)
+    if _size(inp) > INPUT_MAX:
+        raise Bad("%s: input is over %d bytes (4 KiB)" % (w, INPUT_MAX))
+    errs = []
+    _input_errors(inp, 1, errs)
+    if errs:
+        raise Bad("%s: %s" % (w, errs[0]))
+    pick = b.get("pick")
+    if not isinstance(pick, dict) or sorted(pick) != sorted(PICK_KEYS):
+        raise Bad("%s: pick must be exactly {items, key, value}" % w)
+    for k in PICK_KEYS:
+        v = pick[k]
+        if not isinstance(v, str) or not (PICK_PATH.match(v) or (k == "items" and v == "")):
+            raise Bad("%s: pick.%s must be a dot-path of up to 8 names (letters, digits, _)%s" % (w, k, "; items may be empty" if k == "items" else ""))
+    return {"server": b["server"], "tool": b["tool"], "input": inp, "pick": {k: pick[k] for k in PICK_KEYS}}
+
+
+def check_connectors(doc, roles, profile):
+    """The file of `snapshot --connectors` -> {role: binding}. Bad on anything that does not fit."""
+    if not isinstance(doc, dict):
+        raise Bad("connectors: the file must be an object {role: {server, tool, input, pick}}")
+    return {role: check_binding(role, b, roles, profile) for role, b in doc.items()}
+
+
+def check_prev_meta(doc, roles, profile):
+    """The previous `snapshot/meta` document -> {sections: {id: made}, connectors: {role: binding}}. Bad on a malformed one."""
+    if not isinstance(doc, dict) or not isinstance(doc.get("sections"), dict):
+        raise Bad("prev-meta: the file must be the previous snapshot/meta document (an object with `sections`)")
+    sections = {i: m for i, m in doc["sections"].items() if isinstance(i, str) and SECTION_ID.match(i) and isinstance(m, str) and 0 < len(m) <= 40}
+    raw = doc.get("connectors")
+    if raw is not None and not isinstance(raw, dict):
+        raise Bad("prev-meta: `connectors` must be an object")
+    try:
+        connectors = check_connectors(raw, roles, profile) if raw else {}
+    except Bad as e:
+        raise Bad("prev-meta: " + str(e))
+    return {"sections": sections, "connectors": connectors}
+
+
+def _build(sections, products, theme, made, connectors=None, prev=None):
     """-> (documents {path: doc}, over [{path, bytes}], dropped [text]). Bad before anything is built on a wrong id."""
     if not isinstance(made, str) or not made.strip():
         raise Bad("made is missing")
@@ -786,9 +877,16 @@ def _build(sections, products, theme, made, connectors=None):
             continue
         docs["snapshot/" + did] = doc
         written[did] = made
+    # the sections of the previous meta that this run did not write stay, while their product is still one of the products
+    kept = {}
+    for sid, when in ((prev or {}).get("sections") or {}).items():
+        if sid not in written and SECTION_ID.match(sid) and any(sid.endswith("--" + i) for i in ids):
+            kept[sid] = when
     meta = {"v": 1, "made": made,
             "products": [{"id": p["id"], "label": p["label"], "color": p.get("color")} for p in products],
-            "thresholds": dict(THRESHOLDS), "sections": written}
+            "thresholds": dict(THRESHOLDS), "sections": dict(kept, **written)}
+    if connectors is None and prev:
+        connectors = prev.get("connectors")
     if connectors:
         meta["connectors"] = {role: dict(b) for role, b in connectors.items()}
     docs["snapshot/meta"] = meta
@@ -810,10 +908,16 @@ def _build(sections, products, theme, made, connectors=None):
     return docs, over, dropped
 
 
-def build_snapshot(sections, products, theme, made, connectors=None):
+def build_snapshot(sections, products, theme, made, connectors=None, prev_meta=None):
     """The database documents of one snapshot: {path: document}. `sections` = [(name, product id, data)], `products` =
-    [{id, label, color|None}]. A section over 256 KiB is left out (and out of meta.sections); people's keys are dropped."""
-    return _build(sections, products, theme, made, connectors)[0]
+    [{id, label, color|None}]. A section over 256 KiB is left out (and out of meta.sections); people's keys are dropped.
+    `prev_meta` = the previous snapshot/meta: the dates of the sections not written now are carried over (and its
+    connectors, when none are given)."""
+    prev = None
+    if prev_meta is not None:
+        prev = {"sections": {i: m for i, m in (prev_meta.get("sections") or {}).items() if isinstance(m, str)},
+                "connectors": prev_meta.get("connectors")}
+    return _build(sections, products, theme, made, connectors, prev)[0]
 
 
 def _now():
@@ -854,21 +958,15 @@ def cmd_snapshot(a):
     if prof is None:
         raise Bad("no profile '%s' (there are: %s)" % (a.profile, ", ".join(sorted(doc.get("profiles") or {}))))
     roles = [c.get("role") for c in prof.get("connectors") or [] if isinstance(c, dict)]
-    connectors = {}
-    for spec in a.connector:
-        parts = spec.split(":")
-        if len(parts) != 3 or not all(x.strip() for x in parts):
-            raise Bad("connector '%s': expected ROLE:SERVER:TOOL" % spec)
-        if parts[0] not in roles:
-            raise Bad("connector role '%s' is not declared by profile '%s' (it declares: %s)" % (parts[0], a.profile, ", ".join(roles) or "none"))
-        connectors[parts[0]] = {"server": parts[1].strip(), "tool": parts[2].strip()}
+    connectors = check_connectors(_read_json(a.connectors, "connectors"), roles, a.profile) if a.connectors else None
+    prev = check_prev_meta(_read_json(a.prev_meta, "prev-meta"), roles, a.profile) if a.prev_meta else None
     products = [parse_product(x) for x in a.product]
     sections = [parse_section(x) for x in a.section]
     theme = _read_json(a.theme, "theme") if a.theme else None
     made = a.at or _now()
     if a.at and not re.fullmatch(r"\d{4}-\d\d-\d\dT[0-9:.]+(Z|[+-]\d\d:\d\d)?", a.at):
         raise Bad("--at must be an ISO time, e.g. 2026-11-26T10:00:00Z")
-    docs, over, dropped = _build(sections, products, theme, made, connectors)
+    docs, over, dropped = _build(sections, products, theme, made, connectors, prev)
     out = []
     try:
         for path, d in docs.items():
@@ -965,7 +1063,8 @@ def main(argv=None):
     n.add_argument("--profile", required=True)
     n.add_argument("--section", action="append", default=[], metavar="NAME:PRODUCT:FILE")
     n.add_argument("--product", action="append", default=[], metavar="ID:LABEL[:#rrggbb]")
-    n.add_argument("--connector", action="append", default=[], metavar="ROLE:SERVER:TOOL")
+    n.add_argument("--connectors", default=None, metavar="FILE", help="JSON {role: {server, tool, input, pick}}")
+    n.add_argument("--prev-meta", default=None, metavar="FILE", help="the previous snapshot/meta document")
     n.add_argument("--theme", default=None)
     n.add_argument("--at", default=None)
     n.add_argument("--out", required=True)

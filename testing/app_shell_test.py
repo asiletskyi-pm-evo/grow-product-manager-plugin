@@ -748,6 +748,130 @@ const fakeDesktop = `
   for (let i = 0; i < 9; i++) { await p.evaluate(() => window.__fireRetry()); await p.waitForTimeout(60); calls.push(await p.evaluate(() => window.__stateCalls)); }
   out.t7_r1c = {calls, delays: await p.evaluate(() => window.__retries), reqs: await reqsOf(p), errs}; await p.close();
   } catch (e) { out.t7_crash = String(e).slice(0, 400); }
+  try {
+  // ---- Task 8: live numbers through the viewer's connectors (a fake `mcp`; Zorg Tracker / Zorg Board are invented names)
+  const T8 = Date.UTC(2026, 10, 26, 12, 34);
+  const hhmm = (ms) => { const x = new Date(ms); return String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
+  out.t8_hhmm = hhmm(T8);
+  const TRACKER8 = {server: 'Zorg Tracker', tool: 'search_items', input: {query: 'key in ({codes})', ids: '{codes[]}', limit: 50}, pick: {items: 'data.items', key: 'key', value: 'state.name'}};
+  const BOARD8 = {server: 'Zorg Board', tool: 'stage_counts', input: {board: 'main'}, pick: {items: 'rows', key: 'stage', value: 'count'}};
+  const mapWith8 = (codes) => { const m = JSON.parse(JSON.stringify(fx('zorg-map.json')));
+    m.rows.forEach((r, i) => { r.code = codes[i] || ''; });
+    for (let i = m.rows.length; i < codes.length; i++) { m.rows.push({id: 'q' + i, stage: 's1', lane: 'action', text: 'Row ' + i, parent: '', code: codes[i], target: false, locked: false, meta: ''}); }
+    return m; };
+  const docs8 = (codes, bind, extra) => { const dd = snapDocs(Object.assign({'map.first-order--zorg': D5('map.first-order', 'zorg', mapWith8(codes))}, extra || {}));
+    if (bind) { dd.meta.connectors = bind; } return dd; };
+  const REPLY8 = (table) => '(function (s, t, i, n, call) { const T = ' + JSON.stringify(table) + '; const e = T[t]; if (!e) { return null; } if (call) { return e.c || null; }'
+    + ' return Array.isArray(e.w) ? (e.w[Math.min(n, e.w.length) - 1] || null) : (e.w || null); })';
+  const MCP8 = (table, mode) => `
+    window.__m8 = {uses: 0, watches: [], unsubs: 0, calls: [], hs: []};
+    window.__reply8 = ${REPLY8(table)};
+    const mcp8 = {
+      watchTool: (server, tool, input, handler, options) => {
+        const rec = {server, tool, input: JSON.parse(JSON.stringify(input)), options: options === undefined ? 'none' : JSON.parse(JSON.stringify(options)), live: true};
+        window.__m8.watches.push(rec); window.__m8.hs.push({rec, handler});
+        const n = window.__m8.watches.filter(w => w.tool === tool).length;
+        Promise.resolve().then(() => { if (!rec.live) { return; } const ev = window.__reply8(server, tool, rec.input, n, false); if (ev) { handler(ev); } });
+        return () => { rec.live = false; window.__m8.unsubs++; }; },
+      callTool: async (server, tool, input, options) => { window.__m8.calls.push({server, tool, input: JSON.parse(JSON.stringify(input)), options: options === undefined ? 'none' : options});
+        const ev = window.__reply8(server, tool, input, 0, true); if (!ev) { throw {code: 'upstream_error', message: 'none'}; } if (ev.type === 'error') { throw ev.error; } return ev.result; },
+      listTools: async () => ({servers: []}), invalidate: async () => {} };
+    window.__send8 = (tool, ev) => window.__m8.hs.filter(h => h.rec.live && h.rec.tool === tool).forEach(h => h.handler(ev));
+    const __u8 = window.claude.use; window.claude.use = async (n) => { if (n === 'mcp') { window.__m8.uses++; ${mode === 'throws' ? "throw new Error('boom');" : ''} return ${mode === 'null' ? 'null' : 'mcp8'}; } return __u8(n); };`;
+  const DATA8 = (payload, at) => ({type: 'data', result: {content: [], payload, cache: at === null ? undefined : {storedAt: at || T8, revalidating: false}}});
+  const ERR8 = (code, more) => ({type: 'error', error: Object.assign({code, message: 'zorg says ' + code}, more || {})});
+  const STAT8 = (items, at) => DATA8({data: {items}}, at);
+  const FUN8 = (rows, at) => DATA8({rows}, at);
+  const live8 = (pg) => pg.evaluate(() => {
+    const q = (s) => Array.from(document.querySelectorAll(s)); const t = (e) => (e ? (e.textContent || '').trim() : null);
+    const bar = document.querySelector('.gpm-live-bar'); const btn = bar ? bar.querySelector('button') : null;
+    return {bar: bar ? {hidden: bar.hidden, lines: q('.gpm-live-line').map(t), btn: t(btn), btnHidden: btn ? btn.hidden : null, btnDisabled: btn ? btn.disabled : null, state: t(bar.querySelector('.gpm-state'))} : null,
+      rows: q('[data-code]').map(r => ({code: r.getAttribute('data-code'), live: Array.from(r.querySelectorAll('.gpm-live')).map(t)})),
+      stages: q('.gpm-stage').map(s => ({title: t(s.querySelector('.gpm-stage-title')), value: t(s.querySelector('.gpm-stage-value')), live: Array.from(s.querySelectorAll('.gpm-live')).map(t)})),
+      m: window.__m8 ? {uses: window.__m8.uses, watches: window.__m8.watches.map(w => ({server: w.server, tool: w.tool, input: w.input, options: w.options, live: w.live})), unsubs: window.__m8.unsubs, calls: window.__m8.calls} : null,
+      body: document.body.innerText, imgs: document.querySelectorAll('.gpm-modules img, .gpm-live-bar img').length, pwned: !!window.__pwned,
+      sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth}; });
+  const BIND2 = {'issue-status': TRACKER8, 'funnel-numbers': BOARD8};
+  const CODES8 = ['ZRG-1', 'ZRG-2', 'bad code', 'x'.repeat(65), 'ZRG-1'];
+  const STAT_OK = STAT8([{key: 'ZRG-1', state: {name: 'In Review'}}, {key: 'ZRG-2', state: {name: 'Done'}}, {key: 'ZRG-9', state: {name: 'Ghost'}},
+                         {key: 'bad code', state: {name: 'Sneaky'}}, {key: 'ZRG-3', state: {name: 'y'.repeat(41)}}, {key: 7, state: {name: 'Num'}}, 'junk', {key: 'ZRG-2'}]);
+  const FUN_OK = FUN8([{stage: 'visit', count: 990}, {stage: 'cart', count: 'x'}, {stage: 'ghost', count: 5}, {stage: 'pay', count: 410.5}, {stage: 'done'}, 5]);
+  const BOTH_OK = {search_items: {w: STAT_OK}, stage_counts: {w: FUN_OK}};
+
+  // pw_live_issue_status: the codes the map shows -> one watch with exactly those two codes; the statuses sit beside their rows
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK));
+  out.t8_load = await live8(p); await tab(p, 'map'); out.t8_status = await live8(p);
+  await p.evaluate(() => { const m = window.__colls.snapshot['portfolio--zorg']; window.__push2('snapshot', 'portfolio--zorg', Object.assign({}, m, {made: '2026-11-27T09:00:00Z'})); }); await p.waitForTimeout(150);
+  out.t8_same_codes = (await live8(p)).m.watches.length;
+  const mp = mapWith8(CODES8.concat(['ZRG-5']));
+  await p.evaluate((m) => window.__push2('snapshot', 'map.first-order--zorg', {v: 1, product: 'zorg', section: 'map.first-order', made: '2026-11-27T09:00:00Z', data: m}), mp); await p.waitForTimeout(200);
+  out.t8_new_codes = await live8(p); out.t8_errs = errs; await p.close();
+  // 250 codes: at most 200 are sent
+  [p, errs] = await open(APP(docs8(Array.from({length: 250}, (_, i) => 'ZRG-' + (i + 1)), {'issue-status': TRACKER8}), null) + MCP8({search_items: {w: STAT8([])}}));
+  out.t8_cap = (await live8(p)).m.watches.map(w => ({n: w.input.ids.length, last: w.input.ids[199], first: w.input.ids[0], q: w.input.query.split(', ').length})); await p.close();
+  // a status is text: HTML shows as text, 41 characters and a non-string are skipped
+  [p, errs] = await open(APP(docs8(['ZRG-1', 'ZRG-2', 'ZRG-3'], {'issue-status': TRACKER8}), null) + MCP8({search_items: {w: STAT8([{key: 'ZRG-1', state: {name: '<img src=x onerror=window.__pwned=1>'}}, {key: 'ZRG-2', state: {name: 'z'.repeat(41)}}, {key: 'ZRG-3', state: {name: 5}}])}}));
+  await tab(p, 'map'); out.t8_evil = await live8(p); out.t8_evil_errs = errs; await p.close();
+  // pick: the payload itself is the array (items = ""), nested key and value
+  const BP = {'issue-status': Object.assign({}, TRACKER8, {pick: {items: '', key: 'ref.id', value: 'info.state'}})};
+  [p, errs] = await open(APP(docs8(['ZRG-1', 'ZRG-2'], BP), null) + MCP8({search_items: {w: DATA8([{ref: {id: 'ZRG-2'}, info: {state: 'Blocked'}}, {ref: {id: 'ZRG-1'}, info: {state: 'Open'}}])}}));
+  await tab(p, 'map'); out.t8_pick = await live8(p); await p.close();
+  // pw_live_funnel_numbers: a live value beside the snapshot's, with its time; the snapshot value stays
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK));
+  await tab(p, 'funnel'); out.t8_funnel = await live8(p); out.t8_funnel_errs = errs;
+  await p.evaluate(() => window.__send8('stage_counts', {type: 'data', result: {content: [], payload: {rows: [{stage: 'visit', count: 991}]}}})); await p.waitForTimeout(100);
+  out.t8_funnel_fresh = (await live8(p)).stages[0].live; await p.close();
+  // pw_live_absent: use("mcp") = null; throws; no binding; a binding with nothing to ask
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK, 'null')); await tab(p, 'map');
+  out.t8_absent = await live8(p); out.t8_absent_errs = errs; await p.close();
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK, 'null'), null, process.argv[4]); out.t8_absent_en = (await live8(p)).bar; await p.close();
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK, 'throws')); out.t8_throws = await live8(p); out.t8_throws_errs = errs; await p.close();
+  [p, errs] = await open(APP(docs8(CODES8, null), null) + MCP8(BOTH_OK)); out.t8_nobind = await live8(p); out.t8_nobind_errs = errs; await p.close();
+  [p, errs] = await open(APP(docs8([], {'issue-status': TRACKER8}), null) + MCP8(BOTH_OK)); out.t8_noask = await live8(p); await p.close();
+  [p, errs] = await open(APP(snapDocs(), null) + MCP8(BOTH_OK)); out.t8_nometa_bind = await live8(p); await p.close();
+  const evilBind = {'issue-status': Object.assign({}, TRACKER8, {input: 'x'}), 'funnel-numbers': Object.assign({}, BOARD8, {pick: {items: 'a/b', key: 'k', value: 'v'}})};
+  [p, errs] = await open(APP(docs8(CODES8, evilBind), null) + MCP8(BOTH_OK)); out.t8_badbind = await live8(p); out.t8_badbind_errs = errs; await p.close();
+  const evilBind2 = {'issue-status': Object.assign({}, TRACKER8, {input: {q: '{other}'}}), 'funnel-numbers': Object.assign({}, BOARD8, {server: 'S'.repeat(101)}), 'ghost-role': TRACKER8};
+  [p, errs] = await open(APP(docs8(CODES8, evilBind2), null) + MCP8(BOTH_OK)); out.t8_badbind2 = await live8(p); await p.close();
+  // every documented error code: the snapshot's numbers and date stay, the reason in words, nothing live, no error
+  const CODES_ERR = ['needs_reauth', 'server_not_connected', 'server_not_found', 'selection_required', 'not_in_manifest', 'consent_required', 'not_granted', 'blocked_by_policy',
+    'approval_required', 'tool_error', 'server_unavailable', 'upstream_error', 'rate_limited', 'cancelled', 'capability_disabled', 'capability_removed', 'bad_request', 'self_only',
+    'transform_error', 'user_changed', 'mystery_code'];
+  out.t8_err = {};
+  for (const code of CODES_ERR) {
+    [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: ERR8(code)}, stage_counts: {w: ERR8(code)}}));
+    await tab(p, 'funnel'); const r = await live8(p); await p.waitForTimeout(250); const r2 = await live8(p);
+    out.t8_err[code] = {lines: r.bar && r.bar.lines, stages: r.stages.map(s => [s.value, s.live.length]), watches: r2.m.watches.length, unsubs: r2.m.unsubs, calls: r2.m.calls.length, btnHidden: r.bar && r.bar.btnHidden, errs}; await p.close();
+  }
+  // transient errors keep the last good data and say so; an authorization denial takes it away
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK)); await tab(p, 'funnel');
+  await p.evaluate(() => window.__send8('stage_counts', {type: 'error', error: {code: 'server_unavailable', message: 'x', retryable: true}})); await p.waitForTimeout(100);
+  out.t8_keep = await live8(p);
+  await p.evaluate(() => window.__send8('stage_counts', {type: 'error', error: {code: 'needs_reauth', message: 'x'}})); await p.waitForTimeout(100);
+  out.t8_retract = await live8(p);
+  await p.evaluate(() => window.__send8('stage_counts', {type: 'data', result: {content: [], payload: {rows: [{stage: 'cart', count: 701}]}}})); await p.waitForTimeout(100);
+  out.t8_back = await live8(p); out.t8_keep_errs = errs; await p.close();
+  // pw_live_refresh: one fetch on arrival, one more per press of «Оновити» (through busy), nothing on a timer
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: [STAT_OK, null, STAT8([{key: 'ZRG-1', state: {name: 'Closed'}}])]}, stage_counts: {w: [FUN_OK, null, FUN_OK]}}));
+  await tab(p, 'map'); await p.waitForTimeout(600); out.t8_r0 = await live8(p);
+  await p.click('.gpm-live-bar button'); await p.waitForTimeout(60);
+  out.t8_r1 = await live8(p);
+  await p.evaluate(() => { window.__send8('search_items', {type: 'data', result: {content: [], payload: {data: {items: [{key: 'ZRG-2', state: {name: 'Reopened'}}]}}}}); window.__send8('stage_counts', {type: 'data', result: {content: [], payload: {rows: []}}}); });
+  await p.waitForTimeout(150); out.t8_r2 = await live8(p);
+  await p.click('.gpm-live-bar button'); await p.waitForTimeout(250); out.t8_r3 = await live8(p); out.t8_r_errs = errs; await p.close();
+  // a retryable failure is retried only by the button, once, and only that role; a non-retryable one is left alone
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: [ERR8('server_unavailable', {retryable: true, retryAfterMs: 1000}), STAT_OK]}, stage_counts: {w: [ERR8('needs_reauth'), FUN_OK]}}));
+  await tab(p, 'map'); await p.waitForTimeout(1300); out.t8_rt0 = await live8(p);
+  await p.click('.gpm-live-bar button'); await p.waitForTimeout(250); out.t8_rt1 = await live8(p); out.t8_rt_errs = errs; await p.close();
+  // approval_required: the button makes the same call once with callTool and shows its result; the watch stays
+  [p, errs] = await open(APP(docs8(CODES8, {'funnel-numbers': BOARD8}), null) + MCP8({stage_counts: {w: ERR8('approval_required'), c: FUN_OK}}));
+  await tab(p, 'funnel'); out.t8_ap0 = await live8(p);
+  await p.click('.gpm-live-bar button'); await p.waitForTimeout(250); out.t8_ap1 = await live8(p); out.t8_ap_errs = errs; await p.close();
+  // phone width and English
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8({search_items: {w: ERR8('needs_reauth')}, stage_counts: {w: ERR8('server_not_connected')}}), {width: 360, height: 640}); await tab(p, 'funnel');
+  out.t8_phone = await live8(p); await p.close();
+  [p, errs] = await open(APP(docs8(CODES8, BIND2), null) + MCP8(BOTH_OK), null, process.argv[4]); await tab(p, 'funnel'); out.t8_en = await live8(p); out.t8_en_errs = errs; await p.close();
+  } catch (e) { out.t8_crash = String(e).slice(0, 400); }
   console.log(JSON.stringify(out)); await b.close();
 })();""")
         bare_prof = os.path.join(d, "bare.yaml")
@@ -940,8 +1064,6 @@ with tempfile.TemporaryDirectory() as d:
         ("a bad colour", ["--product", "zorg:Zorg:red"], ["--section", "portfolio:zorg:" + PORT], "color"),
         ("the same section twice", ZP, ["--section", "portfolio:zorg:" + PORT, "--section", "portfolio:zorg:" + PORT], "twice"),
         ("a missing data file", ZP, ["--section", "portfolio:zorg:" + os.path.join(d, "nope.json")], "nope.json"),
-        ("a connector role the profile does not declare", ZP, ["--section", "portfolio:zorg:" + PORT, "--connector", "ghost-role:Zorg Tracker:get"], "ghost-role"),
-        ("a malformed connector", ZP, ["--section", "portfolio:zorg:" + PORT, "--connector", "issue-status:only"], "connector"),
     )
     for i, (label, prods, secs, needle) in enumerate(cases):
         rc, text, res, o = snap(d, *prods, *secs, out="bad%d" % i)
@@ -955,12 +1077,7 @@ with tempfile.TemporaryDirectory() as d:
             ok = True
         check("11.11 a segment over 200 bytes is refused by build_snapshot", ok, "")
 
-    # connectors (R1) and the theme check (R2)
-    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connector", "issue-status:Zorg Tracker:get_issue",
-                            "--connector", "funnel-numbers:Zorg Board:read", out="conn")
-    check("11.12 --connector ROLE:SERVER:TOOL -> meta.connectors {role: {server, tool}}", rc == 0 and jread(o, "snapshot", "meta.json").get(
-          "connectors") == {"issue-status": {"server": "Zorg Tracker", "tool": "get_issue"},
-                            "funnel-numbers": {"server": "Zorg Board", "tool": "read"}}, text)
+    # the theme check (R2); the connector bindings are section 16
     good = jread(THEME)
     check("11.13 check_theme: the Zorg theme is clean", sh.check_theme(good) == [], sh.check_theme(good))
     for label, mut in (("a missing key", lambda t: t.pop("font")), ("an extra key", lambda t: t.update(css="x")),
@@ -1535,6 +1652,244 @@ if have_pw:
     check("15.28 R1c: the retry is bounded (5 attempts, doubling delays), then state() is no longer read; no request throughout",
           rc_.get("delays") == [1000, 2000, 4000, 8000, 16000] and rc_["calls"][4] > rc_["calls"][0] and len(set(rc_["calls"][4:])) == 1
           and rc_["reqs"] == [] and not rc_["errs"], rc_)
+
+    # ---- Task 8: live numbers through the viewer's connectors (browser half) --------------------------------------------
+    check("16.30 the Task 8 browser pass ran to its end", not br.get("t8_crash"), br.get("t8_crash"))
+    T8 = br.get("t8_hhmm")
+    ld, stt = g("t8_load"), g("t8_status")
+    wl = {w["tool"]: w for w in (ld.get("m") or {}).get("watches", [])}
+    check("16.31 pw_live_issue_status: at load, before any tab is opened, one watch per role; only the codes of the maps (the two that fit, once), the board's own input, no refetchInterval, no other option",
+          [w["tool"] for w in (ld.get("m") or {}).get("watches", [])] == ["search_items", "stage_counts"]
+          and wl["search_items"]["server"] == "Zorg Tracker" and wl["search_items"]["input"] == {"query": "key in (ZRG-1, ZRG-2)", "ids": ["ZRG-1", "ZRG-2"], "limit": 50}
+          and wl["stage_counts"]["server"] == "Zorg Board" and wl["stage_counts"]["input"] == {"board": "main"}
+          and all(w["options"] == "none" for w in wl.values()), ld.get("m"))
+    byc = {}
+    for r in stt.get("rows", []):
+        byc.setdefault(r["code"], []).append(r["live"])
+    check("16.32 pw_live_issue_status: the status of each code stands beside its row(s); a code that does not fit, a code nobody asked for and a value over 40 characters show nothing",
+          byc.get("ZRG-1") == [["In Review"], ["In Review"]] and byc.get("ZRG-2") == [["Done"]] and byc.get("bad code") == [[]] and byc.get("x" * 65) == [[]]
+          and not any(w in stt.get("body", "") for w in ("Ghost", "Sneaky", "Num", "y" * 41)), (byc, stt.get("body", "")[:300]))
+    check("16.33 the live line names the connector from the binding and the time of the result (cache.storedAt)",
+          any("Живі числа" in x and "Zorg Tracker" in x and T8 in x for x in (stt.get("bar") or {}).get("lines", [])) and (stt["bar"].get("btn") == "Оновити"), stt.get("bar"))
+    nc = g("t8_new_codes")
+    check("16.34 a new snapshot with the same codes asks nothing again; a new code set replaces that role's watch (one unsubscribe) and asks for exactly the new codes",
+          br.get("t8_same_codes") == 2 and [w["tool"] for w in nc["m"]["watches"]] == ["search_items", "stage_counts", "search_items"] and nc["m"]["unsubs"] == 1
+          and nc["m"]["watches"][2]["input"]["ids"] == ["ZRG-1", "ZRG-2", "ZRG-5"] and not br.get("t8_errs"), (br.get("t8_same_codes"), nc.get("m")))
+    check("16.35 at most 200 codes are sent, the first 200 in the order of the map", br.get("t8_cap") == [{"n": 200, "last": "ZRG-200", "first": "ZRG-1", "q": 200}], br.get("t8_cap"))
+    ev = g("t8_evil")
+    ev_rows = {r["code"]: r["live"] for r in ev.get("rows", [])}
+    check("16.36 a status is text: HTML shows as text, no element, no script; 41 characters and a non-string are skipped; no error",
+          ev_rows.get("ZRG-1") == ["<img src=x onerror=window.__pwned=1>"] and ev_rows.get("ZRG-2") == [] and ev_rows.get("ZRG-3") == []
+          and ev.get("imgs") == 0 and ev.get("pwned") is False and br.get("t8_evil_errs") == [], (ev_rows, br.get("t8_evil_errs")))
+    pk = {r["code"]: r["live"] for r in g("t8_pick").get("rows", [])}
+    check("16.37 pick on a nested payload: items '' (the payload is the array), key ref.id, value info.state", pk == {"ZRG-1": ["Open"], "ZRG-2": ["Blocked"]}, pk)
+    fn = g("t8_funnel")
+    fs = {x["title"]: x for x in fn.get("stages", [])}
+    check("16.38 pw_live_funnel_numbers: a live value with its time beside the snapshot's, which stays; a stage with no number, a text, an unknown id and a stage nobody asked for show none",
+          fs["Visit"]["value"].startswith("1000") and fs["Visit"]["live"] == ["наживо: 990 · " + T8] and fs["Payment"]["live"] == ["наживо: 410.5 · " + T8]
+          and fs["Cart"]["live"] == [] and fs["Done"]["live"] == [] and fs["New step"]["live"] == [] and fs["Cart"]["value"].startswith("700")
+          and not br.get("t8_funnel_errs"), (fs, br.get("t8_funnel_errs")))
+    fr = br.get("t8_funnel_fresh") or [""]
+    check("16.39 a result with no cache marker is stamped at receipt (a time, not storedAt)", len(fr) == 1 and re.fullmatch(r"наживо: 991 · \d\d:\d\d", fr[0]) is not None, fr)
+    ab = g("t8_absent")
+    check("16.40 pw_live_absent: use('mcp') = null -> no call, no live value, the snapshot's numbers, one line with the snapshot's date, no error, the button off",
+          ab["m"]["watches"] == [] and ab["m"]["uses"] == 1 and ab["bar"]["lines"] and len(ab["bar"]["lines"]) == 1 and ab["bar"]["lines"][0].startswith("живі числа недоступні:")
+          and "26.11.2026" in ab["bar"]["lines"][0] and all(r["live"] == [] for r in ab["rows"]) and ab["bar"]["btnHidden"] is True and not br.get("t8_absent_errs"), (ab["bar"], br.get("t8_absent_errs")))
+    en_ab = br.get("t8_absent_en") or {"lines": [""]}
+    check("16.41 the same line in English", en_ab["lines"][0].startswith("live numbers are unavailable:") and "2026-11-26" in en_ab["lines"][0], en_ab)
+    th = g("t8_throws")
+    check("16.42 use('mcp') that throws: the same line, no error", th["m"]["watches"] == [] and th["bar"]["lines"][0].startswith("живі числа недоступні:") and not br.get("t8_throws_errs"), (th["bar"], br.get("t8_throws_errs")))
+    nb, na, nm = g("t8_nobind"), g("t8_noask"), g("t8_nometa_bind")
+    check("16.43 no binding in meta, a binding with nothing to ask for, and a snapshot with no connectors: mcp is never even obtained, no line, no bar",
+          all(x["m"]["uses"] == 0 and x["m"]["watches"] == [] and (x["bar"] is None or x["bar"]["hidden"] or x["bar"]["lines"] == []) for x in (nb, na, nm)) and not br.get("t8_nobind_errs"), (nb["bar"], na["bar"], nm["bar"]))
+    b1, b2 = g("t8_badbind"), g("t8_badbind2")
+    check("16.44 bindings that do not fit (input not an object, a pick path with a slash, an unknown placeholder, a 101-character server, an unknown role) are dropped: no call at all, no error",
+          all(x["m"]["uses"] == 0 and x["m"]["watches"] == [] for x in (b1, b2)) and not br.get("t8_badbind_errs"), (b1["m"], b2["m"]))
+    WHY = {"needs_reauth": "підключити знову", "server_not_connected": "не додано", "server_not_found": "не додано", "selection_required": "обери",
+           "not_in_manifest": "немає дозволу", "consent_required": "немає дозволу", "not_granted": "не підтримує конектори", "capability_disabled": "не підтримує конектори",
+           "capability_removed": "не підтримує конектори", "blocked_by_policy": "політика", "approval_required": "схвалення", "tool_error": "відповів помилкою",
+           "server_unavailable": "не відповідає", "upstream_error": "не відповідає", "rate_limited": "не відповідає", "cancelled": "не відповідає", "mystery_code": "не відповідає",
+           "bad_request": "запит не вдався", "self_only": "запит не вдався", "transform_error": "запит не вдався", "user_changed": "онови сторінку"}
+    errs8 = br.get("t8_err") or {}
+    bad = {c: e for c, e in errs8.items() if not (len(e["lines"] or []) == 1 and e["lines"][0].startswith("живі числа недоступні:") and WHY[c] in e["lines"][0] and "26.11.2026" in e["lines"][0])}
+    check("16.45 each documented error code (and an unknown one) shows its own reason in words after «живі числа недоступні:» with the snapshot's date; the same reason of both roles is one line", len(errs8) == len(WHY) and not bad, bad)
+    check("16.46 and the snapshot's numbers stay, no live value, no error, no retry by itself, no unsubscribe, no callTool",
+          all(all(v[0].startswith(("1000", "700", "400", "380", "12")) and v[1] == 0 for v in e["stages"]) and e["errs"] == [] and e["watches"] == 2 and e["unsubs"] == 0 and e["calls"] == 0
+              for e in errs8.values()), {c: (e["stages"], e["errs"], e["watches"]) for c, e in errs8.items()})
+    check("16.47 the reasons differ where the fix differs (reconnect, add, choose, not allowed, policy, approval, tool, unreachable)",
+          len({WHY[c] for c in errs8}) >= 9 and errs8["needs_reauth"]["lines"] != errs8["server_not_connected"]["lines"] != errs8["blocked_by_policy"]["lines"], "")
+    check("16.48 a refresh button is offered only where the API says a repeat may help (approval_required: the button asks; everything else here: off)",
+          errs8["approval_required"]["btnHidden"] is False and all(e["btnHidden"] is True for c, e in errs8.items() if c != "approval_required"), {c: e["btnHidden"] for c, e in errs8.items()})
+    kp, rt, bk = g("t8_keep"), g("t8_retract"), g("t8_back")
+    check("16.49 a transient error keeps the last good live value and says so with its time; an authorization denial takes the value away; the next data brings it back",
+          kp["stages"][0]["live"] == ["наживо: 990 · " + T8] and any("не відповідає" in x and "показано станом на " + T8 in x for x in kp["bar"]["lines"])
+          and rt["stages"][0]["live"] == [] and any("підключити знову" in x for x in rt["bar"]["lines"]) and any("Живі числа" in x and "Zorg Tracker" in x for x in rt["bar"]["lines"])
+          and [x["live"] for x in bk["stages"] if x["title"] == "Cart"][0][0].startswith("наживо: 701") and not br.get("t8_keep_errs"), (kp["stages"][0], kp["bar"], rt["stages"][0], rt["bar"], bk["stages"]))
+    r0, r1, r2, r3 = g("t8_r0"), g("t8_r1"), g("t8_r2"), g("t8_r3")
+    rr = lambda x: {q["code"]: q["live"] for q in x["rows"]}
+    check("16.50 pw_live_refresh: after arrival 2 watches and a button «Оновити»; nothing more on its own (600 ms)", len(r0["m"]["watches"]) == 2 and r0["bar"]["btn"] == "Оновити"
+          and r0["bar"]["btnDisabled"] is False and r0["m"]["unsubs"] == 0 and rr(r0).get("ZRG-1") == ["In Review"], (r0["m"], r0["bar"]))
+    check("16.51 a press goes through busy: «Виконується…» and disabled at once, one new watch per role (old ones unsubscribed), the last values stay until the answer",
+          r1["bar"]["btn"] == "Виконується…" and r1["bar"]["btnDisabled"] is True and len(r1["m"]["watches"]) == 4 and r1["m"]["unsubs"] == 2 and rr(r1).get("ZRG-2") == ["Done"], (r1["bar"], r1["m"]))
+    check("16.52 the answer replaces the values (a code missing from it loses its status), the button is back with «Готово»",
+          r2["bar"]["btn"] == "Оновити" and r2["bar"]["btnDisabled"] is False and r2["bar"]["state"] == "Готово" and rr(r2).get("ZRG-2") == ["Reopened"] and rr(r2).get("ZRG-1") == [], (r2["bar"], rr(r2)))
+    check("16.53 each press asks once per role: the second press gives exactly 2 more watches (6 in all) and shows the third answer; no console error",
+          len(r3["m"]["watches"]) == 6 and r3["m"]["unsubs"] == 4 and rr(r3).get("ZRG-1") == ["Closed"] and r3["bar"]["state"] == "Готово" and not br.get("t8_r_errs"), (r3["m"], r3["bar"]))
+    q0, q1 = g("t8_rt0"), g("t8_rt1")
+    check("16.54 a failure stamped retryable is not retried by itself (even after retryAfterMs); the button retries only that role; a non-retryable failure of the other role is left alone",
+          len(q0["m"]["watches"]) == 2 and q0["bar"]["btnHidden"] is False and len(q1["m"]["watches"]) == 3 and q1["m"]["watches"][2]["tool"] == "search_items"
+          and {r["code"]: r["live"] for r in q1["rows"]}.get("ZRG-1") == ["In Review"] and any("підключити знову" in x for x in q1["bar"]["lines"]) and not br.get("t8_rt_errs"),
+          (q0["m"], q1["m"], q1["bar"]))
+    a0, a1 = g("t8_ap0"), g("t8_ap1")
+    check("16.55 approval_required: the line says so; the button makes the same call once with callTool (no watch is added or dropped) and shows its result",
+          any("схвалення" in x for x in a0["bar"]["lines"]) and a0["m"]["calls"] == [] and len(a1["m"]["calls"]) == 1
+          and a1["m"]["calls"][0]["server"] == "Zorg Board" and a1["m"]["calls"][0]["tool"] == "stage_counts" and a1["m"]["calls"][0]["input"] == {"board": "main"}
+          and len(a1["m"]["watches"]) == 1 and a1["m"]["unsubs"] == 0 and [x["live"] for x in a1["stages"] if x["title"] == "Visit"][0] == ["наживо: 990 · " + T8]
+          and not br.get("t8_ap_errs"), (a0["bar"], a1["m"], a1["bar"]))
+    ph8 = g("t8_phone")
+    check("16.56 at phone width the live bar never scrolls the page sideways", ph8["sw"] <= ph8["cw"] and ph8["bar"] is not None, (ph8["sw"], ph8["cw"]))
+    en8 = g("t8_en")
+    check("16.57 an English page: «Live numbers», «live: 990 · hh:mm», «Refresh»", any(x.startswith("Live numbers") and "Zorg Board" in x for x in en8["bar"]["lines"]) and en8["bar"]["btn"] == "Refresh"
+          and en8["stages"][0]["live"] == ["live: 990 · " + T8] and not br.get("t8_en_errs"), (en8["bar"], en8["stages"][0]))
+
+# ---- Task 8: live numbers through the viewer's connectors (Python half) ---------------------------------------------------
+TRACKER = {"server": "Zorg Tracker", "tool": "search_items", "input": {"query": "key in ({codes})", "limit": 50},
+           "pick": {"items": "data.items", "key": "key", "value": "state.name"}}
+BOARD = {"server": "Zorg Board", "tool": "stage_counts", "input": {"board": "main"},
+         "pick": {"items": "rows", "key": "stage", "value": "count"}}
+BINDINGS = {"issue-status": TRACKER, "funnel-numbers": BOARD}
+
+
+def wjson(d, name, obj):
+    path = os.path.join(d, name)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f)
+    return path
+
+
+with tempfile.TemporaryDirectory() as d:
+    # SERVER may hold spaces and be host:<name>: the tools follow the LAST colon
+    check("16.1 parse_connector: spaces in the server, `host:<name>` and a colon inside the server (split on the LAST colon)",
+          sh.parse_connector("Zorg Tracker:get_issue") == {"server": "Zorg Tracker", "tools": ["get_issue"]}
+          and sh.parse_connector("host:zorg-files:read_file, list_files") == {"server": "host:zorg-files", "tools": ["read_file", "list_files"]}
+          and sh.parse_connector("A:B:c")["server"] == "A:B", [sh.parse_connector("host:zorg-files:read_file")])
+    rc, text, res, o = wrap(d, ZORG, "--connector", "Zorg Tracker:search_items", "--connector", "host:zorg-files:read_file,list_files", out="h.html")
+    check("16.2 wrap --connector 'host:zorg-files:read_file,list_files' -> capabilities.mcp servers [Zorg Tracker, host:zorg-files]",
+          rc == 0 and res.get("capabilities", {}).get("mcp") == {"servers": [{"server": "Zorg Tracker", "tools": ["search_items"]},
+                                                                             {"server": "host:zorg-files", "tools": ["read_file", "list_files"]}]}, res)
+    for bad in ("host:", "host::read", ":read", "Zorg Tracker:", "Zorg Tracker"):
+        rc, text, res, _ = wrap(d, ZORG, "--connector", bad, out="bad2.html")
+        check("16.3 a malformed connector '%s' is still refused" % bad, rc == 1 and res.get("ok") is False and not os.path.exists(os.path.join(d, "bad2.html")), text)
+
+    # snapshot --connectors FILE
+    cf = wjson(d, "bind.json", BINDINGS)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", cf, out="b1")
+    check("16.4 snapshot --connectors FILE -> snapshot/meta.connectors = {role: {server, tool, input, pick}}, as given",
+          rc == 0 and jread(o, "snapshot", "meta.json").get("connectors") == BINDINGS, text)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "one.json", {"funnel-numbers": BOARD}), out="b1b")
+    check("16.5 a file with one role writes that one role", rc == 0 and list(jread(o, "snapshot", "meta.json")["connectors"]) == ["funnel-numbers"], text)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connector", "issue-status:Zorg Tracker:get", out="old")
+    check("16.6 the old snapshot --connector ROLE:SERVER:TOOL is gone: refused, nothing written", rc != 0 and not os.path.exists(o), text)
+
+    def put(role="issue-status", **over):
+        b = copy.deepcopy(TRACKER)
+        b.update(over)
+        return {role: b}
+    deep = {"a": 1}
+    for _ in range(6):
+        deep = {"a": deep}
+    cases = (
+        ("a role the profile does not declare", put("ghost-role"), "ghost-role"),
+        ("an empty server", put(server=""), "server"),
+        ("a server over 100 characters", put(server="s" * 101), "server"),
+        ("a tool that is not text", put(tool=7), "tool"),
+        ("an empty tool", put(tool=""), "tool"),
+        ("a tool over 100 characters", put(tool="t" * 101), "tool"),
+        ("an input that is a list", put(input=[1]), "input"),
+        ("an input over 4 KiB", put(input={"q": "x" * 4200}), "4"),
+        ("an input deeper than 6", put(input=deep), "depth"),
+        ("a placeholder {codes[0]}", put(input={"q": "{codes[0]}"}), "placeholder"),
+        ("a placeholder {key}", put(input={"q": "a {key} b"}), "placeholder"),
+        ("{codes[]} inside a longer string", put(input={"q": "x {codes[]}"}), "placeholder"),
+        ("a placeholder in a key", put(input={"{codes}": 1}), "placeholder"),
+        ("a pick that is missing a member", put(pick={"items": "a", "key": "b"}), "pick"),
+        ("a pick with an extra member", put(pick={"items": "a", "key": "b", "value": "c", "x": "d"}), "pick"),
+        ("a pick path with a slash", put(pick={"items": "a/b", "key": "b", "value": "c"}), "pick"),
+        ("a pick path with brackets", put(pick={"items": "a", "key": "b[0]", "value": "c"}), "pick"),
+        ("an empty key path", put(pick={"items": "a", "key": "", "value": "c"}), "pick"),
+        ("a pick path of 9 segments", put(pick={"items": "a.b.c.d.e.f.g.h.i", "key": "b", "value": "c"}), "pick"),
+        ("an extra member in a binding", put(extra=1), "extra"),
+        ("a binding that is not an object", {"issue-status": "x"}, "issue-status"),
+    )
+    for i, (label, obj, needle) in enumerate(cases):
+        rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "c%d.json" % i, obj), out="cb%d" % i)
+        check("16.7 --connectors with %s: an error naming it, nothing written" % label, rc == 1 and res.get("ok") is False
+              and needle in res.get("error", "") and not os.path.exists(o), text)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", os.path.join(d, "nope.json"), out="cbn")
+    check("16.8 --connectors with a missing file, and with a list instead of an object: refused", rc == 1 and not os.path.exists(o), text)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "lst.json", [TRACKER]), out="cbl")
+    check("16.8b a list instead of an object", rc == 1 and not os.path.exists(o), text)
+    ok_in = {"a": ["{codes[]}", "x {codes} y {codes}"], "n": 1, "b": None, "t": True}
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "okin.json", put(input=ok_in)), out="cbok")
+    check("16.9 the placeholders {codes} (inside a string, twice) and {codes[]} (the whole value) are accepted; other JSON stays",
+          rc == 0 and jread(o, "snapshot", "meta.json")["connectors"]["issue-status"]["input"] == ok_in, text)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "ek.json", put(pick={"items": "", "key": "id", "value": "s"})), out="cbe")
+    check("16.10 pick.items may be empty (the payload is the array); input of exactly 6 levels is accepted",
+          rc == 0 and jread(o, "snapshot", "meta.json")["connectors"]["issue-status"]["pick"]["items"] == "", text)
+    deep6 = {"a": {"a": {"a": {"a": {"a": {"a": 1}}}}}}
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", wjson(d, "d6.json", put(input=deep6)), out="cbd")
+    check("16.10b input with 6 levels (the input itself is the first) is accepted", rc == 0, text)
+
+    # test_connector_in_capabilities_only
+    rc, text, res, o = wrap(d, ZORG, "--connector", "Zorg Tracker:search_items", "--connector", "Zorg Board:stage_counts", out="cap.html")
+    html8 = body_of(o)
+    check("16.11 test_connector_in_capabilities_only: --connector reaches capabilities.mcp and nothing of the page",
+          res.get("capabilities", {}).get("mcp", {}).get("servers", [{}])[0].get("server") == "Zorg Tracker"
+          and not any(w in html8 for w in ("Zorg Tracker", "Zorg Board", "search_items", "stage_counts")), res)
+    scan = [os.path.join(r, f) for top in ("scripts", "references", "skills", "commands") for r, _, fs in os.walk(os.path.join(ROOT, top))
+            for f in fs if f.endswith((".py", ".js", ".css", ".yaml", ".yml", ".md", ".json"))]
+    hits = [os.path.relpath(x, ROOT) for x in scan if any(w in open(x, encoding="utf-8", errors="ignore").read() for w in ("Zorg Tracker", "Zorg Board", "search_items", "stage_counts"))]
+    check("16.12 no connector name or tool of the fixtures is in the plugin's scripts, references, skills or commands", hits == [], hits)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connectors", cf, out="cb_files")
+    in_files = sorted(os.path.relpath(os.path.join(r, f), o) for r, _, fs in os.walk(o) for f in fs
+                      if "Zorg Tracker" in open(os.path.join(r, f), encoding="utf-8").read())
+    check("16.13 in the snapshot's files the binding is only in snapshot/meta", in_files == [os.path.join("snapshot", "meta.json")], in_files)
+
+    # snapshot --prev-meta FILE
+    two = ["--section", "portfolio:zorg:" + PORT, "--section", "map.first-order:zorg:" + MAP]
+    rc, text, res, o1 = snap(d, *ZP, *two, "--connectors", cf, out="p1")
+    LATER_AT = "2026-12-01T09:00:00Z"
+    prev = os.path.join(o1, "snapshot", "meta.json")
+    o2 = os.path.join(d, "p2")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o2, "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT, "--prev-meta", prev)
+    m2 = jread(o2, "snapshot", "meta.json")
+    check("16.14 --prev-meta: a one-section run keeps the date of the section it did not write; the written one has the new date",
+          rc == 0 and m2["sections"] == {"portfolio--zorg": LATER_AT, "map.first-order--zorg": MADE} and m2["made"] == LATER_AT, (text, m2))
+    check("16.15 --prev-meta without --connectors carries the connectors over", m2.get("connectors") == BINDINGS, m2)
+    o3 = os.path.join(d, "p3")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o3, "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT)
+    m3 = jread(o3, "snapshot", "meta.json")
+    check("16.16 without --prev-meta the other section's date is gone (as before), and no connectors", m3["sections"] == {"portfolio--zorg": LATER_AT} and "connectors" not in m3, m3)
+    o4 = os.path.join(d, "p4")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o4, "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT, "--prev-meta", prev,
+                        "--connectors", wjson(d, "new.json", {"funnel-numbers": BOARD}))
+    check("16.17 --connectors given with --prev-meta: the new bindings replace the old ones", jread(o4, "snapshot", "meta.json")["connectors"] == {"funnel-numbers": BOARD}, text)
+    o5 = os.path.join(d, "p5")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o5, "--at", LATER_AT, "--product", "zorg:Zorg", "--section", "portfolio:zorg:" + PORT, "--prev-meta",
+                        wjson(d, "pm.json", {"v": 1, "made": MADE, "sections": {"portfolio--zorg": MADE, "map.a--zorg-pay": MADE, "map.b--zorg": MADE, "BAD ID--zorg": MADE, "x--zorg": 5}}))
+    check("16.18 an entry is carried only when its product is still among --product and its id is well-formed",
+          jread(o5, "snapshot", "meta.json")["sections"] == {"portfolio--zorg": LATER_AT, "map.b--zorg": MADE}, text)
+    for i, (label, body) in enumerate((("a list", [1]), ("sections that is a list", {"sections": []}), ("no sections", {"made": MADE}),
+                                       ("connectors that is a list", {"sections": {}, "connectors": []}),
+                                       ("a binding that does not fit", {"sections": {}, "connectors": {"ghost": TRACKER}}))):
+        o6 = os.path.join(d, "pbad%d" % i)
+        rc, text, res = run("snapshot", "--profile", "cjm", "--out", o6, "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT, "--prev-meta", wjson(d, "pb%d.json" % i, body))
+        check("16.19 --prev-meta that is %s: refused before anything is written" % label, rc == 1 and res.get("ok") is False and "prev-meta" in res.get("error", "")
+              and not os.path.exists(o6), text)
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", os.path.join(d, "pbadx"), "--at", LATER_AT, *ZP, "--section", "portfolio:zorg:" + PORT, "--prev-meta", os.path.join(d, "nope.json"))
+    check("16.20 --prev-meta with a missing file: refused", rc == 1 and not os.path.exists(os.path.join(d, "pbadx")), text)
+    api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None, {"sections": {"x--zorg": MADE}})
+    check("16.21 build_snapshot(..., prev_meta) carries sections the same way", api["snapshot/meta"]["sections"] == {"portfolio--zorg": LATER_AT, "x--zorg": MADE}, api["snapshot/meta"])
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

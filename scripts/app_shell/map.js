@@ -170,6 +170,7 @@
             if (r.target) { it.setAttribute("data-target", "1"); }
             if (r.locked) { it.setAttribute("data-locked", "1"); }
           }
+          if (r.code && S.decorate) { S.decorate("code", it, r.code); }
           td.appendChild(it);
         });
         tr.appendChild(td);

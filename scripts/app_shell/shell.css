@@ -218,3 +218,11 @@ html.gpm-has-modules, html.gpm-has-modules body { background: var(--gpm-bg); }
 .gpm-perms-toggle { min-height: 28px; padding: 0 10px; border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); background: transparent; color: var(--gpm-text); font: 400 12px/1 var(--gpm-font); cursor: pointer; }
 .gpm-perms-toggle[aria-expanded="true"] { border-color: var(--gpm-accent); }
 .gpm-edits { min-width: 0; }
+/* ---- live numbers (live.js): a line under the header, a status beside a map row, a live value beside a stage ---- */
+.gpm-live-bar { box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 16px;
+  background: var(--gpm-surface); color: var(--gpm-muted); border-bottom: 1px solid var(--gpm-border); font: 400 13px/1.35 var(--gpm-font); }
+.gpm-live-bar[hidden], .gpm-live-bar button[hidden] { display: none; }
+.gpm-live-lines { flex: 1 1 200px; min-width: 0; }
+.gpm-live-line { margin: 0; overflow-wrap: anywhere; }
+.gpm-live { color: var(--gpm-accent); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.gpm-live::before { content: "● "; font-size: 9px; }

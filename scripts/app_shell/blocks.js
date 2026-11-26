@@ -149,6 +149,15 @@
   // ---- blocks -----------------------------------------------------------------------------------------------------------
   // A block renderer takes the data of one section document and the view -> an element, or null when the data does not
   // hold what the block shows. `view` = {meta, filter, chip(id), shows(id)}; `info` = {id, product, section, made}.
+  // A renderer tells the registry about a node it drew and that something else may add to: decorate(kind, node, key) —
+  // kinds `stage` (a chart stage's head, key = the stage id) and `code` (a map row, key = its code, from map.js).
+  // Whoever registered with onDecorate (live.js) hears it; with nobody registered nothing changes in the output.
+  var DECORATORS = [];
+  function onDecorate(fn) { if (typeof fn === "function") { DECORATORS.push(fn); } }
+  function decorate(kind, node, key) {
+    DECORATORS.forEach(function (fn) { try { fn(kind, node, key); } catch (e) { /* one decorator does not stop the others */ } });
+  }
+
   function mark(level) {
     var span = el("span", "gpm-attn gpm-attn-" + level);
     var dot = el("span", "gpm-mark");
@@ -284,6 +293,7 @@
       if (base !== null) { head.appendChild(el("span", "gpm-stage-base", S.t.baseline + " " + base + unit)); }
       if (level && level !== "ok") { head.appendChild(mark(level)); }
       row.appendChild(head);
+      if (str(s.id, 64)) { decorate("stage", head, s.id); }
       var scale = top > 0 ? 100 / top : 0;
       var g = svg("svg", { "class": "gpm-bars", viewBox: "0 0 100 10", preserveAspectRatio: "none", role: "img", width: "100%", height: "10" });
       g.setAttribute("aria-label", s.title + ": " + s.value + (base !== null ? " / " + base : ""));
@@ -307,6 +317,8 @@
   var SOURCES = { "@edits": function () { return placeholder(S.t.editsPlaceholder); } };
   S.blocks = RENDER;
   S.sources = SOURCES;
+  S.onDecorate = onDecorate;
+  S.decorate = decorate;
   S.productChip = productChip;
   S.productSwitch = productSwitch;
   // What the window's menu and tray need of the modules: the product and the tab shown, a way to open a tab and to hear
