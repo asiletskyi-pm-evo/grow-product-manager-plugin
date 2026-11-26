@@ -301,7 +301,7 @@ For each integration referenced in the context:
 | Integration | Test | Expected result |
 |-------------|------|-----------------|
 | **Jira** | `getJiraIssue` with a known project key | Project accessible |
-| **Confluence** | `getConfluenceSpaces` + check configured space exists | Space accessible |
+| **Confluence** | `listConfluenceSpaces` (`executeRead`, `keys`) + check configured space exists | Space accessible |
 | **Figma** | `whoami` | Account verified |
 | **Notion** | `notion-get-teams` | Workspace accessible |
 | **Tableau** | If Tableau MCP available: `search-content` (no terms, limit 1) returns metadata. Else navigate to dashboard URL via browser | Connector responds / page loads |
@@ -311,7 +311,7 @@ For each integration referenced in the context:
 
 For each product in the context:
 - Try to search Jira issues in the configured project: `searchJiraIssuesUsingJql` with `project = PROJECT_KEY ORDER BY created DESC` (limit 1)
-- Try to access the configured Confluence space: `getConfluenceSpaces` and verify the space key exists
+- Try to access the configured Confluence space: `listConfluenceSpaces` with `keys: [<the configured key>]` (`executeRead` on Atlassian MCP v2 — `references/integration-strategy.md` 1c) and verify the space key exists
 - If dashboard URLs are configured — try to navigate and take a screenshot to verify access
 - If CJM dashboards are configured — verify each stage dashboard is accessible
 

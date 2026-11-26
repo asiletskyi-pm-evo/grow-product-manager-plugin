@@ -12,6 +12,73 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.11.0 (2026-11-25)
+
+**«Atlassian MCP v2»: the plugin moves to Atlassian's v2 server before v1 is switched off on 2027-03-01** ([#96](https://github.com/asiletskyi-pm-evo/grow-product-manager-plugin/issues/96)). Atlassian already warns about v1 on the first call. Changing the URL alone would break the skills, because v2 renames tools and changes defaults. So the URL, the tool names and the parameters change in one release.
+
+**After updating, reconnect Atlassian once** in the plugin's Connectors tab. The host matches a declared server by its URL, so a connection made to v1 is not picked up. Until you reconnect, the old v1 connection may still answer: the skills recognise it, use the v1 names, and say in one line that reconnecting moves you to v2.
+
+### Changed
+
+- **`.mcp.json`** — `atlassian` → `https://mcp.atlassian.com/v2/mcp`.
+- **`references/integration-strategy.md` §1c** — v2 is the declared server. The table leads with the v2 tool, how it is called (primary or `executeRead` / `executeWrite`) and what to pass, and keeps the v1 name in its last column until 2027-03-01. Every row was checked with `discover` on the live v2 server on 2026-11-25. Five points are mandatory, because each one changes the result without an error:
+  1. A page is read with `detail: "full"`. The default is an excerpt of a few hundred characters.
+  2. An update carries a fresh `snapshotToken` from `getConfluenceContent(draft: true, detail: "full")`.
+  3. A page is created with `contentType: "page"` (the tool itself prefers a live doc), in a space by its numeric `spaceId`, with `parentContentId` for a child page.
+  4. Custom fields (the Team field, story points) are read with `view: "evidence"` or `fields`.
+  5. The ping is `getAccessibleAtlassianResources`: the project and space lists are not primary tools on v2.
+
+  Before writing, the space instructions (`getConfluenceSpace`) and the format guide (`getContentFormatGuide`) are read once per task.
+- **Skills, agents, references** name the v2 tools: `getConfluenceContent`, `createConfluenceContent`, `updateConfluenceContent`, `searchConfluence`, `listConfluenceSpaces`, `listJiraProjects`, `listJiraProjectIssueTypesMetadata`.
+  - `task-creator` gains the v2 fields of `createJiraIssue` (`issueType`, `assignee`). It also learns that `editJiraIssue` replaces labels and components rather than adding to them.
+  - `context-observe.md`: `listJiraProjects` defaults to `view` on v2. The old text described v1, where the default was `create`.
+- **The namespace** seen on Claude / Cowork is `mcp__Atlassian_MCP__*` (measured 2026-11-25); v1 was `mcp__Atlassian_Rovo__*`. The write gate's matcher is namespace-agnostic.
+- **The write gate** (`hooks/hooks.json`, `scripts/write_gate.py`) covers the v2 Confluence writes and keeps the v1 names until v1 is switched off.
+
+### Added
+
+- `testing/atlassian_v2_test.py` (TC-atl-4110) checks four things:
+  - `.mcp.json` declares v2.
+  - No skill, agent or skill reference names a tool that exists only on v1.
+  - Every `getConfluenceContent` a skill names asks for `detail: "full"`.
+  - The gate covers both name sets.
+- `testing/test-cases.md`: TC-gate-4110-create-v2 and TC-atl-4110.
+
+### Files
+
+| File | Change |
+|---|---|
+| `.mcp.json` | the v2 URL |
+| `references/integration-strategy.md` | §1c rewritten for v2; *Declared connectors* and the Confluence pattern row |
+| `references/context-observe.md`, `references/jira-data-protocol.md`, `references/roadmap-artifacts.md`, `references/visual-annotation-protocol.md`, `references/artifact-publishing.md`, `references/artifact-style-gate.md` | v2 tool names and parameters |
+| `skills/task-creator/SKILL.md` | 0.15.3 — v2 names; `createJiraIssue` / `editJiraIssue` on v2 |
+| `skills/requirements-creator/SKILL.md` | 0.17.4 — v2 names (also `analyze-improve-mode.md`, `publishing-destinations.md`) |
+| `skills/write-concept/SKILL.md` | 0.16.3 |
+| `skills/product-research/SKILL.md` | 0.17.1 |
+| `skills/product-reporter/SKILL.md` | 0.12.1 |
+| `skills/product-analysis/SKILL.md` | 0.19.1 (`analysis-engine.md`) |
+| `skills/meeting-processor/SKILL.md` | 0.19.1 |
+| `skills/knowledge-library/SKILL.md` | 0.10.2 (`library-workflows.md`) |
+| `skills/design-bridge/SKILL.md` | 0.10.1 (`design-bridge-playbook.md`) |
+| `skills/brainstorm-features/SKILL.md` | 0.15.3 |
+| `skills/plugin-configurator/SKILL.md` | 2.17.3 (`onboarding-steps.md`, `maintenance-modes.md`) |
+| `agents/extractor.md`, `.codex/agents/extractor.toml` | the example of `read_via` |
+| `commands/setup.md`, `hooks/hooks.json`, `scripts/write_gate.py` | the gate's v2 names first |
+| `testing/atlassian_v2_test.py`, `testing/test-cases.md` | new test; cases |
+| `README.md` | «New in v4.11.0», the write-gate row, skill versions |
+
+### Backwards compatibility
+
+The only step for a user is reconnecting Atlassian once. Until then, a v1 connection still works: §1c keeps the v1 names and the write gate still asks before a v1 Confluence write. No local context, vault note or config changes. After 2027-03-01 the v1 column and the gate's v1 names can go (a small follow-up).
+
+### Known limits
+
+- A live pass on v2 (read a long page, create and update a test page, create a task with an assignee and labels) is not part of this release's tests. The names and inputs were checked with `discover`, and the calls were not run.
+- The Codex CLI namespace for v2 is not measured yet (TBD in *Declared connectors*).
+- Editing the journey map on its page moves to v4.12.0.
+
+---
+
 ## v4.10.0 (2026-11-24)
 
 **«Вкладені карти»: a step of a journey map opens a child map, and the whole tree is seen on one page and one board.** v4.7.0–v4.9.0 gave each journey a note, a page, a board and a row in the portfolio, but a step that is a journey of its own — «Оплата» in «Перше замовлення» — could only become a second map with no tie to the first. Now a map names its parent in its frontmatter; the parent shows the child's roll-up on its step without a copy of a row; the root's page and board carry the whole tree, up to three levels; a child can be published on its own; and what the team changed on several boards comes back in one preview. The whole map works on the host's own tools, and its boards are offered with the host's own board first. The fifth release of the programme «Фреймворки»; editing on the page comes in v4.11.0.

@@ -8,7 +8,7 @@ This mode is for reviewing and improving **already written requirements**. The g
 
 **A1a. Determine the source of requirements:**
 
-- **Confluence link provided** → read page via Confluence MCP (`getConfluencePage`) or browser fallback. Extract full text, tables, and structure
+- **Confluence link provided** → read page via Confluence MCP (`getConfluenceContent` with `detail: "full"` — the default is an excerpt, `references/integration-strategy.md` 1c) or browser fallback. Extract full text, tables, and structure
 - **File provided** → read from uploaded file
 - **Text pasted into dialogue** → use as-is
 - **No source provided** → ask via AskUserQuestion:
