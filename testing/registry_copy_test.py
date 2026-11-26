@@ -45,6 +45,9 @@ with tempfile.TemporaryDirectory() as d:
     write(d, "docs/notes.md", "design notes\n")
     write(d, ".github/workflows/ci.yml", "on: push\n")
     write(d, "README.md", "# Demo\n")
+    write(d, "CLAUDE.md", "working on the repository\n")
+    write(d, "REVIEW.md", "review instructions\n")
+    write(d, "skills/hello/REVIEW.md", "a skill's own file of that name\n")
     git(d, "add", "."); git(d, "commit", "-q", "-m", "init")
     copy = os.path.join(d, ".ai-registry", "skills", "demo")
     def run(*args):
@@ -58,6 +61,8 @@ with tempfile.TemporaryDirectory() as d:
     check("maintainer folders and the marketplace catalogue stay out",
           not any(p.startswith(("testing/", "docs/", ".github/")) for p in have)
           and ".claude-plugin/marketplace.json" not in have, sorted(have))
+    check("the root's CLAUDE.md and REVIEW.md stay out, a file of that name deeper is kept",
+          "CLAUDE.md" not in have and "REVIEW.md" not in have and "skills/hello/REVIEW.md" in have, sorted(have))
     cur = json.load(open(os.path.join(copy, ".cursor-plugin/plugin.json")))
     check("a Cursor manifest is derived from plugin.json",
           cur.get("name") == "demo" and cur.get("version") == "1.0.0" and cur.get("skills") == "./skills/", cur)
