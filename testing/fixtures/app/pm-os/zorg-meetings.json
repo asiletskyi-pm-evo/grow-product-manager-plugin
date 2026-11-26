@@ -1,0 +1,15 @@
+{
+ "items": [
+  {
+   "title": "Checkout sync, 11:00",
+   "note": "Preparation pack is ready",
+   "product": "zorg-pay"
+  },
+  {
+   "title": "Weekly planning, 15:00",
+   "note": "No pack yet",
+   "product": "zorg",
+   "attention": "warn"
+  }
+ ]
+}

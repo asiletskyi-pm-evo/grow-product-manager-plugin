@@ -1,0 +1,32 @@
+{
+ "columns": [
+  {
+   "key": "title",
+   "title": "Source"
+  },
+  {
+   "key": "updated",
+   "title": "Updated"
+  },
+  {
+   "key": "age",
+   "title": "Age"
+  }
+ ],
+ "rows": [
+  {
+   "title": "Funnel tracker",
+   "updated": "2026-11-16",
+   "age": "10 d",
+   "product": "zorg",
+   "attention": "warn"
+  },
+  {
+   "title": "Payments tracker",
+   "updated": "2026-11-25",
+   "age": "1 d",
+   "product": "zorg-pay",
+   "attention": "ok"
+  }
+ ]
+}

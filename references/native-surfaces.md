@@ -66,6 +66,8 @@ A run started by SCHEDULE has no one to answer §3. So it:
 
 Setting the schedule up is an interactive step: the skill says what will run, how often and where its result will go (the vault or a file, never a hosted surface), and creates it on the user's «так».
 
+**One exception — the pult's data.** A scheduled refresh of the user's own private pult writes its `snapshot` and `runs` documents without the question of §3 when the user gave a standing consent at the pult's set-up, and only while the pult is shared with no one; the page itself, its layout and every other place keep §3. The conditions, the journal and how the consent is taken back: `pm-os-protocol.md` §5.
+
 ## 5. When the surface is absent
 
 Say it once, at the start, in one line — the `host-profiles.md` §3 rule — and take the next column of §2:

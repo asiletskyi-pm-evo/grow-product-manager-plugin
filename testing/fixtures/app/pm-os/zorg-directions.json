@@ -1,0 +1,50 @@
+{
+ "columns": [
+  {
+   "key": "title",
+   "title": "Direction"
+  },
+  {
+   "key": "code",
+   "title": "Epic"
+  },
+  {
+   "key": "stage",
+   "title": "Stage"
+  },
+  {
+   "key": "ready",
+   "title": "Ready"
+  },
+  {
+   "key": "open",
+   "title": "Open"
+  },
+  {
+   "key": "stale",
+   "title": "Stale over 14 days"
+  }
+ ],
+ "rows": [
+  {
+   "title": "First order",
+   "code": "ZORG-100",
+   "stage": "In progress",
+   "ready": "62%",
+   "open": 19,
+   "stale": 1,
+   "product": "zorg",
+   "attention": "warn"
+  },
+  {
+   "title": "Pay by card",
+   "code": "ZPAY-40",
+   "stage": "In progress",
+   "ready": "80%",
+   "open": 6,
+   "stale": 0,
+   "product": "zorg-pay",
+   "attention": "ok"
+  }
+ ]
+}
