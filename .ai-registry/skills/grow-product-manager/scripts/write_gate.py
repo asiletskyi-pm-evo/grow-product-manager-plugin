@@ -75,13 +75,16 @@ GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "update
 UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
 DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
 DESTRUCTIVE_OPS = ("executeDestructive",)  # since v4.11.1: always asks, no pause, no size threshold
-TRUST_RX = re.compile(r"\bprovider\s+trust\b")              # since v4.11.1: `ctx provider trust <id> --code …`
+TRUST_RX = re.compile(r"\bprovider\W+trust\b|\bcmd_provider_trust\b|\bctx\.main\s*\(")              # since v4.11.1: `ctx provider trust <id> --code …`
 CODE_RX = re.compile(r"(?:^|[\s'\"=])--c(?:o|od|ode)?(?=[=\s'\"]|$)")   # --code, quoted or not, and every abbreviation argparse accepts
-SETUP_RX = re.compile(r"\bsetup(?:\.py)?\b[\s\S]*?(?:^|[\s'\"])--w[\w-]*|\bsetup\.main\b|\bwrite_gate_pause_until\b|"
-                      r"[\"']write_gate[\"']", re.I)   # `setup.py --write-gate off|pause|on`, abbreviated, or setup imported
+SETUP_RX = re.compile(r"\bsetup\.py\b[\s\S]*?(?:^|[\s'\"])--w[\w-]*|\bimport\s+setup\b|\bfrom\s+setup\s+import\b|"
+                      r"\bsetup\.main\b|\bwrite_gate_pause_until\b|[\"']write_gate[\"']", re.I)   # `setup.py --write-gate off|pause|on`, abbreviated, or setup imported
 GUARDED_FILES_RX = re.compile(r"\.grow-pm/(?:trust\b|\.trust-seeded)|plugin-data|CLAUDE_PLUGIN_DATA|"
-                              r"write[_-]gate\.(?:py|sh)|hooks\.json", re.I)   # the gate's config, the trust store, the gate itself
-WRITE_WORDS_RX = re.compile(r">|\btee\b|\bmv\b|\bcp\b|\brm\b|\bsed\s+-i|\btruncate\b|\bpython|\bperl\b|\bchmod\b|\bln\b|\bdd\b")
+                              r"write[_-]gate\.(?:py|sh)|(?:grow-product-manager|CLAUDE_PLUGIN_ROOT)[^\s'\"]*hooks\.json", re.I)
+GROW_RX = re.compile(r"\.grow-pm\b", re.I)    # anywhere under ~/.grow-pm, a delete or a move asks (the trust store, the mark)
+DELETE_RX = re.compile(r"\brm\b|\brmdir\b|\bunlink\b|-delete\b|\bmv\b|\bshred\b")   # the gate's config, the trust store, the gate itself
+WRITE_WORDS_RX = re.compile(r"(?<![0-9&])>(?!&)|\btee\b|\bmv\b|\bcp\b|\brm\b|\brmdir\b|\bunlink\b|-delete\b|\bsed\s+-i|"
+                            r"\btruncate\b|\bpython|\bperl\b|\bruby\b|\bnode\b|\bchmod\b|\bln\b|\bdd\b|\binstall\b|\brsync\b")
 PAUSE_KEY = "write_gate_pause_until"
 MAX_PAUSE_MINUTES = 240
 
@@ -299,7 +302,9 @@ def guarded(tool, tool_input, cwd=None):
             ask("Grow PM write gate: this command changes the write gate itself (`setup.py --write-gate …`) — off or paused,"
                 " the plugin's questions before Jira and Confluence writes stop." + tail)
             return True
-        if GUARDED_FILES_RX.search(cmd) and WRITE_WORDS_RX.search(cmd):
+        dirs = {os.path.dirname(p) for p in config_paths()}
+        named = GUARDED_FILES_RX.search(cmd) or any(d and d in cmd for d in dirs)
+        if (named and WRITE_WORDS_RX.search(cmd)) or (GROW_RX.search(cmd) and DELETE_RX.search(cmd)):
             ask("Grow PM write gate: this command may change the write gate's config or the provider trust file — the "
                 "files that decide what is asked and which addresses get your searches." + tail)
             return True
@@ -312,11 +317,10 @@ def guarded(tool, tool_input, cwd=None):
         real = fold(path) if path else ""
         grow = fold(os.path.join("~", ".grow-pm"))
         exact = {fold(p) for p in config_paths()} | {fold(os.path.join(grow, ".trust-seeded"))}
-        exact |= {fold(os.path.join(HERE, n)) for n in ("write_gate.py", "write-gate.sh")}
-        exact |= {fold(os.path.join(HERE, "..", "hooks", n)) for n in ("hooks.json", "write-gate.sh")}
-        trust = fold(os.path.join(grow, "trust"))
-        if real and (real in exact or real == trust or real.startswith(trust + os.sep)):
-            ask("Grow PM write gate: this edit changes %s — the write gate itself, its config or the provider trust store."
+        trust, root = fold(os.path.join(grow, "trust")), fold(os.path.join(HERE, ".."))   # the plugin's own files: all of them
+        if real and (real in exact or any(real == t or real.startswith(t + os.sep) for t in (trust, root))):
+            ask("Grow PM write gate: this edit changes %s — the plugin's own code, the write gate's config or the provider "
+                "trust store."
                 % path + tail)
             return True
         return False
@@ -341,7 +345,14 @@ def main():
     data = json.loads(raw) if raw.strip() else {}
     tool = str(data.get("tool_name", ""))
     tool_input = data.get("tool_input") or {}
-    if guarded(tool, tool_input, data.get("cwd")):     # since v4.11.1: these questions stay on whatever the config says (no off, no pause)
+    try:
+        hit = guarded(tool, tool_input, data.get("cwd"))
+    except Exception:                 # these questions fail closed: a check that cannot run asks
+        if tool == "Bash" or tool in FILE_TOOLS or tool.rsplit("__", 1)[-1] in DESTRUCTIVE_OPS:
+            ask("Grow PM write gate: the safety check of this action could not run. Confirm only if you asked for exactly "
+                "this.")
+        return
+    if hit:     # since v4.11.1: these questions stay on whatever the config says (no off, no pause)
         return
     cfg = load_config()
     if not tool or not write_gate_enabled(cfg):
