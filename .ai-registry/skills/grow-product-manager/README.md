@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.12.0
+**Version:** 4.12.1
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.12.1** — **A release is finished when it has reached every place that serves it, not when the tag exists** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). Four releases in a row reached the canonical remote and never its mirror, because they were run from sessions that could not reach it and nothing recorded the step as left. `release-manager` 0.5.2 now ends with a reach check: `python3 testing/release_reach.py` compares the canonical branch and its tag with every mirror and with the copies of the plugin installed on the machine, and fails while anything is behind or could not be checked. A step a session cannot do — the mirror push, the vault record — is written out as «Left to do on the release machine» instead of being passed over. `references/host-profiles.md` §8 says how each host takes a release and how soon, measured on six releases: a claim «the machine is at version N» now names which host's copy. And a session says so itself: when another copy of the plugin on the machine is at another version, the SessionStart digest ends with a `plugin copies:` line — a ⚠ the user hears once when this host lags a newer copy, a list named on request when the others are older. Local files only, no network.
 
 **New in v4.12.0** — **«Редагування на сторінці»: the journey map is edited on its page, and on the host's own artifact page the team edits it together, live** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). Every page `render-html` writes carries the switch «Редагувати»: cards are dragged between cells, a side panel edits a row's text, its stage and lane, its parent, its code and the stage's target, «+ Додати» adds a row, and a health-check, metric or anomaly row stays locked. On the host's artifact page each edit is a document of the page's own `edits` collection, so everyone who may edit the artifact sees the others' edits as they are made, with who made them; a viewer sees the marks without the switch. Elsewhere the page saves or copies its edits. Either way the note changes only through the board's preview: «забери правки зі сторінки карти шляху» → `journey_map.py page-diff` → `board-take` with the PM's class for each evidence row, and a child map's row goes into the child's own note. `cjm-research` 0.20.0 (Step J9). New test `testing/journey_page_edit_test.py`.
 
@@ -184,7 +186,7 @@ It adds no question, switch or role-dependent behaviour. Automated runs get the 
 
 **New in v1.29.0** — **Vault coverage complete**: a standard "Save to Vault" step added to the 11 skills that previously never wrote to the Obsidian knowledge graph (requirements-creator, meeting-processor, brainstorm-features, product-research, diagram-prototyper, task-creator, product-reporter, and the 4 Planning Suite skills). Meeting MoMs, requirements, hypotheses, research, diagrams, task breakdowns, ops reports, and roadmaps now accumulate in the vault with wikilinks. Vault schema extended with 4 new artifact types: `diagram`, `task-breakdown`, `ops-report`, `roadmap` (20 types total). Vault stays optional — L0 setups are unaffected.
 
-**New in v1.28.0** — **Release Manager** skill: one guided pipeline to release the plugin itself — version bump across all 4 mandatory places, CHANGELOG entry, README sync, local validation, gated commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Ships with `skills/release-manager/references/release-pitfalls.md` — nine real failure modes (iCloud-evicted git objects, stale locks, token scopes, VPN-only mirrors, protected-branch divergence, CDN cache…) with guards and recovery recipes.
+**New in v1.28.0** — **Release Manager** skill: one guided pipeline to release the plugin itself — version bump across all 4 mandatory places, CHANGELOG entry, README sync, local validation, gated commit/PR/merge, GitHub Release with tag, mirror sync, and post-release verification. Ships with `skills/release-manager/references/release-pitfalls.md` — ten real failure modes (iCloud-evicted git objects, stale locks, token scopes, VPN-only mirrors, protected-branch divergence, CDN cache…) with guards and recovery recipes.
 
 **New in v1.27.0** — **CI validation + trigger disambiguation**: every push/PR to main now runs `testing/validate-consistency.sh` via GitHub Actions (version consistency across manifests/README/CHANGELOG, SKILL.md frontmatter, broken reference paths). Skill descriptions of the CJM trio (cjm-research / product-analysis / brainstorm-features) and the prototype pair (diagram-prototyper / design-bridge) now carry explicit "Do NOT use" routing hints.
 
@@ -551,13 +553,13 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.5.1) — NEW in v1.28.0
+### 19. Release Manager (v0.5.2) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
-**Pipeline:** pre-flight guards (iCloud materialization, stale locks, clean tree) → scope & semver decision → bump in the 4 mandatory places (plugin.json, marketplace.json, README, CHANGELOG) → the registry copy rebuilt from the index, when the repo publishes one for a registry that syncs a subfolder → local `validate-consistency.sh` run → gated commit/push → PR → merge → GitHub Release with tag → mirror sync → post-release verification, optional Confluence changelog update, and vault release record.
+**Pipeline:** pre-flight guards (iCloud materialization, stale locks, clean tree) → scope & semver decision → bump in the 4 mandatory places (plugin.json, marketplace.json, README, CHANGELOG) → the registry copy rebuilt from the index, when the repo publishes one for a registry that syncs a subfolder → local `validate-consistency.sh` run → gated commit/push → PR → merge → GitHub Release with tag → mirror sync → post-release verification with the reach check (`testing/release_reach.py`: every mirror, and the copies installed on the machine), optional Confluence changelog update, vault release record, and what a session could not do written out as «Left to do on the release machine».
 
-**Built-in pitfall guide:** `skills/release-manager/references/release-pitfalls.md` — nine real failure modes with guards and recovery recipes (P1 iCloud-evicted git objects, P4 token without workflow scope, P6 diverged protected mirror, P7 stale raw CDN, and more).
+**Built-in pitfall guide:** `skills/release-manager/references/release-pitfalls.md` — ten real failure modes with guards and recovery recipes (P1 iCloud-evicted git objects, P4 token without workflow scope, P6 diverged protected mirror, P7 stale raw CDN, and more).
 
 **Generic by design:** works for any Claude plugin repo; org specifics (mirrors, VPN hosts, Confluence page) come from `local-context.md` → `plugin_release`.
 
@@ -707,7 +709,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.4 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.5.1 | Release the plugin repo: bump → validate → PR → Release → mirror sync, with pitfall guards |
+| Release Manager | v0.5.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync → reach check, with pitfall guards |
 | Focus Advisor | v0.11.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.3 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.3 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -968,7 +970,7 @@ Every protocol keeps a fallback chain that never widens an agent's tools (named 
 
 | Hook | Event | Does |
 |---|---|---|
-| Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. |
+| Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. Since v4.12.1 the digest ends with a `plugin copies:` line when another copy of the plugin on the machine is at another version (local manifests only, `references/host-profiles.md` §8). |
 | Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluenceContent`, `updateConfluenceContent` (Atlassian MCP v2; the v1 names `createConfluencePage`, `updateConfluencePage` stay gated until v1 is switched off on 2027-03-01) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits and an `updateConfluenceContent` dry run (`dryRun: true`) pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. For one bulk job (a docs sync, a batch of tasks): `/grow-product-manager:setup --write-gate pause <minutes>` skips this question for up to 240 minutes and it comes back on its own; the provider-boundary and generated-region questions stay on. Opt-out: `/grow-product-manager:setup --write-gate off`. |
 | Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate; a write-gate pause does not cover it. |
 | Irreversible Atlassian operation (since v4.11.1) | `PreToolUse` on `executeDestructive` (Atlassian MCP v2) | The same `scripts/write_gate.py` always asks before a delete or another operation with no draft and no undo, naming the operation. A write-gate pause does not cover it. |
@@ -1140,5 +1142,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.12.0  
+**Version:** 4.12.1  
 **Last Updated:** November 2026

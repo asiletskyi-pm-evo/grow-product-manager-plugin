@@ -20,6 +20,10 @@ Design rules (see references/harness-map.md → hooks):
   names, when the host sets it.
 - The search index (since v3.16.0) is read from its `index.json` alone, within 0.2 s: the
   hook never opens its sqlite and never refreshes it.
+- The `plugin copies:` line (since v4.12.1) comes from the manifests of this plugin's other
+  copies on the machine (`plugin_copies.py`), read within 0.5 s: versions, host names and
+  folders with their ids as `*`. It says where a copy lags; it never asks a server which
+  version is the newest.
 """
 import datetime
 import glob
@@ -38,11 +42,17 @@ try:  # since v3.10.0 — shared helpers; absent → the v3.9.0 digest, still fa
     import ctx_common as cc
 except Exception:
     cc = None
+try:  # since v4.12.1 — the places a host keeps its copy of a plugin; absent → no `plugin copies:` line
+    import plugin_copies as pc
+except Exception:
+    pc = None
 
 MAX_LINES = 25
 REG_READ_S = 1.0     # seconds one provider registration may take to read (an iCloud download); ctx allows 3
 REG_DEADLINE_S = 2.0  # …and all of them together (since v3.14): N evicted files never cost N seconds of the hook
 INDEX_READ_S = 0.2    # seconds the search index's index.json may take to read (since v3.16.0)
+COPIES_READ_S = 0.5   # seconds the manifests of this plugin's other copies may take to read (since v4.12.1)
+COPIES_SHOWN = 4      # copies the `plugin copies:` line names; the rest is "+N"
 ROLE_ENUM = {"pm", "head_of_product", "cpo", "product_designer", "product_analyst",
              "ux_researcher", "eng_lead", "business_owner", "other"}  # == references/role-profiles.md §2
 
@@ -84,13 +94,70 @@ def candidates(cwd):
     return uniq
 
 
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
 def plugin_version():
     try:
-        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        with open(os.path.join(root, ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
+        with open(os.path.join(PLUGIN_ROOT, ".claude-plugin", "plugin.json"), encoding="utf-8") as f:
             return json.load(f).get("version", "?")
     except Exception:
         return "?"
+
+
+def copies_line(version, home=None, root=None, tell=True):
+    """`plugin copies: …` (since v4.12.1) — the other copies of this plugin on this machine whose version differs from
+    the session's `version`, the newest first, at most COPIES_SHOWN and the count of the rest; None when there is none,
+    when this session's version is unknown, or when the manifests are not read within COPIES_READ_S. `root` is the copy
+    this session runs from (never reported), `home` where the hosts keep theirs (`~`). A newer copy means this host has
+    not taken an update the machine already has: the model says so once, and the line lists the newer copies first, any
+    older ones after them. `tell` is False when the session is resumed, forked or its context compacted — the hook runs again
+    there, and the line then carries the fact without asking to tell the user a second time. Older copies alone are
+    named only when asked."""
+    root = root or PLUGIN_ROOT
+    if pc is None or pc.version_key(version) is None:
+        return None
+    name, _ = pc.read_manifest(os.path.join(root, ".claude-plugin", "plugin.json"))
+    if not name:
+        return None
+    home = home or os.path.expanduser("~")
+    box = {}
+
+    def work():
+        try:
+            box["copies"] = pc.installed_copies(home, name)
+        except Exception:  # noqa: BLE001 — no line, never a failed digest
+            pass
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(COPIES_READ_S)
+    if t.is_alive() or "copies" not in box:
+        return None
+    me, others = os.path.realpath(root), []
+    for where, v, path, shown in box["copies"]:
+        if v == version or os.path.realpath(path) == me:
+            continue
+        item = (pc.compare(v, version) == "ahead", pc.version_key(v) or (), "v%s %s (%s)" % (v, where, shown))
+        if item not in others:
+            others.append(item)
+    if not others:
+        return None
+    others.sort(key=lambda o: (o[0], o[1]), reverse=True)
+    more = ["+%d" % (len(others) - COPIES_SHOWN)] if len(others) > COPIES_SHOWN else []
+    shown = others[:COPIES_SHOWN]
+    newer, older = [o[2] for o in shown if o[0]], [o[2] for o in shown if not o[0]]
+    if older or not newer:                         # the copies not shown are the oldest of the list
+        older += more
+    else:
+        newer += more
+    if newer:
+        ask = (" This host has not taken the update yet (signed in? restarted since?): tell the user once, in one line at "
+               "the end of your first answer.") if tell else " This host has not taken the update yet."
+        return ("plugin copies: ⚠ this session runs v%s and a newer copy is on this machine — %s.%s%s"
+                % (version, "; ".join(newer), ask, " Older here: %s." % "; ".join(older) if older else ""))
+    return ("plugin copies: this session runs v%s; older on this machine — %s. Name them only when the user asks about "
+            "the plugin's version or an update." % (version, "; ".join(older)))
 
 
 def _org_scope(text):
@@ -586,6 +653,12 @@ def main():
         export_env(found, facts.get("provider_roots") or [])
     else:
         text = not_found(searched, version)
+    try:                                           # since v4.12.1: another copy of this plugin at another version
+        copies = copies_line(version, tell=data.get("source") not in ("resume", "fork", "compact"))
+    except Exception:  # noqa: BLE001
+        copies = None
+    if copies:
+        text += "\n" + copies
     print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}}))
 
 
