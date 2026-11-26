@@ -49,43 +49,55 @@ project = PROJ AND (assignee = <accountId> OR cf[10041] = <accountId> OR cf[1003
 
 ## Large-response extraction (mandatory)
 
-`searchJiraIssuesUsingJql` with `responseContentFormat:"markdown"` still embeds full descriptions → responses routinely exceed the token cap and are **saved to a file**. Do not try to read the whole file. Instead:
+A search over a sprint or a quarter does not fit inline: the host **saves the response to a file** and shows its path (measured 2026-11-26 on Claude Code 2.1.332 with Atlassian MCP v2: 100 issues with eight fields — about 380 000 characters, two fifths of them avatar links). Do not read that file whole.
 
-1. Request only the fields you need (descriptions still come back, but smaller scopes help).
-2. `Grep -o` the saved file with compact alternation patterns, then parse in document order (fields appear per node in JSON order).
+1. **Ask only for the fields the mode needs** (`fields: ["summary", "status", "customfield_…"]`). With an explicit list v2 returns no description; `view: "evidence"` brings every comment of every issue, so it is not the way to custom fields in a search (`integration-strategy.md` 1c, point 4).
+2. **Know the shape.** It differs between the two servers, and a reader of the wrong one finds nothing and reports every estimate as missing:
 
-Useful `-o` patterns:
+   | | v2 | v1 (until 2027-03-01) |
+   |---|---|---|
+   | a custom field | `fields.customFields["<display name>"] = {"id": "customfield_N", "value": …}` | `fields.customfield_N = …` |
+   | a field with no value | absent | `null` |
+   | a user | `accountId`, `emailAddress`, `avatarUrls`, `displayName`, … | the same, after a `self` link |
+
+   Read a custom field by its **id**, never by its display name: the name is the site's own and changes with its language.
+3. **With SHELL — the script.** `python3 scripts/jira_rows.py <saved file> [<saved file> …]` prints one JSON line per issue, the same for both shapes: `key`, the system fields that came (`summary`, `status`, `category` — the status category's key, `type`, `assignee`, `resolved`, `versions`, `labels`, `parent`), `cf` — the custom fields by id, and `closed_sprints`. A user is `{"id", "name"}` — the account id and the display name; an e-mail address, a description and a comment's text never reach a row. A custom field with no value has no key in `cf`: read it as null (Story Points → 0). The sprints printed are the ones not closed; `--sprint-history` prints the whole history with dates (member-review buckets). After a file's rows comes `{"_page": …}`: `has_next`, `next_page_token` for the next page, `shape`, and on v2 `cf_names` — the display name of each id, the quickest way to learn a site's field ids. A file that is not a Jira response is exit 2: say so, never report from nothing.
+4. **No shell — `Grep -o`** the saved file with one alternation of the patterns below and parse the matches in document order. A `"key":` match opens a node; a field with no match before the next key has no value. Never align the matches by count — on v2 an empty field leaves no line.
+
 ```
 "key":"PROJ-[0-9]+"
-"summary":"[^"]*"
-"customfield_10014":(null|"[A-Z]+-[0-9]+")
-"customfield_10036":(null|[0-9.]+)
-"customfield_10041":(null|\{"self":"[^"]*","accountId":"[^"]*","emailAddress":"[^"]*")
-"customfield_10037":(null|\{...emailAddress...)
-"assignee":(null|\{...emailAddress...)
-statuses/[a-z]*\.png","name":"[^"]*"      # status name (not statusCategory)
-"state":"(closed|future)"                  # count to detect carried-over (see below)
-"id":[0-9]+,"name":"[^"]*","state":"[a-z]+"# sprint entries
+"summary":"(\\.|[^"\\])*"
+"assignee":(null|\{"accountId":"[^"]*")
+"id":"customfield_10014","value":"[A-Z][A-Z0-9]*-[0-9]+"
+"id":"customfield_10036","value":[0-9.]+
+"id":"customfield_10041","value":\{"accountId":"[^"]*"
+"id":"customfield_10037","value":\{"accountId":"[^"]*"
+"displayName":"[^"]*"   # the name of the user whose accountId matched just before it
+statuses/[a-z]*\.png","name":"[^"]*"   # status name (not statusCategory)
+"state":"closed"   # count per node to detect carried-over (see below)
+"id":[0-9]+,"name":"[^"]*","state":"[a-z]+"   # sprint entries
 ```
+
+On v1 the user and custom-field lines are `"customfield_10014":(null|"[A-Z]+-[0-9]+")`, `"customfield_10036":(null|[0-9.]+)`, `"customfield_10041":(null|\{"self":"[^"]*","accountId":"[^"]*"` and `"assignee":(null|\{"self":"[^"]*","accountId":"[^"]*"` — a v1 user starts with its `self` link; the rest is the same.
+
 Notes:
-- With a **restricted** field set there is exactly one `"key":"PROJ-…"`/node and one of each cf line → tokens align per node.
-- A user field's `emailAddress` comes right after `accountId`; map email local-part → display name via a roster in local-context.
 - The "Team = name" form returns 0; always use the team **id**.
+- A person is named by `displayName`; a roster in local-context is needed only to map a name to a role.
 
 ## Pagination
 
-`maxResults` ~100/page; `pageInfo.hasNextPage` + `endCursor` → pass as `nextPageToken`. Grep the saved file for `"endCursor":"[^"]*"`. Large cross-functional teams span 3+ pages. The search endpoint can time out (~180s) on deep pages — retry, or fetch the tail by explicit `key in (...)`.
+`maxResults` ~100/page; `pageInfo.hasNextPage` + `endCursor` → pass as `nextPageToken`. The token is `next_page_token` in the script's `_page` line (no shell: grep the saved file for `"endCursor":"[^"]*"`). Large cross-functional teams span 3+ pages. The search endpoint can time out (~180s) on deep pages — retry, or fetch the tail by explicit `key in (...)`.
 
 ## Carried-over vs new (sprint-plan)
 
 Issues keep their **entire** sprint history in `customfield_10020`. Definition:
 - **New** (planned at this sprint's grooming) = history contains **no** `"state":"closed"` sprint (only the one active sprint).
 - **Carried** = ≥1 closed sprint in history.
-Detect by counting `"state":"closed"` occurrences between one node's key and the next.
+It is `closed_sprints` in the script's row (no shell: count the `"state":"closed"` occurrences between one node's key and the next).
 
 ## Status transitions (member-review)
 
-Fetch `changelog` (expand) and read `items[].field == "status"` transitions with timestamps. Map to role events:
+Prefer the status-history JQL of *Validated conventions* below. For one issue's whole history on v2 use `listJiraIssueChangelogs` (`executeRead`) — `expand: "changelog"` on `getJiraIssue` returns only the newest page there — and read `items[].field == "status"` transitions with timestamps. Map to role events:
 - **passed to test** (dev) — transition to `Ready for test`.
 - **tested** (QA) — transition out of testing to `Documentation`/`Ready`/`Done`-side, or `In test → Ready`.
 - **passed to review** (analyst/designer) — transition to `On review`.
