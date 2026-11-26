@@ -12,6 +12,46 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.12.1 (2026-11-26)
+
+**A release is finished when it has reached every place that serves it, not when the tag exists.** On 2026-11-26 the canonical remote was at v4.12.0, the mirror at v4.10.0, and a machine was reported at v4.9.1. The report measured the wrong folders — the terminal's, last synced two days before and with a leftover of an older sync beside it, not the desktop app's, which was at most an hour behind. The mirror was the real gap: four releases were run from sessions that could not reach it, and nothing recorded the step as left to do. This release makes the end of a release a check, and makes a skipped step visible. No user step is needed.
+
+### Added
+
+- **`testing/release_reach.py`** — where the release has reached. It reads the version on the canonical remote's branch and compares it with the canonical tag (a merged bump without its tag is not a release), with every mirror remote of the clone (its branch and its tag), and with the copies of the plugin installed on the machine: the Claude desktop app's, Claude Code's (synced from the account, or a marketplace install) and Codex's. It writes nothing: `git ls-remote` and file reads.
+  - Exit 1 while a row is `behind` or `unchecked` — a mirror that cannot be reached, or one named with `--mirror` that is not a remote of this clone, is not a pass.
+  - A copy that is absent is not a failure; a copy newer than the release is `ahead`. `--skip-hosts` checks the remotes alone, for the minutes after a merge when the hosts have not synced yet.
+  - A clone that has not fetched the canonical branch says so instead of comparing against its own old version.
+  - A mirror whose tag points at another commit than the canonical tag is `behind`, not `ok`.
+  - A folder an earlier account sync left beside the one it loads now is a `leftover` row, not a failure: the sync's own `manifest.json` says which folder is loaded. The 2026-11-26 report of «v4.9.1 and v3.17.0» was two such folders.
+- **`references/host-profiles.md` §8 «How a release reaches each host»** — the route and the delay per host, each with its source: a claude.ai account's marketplace about 95 seconds after the merge, a cloud session at its start, the desktop app within the hour, a terminal on a signed-in start (measured once: about 20 seconds in, into a new folder beside the old ones; an earlier start that day did not sync, unexplained), Codex on its start, a mirror only when Step 7 runs on the release machine. Measured on the six releases v4.9.1–v4.12.0, vendor documents linked.
+- **The `plugin copies:` line of the SessionStart digest** (`scripts/session_start.py`, `scripts/plugin_copies.py`) — a session says when the machine holds another copy of this plugin at another version. A newer copy elsewhere means this host has not taken an update the machine already has: the line starts with ⚠ and the model tells the user once — asked at a start and after `/clear`, not again on a resume, a fork or a compaction. Older copies are listed and named only when the user asks about the version. Local files only — the manifests in the hosts' folders, read within 0.5 s; no network, nothing written; the folders are shown with their account and plugin ids as `*`, and a manifest whose version is not a version is left out. `plugin_copies.py` is the one list of those folders, shared with the reach check.
+- **Pitfall P10** (`skills/release-manager/references/release-pitfalls.md`) — a release run where the mirror cannot be reached drops the mirror step.
+- **Tests** — `testing/release_reach_test.py`: 33 checks on throw-away git remotes and a fictional home folder. `testing/session_start_test.py`: 19 checks of the `plugin copies:` line on a fictional home folder (4121.x), and its WAL fixture no longer fails on an SQLite that removes the `-wal` file itself.
+
+### Changed
+
+- **`release-manager` 0.5.2** — Step 7: a run that cannot push to the mirror says so and carries the step as owed. Step 8: the reach check (8.2); the table of §8 told to the user in place of «update your plugin» (8.5); «Close, or carry what is left» — what a session could not do is written out as «Left to do on the release machine» in the closing reply, the release pull request and the user's board (8.6). The description and `## Routing` are unchanged.
+
+### Files
+
+| File | Change |
+|---|---|
+| `testing/release_reach.py`, `testing/release_reach_test.py` | new |
+| `scripts/plugin_copies.py` | new — the folders a host keeps its copy in |
+| `scripts/session_start.py`, `testing/session_start_test.py` | the `plugin copies:` line; 19 checks |
+| `skills/release-manager/SKILL.md` | 0.5.2 — Steps 7 and 8 |
+| `skills/release-manager/references/release-pitfalls.md` | P10 |
+| `references/host-profiles.md` | §8 |
+| `AGENTS.md`, `testing/Testing-process.md`, `testing/test-cases.md` | the reach check in the release loop; v4.12.1 cases |
+| `README.md` | «New in v4.12.1», Release Manager 0.5.2 |
+
+### Backwards compatibility
+
+No skill and no protocol of a contour has changed. The SessionStart digest gains one line, and only on a machine that holds another copy of the plugin at another version; a session with one copy, or with copies at one version, sees the digest it saw before. The hook stays fail-open and offline: a manifest that cannot be read, or is not read within 0.5 s, gives no line. The reach check is a maintainer's tool under `testing/`, which the installed copy does not carry; `release-manager` runs it only in a repository that has it.
+
+---
+
 ## v4.12.0 (2026-11-26)
 
 **«Редагування на сторінці»: the journey map is edited on its page, and the edits come back through the board's preview.** v4.8.0–v4.10.0 let the team edit the map only on a board; the page was a snapshot. Now every page of the map — the published one too — carries the switch «Редагувати». A click on a row opens its editor, «+» in a cell adds a row, and the links a board cannot carry — a row's parent, an initiative's or an experiment's code, the stage's target — are edited too. The page sends nothing: the edits leave it as a file saved or a text copied, `page-diff` makes them a diff the board's take reads, and nothing is written before the PM's preview. On a tree page a child's row goes into the child's own note. The sixth release of the programme «Фреймворки».

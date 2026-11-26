@@ -148,7 +148,9 @@ The case registry is `testing/test-cases.md`; updated EVERY release (new cases f
 5. Sign-off (stage 6): version bump in frontmatter + CHANGELOG entry + README; update test-cases.md.
 6. Commit, PR, merge on the canonical remote. release.yml validates, then creates the tag and the
    GitHub Release from the CHANGELOG section — do not create them by hand. Then push main and the
-   tag to each mirror remote (release-manager Step 7). Move on to the next version.
+   tag to each mirror remote (release-manager Step 7) and run the reach check (Step 8.2,
+   `python3 testing/release_reach.py --skip-hosts`): the release is closed when it ends
+   `0 behind, 0 not checked`, or what is left is written out (Step 8.6). Move on to the next version.
 ```
 
 ## Subagent orchestration
@@ -178,6 +180,7 @@ Static checks prove the tree is consistent; they cannot prove a host still loads
 - Seeded-leak test: 27/27 caught (and a new seed for every new check).
 - `python3 testing/session_start_test.py`: every digest case passes (12/12 as of v3.10.0) — it is not in CI, so it runs here.
 - `python3 testing/ctx_common_test.py` (8/8) and `python3 testing/provider_bundle_test.py` (since v3.10.0): the provider helpers and the bundle builder on the fictional fixture core — not in CI, so they run here.
+- `python3 testing/release_reach_test.py` (since v4.12.1): the reach check on throw-away remotes and a fictional home folder — not in CI, so it runs here.
 - `python3 testing/branch_leak_scan.py --base main` (since v3.10.0): clean — no organisation identifier in any line the branch adds or in its commit messages; `python3 testing/branch_leak_scan_test.py` proves the scan fires.
 - `python3 testing/ctx_store_test.py`, `python3 testing/ctx_ops_test.py`, `python3 testing/ctx_read_test.py` (since v3.12.0) and `python3 testing/ctx_cli_test.py` (since v3.11.0): the context store's model, operations and command line on the fictional fixtures in `testing/fixtures/ctx/` — not in CI, so they run here.
 - `python3 testing/ctx_repos_test.py`, `python3 testing/ctx_mcp_test.py` and `python3 testing/ctx_blocks_test.py` (since v3.13.0): the repositories (registration v1 and v2, `fetch`), the stdlib MCP client with its allow-list and `ctx repo status`, and the blocks (`find_regions`, `classify`, the block state, `adopt`, `plan`, `apply`) on the fictional "Zorg" fixtures in `testing/fixtures/ctx-repos/` and the fake MCP server `testing/mcp_fake.py` (127.0.0.1) — not in CI, so they run here. `ctx_cli_test.py` and `provider_bundle_test.py` carry the end-to-end flows and the checks of the protocol documents.
