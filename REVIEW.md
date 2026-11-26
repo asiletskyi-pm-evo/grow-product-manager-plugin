@@ -1,6 +1,6 @@
 # Review instructions
 
-For a code review of a pull request into this repository — Claude Code Review on GitHub, or a local `/code-review` pointed here by `CLAUDE.md`. Not part of the plugin: `testing/registry_copy.py` leaves this file out of the copy users install.
+For a code review of a pull request into this repository — the `claude-review` workflow on GitHub (`.github/workflows/claude-review.yml`), or a local `/code-review`; `CLAUDE.md` points both here. Not part of the plugin: `testing/registry_copy.py` leaves this file out of the copy users install.
 
 The repository is the Grow Product Manager plugin: markdown protocols a model follows (`skills/`, `references/`, `agents/`, `commands/`) plus deterministic Python and shell scripts (`scripts/`, `hooks/`) and their tests (`testing/`). There is no application to build. A skill is a prompt, so a contradiction between two steps is a bug exactly like a wrong branch in a script.
 
