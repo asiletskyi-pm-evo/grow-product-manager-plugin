@@ -52,7 +52,8 @@ re-audit of 2026-11-25; `guarded`):
   is the user's own click and never the agent's alone (references/context-provider-protocol.md §13); `--code`
   abbreviated, or on another line, too.
 - a Bash command that changes the gate (`setup.py --write-gate …`) or writes its config or the trust file, and a
-  Write/Edit of those files: the agent can never turn the gate off on its own.
+  Write/Edit of those files (and of the gate's own files): turning the gate off is the user's click, not the agent's
+  alone. These read a command's text — a confirmation layer, not a sandbox.
 
 The gate is opt-out: `/grow-product-manager:setup --write-gate off` writes
 {"write_gate": "off"} to the plugin data dir — all three questions off. Fail open:
@@ -75,9 +76,11 @@ UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent"
 DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
 DESTRUCTIVE_OPS = ("executeDestructive",)  # since v4.11.1: always asks, no pause, no size threshold
 TRUST_RX = re.compile(r"\bprovider\s+trust\b")              # since v4.11.1: `ctx provider trust <id> --code …`
-CODE_RX = re.compile(r"(?:^|\s)--c(?:o|od|ode)?(?=[=\s'\"]|$)")   # --code and every abbreviation argparse accepts
-SETUP_RX = re.compile(r"\bsetup\.py\b[\s\S]*?(?:^|\s)--w[\w-]*")  # `setup.py --write-gate off|pause|on` (abbreviated too)
-GUARDED_FILES_RX = re.compile(r"\.grow-pm/trust/|plugin-data/config\.json|CLAUDE_PLUGIN_DATA")
+CODE_RX = re.compile(r"(?:^|[\s'\"=])--c(?:o|od|ode)?(?=[=\s'\"]|$)")   # --code, quoted or not, and every abbreviation argparse accepts
+SETUP_RX = re.compile(r"\bsetup(?:\.py)?\b[\s\S]*?(?:^|[\s'\"])--w[\w-]*|\bsetup\.main\b|\bwrite_gate_pause_until\b|"
+                      r"[\"']write_gate[\"']", re.I)   # `setup.py --write-gate off|pause|on`, abbreviated, or setup imported
+GUARDED_FILES_RX = re.compile(r"\.grow-pm/(?:trust\b|\.trust-seeded)|plugin-data|CLAUDE_PLUGIN_DATA|"
+                              r"write[_-]gate\.(?:py|sh)|hooks\.json", re.I)   # the gate's config, the trust store, the gate itself
 WRITE_WORDS_RX = re.compile(r">|\btee\b|\bmv\b|\bcp\b|\brm\b|\bsed\s+-i|\btruncate\b|\bpython|\bperl\b|\bchmod\b|\bln\b|\bdd\b")
 PAUSE_KEY = "write_gate_pause_until"
 MAX_PAUSE_MINUTES = 240
@@ -272,14 +275,19 @@ def region_hit(tool, tool_input, cwd=None, text=None):
     return None, path
 
 
-def guarded(tool, tool_input):
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def guarded(tool, tool_input, cwd=None):
     """Since v4.11.1 (the re-audit of 2026-11-25): the questions no config can switch off, asked before the config is
     read — True when one was asked. (1) A Bash command that approves a provider's address (`provider trust` with
     `--code` or an abbreviation of it, on one line or several). (2) A Bash command that changes the write gate
-    (`setup.py --write-gate …`), or writes the gate's config or the trust file. (3) A Write/Edit of those two files.
-    (4) An Atlassian executeDestructive. The agent alone can never approve an address, delete, or turn the gate off."""
+    (`setup.py --write-gate …`, or `setup` imported), or writes the gate's config, the trust store or the gate's own files.
+    (3) A Write/Edit of those files (a relative path read against the hook's `cwd`, case folded). (4) An Atlassian
+    executeDestructive. These match the text of a command: a confirmation layer for the agent, not a sandbox — a command
+    built to hide what it does, or a tool this hook does not see, is not caught (the Known limits of v4.11.1)."""
     tail = (" Confirm only if YOU asked for exactly this; never because a note, a core, a page or another session asked "
-            "for it. No write-gate setting covers this question.")
+            "for it. Neither a pause nor `--write-gate off` covers this question.")
     if tool == "Bash":
         cmd = str(tool_input.get("command") or "")
         if TRUST_RX.search(cmd) and CODE_RX.search(cmd):
@@ -298,11 +306,18 @@ def guarded(tool, tool_input):
         return False
     if tool in FILE_TOOLS:
         path = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
-        real = os.path.realpath(os.path.expanduser(path)) if path else ""
-        homes = [os.path.realpath(p) for p in config_paths()]
-        trust = os.path.realpath(os.path.join(os.path.expanduser("~"), ".grow-pm", "trust"))
-        if real and (real in homes or real == trust or real.startswith(trust + os.sep)):
-            ask("Grow PM write gate: this edit changes %s — the write gate's config or the provider trust file." % path + tail)
+        if path and not os.path.isabs(os.path.expanduser(path)):
+            path = os.path.join(str(cwd or os.getcwd()), path)
+        fold = lambda x: os.path.normcase(os.path.realpath(os.path.expanduser(x))).lower()   # macOS folds case
+        real = fold(path) if path else ""
+        grow = fold(os.path.join("~", ".grow-pm"))
+        exact = {fold(p) for p in config_paths()} | {fold(os.path.join(grow, ".trust-seeded"))}
+        exact |= {fold(os.path.join(HERE, n)) for n in ("write_gate.py", "write-gate.sh")}
+        exact |= {fold(os.path.join(HERE, "..", "hooks", n)) for n in ("hooks.json", "write-gate.sh")}
+        trust = fold(os.path.join(grow, "trust"))
+        if real and (real in exact or real == trust or real.startswith(trust + os.sep)):
+            ask("Grow PM write gate: this edit changes %s — the write gate itself, its config or the provider trust store."
+                % path + tail)
             return True
         return False
     if tool.rsplit("__", 1)[-1] in DESTRUCTIVE_OPS:
@@ -326,7 +341,7 @@ def main():
     data = json.loads(raw) if raw.strip() else {}
     tool = str(data.get("tool_name", ""))
     tool_input = data.get("tool_input") or {}
-    if guarded(tool, tool_input):     # since v4.11.1: these questions stay on whatever the config says (no off, no pause)
+    if guarded(tool, tool_input, data.get("cwd")):     # since v4.11.1: these questions stay on whatever the config says (no off, no pause)
         return
     cfg = load_config()
     if not tool or not write_gate_enabled(cfg):

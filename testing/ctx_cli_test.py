@@ -1951,7 +1951,8 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               and "утримано: ~ scope — цей прохід його не чіпав (правило ядра — лише на твою згоду) · взяти текст ядра: --choose scope=theirs" in out
               and "policy=rule" not in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
         rc, out, res = apply_run(e, core, "zorg-core", "--choose", "scope=theirs")
-        check("…--choose scope=theirs takes it", rc == 0 and res["applied"].get("scope") == "~"
+        check("…--choose scope=theirs takes it, and does not call the answer «не потрібне»", rc == 0 and res["applied"].get("scope") == "~"
+              and "scope" not in res["ignored"] and "не потрібне" not in out
               and "policy=rule" in region_in(read(e.ctx), "zorg-core", "scope"), (rc, out[-500:]))
 
 def reject(e, repo, texts):
@@ -3789,7 +3790,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:
               confl["candidates"] == [] and confl["winner"] is None and confl["looked_in"]["names"] == ["Confluence Space"]
               and "product.confluence_space · одне значення · Product: Zorg App · не знайдено\n" in out
               and "  шукав: Confluence Space — у Product: Zorg App; блоків із цим слотом немає" in out
-              and '  прив\'язати свою підсекцію: ctx slot map product.zorg-app "<Назва>" product.confluence_space' in out, out[-1500:])
+              and "  прив'язати свою підсекцію: ctx slot map product.zorg-app '<Назва>' product.confluence_space" in out, out[-1500:])
         key = slot_in(res, "product.jira_key")
         check("a value your text answers: one candidate, it won, «єдиний кандидат»", outcomes_of(key) == [("mine", "won")] and key["winner"] == "mine"
               and key["why"] == "єдиний кандидат" and "  ✔ твоє · product.zorg-app › Jira Project Key" in out, (key, out[:600]))
@@ -3913,7 +3914,7 @@ with FakeMcp(tree={GROWTH_PATH: GROWTH_TEXT}) as fake:           # your own name
         km = slot_in(res, "product.key_metrics")
         check("a subsection under a name of your own: the slot is not found, and the command is printed to map it", km["candidates"] == []
               and "  шукав: Key Metrics, Ключові метрики — у Product: Zorg App; блоків із цим слотом немає" in out
-              and km["commands"] == ['ctx slot map product.zorg-app "<Назва>" product.key_metrics'], (km, out[:800]))
+              and km["commands"] == ["ctx slot map product.zorg-app '<Назва>' product.key_metrics"], (km, out[:800]))
         rc_m, out_m, _ = run_ok(e, *ctx_args(printed(out, "ctx slot map").replace("<Назва>", "Core numbers")))
         rc, out, res = run_ok(e, "explain", "product.key_metrics")
         km = slot_in(res, "product.key_metrics")

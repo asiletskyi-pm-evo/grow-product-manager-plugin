@@ -56,4 +56,4 @@ Names only — never a tool's arguments, results or descriptions beyond a short 
 
 1. `team` — reads the `tools_file` of every core the user has registered, through the registrations `ctx` knows; a core without the key is skipped silently, one whose file is outside the core or unreadable is named in one line, and a list no core publishes any more is removed.
 2. Show the «Від команди» records: name, job, who recommends. They are read-only.
-3. «Взяти собі» → `add --from-team "<name>"` copies one into the user's registry.
+3. «Взяти собі» → `add --from-team '<name>'` copies one into the user's registry.

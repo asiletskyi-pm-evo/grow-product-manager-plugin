@@ -188,6 +188,9 @@ SEEDS = [
     ("core-is-data: a delta in the command line",
      "references/context-protocol.md", "append",
      "Then `ctx propose --skill x --delta '<json>'`.", "core-is-data"),
+    ("core-is-data: a sample value in double quotes in a scripts command",
+     "skills/context-connect/references/connect-steps.md", "append",
+     '`python3 "<plugin root>/scripts/provider_bundle.py" --core x --name "Name Surname"`', "core-is-data"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare

@@ -338,6 +338,13 @@ with tempfile.TemporaryDirectory() as d:
                 "python3 /p/scripts/setup.py --write-g off"):
         check("re-audit: a Bash that changes the gate asks — " + cmd, ASK in bash(cmd) and "write gate" in bash(cmd), cmd)
     check("re-audit: setup.py without --write-gate passes", bash("python3 /p/scripts/setup.py --status") == "")
+    for cmd, why in (('ctx provider trust a "--code" 1', "a quoted --code"),
+                     ("python3 -c 'import setup; setup.main([\"--write-gate\", \"off\"])'", "setup imported"),
+                     ("cd ~/.grow-pm/plugin-data && echo {} > config.json", "cd into plugin-data"),
+                     ("rm -rf ~/.grow-pm/trust ~/.grow-pm/.trust-seeded", "the trust store removed"),
+                     ("sed -i s/ask/allow/ /p/scripts/write_gate.py", "the gate's own script"),
+                     ("cp /dev/null /p/hooks/hooks.json", "hooks.json")):
+        check("re-audit 2: asks — " + why, ASK in bash(cmd), cmd)
     for cmd in ("echo '{\"write_gate\":\"off\"}' > \"$CLAUDE_PLUGIN_DATA/config.json\"",
                 "python3 -c 'open(\"%s/.grow-pm/plugin-data/config.json\",\"w\")'" % home,
                 "cp x ~/.grow-pm/trust/addresses.json"):
@@ -349,6 +356,14 @@ with tempfile.TemporaryDirectory() as d:
         check("re-audit: a Write of %s asks" % os.path.relpath(path, d), ASK in out, out)
     out = run(env, {"tool_name": "Write", "tool_input": {"file_path": os.path.join(d, "notes.md"), "content": "x"}})
     check("re-audit: a Write elsewhere passes", out == "", out)
+    for path, why in ((os.path.join(home, ".GROW-PM", "Trust", "x.json"), "the trust store in other case"),
+                      (os.path.join(home, ".grow-pm", ".trust-seeded"), ".trust-seeded"),
+                      (os.path.join(ROOT, "scripts", "write_gate.py"), "the gate's own script"),
+                      (os.path.join(ROOT, "hooks", "hooks.json"), "hooks.json")):
+        out = run(env, {"tool_name": "Edit", "tool_input": {"file_path": path, "old_string": "a", "new_string": "b"}})
+        check("re-audit 2: an Edit asks — " + why, ASK in out, out)
+    out = run(env, {"tool_name": "Write", "cwd": pdata, "tool_input": {"file_path": "config.json", "content": "{}"}})
+    check("re-audit 2: a relative path is read against the hook's cwd", ASK in out, out)
     open(os.path.join(pdata, "config.json"), "w").write(json.dumps({"write_gate": "off"}))
     check("re-audit: with the gate OFF, trust still asks", ASK in bash("ctx provider trust a --code 1"))
     check("…and setup --write-gate on|off still asks", ASK in bash("python3 /p/scripts/setup.py --write-gate on"))

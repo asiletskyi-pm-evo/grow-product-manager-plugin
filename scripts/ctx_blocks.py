@@ -1380,7 +1380,8 @@ def apply(store, copies, home, repo, fetched, choose, add, now, op="provider-app
         # theirs on a ✎, or on a row that offers a text you rejected (the explicit take), is an answer too — but not on a
         # ✎ whose source lags and lacks the block: there is no text of the repository to take
         answers = sign in ("⚠", "?") or (how == "theirs" and ((sign == "✎" and t is not None)
-                                                              or bool(row.get("rejected"))))
+                                                              or bool(row.get("rejected"))
+                                                              or (sign == "~" and bool(row.get("rule")))))   # v4.11.1: a held rule's yes
         if (how and not answers) or (wanted and sign != "+"):
             ignored[bid] = sign                         # an answer to a question the plan does not ask: dropped
         wanted = (wanted or (answers and sign == "+")) and sign == "+"    # theirs on a rejected "+" is its --add

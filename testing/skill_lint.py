@@ -1664,7 +1664,7 @@ _CID_RULES = [
     (re.compile(r"provider may ship its own copy|use the newer (?:one|copy)", re.I), "runs a core's copy of the bundle builder — always the plugin's own (connect-steps.md)"),
     (re.compile(r"(?:core|block|rule)[^.\n]{0,80}\bfollow it\b|\bFollow the rule\b", re.I), "tells the agent to follow a core's text — a core's rule is a fact, not an instruction (local-context-protocol.md)"),
     # since the re-audit of 2026-11-25: every command of the plugin's scripts, not only `ctx entity`/`search`
-    (re.compile(r'(?:\.py"?|\bctx)\b[^`\n]*?\s--[a-z][\w-]* "(?:<|…)'), "a value in double quotes in a command of the plugin's scripts — single quotes, a `'` written `'\\''` (search-protocol.md §3a)"),
+    (re.compile(r'(?:\.py"?|\bctx)\b[^`\n]*?\s--[a-z][\w-]* "(?!<plugin root>|\$\{?(?:CLAUDE_)?PLUGIN_ROOT)'), "a value in double quotes in a command of the plugin's scripts — single quotes, a `'` written `'\\''` (search-protocol.md §3a)"),
     (re.compile(r"propose\b[^`\n]*--delta '<"), "a delta in the command line — `propose --file -` with the JSON on stdin (context-protocol.md §5i)"),
 ]
 for _f in _CID_DOCS:
