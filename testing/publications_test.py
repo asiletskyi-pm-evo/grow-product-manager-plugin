@@ -514,6 +514,44 @@ try:
     rc, out, res = rec(n16, id_="a", url="https://your-org.atlassian.net/a")
     check("18.9 M4 version inf is unreadable, never a crash", rc == 2 and "PUB_RESULT" in out, out)
 
+    # 19. an app (v4.13.0) — `--app PROFILE:SHELL[:PERM,PERM]` is remembered on the place
+    n19 = os.path.join(d, "n19.md")
+    shutil.copy(os.path.join(FIX, "zorg-deck.md"), n19)
+    APP = {"profile": "cjm", "shell": 1, "permissions": ["notifications", "menu-bar"]}
+    rc, out, res = rec(n19, "--app", "cjm:1:notifications,menu-bar", "--level", "page", surface="artifact", kind="page")
+    rc2, out2, res2, found = find(n19)
+    check("19.1 test_record_app_field: record --app is stored as {profile, shell, permissions} and find gives it back",
+          rc == 0 and res.get("recorded", {}).get("app") == APP and len(found) == 1 and found[0].get("app") == APP,
+          (out, found))
+    rc, out, res = rec(n19, "--app", "zorg-pay:2", "--level", "page", surface="artifact", kind="page", at="2026-11-04T08:00")
+    rc2, out2, res2, found = find(n19)
+    check("19.2 --app without permissions gives an empty list, and a new --app replaces the old one",
+          rc == 0 and found[0].get("app") == {"profile": "zorg-pay", "shell": 2, "permissions": []} and
+          found[0]["version"] == 2, (out, found))
+    rc, out, res = rec(n19, "--level", "page", surface="artifact", kind="page", at="2026-11-05T08:00")
+    rc2, out2, res2, found = find(n19)
+    check("19.3 test_new_version_keeps_app: a new version without --app keeps the app",
+          rc == 0 and found[0]["version"] == 3 and found[0].get("app") == {"profile": "zorg-pay", "shell": 2, "permissions": []}
+          and res.get("recorded", {}).get("app") == found[0].get("app"), (out, found))
+    before = read(n19)
+    for name, val in (("a profile that is no slug", "Zorg Pay:1"), ("an upper-case profile", "CJM:1"),
+                      ("a shell that is no number", "cjm:x"), ("a shell of 0", "cjm:0"), ("a shell of 1000", "cjm:1000"),
+                      ("no shell", "cjm"), ("an unknown permission", "cjm:1:teleport"),
+                      ("a repeated permission", "cjm:1:overlay,overlay"),
+                      ("an empty permission", "cjm:1:notifications,"), ("a fourth part", "cjm:1:overlay:x")):
+        rc, out, res = rec(n19, "--app", val, "--level", "page", surface="artifact", kind="page", at="2026-11-06T08:00")
+        check("19.4 test_app_bad_profile: %s is refused and nothing is written" % name,
+              rc == 2 and res.get("error") and read(n19) == before, (rc, out))
+    # a record whose `app` does not read as that shape never crashes find or record
+    with open(n19, "wb") as f:
+        f.write(before.replace(b'app: "zorg-pay:2"', b'app: "not an app!"'))
+    rc, out, res, found = find(n19)
+    check("19.5 a malformed app on disk is dropped by find, the entry stays", rc == 0 and len(found) == 1 and
+          "app" not in found[0], (out, found))
+    rc, out, res = rec(n19, "--level", "page", surface="artifact", kind="page", at="2026-11-07T08:00")
+    check("19.6 record over a malformed app still works", rc == 0 and res.get("recorded", {}).get("version") == 4 and
+          "app" not in res["recorded"], out)
+
     # 15. check 24 — the schema in three places
     import publications as pub  # noqa: E402
     errs = pub.check_schema(ROOT)

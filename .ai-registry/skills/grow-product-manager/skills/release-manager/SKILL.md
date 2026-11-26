@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.5.1
+version: 0.5.3
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
@@ -53,6 +53,8 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
 
+**A release that changes the shell of a published app** (since v4.13.0, pitfall P11) — a file under `scripts/app_shell/`, the `wrap` function of `scripts/app_shell.py`, or a profile's modules or menu in `references/app-profiles.yaml` — also raises `SHELL_VERSION` in `scripts/app_shell.py`; the validator cannot see the omission.
+
 Skill frontmatter versions are normally bumped in the feature PRs themselves; verify they match the CHANGELOG claims.
 
 ### Step 4 — Validate (static + both hosts)
@@ -93,11 +95,15 @@ Mirror push rejected non-fast-forward → mirror diverged: never force into a pr
 
 With a registry copy, the mirror push is what a registry's sync bot reads: it opens its own merge request in the registry, which the registry's owners merge. Nothing is pushed to the registry from here.
 
+**A run that cannot do this step says so — it never passes over it** (since v4.12.1, pitfall P10). A cloud session, a clone without the mirror remote, a machine off the VPN: the block above cannot run there. Then the step is **owed**: it goes into the list «Left to do on the release machine» of Step 8.6 with the block itself, and the release stays open until that machine has run it.
+
 ### Step 8 — Post-release
 1. **Verify:** fetch `releases/latest` on the canonical host → must show `vX.Y.Z`. Raw-file CDN may lag a few minutes — don't panic on stale `raw.githubusercontent.com` (pitfall P7).
-2. Confluence: if `confluence_changelog_page_id` is set — append the release entry via Atlassian MCP (gate before writing).
-3. **Step V — Vault Save:** per `vault-protocol.md`, `vault_save({ type: "decision", product: "general", skill: "release-manager", tags: ["release"], … })` → `Decisions/general/decision-release-vX-Y-Z-<date>.md` (version, date, scope, links to Release and CHANGELOG). There is no `Decisions/Releases/` area — the release record IS a decision, tagged `release`.
-4. Remind the user to update their installed plugin from the marketplace.
+2. **Reach check** (since v4.12.1) — only when the repo has `testing/release_reach.py`: `python3 testing/release_reach.py --skip-hosts`, with `--mirror <name>` for every entry of `mirror_remotes` (a mirror this clone does not have is then counted, not forgotten), and with `--canonical <canonical_remote>` and `--branch <the release branch>` when the config names other than `origin` and `main`. It compares the canonical branch and its tag with every mirror and must end `0 behind, 0 not checked`. A row `behind` → Step 7's block was not run or did not finish: run it. A row `unchecked` (no such remote here, no VPN) → owed, Step 8.6.
+3. Confluence: if `confluence_changelog_page_id` is set — append the release entry via Atlassian MCP (gate before writing).
+4. **Step V — Vault Save:** per `vault-protocol.md`, `vault_save({ type: "decision", product: "general", skill: "release-manager", tags: ["release"], … })` → `Decisions/general/decision-release-vX-Y-Z-<date>.md` (version, date, scope, links to Release and CHANGELOG). There is no `Decisions/Releases/` area — the release record IS a decision, tagged `release`. No vault in this session → owed, Step 8.6.
+5. **Tell the user when the release arrives on each host** — the table of `references/host-profiles.md` §8 (how each host takes a new version and how soon), not a general reminder to update. To see what a machine actually runs: `python3 testing/release_reach.py` there, once the host's own delay has passed — it lists every installed copy of the plugin with its version. A copy still `behind` after that is a finding about that host (a sign-in to check, an old client); a row `leftover` is a folder an earlier sync left, not loaded and not a failure, not about the release.
+6. **Close, or carry what is left.** The release is closed when the reach check of 8.2 ends `0 behind, 0 not checked` and 8.3–8.4 are done or declined by the user. Everything else is written out as **«Left to do on the release machine»** — one line per item: what, where, the exact command — in the reply that ends the run, in the release PR's description, and on the project's board or task list when the user keeps one. A later run of this skill on that machine starts from that list.
 
 ## Quality Standards
 - Version is read and written only via the structured `"version"` fields; a manifest description never carries a version (since v3.20.0).

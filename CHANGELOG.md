@@ -12,6 +12,116 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.13.0 «Застосунки» (2026-11-26)
+
+**A page the plugin published becomes an app you install from the Claude desktop app.** The vendor's launch article (https://claude.com/resources/articles/install-as-app) offers the install for Mac and Windows; this release was measured on macOS only (Claude desktop app 8.9912.0, 2026-11-26), Windows has not been measured yet. Until now a published page — the journey map, the portfolio, the funnel — was a page in a browser tab. Now the plugin can wrap it in a small shell: the page gets a button «Встановити як застосунок», and what you install is a window of its own with an icon, a title and a menu. The first app is «CJM»: the portfolio of your journey maps, the maps, the funnel and your team's edits in one place. The plugin installs nothing for anyone — the person presses the button.
+
+### What the app can do
+
+- **Its own window.** A title and an icon, an application menu with the modules and the switch «Редагувати», light and dark themes with a three-state switch (system, light, dark).
+- **Your product's look.** The theme is built from the colours of your design system, 2–3 candidates offered in one question; a colour pair that is too weak to read is named with its replacement and never shipped. Several products in one app: a switch between them, each with its label and colour.
+- **Modules.** The shell has six kinds of block — a table, a list, a number, a chart, a feed, a journey map — and the app is made of modules that use them. The owner can turn a module off, reorder them or add their own in `config/app`; the page reads that file as someone else's input.
+- **The journey map inside the app.** The same map as on the v4.12.0 page, with the same switch «Редагувати» and the same shared edits of the team; a map is picked from a list when there are several. The edits are still a draft: they reach the note only through its preview, as before.
+- **A badge, a menu-bar item and notifications.** The badge on the icon counts the team's edits not yet taken into the note; the menu-bar (tray) item names the weakest journey; a notification comes for a new team edit and for a funnel stage that has got worse, past the threshold below its baseline, since it was last seen on this computer (never on first sight). A notification never carries a person's name.
+- **Permissions one at a time.** The panel «Дозволи» asks for each permission only when you press its button, each with a 30 second wait, never on load and never several in one call (three in one call hung the app when measured). A permission you did not grant leaves its feature off silently.
+- **Live numbers from your own connectors.** Issue statuses and the funnel's numbers are read through the connectors of the person who opens the app, once when the data arrives and again on «Оновити» — never polled. The app's own numbers stay as the base with their date, and a missing connector is said in words.
+- **Updates without a new version.** The numbers live in the artifact's database, in a snapshot, so a new snapshot updates the app and the permissions are not asked again. A new version of the page is published only when the shell or the profile changed, and then the person is told first that the permissions will be asked again.
+- **A browser or a phone.** Where the platform cannot install, the page works as in v4.12.0; every part of the shell that is absent or refused switches itself off with no error.
+
+Every snapshot is a publication: one question before every write into the database, and a scheduled run never writes to it. The database's rules let everyone who may view the page read the snapshot, the settings and the log, and only the owner write them — a colleague who may edit the page can write edits, never the numbers.
+
+### What it does not do yet
+
+- **No files, no commands, no full access.** An app that reads a folder or runs the plugin's commands on your computer arrives in v4.13.1, after a second security audit. A profile that asks for it is refused with «arrives in v4.13.1».
+- **No «Ask Claude» button** — not in this release.
+- **No «Open in Claude» item in the menu.** The profile can name it, but the shell leaves it out: the platform gives a page no call for it.
+- **PM OS** is a placeholder profile with no screens. Its modules and sources belong to its own protocol and release; this release gives it the shell, the blocks, the theme, the products, `config/app`, `runs` and the rules.
+
+### Still to be measured on a real computer
+
+**Windows has not been measured at all** — the install, the permissions, the tray item and the notifications there are still to be shown. What the host's probe page showed on 2026-11-26 on macOS (install, permissions, notifications, the menu-bar item, the badge, a database read) is in `references/native-surfaces.md` §7. The acceptance run on the maintainer's computer still has to show, with fictional Zorg data and, for one real product, only in its owner's account: the editing script of the map under the published page's real content-security policy; the theme's fonts on a real network; the first snapshot read by the installed app; a real connector binding; the icon after a reinstall; the permissions asked one by one; a snapshot update without a new version and without the permissions asked again; a colleague who edits the page cannot write the snapshot. Until it has run, the cases are `_pending_` in `testing/test-cases.md`.
+
+### Added
+
+- **`references/desktop-app-protocol.md`** — the shared protocol: the three levels (page, app, full access later), profiles, the one question before the first build, build and publish, the data channel and its rules, connectors as data, permissions, updating, a map too large for one database document, what never happens.
+- **`references/app-profiles.yaml`** and **`scripts/app_shell.py`** — the profiles `cjm` and `pm-os` with placeholders only, and the script: `schema`, `check` (a profile or an owner's `config/app`), `wrap`, `theme`, `snapshot`. `SHELL_VERSION` is 1. The script never reads `local-context.md` and never writes into the plugin's files.
+- **`scripts/app_shell/`** — the shell's own files, embedded byte for byte into a wrapped page: `shell.js`, `blocks.js`, `map.js`, `desk.js`, `live.js`, `shell.css`.
+- **`journey_map.py app-data`** and **`journey_portfolio.py app-data`** — a map and the portfolio as the data of one section of the snapshot; a map too large for one database document stays out and is named.
+- **`publications.py record --app PROFILE:SHELL[:PERM,PERM]`** — the publication record remembers that a place is an app, with its profile, shell number and permissions; `find` returns them, so the skill sees what changed.
+- **Lint check 33 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
+- **Tests** — `testing/app_shell_test.py` (400 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (56), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
+- **A release guard** — `release-manager` pitfall P11 and a line in Step 3: a release that changes the shell's files, the `wrap` function or a profile's modules or menu raises `SHELL_VERSION`; otherwise a published app is never offered its new page.
+- **`docs/superpowers/specs/2026-11-26-desktop-apps-design.md`** and its Ukrainian twin — the design this release follows.
+
+### Changed
+
+- **`cjm-research` 0.21.0** — step J4a, the app: after a journey map's page one offer to build the app «CJM», the one question before the first build, everything local first, then one question and the writes. The mode table, the Step J header and the trigger note carry the new version. The description and `## Routing` are unchanged.
+- **`release-manager` 0.5.3** — the `SHELL_VERSION` guard (Step 3, pitfall P11). The description and `## Routing` are unchanged.
+- **`references/artifact-publishing.md`** — an app as a place and the `app` field of the record; **`references/journey-protocol.md`** — the two `app-data` commands; **`references/native-surfaces.md`** — what the probe measured; **`references/vault-schema.md`** — the record's field.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/desktop-app-protocol.md`, `references/app-profiles.yaml` | new |
+| `scripts/app_shell.py`, `scripts/app_shell/*` | new — the script and the shell's six files |
+| `scripts/journey_map.py`, `scripts/journey_portfolio.py` | `app-data` |
+| `scripts/publications.py` | `record --app` |
+| `skills/cjm-research/SKILL.md` | 0.21.0 — step J4a |
+| `skills/release-manager/SKILL.md`, `skills/release-manager/references/release-pitfalls.md` | 0.5.3 — P11 |
+| `references/artifact-publishing.md`, `references/journey-protocol.md`, `references/native-surfaces.md`, `references/vault-schema.md` | the app in each |
+| `testing/app_shell_test.py`, `testing/journey_app_data_test.py`, `testing/publications_test.py`, `testing/fixtures/app/*` | new tests and fixtures |
+| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 33 and its seeds |
+| `testing/Testing-process.md`, `testing/test-cases.md` | the new tests, the shell-version rule, the acceptance cases |
+| `docs/superpowers/specs/2026-11-26-desktop-apps-design.md`, `….uk.md` | the design |
+| `README.md`, `.claude-plugin/*.json`, `.codex-plugin/plugin.json`, `.ai-registry/` | «New in v4.13.0», the version, the registry copy |
+
+### Backwards compatibility
+
+No page that exists changes: a page without the shell is published, edited and read exactly as in v4.12.0, and the `edits` collection keeps its format. The app is an offer after a map's page, made only when the product has a map and never without the one question. The publication record gains an optional field; a record without it reads as before. Nothing in a user's `local-context.md`, vault or notes changes, and a scheduled run still publishes and writes nothing.
+
+---
+
+## v4.12.1 (2026-11-26)
+
+**A release is finished when it has reached every place that serves it, not when the tag exists.** On 2026-11-26 the canonical remote was at v4.12.0, the mirror at v4.10.0, and a machine was reported at v4.9.1. The report measured the wrong folders — the terminal's, last synced two days before and with a leftover of an older sync beside it, not the desktop app's, which was at most an hour behind. The mirror was the real gap: four releases were run from sessions that could not reach it, and nothing recorded the step as left to do. This release makes the end of a release a check, and makes a skipped step visible. No user step is needed.
+
+### Added
+
+- **`testing/release_reach.py`** — where the release has reached. It reads the version on the canonical remote's branch and compares it with the canonical tag (a merged bump without its tag is not a release), with every mirror remote of the clone (its branch and its tag), and with the copies of the plugin installed on the machine: the Claude desktop app's, Claude Code's (synced from the account, or a marketplace install) and Codex's. It writes nothing: `git ls-remote` and file reads.
+  - Exit 1 while a row is `behind` or `unchecked` — a mirror that cannot be reached, or one named with `--mirror` that is not a remote of this clone, is not a pass.
+  - A copy that is absent is not a failure; a copy newer than the release is `ahead`. `--skip-hosts` checks the remotes alone, for the minutes after a merge when the hosts have not synced yet.
+  - A clone that has not fetched the canonical branch says so instead of comparing against its own old version.
+  - A mirror whose tag points at another commit than the canonical tag is `behind`, not `ok`.
+  - A folder an earlier account sync left beside the one it loads now is a `leftover` row, not a failure: the sync's own `manifest.json` says which folder is loaded. The 2026-11-26 report of «v4.9.1 and v3.17.0» was two such folders.
+- **`references/host-profiles.md` §8 «How a release reaches each host»** — the route and the delay per host, each with its source: a claude.ai account's marketplace about 95 seconds after the merge, a cloud session at its start, the desktop app within the hour, a terminal on a signed-in start (measured once: about 20 seconds in, into a new folder beside the old ones; an earlier start that day did not sync, unexplained), Codex on its start, a mirror only when Step 7 runs on the release machine. Measured on the six releases v4.9.1–v4.12.0, vendor documents linked.
+- **The `plugin copies:` line of the SessionStart digest** (`scripts/session_start.py`, `scripts/plugin_copies.py`) — a session says when the machine holds another copy of this plugin at another version. A newer copy elsewhere means this host has not taken an update the machine already has: the line starts with ⚠ and the model tells the user once — asked at a start and after `/clear`, not again on a resume, a fork or a compaction. Older copies are listed and named only when the user asks about the version. Local files only — the manifests in the hosts' folders, read within 0.5 s; no network, nothing written; the folders are shown with their account and plugin ids as `*`, and a manifest whose version is not a version is left out. `plugin_copies.py` is the one list of those folders, shared with the reach check.
+- **Pitfall P10** (`skills/release-manager/references/release-pitfalls.md`) — a release run where the mirror cannot be reached drops the mirror step.
+- **Tests** — `testing/release_reach_test.py`: 33 checks on throw-away git remotes and a fictional home folder. `testing/session_start_test.py`: 19 checks of the `plugin copies:` line on a fictional home folder (4121.x), and its WAL fixture no longer fails on an SQLite that removes the `-wal` file itself.
+
+### Changed
+
+- **`release-manager` 0.5.2** — Step 7: a run that cannot push to the mirror says so and carries the step as owed. Step 8: the reach check (8.2); the table of §8 told to the user in place of «update your plugin» (8.5); «Close, or carry what is left» — what a session could not do is written out as «Left to do on the release machine» in the closing reply, the release pull request and the user's board (8.6). The description and `## Routing` are unchanged.
+
+### Files
+
+| File | Change |
+|---|---|
+| `testing/release_reach.py`, `testing/release_reach_test.py` | new |
+| `scripts/plugin_copies.py` | new — the folders a host keeps its copy in |
+| `scripts/session_start.py`, `testing/session_start_test.py` | the `plugin copies:` line; 19 checks |
+| `skills/release-manager/SKILL.md` | 0.5.2 — Steps 7 and 8 |
+| `skills/release-manager/references/release-pitfalls.md` | P10 |
+| `references/host-profiles.md` | §8 |
+| `AGENTS.md`, `testing/Testing-process.md`, `testing/test-cases.md` | the reach check in the release loop; v4.12.1 cases |
+| `README.md` | «New in v4.12.1», Release Manager 0.5.2 |
+
+### Backwards compatibility
+
+No skill and no protocol of a contour has changed. The SessionStart digest gains one line, and only on a machine that holds another copy of the plugin at another version; a session with one copy, or with copies at one version, sees the digest it saw before. The hook stays fail-open and offline: a manifest that cannot be read, or is not read within 0.5 s, gives no line. The reach check is a maintainer's tool under `testing/`, which the installed copy does not carry; `release-manager` runs it only in a repository that has it.
+
+---
+
 ## v4.12.0 (2026-11-26)
 
 **«Редагування на сторінці»: the journey map is edited on its page, and the edits come back through the board's preview.** v4.8.0–v4.10.0 let the team edit the map only on a board; the page was a snapshot. Now every page of the map — the published one too — carries the switch «Редагувати». A click on a row opens its editor, «+» in a cell adds a row, and the links a board cannot carry — a row's parent, an initiative's or an experiment's code, the stage's target — are edited too. The page sends nothing: the edits leave it as a file saved or a text copied, `page-diff` makes them a diff the board's take reads, and nothing is written before the PM's preview. On a tree page a child's row goes into the child's own note. The sixth release of the programme «Фреймворки».

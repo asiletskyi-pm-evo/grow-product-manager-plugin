@@ -29,10 +29,11 @@ import argparse, json, os, shutil, subprocess, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 REGISTRY_ROOT = ".ai-registry/skills"
-# The maintainer's tooling and history: tests, design notes, CI, local settings, the
-# GitHub marketplace catalogue (a registry writes its own), the instructions for working
-# on and reviewing this repository (CLAUDE.md, REVIEW.md) and the copy itself.
-EXCLUDE = ("testing/", "docs/", ".github/", ".claude/", ".ai-registry/",
+# The maintainer's tooling and history: tests, design notes, CI (GitHub's, and the mirror's
+# own .gitlab-ci.yml), local settings, the GitHub marketplace catalogue (a registry writes
+# its own), the instructions for working on and reviewing this repository (CLAUDE.md,
+# REVIEW.md) and the copy itself.
+EXCLUDE = ("testing/", "docs/", ".github/", ".gitlab-ci.yml", ".claude/", ".ai-registry/",
            ".claude-plugin/marketplace.json", ".gitignore", ".gitattributes",
            "CLAUDE.md", "REVIEW.md")
 MANIFESTS = (".claude-plugin/plugin.json", ".codex-plugin/plugin.json", ".cursor-plugin/plugin.json")

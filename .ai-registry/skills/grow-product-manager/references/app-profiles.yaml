@@ -1,0 +1,27 @@
+# App profiles of the desktop shell (v4.13.0). Shell code and placeholders only: a user's values live in the
+# published page or its database, never here. Checked by `python3 scripts/app_shell.py check`.
+version: 1
+profiles:
+  cjm:
+    level: app
+    title: {uk: "CJM", en: "CJM"}
+    icon: {glyph: journey}
+    permissions: [notifications, menu-bar]
+    modules:
+      - {id: portfolio, block: table, source: portfolio, home: true, title: {uk: "Портфель", en: "Portfolio"}}
+      - {id: map, block: map, source: map, title: {uk: "Карти", en: "Maps"}}
+      - {id: funnel, block: chart, source: funnel, title: {uk: "Воронка", en: "Funnel"}}
+      - {id: edits, block: feed, source: "@edits", title: {uk: "Правки команди", en: "Team edits"}}
+    menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits, {action: open-in-claude}]
+    badge: "@edits.pending"
+    tray: {title: portfolio.weakest, menu: map}
+    notify: [edits.new, threshold.crossed]
+    connectors: [{role: issue-status, needs: "<jira_project>"}, {role: funnel-numbers, needs: "<dashboard_id>"}]
+    commands: []
+  pm-os:
+    level: app
+    title: {uk: "PM OS", en: "PM OS"}
+    icon: {glyph: os}
+    permissions: [notifications, menu-bar]
+    modules: []
+    commands: []
