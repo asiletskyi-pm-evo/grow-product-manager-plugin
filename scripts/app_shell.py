@@ -3,16 +3,19 @@
 
   schema   the constants the shell and the profiles agree on (levels, permissions, blocks, glyphs)
   check    references/app-profiles.yaml (or --profiles PATH) against them: {"ok": bool, "errors": [...]}
+  wrap     an HTML page + a profile -> an installable app: the permission manifest, the shell (shell.js, shell.css),
+           the profile as JSON; the page's own body goes into <div class="gpm-page">. Writes nothing on a refusal.
 
 A profile holds shell code and placeholders only (`<jira_project>`, `<dashboard_id>`) — never a user's value. Only the
 levels `page` and `app` exist; `full`, `full-access` and `commands` arrive in v4.13.1 and are refused. The file is only
 read, never written; local-context.md is never read. Every command ends with one `APP_RESULT {json}` line.
 Stdlib only (Python 3.9). Exit 0; 1 when a check fails; 2 for a wrong argument.
 """
-import argparse, json, os, re, sys
+import argparse, html, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROFILES = os.path.join(os.path.dirname(HERE), "references", "app-profiles.yaml")
+SHELL_DIR = os.path.join(HERE, "app_shell")
 
 SHELL_VERSION = 1
 LEVELS = ("page", "app")
@@ -296,6 +299,86 @@ def check_doc(doc):
     return errs
 
 
+# ---- wrap ---------------------------------------------------------------------------------------------------------
+
+DB_RULES = [{"path": "", "read": "view", "write": "admin"},
+            {"path": "snapshot", "read": "view", "write": "owner"},
+            {"path": "config", "read": "view", "write": "owner"},
+            {"path": "runs", "read": "view", "write": "owner"}]
+
+
+def parse_connector(spec):
+    """`SERVER:TOOL[,TOOL]` -> {server, tools}. Bad -> Bad."""
+    server, sep, tools = (spec or "").partition(":")
+    names = [x.strip() for x in tools.split(",")] if sep else []
+    if not server.strip() or not names or not all(names):
+        raise Bad("connector '%s': expected SERVER:TOOL[,TOOL]" % spec)
+    return {"server": server.strip(), "tools": names}
+
+
+def capabilities(prof, connectors):
+    """The `capabilities` the skill passes to the publication, verbatim. `connectors` = ['SERVER:TOOL[,TOOL]', …]."""
+    caps = {"desktop": {}, "db": {"rules": [dict(r) for r in DB_RULES]}, "user": {"scopes": ["profile"]}}
+    servers = []
+    for spec in connectors or []:
+        c = parse_connector(spec)
+        same = [x for x in servers if x["server"] == c["server"]]
+        if same:
+            same[0]["tools"] += [t for t in c["tools"] if t not in same[0]["tools"]]
+        else:
+            servers.append(c)
+    if servers:
+        caps["mcp"] = {"servers": servers}
+    return caps
+
+
+def _read(name):
+    with open(os.path.join(SHELL_DIR, name), encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def _json_in_script(obj):
+    """JSON that cannot close or open anything inside a <script> element."""
+    return (json.dumps(obj, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
+
+def wrap_page(page, name, prof, lang):
+    """The page as an app: manifest + meta + style in <head>, header + modules + the page's body in .gpm-page, the
+    profile and the shell script at the end of <body>. Bad on anything it cannot wrap; the same input, the same bytes."""
+    if lang not in LANGS:
+        raise Bad("unknown language '%s'" % lang)
+    errs = check_profile(name, prof)
+    if errs:
+        raise Bad("profile '%s' does not pass the check: %s" % (name, "; ".join(errs)))
+    if "claude-artifacts-manifest" in page or re.search(r"""name\s*=\s*["']?grow-pm-app""", page, re.I):
+        raise Bad("already an app: the page has a manifest or the grow-pm-app meta")
+    if re.search(r"<script\b[^>]*\bsrc\s*=", page, re.I):
+        raise Bad("the page has a <script src>: a published page takes inline scripts only")
+    head_end = re.search(r"</head\s*>", page, re.I)
+    body_open = re.search(r"<body\b[^>]*>", page, re.I)
+    body_ends = list(re.finditer(r"</body\s*>", page, re.I))
+    if not re.search(r"<head\b[^>]*>", page, re.I) or not head_end:
+        raise Bad("the page has no <head>")
+    if not body_open or not body_ends or body_open.start() < head_end.end():
+        raise Bad("the page has no <body>")
+    body_end = body_ends[-1]
+    manifest = '<script type="application/json" id="claude-artifacts-manifest">%s</script>' % _json_in_script(
+        {"permissions": list(prof.get("permissions") or [])})
+    meta = '<meta name="grow-pm-app" content="%s;shell=%d">' % (html.escape(name, quote=True), SHELL_VERSION)
+    style = '<style id="gpm-style">\n%s</style>' % _read("shell.css")
+    shown = dict(prof)
+    shown["connectors"] = [{"role": c.get("role")} for c in prof.get("connectors") or []]
+    shown.update(name=name, lang=lang, shell=SHELL_VERSION)
+    title = html.escape((prof.get("title") or {}).get(lang, ""), quote=False)
+    shell = ('<header class="gpm-shell"><span class="gpm-title">%s</span><div class="gpm-actions"></div></header>'
+             '<main class="gpm-modules" hidden></main><div class="gpm-page">' % title)
+    tail = ('</div><script id="gpm-profile" type="application/json">%s</script>\n<script id="gpm-shell">\n%s</script>'
+            % (_json_in_script(shown), _read("shell.js")))
+    return (page[:head_end.start()] + manifest + meta + style + page[head_end.start():body_open.end()] + shell
+            + page[body_open.end():body_end.start()] + tail + page[body_end.start():])
+
+
 # ---- the commands -------------------------------------------------------------------------------------------------
 
 def cmd_schema(_a):
@@ -310,6 +393,28 @@ def cmd_check(a):
     return 1 if errs else 0
 
 
+def cmd_wrap(a):
+    doc = load_profiles(a.profiles)
+    prof = (doc.get("profiles") or {}).get(a.profile)
+    if prof is None:
+        raise Bad("no profile '%s' (there are: %s)" % (a.profile, ", ".join(sorted(doc.get("profiles") or {}))))
+    try:
+        with open(a.page, encoding="utf-8", newline="") as f:
+            page = f.read()
+    except (OSError, ValueError) as e:
+        raise Bad("the page does not read: %s" % e)
+    caps = capabilities(prof, a.connector)
+    out = wrap_page(page, a.profile, prof, a.lang)
+    try:
+        with open(a.out, "w", encoding="utf-8", newline="") as f:
+            f.write(out)
+    except OSError as e:
+        raise Bad("the app does not write: %s" % e)
+    result(ok=True, out=a.out, bytes=len(out.encode("utf-8")), profile=a.profile, shell=SHELL_VERSION,
+           permissions=list(prof.get("permissions") or []), capabilities=caps)
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="the desktop app shell: profiles and their check")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -317,6 +422,14 @@ def main(argv=None):
     c = sub.add_parser("check")
     c.add_argument("--profiles", default=None)
     c.set_defaults(fn=cmd_check)
+    w = sub.add_parser("wrap")
+    w.add_argument("--page", required=True)
+    w.add_argument("--profile", required=True)
+    w.add_argument("--out", required=True)
+    w.add_argument("--lang", default="uk", choices=LANGS)
+    w.add_argument("--connector", action="append", default=[], metavar="SERVER:TOOL[,TOOL]")
+    w.add_argument("--profiles", default=None)
+    w.set_defaults(fn=cmd_wrap)
     a = ap.parse_args(argv)
     try:
         return a.fn(a)
