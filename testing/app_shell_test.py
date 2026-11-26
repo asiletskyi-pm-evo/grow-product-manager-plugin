@@ -2102,6 +2102,21 @@ with tempfile.TemporaryDirectory() as d:
     check("16.20 --prev-meta with a missing file: refused", rc == 1 and not os.path.exists(os.path.join(d, "pbadx")), text)
     api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None, {"sections": {"x--zorg": MADE}})
     check("16.21 build_snapshot(..., prev_meta) carries sections the same way", api["snapshot/meta"]["sections"] == {"portfolio--zorg": LATER_AT, "x--zorg": MADE}, api["snapshot/meta"])
+    # R25: a full update's index is what it wrote; the connectors are still carried
+    pm_ab = wjson(d, "pm_ab.json", {"v": 1, "made": MADE, "sections": {"map.a--zorg": MADE, "map.b--zorg": MADE}, "connectors": BINDINGS})
+    o7 = os.path.join(d, "pfull")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o7, "--at", LATER_AT, *ZP, "--section", "map.a:zorg:" + MAP, "--full", "--prev-meta", pm_ab)
+    m7 = jread(o7, "snapshot", "meta.json") if rc == 0 else {}
+    check("16.22 --full --prev-meta: the new index is exactly the sections written now (map.b is not carried), the connectors are carried",
+          rc == 0 and m7.get("sections") == {"map.a--zorg": LATER_AT} and m7.get("connectors") == BINDINGS, (text, m7))
+    o8 = os.path.join(d, "ppart")
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o8, "--at", LATER_AT, *ZP, "--section", "map.a:zorg:" + MAP, "--prev-meta", pm_ab)
+    check("16.23 the same without --full is a partial update: map.b keeps its previous date",
+          rc == 0 and jread(o8, "snapshot", "meta.json")["sections"] == {"map.a--zorg": LATER_AT, "map.b--zorg": MADE}, text)
+    api2 = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, LATER_AT, None,
+                             {"sections": {"x--zorg": MADE}, "connectors": BINDINGS}, full=True) if "full" in sh.build_snapshot.__code__.co_varnames else {}
+    check("16.24 build_snapshot(..., full=True) carries no section, only the connectors",
+          api2.get("snapshot/meta", {}).get("sections") == {"portfolio--zorg": LATER_AT} and api2["snapshot/meta"].get("connectors") == BINDINGS, api2.get("snapshot/meta"))
 
     # R22: a reused --out folder is refused (files of an earlier run are never written again); no --out in the plugin
     reused = os.path.join(d, "reused")
