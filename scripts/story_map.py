@@ -10,6 +10,8 @@
   board-state  the board read back after a publication, kept with which sticky is which card, activity, step or slice
   board-diff   a board's last state against a read-back, by element id: card changes apart from backbone and other items;
                on the host's board a read lacking a slice section or a backbone block is `partial`, never «removed»
+  board-layout the host's board laid out (since v4.11.2): its writes by id — the columns, the sections as tall as their
+               tallest cell, the team's items moved with their section and column, nothing deleted
 
 Both board commands read a Miro board's SVG (`--surface miro`, the default, its bytes as at v4.6.0) or, since v4.11.2,
 the host's own board type's element list (`--surface whiteboard`); board-diff takes the surface from the state.
@@ -39,7 +41,8 @@ FINDINGS = ("subitem", "work_type", "skeleton_gap", "no_outcome", "no_step", "no
             "edge_unknown", "edge_other_step", "unknown_slice", "bad_code", "empty_step", "duplicate_feature", "link",
             "secret")
 STATUSES = ("done", "in_progress", "planned", "blocked")
-COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-state", "board-diff", "schema")
+COMMANDS = ("parse", "check", "render-html", "progress", "baseline", "board-state", "board-diff", "board-layout",
+            "schema")
 
 SUBITEM = re.compile(r"<br\s*/?>|•|[:;]\s*[-*]\s+\S", re.I)
 WORK = r"(?:FE|BE|QA|iOS|Android|Design|DevOps)"
@@ -689,6 +692,10 @@ def check_protocol(root):
     for rel, text in host:                          # the user's rule: the whole map on the host's own tools, a paid board
         if rel in texts and HOST_FIRST not in text:  # tool never needed
             errs.append("%s: the story map's boards are not offered with the host's own board first (%s)" % (rel, HOST_FIRST))
+    for rel, text in (("references/story-map-protocol.md §6", _section(proto, "6. Renders")),
+                      ("skills/roadmap-architect/SKILL.md", skill)):   # the host's board is laid out by the script
+        if text and "board-layout" not in text:
+            errs.append("%s: the host's board is not laid out by `story_map.py board-layout`" % rel)
     if "not the story map's" in _section(proto, "11. What never happens"):
         errs.append("story-map-protocol.md §11 still excludes the host's own board from the story map")
     if "only the journey map offers it" in _section(texts.get("references/artifact-publishing.md", ""), "2. The candidates"):
@@ -849,6 +856,321 @@ def cmd_board_diff(args):
     return 0
 
 
+# ------------------------------------------------------------------ the host board's grid (since v4.11.2)
+# One column per step, the activity over its steps, a full-width section per slice and the backlog last; a section
+# grows with the tallest cell it holds, and every section under it moves down by as much — the gaps stay as they were.
+GRID = {"col": 200, "gap": 24, "act_y": 0, "act_h": 70, "step_y": 94, "step_h": 90, "band_y": 264, "pad": 24,
+        "band_gap": 64, "card_min": 110, "title_y": -140, "lead_y": -76}
+LEAD = {"uk": "Мапа історій: діяльності й кроки, під ними картки за зрізами",
+        "en": "Story map: activities and steps across, the cards under them by slice"}
+OWN = ("card", "activity", "step", "slice", "backlog")
+LAYOUT_FIELDS = ("x", "y", "w", "h", "text")
+BATCH = 50
+
+
+def card_text(c):
+    """A card's block on the host's board: its board text and, once linked, its feature code on a second line."""
+    return c["board_text"] + ("\n" + c["feature"] if c.get("feature") else "")
+
+
+def card_h(text):
+    """A card block's height for its words at the small size in a 200-wide block — never under 110, so a long card
+    is never drawn over the card under it."""
+    lines = sum(max(1, -(-len(part) // 24)) for part in text.split("\n"))
+    return max(GRID["card_min"], 26 + 21 * lines)
+
+
+def band_title(sl, lang):
+    if not sl["slice"]:
+        return LABELS.get(lang, LABELS["en"])["backlog"]
+    name = sl.get("label") or sl["slice"].upper()
+    return nt.safe("%s — %s" % (name, sl["outcome"])) if sl.get("outcome") else nt.safe(name)
+
+
+def _raw_rows(paths):
+    """{id: the element's own fields} of a host list read, the first read of an id winning."""
+    raw = {}
+    for path in paths:
+        for eid, data in bs._rows(path):
+            if isinstance(data, dict):
+                raw.setdefault(eid, data)
+    return raw
+
+
+def _versions(paths):
+    """{id: version} where the saved list kept the element's version (a pinned update needs it)."""
+    out = {}
+    for path in paths:
+        files = [os.path.join(path, "elements", f) for f in sorted(os.listdir(os.path.join(path, "elements"))) if not f.startswith(".")] \
+            if os.path.isdir(os.path.join(path, "elements")) else [path] if os.path.isfile(path) else []
+        for f in files:
+            try:
+                with open(f, encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            rows = data if isinstance(data, list) else [data]
+            for r in rows:
+                if isinstance(r, dict) and r.get("id") not in (None, "") and isinstance(r.get("version"), int):
+                    out.setdefault(str(r["id"]), r["version"])
+    return out
+
+
+def grid_plan(p, lang):
+    """The plugin's own blocks as they should stand: [(key, fields)] in writing order — the title, the activities, the
+    steps, then each section followed by its cards. A key names what a block is: ("activity", i), ("step", col),
+    ("slice", id) / ("backlog",), ("card", id)."""
+    g, cols = GRID, p["layout"]["columns"]
+    span = g["col"] + g["gap"]
+    width = max(1, len(cols)) * span - g["gap"]
+    plan = [(("title",), {"type": "text", "x": 0, "y": g["title_y"], "text": nt.safe(p["title"] or p["product"] or ""),
+                          "size": "title"}),
+            (("lead",), {"type": "text", "x": 0, "y": g["lead_y"], "text": LEAD.get(lang, LEAD["en"]), "size": "body"})]
+    i = 0
+    for ai, a in enumerate(p["activities"]):
+        n = len(a["steps"]) or 1
+        plan.append((("activity", ai), {"type": "shape", "kind": "rounded", "x": i * span, "y": g["act_y"],
+                                        "w": n * span - g["gap"], "h": g["act_h"], "color": "peach", "size": "body",
+                                        "text": nt.safe(a["name"])}))
+        i += n
+    for ci, col in enumerate(cols):
+        plan.append((("step", ci), {"type": "shape", "kind": "rounded", "x": ci * span, "y": g["step_y"], "w": g["col"],
+                                    "h": g["step_h"], "color": "blue", "size": "small", "text": nt.safe(col["step"])}))
+    cards = {c["id"]: c for c in p["cards"]}
+    slices = {s["slice"]: s for s in p["slices"]}
+    bands = []
+    for band in p["layout"]["bands"]:
+        sl = slices.get(band["slice"]) or {"slice": band["slice"], "outcome": band.get("outcome", ""), "label": ""}
+        key = ("slice", band["slice"]) if band["slice"] else ("backlog",)
+        cells = []
+        for ci, ids in enumerate(band["cells"]):
+            cells.append([(cid, card_text(cards[cid]), card_h(card_text(cards[cid]))) for cid in ids if cid in cards])
+        bands.append((key, band_title(sl, lang), cells))
+    return plan, bands, width
+
+
+def cmd_board_layout(args):
+    """The host board's next version, laid out by the script: every block of the plugin in its column and section, a
+    section as tall as its tallest cell, the sections under it moved down by as much; the team's own items moved with the
+    section and column they sit in, never changed otherwise; nothing deleted. Without --last it is a new board."""
+    p = parse(load(args.note))
+    g = GRID
+    span = g["col"] + g["gap"]
+    plan, bands, width = grid_plan(p, args.lang)
+    first = not args.last
+    if first and args.now:
+        raise Bad("--now needs --last: the board's state names which block is the plugin's")
+    if not first and not args.now:
+        raise Bad("--last needs --now: lay a board out only from its whole list read again just now, into a fresh folder")
+    raw, versions, now, last = {}, {}, {}, {}
+    if not first:
+        if not _there(args.last, "whiteboard"):
+            raise Bad("no state at %s — run board-state first, or lay out a new board without --last" % args.last)
+        last, _ = load_state(args.last, p, "whiteboard")
+        now = read_boards(args.now, "whiteboard")
+        lost = missing_backbone(last, now, p) if set(last) & set(now) else [{"text": "every element"}]
+        if lost:
+            raise Bad("the read lacks %d slice section(s) or backbone block(s) the state holds (%s) — read the board "
+                      "again, every page, into a fresh folder; a board is never laid out from a partial read"
+                      % (len(lost), ", ".join(x["text"] for x in lost[:3])))
+        raw, versions = _raw_rows(args.now), _versions(args.now)
+        fresh = {mid: dict(it) for mid, it in now.items()}
+        assign_roles(fresh, p)
+        for mid, it in now.items():                # the state's role wins: it was taken while the note and board agreed
+            old = last.get(mid) or fresh[mid]
+            it["role"], it["card"], it["slice"] = old.get("role", "other"), old.get("card"), old.get("slice")
+
+    # which element is which block: the state's card and slice ids, the backbone by its text, then by its order
+    owner = {}
+    if not first:
+        by_role = {}
+        for mid, it in now.items():
+            by_role.setdefault(it["role"], []).append(mid)
+        for mid in by_role.get("card", []):
+            if now[mid]["card"]:
+                owner.setdefault(("card", now[mid]["card"]), mid)
+        for mid in by_role.get("slice", []):
+            owner.setdefault(("slice", now[mid]["slice"]), mid)
+        for mid in by_role.get("backlog", [])[:1]:
+            owner[("backlog",)] = mid
+        for role in ("activity", "step"):
+            want = [(k, f) for k, f in plan if k[0] == role]
+            pool = sorted(by_role.get(role, []), key=lambda m: (now[m]["x"], now[m]["y"]))
+            for k, f in want:                      # the same text first, the nearest to its place among those
+                same = [m for m in pool if now[m]["text"] == bn(f["text"])]
+                if same:
+                    m = min(same, key=lambda m: abs(now[m]["x"] - f["x"]))
+                    owner[k] = m
+                    pool.remove(m)
+            for k, f in want:                      # a renamed block: the leftovers in their order
+                if k not in owner and pool:
+                    owner[k] = pool.pop(0)
+    mine = set(owner.values())
+
+    # the old grid, to move the team's items with the section and the column they sit in
+    old_col = {}                                   # step element id → its column's x now
+    for k, mid in owner.items():
+        if k[0] == "step":
+            old_col[mid] = now[mid]["x"]
+    old_steps = sorted(((now[m]["x"], now[m]["w"] or g["col"], m) for m in old_col), key=lambda t: t[0])
+    col_of = {owner[("step", ci)]: ci for ci in range(len(p["layout"]["columns"])) if ("step", ci) in owner}
+    new_x = {m: ci * span for m, ci in col_of.items()}
+
+    def column_of(it):
+        cx = it["x"] + (it["w"] or 0) / 2.0
+        for x, w, m in old_steps:
+            if x - g["gap"] / 2.0 <= cx <= x + w + g["gap"] / 2.0:
+                return m
+        return None
+
+    def cell_bottom(sec_id, col_mid):              # the lowest of the plugin's cards in that column of that section, now
+        if col_mid is None:
+            return None
+        x0 = now[col_mid]["x"]
+        ys = [now[m]["ry"] + (now[m]["h"] or 0) for m in mine if now[m]["frame"] == sec_id and now[m]["role"] == "card"
+              and abs(now[m]["x"] - x0) < span / 2.0]
+        return max(ys) if ys else g["pad"] - g["gap"]
+
+    writes, made, moved_team, left = [], {}, [], []
+    top = max([int(m[1:]) for m in list(raw) + list(now) if re.match(r"^e\d+$", m)] or [0])
+
+    def new_id():
+        nonlocal top
+        top += 1
+        return "e%d" % top
+
+    def place(key, fields):
+        mid = owner.get(key)
+        if mid is None:
+            mid = new_id()
+            made[mid] = key
+            writes.append({"op": "set", "collection": "elements", "doc_id": mid, "data": fields})
+            return mid
+        have = raw.get(mid, {})
+        diff = {f: fields[f] for f in LAYOUT_FIELDS if f in fields and have.get(f) != fields[f]}
+        if diff:
+            w = {"op": "update", "collection": "elements", "doc_id": mid, "data": diff}
+            if mid in versions:
+                w["if_version"] = versions[mid]
+            writes.append(w)
+        return mid
+
+    for key, fields in plan:
+        if key[0] in ("title", "lead") and not first:
+            continue                               # a board that exists keeps its own heading
+        place(key, fields)
+
+    y = g["band_y"]
+    team_moves = {}
+    for key, title, cells in bands:
+        sec = owner.get(key)
+        old_sec = now.get(sec) if sec else None
+        heights = [sum(h for _, _, h in cell) + g["gap"] * max(0, len(cell) - 1) for cell in cells]
+        inner = max([g["card_min"]] + heights)
+        team = [m for m, it in now.items() if old_sec is not None and it["frame"] == sec and m not in mine
+                and it["type"] not in ("arrow", "sticker")]
+        for m in team:                             # a team item: the same place in its section and column; pushed down by
+            it = now[m]                            # as much as the plugin's cards above it in that column grew
+            col = column_of(it)
+            dx = (new_x.get(col, it["x"]) - old_col[col]) if col in new_x else 0
+            ci = col_of.get(col)
+            grow = 0
+            if ci is not None:
+                was = cell_bottom(sec, col)
+                now_h = heights[ci] if ci < len(heights) else 0
+                if was is not None and it["ry"] >= was - 1:
+                    grow = (g["pad"] + now_h) - was if now_h else 0
+                    grow = max(grow, 0)
+            ry = it["ry"] + grow
+            inner = max(inner, ry + (it["h"] or 0) - g["pad"])
+            team_moves[m] = (it["x"] + dx, ry)
+        h = int(round(g["pad"] * 2 + inner))
+        sid = place(key, {"type": "container", "x": -g["pad"], "y": y, "w": width + 2 * g["pad"], "h": h, "text": title})
+        for m, (tx, ry) in team_moves.items():
+            if now[m]["frame"] == sec and m not in [t[0] for t in moved_team]:
+                nx, ny = round(tx), round(y + ry)
+                have = raw.get(m, {})
+                diff = {f: v for f, v in (("x", nx), ("y", ny)) if not isinstance(have.get(f), (int, float))
+                        or abs(have[f] - v) >= 1}   # a whole-number rounding is no move of a person's item
+                if diff:
+                    w = {"op": "update", "collection": "elements", "doc_id": m, "data": diff}
+                    if m in versions:
+                        w["if_version"] = versions[m]
+                    writes.append(w)
+                    moved_team.append((m, diff))
+        for ci, cell in enumerate(cells):
+            cy = y + g["pad"]
+            for cid, text, ch in cell:
+                place(("card", cid), {"type": "shape", "kind": "rounded", "x": ci * span, "y": cy, "w": g["col"], "h": ch,
+                                      "color": "yellow", "size": "small", "text": text})
+                cy += ch + g["gap"]
+        y += h + g["band_gap"]
+
+    if not first:                                  # what lies beside or under the map moves with its edge
+        old_bottom = max([now[m]["y"] + (now[m]["h"] or 0) for m in mine if now[m]["kind"] == "frame"] or [y])
+        old_right = max([now[m]["x"] + (now[m]["w"] or 0) for m in mine] or [width])
+        dy, dx = (y - g["band_gap"]) - old_bottom, (width + g["pad"]) - old_right
+        for m, it in now.items():
+            if m in mine or it["frame"] or it["type"] in ("arrow", "sticker") or m not in raw:
+                continue
+            if "x" not in raw[m] or "y" not in raw[m]:
+                continue
+            diff = {}
+            if it["y"] >= old_bottom and dy:
+                diff["y"] = round(it["y"] + dy)
+            if it["x"] >= old_right and dx:
+                diff["x"] = round(it["x"] + dx)
+            if diff:
+                w = {"op": "update", "collection": "elements", "doc_id": m, "data": diff}
+                if m in versions:
+                    w["if_version"] = versions[m]
+                writes.append(w)
+                moved_team.append((m, diff))
+        for mid in sorted(now, key=lambda m: (now[m]["y"], now[m]["x"])):
+            if now[mid]["role"] in OWN + ("orphan",) and mid not in mine:
+                left.append({"id": mid, "role": now[mid]["role"], "text": now[mid]["text"], "card": now[mid].get("card")})
+
+    order = [mid for mid, _ in ((w["doc_id"], w) for w in writes if w["op"] == "set")]
+    meta = {"op": "set", "collection": "board", "doc_id": "meta",
+            "data": {"v": 1, "title": nt.safe(args.title or p["title"] or p["product"] or ""), "order": order}} if first else None
+    every = ([meta] if meta else []) + writes
+    batches = [every[i:i + BATCH] for i in range(0, len(every), BATCH)]
+    try:
+        out = _write_json(args.out, {"version": 1, "surface": "whiteboard", "note": os.path.basename(args.note),
+                                     "first": first, "batches": batches})
+    except Unwritable as e:
+        result(ok=False, error="the layout cannot be written: %s" % e)
+        return 1
+    result(ok=True, out=out, surface="whiteboard", first=first, batches=len(batches),
+           counts={"new": sum(1 for w in writes if w["op"] == "set"), "updated": sum(1 for w in writes if w["op"] == "update"),
+                   "team_moved": len(moved_team), "left": len(left)},
+           cards={k[1]: mid for k, mid in list(owner.items()) + [(v, m) for m, v in made.items()] if k[0] == "card"},
+           team_moved=[{"id": m, "to": d} for m, d in moved_team], left=left, errors=p["errors"])
+    return 0
+
+
+def bn(text):
+    """A block's text as the reader keeps it (one line), to match the plan against a read."""
+    return bs._flat(text) if isinstance(text, str) else ""
+
+
+def _write_json(path, data):
+    out = os.path.abspath(path)
+    try:
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        tmp = out + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=1)
+        os.replace(tmp, out)
+    except OSError as e:
+        raise Unwritable(e.strerror or type(e).__name__)
+    return out
+
+
+class Unwritable(Exception):
+    pass
+
+
 def cmd_schema(args):
     result(ok=True, fields=list(FIELDS), columns=[list(c) for c in COLUMNS], findings=list(FINDINGS),
            statuses=list(STATUSES), commands=list(COMMANDS), errors=check_protocol(os.path.dirname(HERE)))
@@ -886,11 +1208,18 @@ def main(argv=None):
                    "or every page of the host's list")
     p.add_argument("--surface", choices=bs.SURFACES, help="the reads' format (default: the state's, else miro)")
     p.add_argument("--note")
+    p = sub.add_parser("board-layout")
+    p.add_argument("--note", required=True)
+    p.add_argument("--last", help="the host board's state (board-state --surface whiteboard); left out: a new board")
+    p.add_argument("--now", nargs="+", help="the host board's whole list, read again just now into a fresh folder")
+    p.add_argument("--title", help="a new board's name (default: the map's title)")
+    p.add_argument("--lang", default="uk", choices=sorted(LABELS), help="the backlog's and the lead line's language")
+    p.add_argument("--out", required=True, help="the writes, in batches of at most %d, for the board's store" % BATCH)
     sub.add_parser("schema")
     args = ap.parse_args(argv)
     fn = {"parse": cmd_parse, "check": cmd_check, "render-html": cmd_render, "progress": cmd_progress,
           "baseline": cmd_baseline, "board-state": cmd_board_state, "board-diff": cmd_board_diff,
-          "schema": cmd_schema}.get(args.cmd)
+          "board-layout": cmd_board_layout, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2

@@ -589,6 +589,10 @@ try:
           "journey map only", "7.13b artifact-publishing §2 offering the host's board to the journey map only is named")
     drift("references/story-map-protocol.md", "[--surface miro\\|whiteboard] [--last S]", "[--surface miro] [--last S]", "--surface",
           "7.14 a §10 board command without both surfaces is named")
+    drift("references/story-map-protocol.md", "`story_map.py board-layout ", "`story_map.py lay-out ", "laid out by",
+          "7.15 a §6 whose host board is not laid out by board-layout is named")
+    drift("skills/roadmap-architect/SKILL.md", "board-layout", "lay-out", "laid out by",
+          "7.15b a skill whose host board is not laid out by board-layout is named", count=-1)
     os.makedirs(os.path.join(r2, "scripts"), exist_ok=True)
     shutil.copy(SCRIPT, os.path.join(r2, "scripts", "story_map.py"))
     drift("scripts/story_map.py", '"--surface", choices=bs.SURFACES, default="miro"', '"--surface", choices=("miro",), default="miro"',
@@ -768,6 +772,122 @@ try:
     else:
         rc, out, res = mrun(mm, "board-state", "--surface", "whiteboard", "--read", nn, "--note", note, "--out", os.path.join(d, "mn.json"))
         check("12.M5 a note taken as the plugin's card is caught (12.17)", res.get("cards", {}).get("c1") == "mwkxzorg-n1", out)
+    # §13 — the host board laid out by the script (board-layout, v4.11.2): no hand-moved column, nothing deleted
+    def apply(batches, folder, base=None):
+        """The board after the writes: a copy of `base` (a read folder) with every set and update applied."""
+        els = {}
+        if base:
+            for f in sorted(os.listdir(os.path.join(base, "elements"))):
+                els[f[:-5]] = json.loads(read(os.path.join(base, "elements", f)).decode("utf-8"))
+        for b in batches:
+            for w in b:
+                if w["collection"] != "elements":
+                    continue
+                if w["op"] == "set":
+                    els[w["doc_id"]] = dict(w["data"])
+                elif w["op"] == "update":
+                    els[w["doc_id"]].update(w["data"])
+        os.makedirs(os.path.join(folder, "elements"))
+        for k, v in els.items():
+            write(os.path.join(folder, "elements", k + ".json"), json.dumps(v, ensure_ascii=False))
+        return els
+
+    def overlaps(els, ids):
+        boxes = [(k, els[k]["x"], els[k]["y"], els[k]["x"] + els[k]["w"], els[k]["y"] + els[k]["h"]) for k in ids]
+        return [(a[0], b[0]) for i, a in enumerate(boxes) for b in boxes[i + 1:]
+                if a[1] < b[3] and b[1] < a[3] and a[2] < b[4] and b[2] < a[4]]
+
+    def layout(*extra):
+        out = os.path.join(d, "lay-%d.json" % len(os.listdir(d)))
+        rc, o, r = run("board-layout", "--note", note, "--out", out, *extra)
+        return rc, o, r, (json.loads(read(out).decode("utf-8")) if rc == 0 and os.path.exists(out) else {})
+
+    rc, out, res, lay = layout()
+    flat = [w for b in lay.get("batches", []) for w in b]
+    els = apply(lay.get("batches", []), os.path.join(d, "lay-r1")) if lay else {}
+    blocks = [w["doc_id"] for w in flat if w.get("data", {}).get("type") == "shape"]
+    secs = [w["doc_id"] for w in flat if w.get("data", {}).get("type") == "container"]
+    first_of = {k: i for i, k in enumerate(w["doc_id"] for w in flat)}
+    check("13.1 a new host board: the meta first, one block per card, step and activity, a section per slice and the "
+          "backlog, each written before its cards", rc == 0 and flat and flat[0]["collection"] == "board"
+          and res.get("counts", {}).get("new") == len(blocks) + len(secs) + 2 and len(secs) == 4
+          and len(res.get("cards", {})) == 18 and all(first_of[res["cards"][c]] > min(first_of[s] for s in secs)
+                                                      for c in res.get("cards", {})), (rc, out))
+    cards_blocks = [res["cards"][c] for c in res.get("cards", {})]
+    check("13.2 no two of the plugin's blocks overlap, and no two sections", els and not overlaps(els, blocks)
+          and not overlaps(els, secs), overlaps(els, blocks)[:3] if els else out)
+    st1 = os.path.join(d, "lay.artifact.board.json")
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", os.path.join(d, "lay-r1"), "--note", note, "--out", st1)
+    check("13.3 the board it lays out reads back as the map: every card in its slice's section", rc == 0
+          and res.get("unmapped_cards") == [] and len(res.get("slices", {})) == 3, out)
+    rc, out, res, lay2 = layout("--last", st1, "--now", os.path.join(d, "lay-r1"))
+    check("13.4 the same note on the board it laid out writes nothing (a fixed point)", rc == 0
+          and lay2.get("batches") == [] and res.get("counts", {}).get("updated") == 0, out)
+    # the team adds a note under c2 (R1, column 1) and one below the map; the PM adds a card under c1 and a new step
+    r1 = os.path.join(d, "lay-r1")
+    sec_r1 = next(k for k in secs if els[k]["text"].startswith("R1"))
+    c2 = els[res["cards"]["c2"]] if res.get("cards") else {}
+    write(os.path.join(r1, "elements", "team-n1.json"), json.dumps({"type": "note", "x": c2.get("x", 0) + 10,
+          "y": c2.get("y", 0) + c2.get("h", 0) + 24, "w": 180, "h": 100, "text": "Ідея команди"}, ensure_ascii=False))
+    sec_mvp = next((k for k in secs if els[k]["text"].startswith("MVP")), None)
+    write(os.path.join(r1, "elements", "team-n3.json"), json.dumps({"type": "note", "x": 3 * 224 + 6,
+          "y": els[sec_mvp]["y"] + 3 if sec_mvp else 0, "w": 180, "h": 180, "text": "картка для тесту"}, ensure_ascii=False))
+    bottom = max(els[k]["y"] + els[k]["h"] for k in secs) if els else 0
+    write(os.path.join(r1, "elements", "team-n2.json"), json.dumps({"type": "note", "x": 0, "y": bottom + 200, "w": 180,
+          "h": 100, "text": "Нотатка під мапою"}, ensure_ascii=False))
+    grown = os.path.join(d, "map-grown.md")
+    write(grown, read(note).decode("utf-8").replace(
+        "| c2 | Обрати доставку |",
+        "| c19 | Обрати доставку | Побачити поштомат у кошику | Позначка «найближчий» біля поштомата | mvp |  |  | дошка |  |\n"
+        "| c20 | Обрати доставку | Порівняти ціни | Ціни служб доставки поруч | r1 |  |  | дошка |  |\n| c2 | Обрати доставку |", 1))
+    out3 = os.path.join(d, "lay-grown.json")
+    rc, out, res3 = run("board-layout", "--note", grown, "--last", st1, "--now", r1, "--out", out3)
+    lay3 = json.loads(read(out3).decode("utf-8")) if rc == 0 else {}
+    flat3 = [w for b in lay3.get("batches", []) for w in b]
+    els3 = apply(lay3.get("batches", []), os.path.join(d, "lay-r3"), r1) if lay3 else {}
+    own3 = [k for k, v in els3.items() if v.get("type") in ("shape", "container") and not k.startswith("team-")]
+    check("13.5 a new card and a new step: the columns widen and the section grows — nothing of the plugin overlaps",
+          rc == 0 and res3.get("counts", {}).get("new") == 3 and els3
+          and not overlaps(els3, [k for k in own3 if els3[k]["type"] == "shape"])
+          and not overlaps(els3, [k for k in own3 if els3[k]["type"] == "container"]), (out, overlaps(els3, own3)[:3]))
+    check("13.6 nothing is deleted, and the team's notes only move (x, y) — their text is theirs",
+          all(w["op"] in ("set", "update") for w in flat3)
+          and all(set(w["data"]) <= {"x", "y"} for w in flat3 if w["doc_id"].startswith("team-"))
+          and els3.get("team-n1", {}).get("text") == "Ідея команди", [w for w in flat3 if w["doc_id"].startswith("team-")])
+    st3 = os.path.join(d, "lay3.artifact.board.json")
+    rc, out, res = run("board-state", "--surface", "whiteboard", "--read", os.path.join(d, "lay-r3"), "--note", grown,
+                       "--out", st3)
+    s3 = json.loads(read(st3).decode("utf-8"))["elements"] if rc == 0 else {}
+    n1 = s3.get("team-n1", {})
+    col = [k for k, v in s3.items() if v.get("role") == "card" and v.get("card") == "c2"]
+    check("13.7 the team's note stays in its section and column, under its card, overlapping no card of the plugin",
+          n1.get("frame") == sec_r1 and n1.get("role") == "sticky" and col and abs(s3[col[0]]["x"] - n1["x"] + 10) < 1
+          and not overlaps(els3, ["team-n1"] + [k for k, v in s3.items() if v.get("role") == "card"]), (n1, col))
+    sec_bottom = max(els3[k]["y"] + els3[k]["h"] for k in own3 if els3[k]["type"] == "container") if els3 else 0
+    check("13.8 a note below the map moves down with its edge — the gap stays as it was",
+          els3 and abs((els3["team-n2"]["y"] - sec_bottom) - 200) < 1, (els3.get("team-n2"), sec_bottom))
+    check("13.9 every card of the grown map is on the board", rc == 0 and res.get("unmapped_cards") == [], out)
+    n3 = s3.get("team-n3", {})
+    st_col = [v for v in s3.values() if v.get("role") == "step" and v.get("text") == "Оплатити при отриманні"]
+    check("13.11 a note in a later column moves right with its column when a step is added before it, at the same "
+          "height in its section; the section grows to hold it, its numbers whole",
+          n3.get("frame") == sec_mvp and st_col and abs(n3["x"] - st_col[0]["x"] - 6) < 1 and abs(n3["ry"] - 3) < 1
+          and els3[sec_mvp]["h"] >= 3 + 180 + 24 and all(isinstance(els3[k][f], int) for k in own3 for f in ("x", "y", "w", "h")),
+          (n3, st_col[:1], els3.get(sec_mvp)))
+    rc, out, res, _ = layout("--last", st1)
+    rc2, out2, res2 = run("board-layout", "--note", note, "--last", st1, "--now", wp, "--out", os.path.join(d, "lay-p.json"))
+    check("13.10 no layout without a fresh whole read, nor from a partial or another board's read (exit 2)",
+          rc == 2 and rc2 == 2 and "partial" in res2.get("error", "") and not os.path.exists(os.path.join(d, "lay-p.json")),
+          (out, out2))
+    mm = mutant(d, "nogrow", 'inner = max([g["card_min"]] + heights)', 'inner = g["card_min"]')
+    if mm is None:
+        check("13.M1 mutation site present (a section as tall as its tallest cell)", False, "pattern not in story_map.py")
+    else:
+        mo = os.path.join(d, "lay-m1.json")
+        rc, out, res = run("board-layout", "--note", grown, "--out", mo, script=mm)
+        em = apply(json.loads(read(mo).decode("utf-8"))["batches"], os.path.join(d, "lay-m1")) if rc == 0 else {}
+        check("13.M1 a section that does not grow with its cells is caught (13.2: its cards overlap the next section's)",
+              bool(em) and bool(overlaps(em, [k for k, v in em.items() if v.get("type") == "shape"])), out)
     n, bad = replay(SCRIPT, "after12")
     check("12.16 after the host's board the Miro replay is still byte for byte (%d cases)" % n, n >= 14 and not bad, bad)
 finally:
