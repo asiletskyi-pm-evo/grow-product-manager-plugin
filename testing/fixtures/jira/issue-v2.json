@@ -1,0 +1,68 @@
+{
+ "issues": {
+  "nodes": [
+   {
+    "expand": "names,schema",
+    "id": "5002",
+    "key": "PROJ-102",
+    "fields": {
+     "summary": "Кнопка \"Оплатити\" не реагує на другий дотик",
+     "assignee": {
+      "accountId": "acc-zorg-qa",
+      "emailAddress": "zorg.qa@example.com",
+      "avatarUrls": {
+       "48x48": "https://example.com/avatars/48.png",
+       "24x24": "https://example.com/avatars/24.png"
+      },
+      "displayName": "Zorg QA",
+      "active": true,
+      "timeZone": "Europe/Kyiv",
+      "accountType": "atlassian"
+     },
+     "status": {
+      "description": "A status of the fictional project.",
+      "iconUrl": "https://example.com/images/icons/statuses/inprogress.png",
+      "name": "In progress",
+      "id": "6",
+      "statusCategory": {
+       "id": 3,
+       "key": "indeterminate",
+       "colorName": "green",
+       "name": "Indeterminate"
+      }
+     },
+     "customFields": {
+      "Sprint": {
+       "id": "customfield_10020",
+       "value": [
+        {
+         "id": 902,
+         "name": "Zorg sprint 12",
+         "state": "active",
+         "boardId": 77,
+         "goal": "",
+         "startDate": "2026-11-16T08:00:00.000Z",
+         "endDate": "2026-11-29T06:00:00.000Z"
+        }
+       ]
+      },
+      "Story Points": {
+       "id": "customfield_10036",
+       "value": 0.5
+      },
+      "Team": {
+       "id": "customfield_10001",
+       "value": {
+        "id": "team-zorg-0001",
+        "name": "Zorg Checkout",
+        "avatarUrl": "https://example.com/teams/1.svg",
+        "isVisible": true
+       }
+      }
+     }
+    },
+    "webUrl": "https://example.atlassian.net/browse/PROJ-102"
+   }
+  ]
+ }
+}
