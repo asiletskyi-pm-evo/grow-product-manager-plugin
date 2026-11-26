@@ -307,6 +307,47 @@ const fakeDesktop = `
   out.phone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth,
     right: document.querySelector('.gpm-install').getBoundingClientRect().right, h: document.querySelector('.gpm-shell').getBoundingClientRect().height}));
   await p.close();
+
+  // ---- Task 3: the data channel — a fake database with a collection listener
+  const fakeDb = (docs, mode) => `
+    window.__docs = ${JSON.stringify(docs)}; window.__subs = []; window.__marker = 'same-page';
+    const qs = () => ({docs: Object.keys(window.__docs).sort().map(id => ({id, exists: true, data: () => window.__docs[id]})),
+                       size: Object.keys(window.__docs).length, empty: false, docChanges: () => []});
+    window.__push = (id, data) => { window.__docs[id] = data; window.__subs.forEach(f => f(qs())); };
+    const db = {collection: (n) => ({onSnapshot: (next, err) => {
+      if ('${mode}' === 'throws') { throw new Error('boom'); }
+      if ('${mode}' === 'error') { setTimeout(() => err && err({code: 'permission_denied'}), 0); return () => {}; }
+      window.__subs.push(next); setTimeout(() => next(qs()), 0); return () => {}; }})};
+    const _use = window.claude.use; window.claude.use = async (n) => (n === 'db' ? (${mode === 'nodb' ? 'null' : 'db'}) : _use(n));`;
+  const META = {v: 1, made: '2026-11-26T10:00:00Z', products: [], thresholds: {warning: 0.1, critical: 0.25}, sections: {'portfolio--zorg': '2026-11-26T10:00:00Z'}};
+  const SEC = (rows, made) => ({v: 1, product: 'zorg', section: 'portfolio', made, data: {columns: [], rows}});
+  [p, errs] = await open(fakeDesktop + fakeDb({'meta': META, 'portfolio--zorg': SEC([{a: 1}, {a: 2}, {a: 3}], '2026-11-26T10:00:00Z'), 'theme': {v: 1}}, 'ok'));
+  const read = () => p.evaluate(() => { const g = window.__gpm; const d = g && g.data;
+    return {meta: d && d.meta && d.meta.made, rows: d && d.sections && d.sections['portfolio--zorg'] && d.sections['portfolio--zorg'].data.rows.length,
+            keys: d && Object.keys(d.sections).sort(), fresh: (document.querySelector('.gpm-fresh') || {}).textContent || '',
+            marker: window.__marker, ro: (() => { try { window.__gpm = 1; window.__gpm.data = 1; } catch (e) {} return !!(window.__gpm && window.__gpm.data); })()}; });
+  out.live0 = await read();
+  await p.evaluate(() => {
+    window.__gotEvent = 0; window.__push('portfolio--zorg', {v: 1, product: 'zorg', section: 'portfolio', made: '2026-12-01T09:00:00Z', data: {columns: [], rows: [{a: 9}]}});
+    window.__push('meta', {v: 1, made: '2026-12-01T09:00:00Z', products: [], thresholds: {warning: 0.1, critical: 0.25}, sections: {'portfolio--zorg': '2026-12-01T09:00:00Z'}}); });
+  await p.waitForTimeout(150);
+  out.live1 = await read(); out.liveErrs = errs; out.livePage = await p.isVisible('.gpm-page #keep'); await p.close();
+  [p, errs] = await open('window.__en = 1;' + fakeDesktop + fakeDb({'meta': META}, 'ok'));
+  out.liveNoSec = await read(); await p.close();
+  // foreign input: nothing is trusted, nothing is thrown
+  const evil = {'meta': {v: 1, made: '<img src=x onerror=window.__pwned=1>', products: 'x', sections: 5}, 'portfolio--zorg': 'a string', '../x--y': {data: {}},
+                'theme': 'x', 'bad id--zorg': {v: 1, data: {}}, 'map.q--zorg': {v: 1, product: 7, section: null, made: {}, data: []}};
+  [p, errs] = await open(fakeDesktop + fakeDb(evil, 'ok'));
+  out.evil = {state: await read(), pwned: await p.evaluate(() => !!window.__pwned), imgs: await p.$$eval('.gpm-shell img', e => e.length), errs, page: await p.isVisible('.gpm-page #keep')}; await p.close();
+  for (const mode of ['throws', 'error', 'nodb']) {
+    [p, errs] = await open(fakeDesktop + fakeDb({'meta': META}, mode));
+    out['db_' + mode] = {fresh: (await p.$$eval('.gpm-fresh', e => e.map(x => x.textContent).join(''))), errs, page: await p.isVisible('.gpm-page #keep'), install: await p.$$eval('.gpm-install', e => e.length)}; await p.close();
+  }
+  // a part that never settles does not hold the others back
+  [p, errs] = await open(fakeDesktop.replace("state: async () => state", "state: () => new Promise(() => {})") + fakeDb({'meta': META}, 'ok'));
+  out.hang = {fresh: (await p.$$eval('.gpm-fresh', e => e.map(x => x.textContent).join(''))), errs}; await p.close();
+  [p, errs] = await open(fakeDesktop + fakeDb({'meta': META}, 'ok'), {width: 360, height: 640});
+  out.livePhone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth})); await p.close();
   console.log(JSON.stringify(out)); await b.close();
 })();""")
         pr = subprocess.run(["node", js, pg], capture_output=True, text=True, timeout=180, env=dict(os.environ, NODE_PATH=npm))
@@ -335,6 +376,169 @@ const fakeDesktop = `
         ph = br.get("phone") or {}
         check("10.9 at phone width: no horizontal scroll, the button is on screen, the header is small",
               ph and ph.get("sw") <= ph.get("cw") and ph.get("right") <= ph.get("cw") and ph.get("h") < 120, ph)
+
+        l0, l1 = br.get("live0") or {}, br.get("live1") or {}
+        check("10.10 pw_live_update: the data the shell holds is read from the database (meta + section), the freshness line shows the date",
+              l0.get("meta") == "2026-11-26T10:00:00Z" and l0.get("rows") == 3 and l0.get("keys") == ["portfolio--zorg"]
+              and l0.get("fresh") == "дані від 26.11.2026", l0)
+        check("10.11 pw_live_update: a new snapshot/portfolio--zorg and a new snapshot/meta change the held data and the line, no reload, no error",
+              l1.get("meta") == "2026-12-01T09:00:00Z" and l1.get("rows") == 1 and l1.get("fresh") == "дані від 01.12.2026"
+              and l1.get("marker") == "same-page" and br.get("liveErrs") == [] and br.get("livePage") is True, (l1, br.get("liveErrs")))
+        check("10.12 window.__gpm.data is read-only for the page's own code", l0.get("ro") is True, l0)
+        check("10.13 a database with meta only: no section, the line is still shown", (br.get("liveNoSec") or {}).get("keys") == []
+              and (br.get("liveNoSec") or {}).get("fresh") == "дані від 26.11.2026", br.get("liveNoSec"))
+        ev = br.get("evil") or {}
+        check("10.14 foreign input: a malformed meta, section, id or theme gives an empty result, no error, nothing put into the page as HTML",
+              ev.get("errs") == [] and ev.get("pwned") is False and ev.get("imgs") == 0 and (ev.get("state") or {}).get("fresh") == ""
+              and (ev.get("state") or {}).get("keys") == [] and ev.get("page") is True, ev)
+        for mode in ("throws", "error", "nodb"):
+            dm = br.get("db_" + mode) or {}
+            check("10.15 a database that %s: no error, no line, the page is there, the install button still works" % mode,
+                  dm.get("errs") == [] and dm.get("fresh") == "" and dm.get("page") is True and dm.get("install") == 1, dm)
+        check("10.16 a part that never settles (install.state) does not hold the data part back",
+              (br.get("hang") or {}).get("fresh") == "дані від 26.11.2026" and (br.get("hang") or {}).get("errs") == [], br.get("hang"))
+        lp = br.get("livePhone") or {}
+        check("10.17 at phone width the freshness line adds no horizontal scroll", lp and lp.get("sw") <= lp.get("cw"), lp)
+
+# ---- Task 3: the data channel (snapshot) --------------------------------------------------------------------------------
+FIX = os.path.join(ROOT, "testing", "fixtures", "app")
+PORT, MAP, THEME = (os.path.join(FIX, n) for n in ("zorg-portfolio.json", "zorg-map.json", "zorg-theme.json"))
+MADE = "2026-11-26T10:00:00Z"
+ZP = ["--product", "zorg:Zorg:#2f6fde", "--product", "zorg-pay:Zorg Pay"]
+
+
+def snap(d, *args, out="snap"):
+    o = os.path.join(d, out)
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", o, "--at", MADE, *args)
+    return rc, text, res, o
+
+
+def jread(*parts):
+    with open(os.path.join(*parts), encoding="utf-8") as f:
+        return json.load(f)
+
+
+with tempfile.TemporaryDirectory() as d:
+    # test_snapshot_paths
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--section", "portfolio:zorg-pay:" + PORT,
+                            "--section", "map.first-order:zorg:" + MAP, "--section", "map.first-order:zorg-pay:" + MAP,
+                            "--theme", THEME)
+    paths = sorted(x.get("path") for x in res.get("docs", []))
+    want = sorted(["snapshot/meta", "snapshot/theme", "runs/2026-11-26T10-00-00Z"] + ["snapshot/%s--%s" % (a, b) for a in
+                  ("portfolio", "map.first-order") for b in ("zorg", "zorg-pay")])
+    check("11.1 snapshot: 4 section documents + meta + theme + runs/<made>, exactly; ok, over empty", rc == 0
+          and res.get("ok") is True and paths == want and res.get("over") == [], (text, paths))
+    files = sorted(os.path.relpath(os.path.join(r, f), o) for r, _, fs in os.walk(o) for f in fs)
+    check("11.2 one JSON file per document under DIR/<collection>/<id>.json, bytes as printed", files == sorted(
+          x + ".json" for x in want) and all(os.path.getsize(os.path.join(o, x["path"] + ".json")) == x["bytes"]
+                                            for x in res.get("docs", [])), files)
+    meta = jread(o, "snapshot", "meta.json")
+    check("11.3 meta: v, made, products with colour or null, thresholds, sections has all 4 with made", meta == {
+          "v": 1, "made": MADE, "products": [{"id": "zorg", "label": "Zorg", "color": "#2f6fde"},
+                                             {"id": "zorg-pay", "label": "Zorg Pay", "color": None}],
+          "thresholds": {"warning": 0.10, "critical": 0.25},
+          "sections": {"portfolio--zorg": MADE, "portfolio--zorg-pay": MADE, "map.first-order--zorg": MADE,
+                       "map.first-order--zorg-pay": MADE}}, meta)
+    sec = jread(o, "snapshot", "portfolio--zorg.json")
+    check("11.4 a section document: {v, product, section, made, data}; data is the file", sec == {
+          "v": 1, "product": "zorg", "section": "portfolio", "made": MADE, "data": jread(PORT)}, sec)
+    check("11.5 runs/<made path-safe>: {at, sections, ok}", jread(o, "runs", "2026-11-26T10-00-00Z.json") == {
+          "at": MADE, "sections": sorted(meta["sections"]), "ok": True}, jread(o, "runs", "2026-11-26T10-00-00Z.json"))
+    check("11.6 theme is written as the file's theme; meta has no connectors key without the option",
+          jread(o, "snapshot", "theme.json") == jread(THEME) and "connectors" not in meta, "")
+    api = sh.build_snapshot([("portfolio", "zorg", {"rows": []})], [{"id": "zorg", "label": "Zorg", "color": None}], None, MADE)
+    check("11.7 build_snapshot(sections, products, theme, made) -> {path: document}; no theme -> no theme document",
+          sorted(api) == ["runs/2026-11-26T10-00-00Z", "snapshot/meta", "snapshot/portfolio--zorg"], sorted(api))
+    rc, text, res, o2 = snap(d, "--product", "zorg:Зорг:#2f6fde", "--section", "portfolio:zorg:" + PORT, out="uk")
+    check("11.8 a label may be non-Latin and have spaces", rc == 0 and jread(o2, "snapshot", "meta.json")["products"][0]["label"] == "Зорг", text)
+
+    # test_snapshot_size
+    big = os.path.join(d, "big.json")
+    with open(big, "w") as f:
+        json.dump({"rows": [{"t": "x" * 1000} for _ in range(300)]}, f)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--section", "feed:zorg:" + big, out="size")
+    over = res.get("over") or []
+    check("11.9 a section over 256 KiB is not written, named in over with its size, ok false; the rest is written",
+          rc == 1 and res.get("ok") is False and len(over) == 1 and over[0].get("path") == "snapshot/feed--zorg"
+          and over[0].get("bytes", 0) > 256 * 1024 and not os.path.exists(os.path.join(o, "snapshot", "feed--zorg.json"))
+          and os.path.exists(os.path.join(o, "snapshot", "portfolio--zorg.json"))
+          and "feed--zorg" not in jread(o, "snapshot", "meta.json")["sections"], (text, over))
+
+    # test_snapshot_ids
+    cases = (
+        ("a product id with a capital", ["--product", "Zorg:Zorg"], ["--section", "portfolio:Zorg:" + PORT], "product"),
+        ("a product id with an underscore", ["--product", "zorg_pay:Zorg"], ["--section", "portfolio:zorg_pay:" + PORT], "product"),
+        ("a section name with a slash", ZP, ["--section", "a/b:zorg:" + PORT], "section"),
+        ("a section name over 64", ZP, ["--section", "a" * 65 + ":zorg:" + PORT], "section"),
+        ("a section name starting with a dot", ZP, ["--section", ".x:zorg:" + PORT], "section"),
+        ("a section of an unknown product", ZP, ["--section", "portfolio:ghost:" + PORT], "ghost"),
+        ("a label with 25 characters", ["--product", "zorg:" + "я" * 25], ["--section", "portfolio:zorg:" + PORT], "label"),
+        ("a bad colour", ["--product", "zorg:Zorg:red"], ["--section", "portfolio:zorg:" + PORT], "color"),
+        ("the same section twice", ZP, ["--section", "portfolio:zorg:" + PORT, "--section", "portfolio:zorg:" + PORT], "twice"),
+        ("a missing data file", ZP, ["--section", "portfolio:zorg:" + os.path.join(d, "nope.json")], "nope.json"),
+        ("a connector role the profile does not declare", ZP, ["--section", "portfolio:zorg:" + PORT, "--connector", "ghost-role:Zorg Tracker:get"], "ghost-role"),
+        ("a malformed connector", ZP, ["--section", "portfolio:zorg:" + PORT, "--connector", "issue-status:only"], "connector"),
+    )
+    for i, (label, prods, secs, needle) in enumerate(cases):
+        rc, text, res, o = snap(d, *prods, *secs, out="bad%d" % i)
+        check("11.10 %s: an error before anything is written" % label, rc == 1 and res.get("ok") is False
+              and needle in res.get("error", "") and not os.path.exists(o), text)
+    for seg in ("x" * 201,):
+        try:
+            sh.build_snapshot([("a", "b" * 201, {})], [{"id": "b" * 201, "label": "B", "color": None}], None, MADE)
+            ok = False
+        except sh.Bad:
+            ok = True
+        check("11.11 a segment over 200 bytes is refused by build_snapshot", ok, "")
+
+    # connectors (R1) and the theme check (R2)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--connector", "issue-status:Zorg Tracker:get_issue",
+                            "--connector", "funnel-numbers:Zorg Board:read", out="conn")
+    check("11.12 --connector ROLE:SERVER:TOOL -> meta.connectors {role: {server, tool}}", rc == 0 and jread(o, "snapshot", "meta.json").get(
+          "connectors") == {"issue-status": {"server": "Zorg Tracker", "tool": "get_issue"},
+                            "funnel-numbers": {"server": "Zorg Board", "tool": "read"}}, text)
+    good = jread(THEME)
+    check("11.13 check_theme: the Zorg theme is clean", sh.check_theme(good) == [], sh.check_theme(good))
+    for label, mut in (("a missing key", lambda t: t.pop("font")), ("an extra key", lambda t: t.update(css="x")),
+                       ("a colour that is not #rrggbb", lambda t: t["light"].update(bg="red")),
+                       ("a 3-digit colour", lambda t: t["dark"].update(bg="#fff")),
+                       ("a radius of 25", lambda t: t.update(radius=25)), ("a fractional radius", lambda t: t.update(radius=4.5)),
+                       ("a boolean radius", lambda t: t.update(radius=True)), ("v 2", lambda t: t.update(v=2)),
+                       ("light as a list", lambda t: t.update(light=[]))):
+        t = copy.deepcopy(good)
+        mut(t)
+        check("11.14 check_theme names %s" % label, sh.check_theme(t) != [], "")
+    badt = os.path.join(d, "bad-theme.json")
+    with open(badt, "w") as f:
+        json.dump(dict(good, radius=99), f)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, "--theme", badt, out="badtheme")
+    check("11.15 a bad --theme file is an error before anything is written", rc == 1 and "theme" in res.get("error", "")
+          and not os.path.exists(o), text)
+
+    # test_snapshot_no_people
+    ppl = os.path.join(d, "people.json")
+    with open(ppl, "w") as f:
+        json.dump({"rows": [{"title": "T1", "Email": "a@zorg.example", "Author": "A", "meta": {"assignee": "B", "keep": 1,
+                   "deep": [{"PERSON": "C", "owner": "D", "reporter": "E", "e-mail": "F", "name_of_person": "stays"}]}}],
+                   "weakest": {"title": "W", "score": 1}}, f)
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + ppl, out="ppl")
+    sec = jread(o, "snapshot", "portfolio--zorg.json")
+    blob = json.dumps(sec["data"])
+    gone = ("a@zorg.example", '"Author"', '"assignee"', '"PERSON"', '"owner"', '"reporter"', '"e-mail"', '"Email"')
+    check("11.16 the keys email, e-mail, author, assignee, person, owner, reporter are dropped at any depth, any case",
+          rc == 0 and not any(g in blob for g in gone) and sec["data"]["rows"][0]["meta"]["keep"] == 1
+          and sec["data"]["rows"][0]["meta"]["deep"][0] == {"name_of_person": "stays"}, sec)
+    dropped = res.get("dropped") or []
+    check("11.17 dropped lists 'section: key-path' for each; the document id is the section label", len(dropped) == 7
+          and "portfolio--zorg: rows.0.Email" in dropped and "portfolio--zorg: rows.0.meta.deep.0.PERSON" in dropped
+          and all(": " in x for x in dropped), dropped)
+    check("11.18 sources are not touched", jread(ppl)["rows"][0]["Email"] == "a@zorg.example", "")
+    rc, text, res, o = snap(d, *ZP, "--section", "portfolio:zorg:" + PORT, out="clean")
+    check("11.19 nothing to drop -> dropped is []", res.get("dropped") == [], res)
+    rc, text, res = run("snapshot", "--profile", "cjm", "--out", os.path.join(d, "def"), *ZP, "--section", "portfolio:zorg:" + PORT)
+    made_default = jread(d, "def", "snapshot", "meta.json").get("made", "")
+    check("11.20 --at omitted: made is now in UTC as publications.py writes it", re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", made_default) is not None, made_default)
+
 
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

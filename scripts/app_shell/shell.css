@@ -33,6 +33,8 @@
   font: 600 15px/1.3 var(--gpm-font);
 }
 .gpm-title { min-width: 0; overflow-wrap: anywhere; }
+.gpm-fresh { color: var(--gpm-muted); font-weight: 400; font-size: 13px; }
+.gpm-fresh[hidden] { display: none; }
 .gpm-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
 .gpm-actions:empty { display: none; }
 .gpm-btn {

@@ -1,7 +1,8 @@
 (function () {
   "use strict";
   // The app shell: one script, fixed bytes, no data in it. The profile comes from #gpm-profile; the parts below are
-  // started one by one, each in its own try/catch — a part that fails or is refused switches itself off silently.
+  // started independently, each in its own try/catch — a part that fails, is refused or never settles switches itself
+  // off (or waits) alone and holds no other part back.
 
   var STRINGS = {
     uk: {
@@ -11,7 +12,8 @@
       cancelled: "Скасовано: ви відмовились встановлювати",
       unavailable: "Тут встановити не вийде",
       failed: "Не вдалося встановити",
-      refused: "Відмовлено"
+      refused: "Відмовлено",
+      freshness: "дані від "
     },
     en: {
       install: "Install as an app",
@@ -20,7 +22,8 @@
       cancelled: "Cancelled: you declined to install",
       unavailable: "Cannot be installed here",
       failed: "Installation failed",
-      refused: "Refused"
+      refused: "Refused",
+      freshness: "data from "
     }
   };
   var PARTS = [];
@@ -95,6 +98,121 @@
     });
   });
 
+  // ---- the data channel -------------------------------------------------------------------------------------------
+  // The data of the app lives in the artifact's database (collection `snapshot`), never in this page. Everything read
+  // there is foreign input: a type is never trusted, a document that does not fit its shape is skipped, and a value goes
+  // into the page only through textContent. readSnapshot never throws and never rejects.
+  var SECTION_ID = /^[a-z0-9][a-z0-9.-]{0,63}--[a-z0-9][a-z0-9-]{0,63}$/;
+  var COLOR = /^#[0-9a-fA-F]{6}$/;
+  var LOAD_TIMEOUT = 10000;
+
+  function isObj(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
+  function str(v, max) { return typeof v === "string" && v.length > 0 && v.length <= (max || 200) ? v : null; }
+  function num(v) { return typeof v === "number" && isFinite(v) ? v : null; }
+
+  function cleanMeta(raw) {
+    if (!isObj(raw)) { return null; }
+    var made = str(raw.made, 40);
+    if (!made) { return null; }
+    var meta = { made: made, products: [], thresholds: { warning: 0.1, critical: 0.25 }, sections: {}, connectors: {} };
+    if (Array.isArray(raw.products)) {
+      raw.products.forEach(function (p) {
+        if (!isObj(p) || !str(p.id, 64) || !str(p.label, 24)) { return; }
+        meta.products.push({ id: p.id, label: p.label, color: typeof p.color === "string" && COLOR.test(p.color) ? p.color : null });
+      });
+    }
+    if (isObj(raw.thresholds)) {
+      var w = num(raw.thresholds.warning), c = num(raw.thresholds.critical);
+      if (w !== null && c !== null && w > 0 && c > w && c < 1) { meta.thresholds = { warning: w, critical: c }; }
+    }
+    if (isObj(raw.sections)) {
+      Object.keys(raw.sections).forEach(function (id) {
+        if (SECTION_ID.test(id) && str(raw.sections[id], 40)) { meta.sections[id] = raw.sections[id]; }
+      });
+    }
+    if (isObj(raw.connectors)) {
+      Object.keys(raw.connectors).forEach(function (role) {
+        var b = raw.connectors[role];
+        if (/^[a-z0-9][a-z0-9-]{0,63}$/.test(role) && isObj(b) && str(b.server, 100) && str(b.tool, 100)) {
+          meta.connectors[role] = { server: b.server, tool: b.tool };
+        }
+      });
+    }
+    return meta;
+  }
+
+  function cleanSection(id, raw) {
+    if (!SECTION_ID.test(id) || !isObj(raw) || !isObj(raw.data)) { return null; }
+    var made = str(raw.made, 40);
+    if (!made || !str(raw.product, 64) || !str(raw.section, 64)) { return null; }
+    return { product: raw.product, section: raw.section, made: made, data: raw.data };
+  }
+
+  function emptySnapshot() { return { meta: null, theme: null, sections: {} }; }
+
+  // A query snapshot -> {meta, theme, sections}. The theme is kept as an object only; its tokens are checked by the
+  // part that applies it.
+  function parseSnapshot(qs) {
+    var out = emptySnapshot();
+    try {
+      var docs = qs && qs.docs ? Array.prototype.slice.call(qs.docs) : [];
+      docs.forEach(function (d) {
+        try {
+          var id = d && typeof d.id === "string" ? d.id : "";
+          var body = d && d.exists !== false && typeof d.data === "function" ? d.data() : null;
+          if (id === "meta") { out.meta = cleanMeta(body); }
+          else if (id === "theme") { out.theme = isObj(body) ? body : null; }
+          else {
+            var sec = cleanSection(id, body);
+            if (sec) { out.sections[id] = sec; }
+          }
+        } catch (e) { /* one malformed document is skipped */ }
+      });
+    } catch (e) { return emptySnapshot(); }
+    return out;
+  }
+
+  // Resolves once with the first answer (an empty result after 10 s, on a refusal or without a database); stays
+  // subscribed and calls onChange with every later state. Subscribed once, never again.
+  function readSnapshot(db, onChange) {
+    return new Promise(function (resolve) {
+      var settled = false, timer = null;
+      function first(v) { if (!settled) { settled = true; if (timer) { clearTimeout(timer); } resolve(v); } }
+      if (!db || typeof db.collection !== "function") { first(emptySnapshot()); return; }
+      timer = setTimeout(function () { first(emptySnapshot()); }, LOAD_TIMEOUT);
+      try {
+        db.collection("snapshot").onSnapshot(function (qs) {
+          var snap = parseSnapshot(qs);
+          if (!settled) { first(snap); }
+          else if (onChange) { try { onChange(snap); } catch (e) { /* a listener must not break the stream */ } }
+        }, function () { first(emptySnapshot()); });
+      } catch (e) { first(emptySnapshot()); }
+    });
+  }
+
+  // 2026-11-26T10:00:00Z -> 26.11.2026 (uk) / 2026-11-26 (en); anything else shows no line.
+  function showDate(made, lang) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(made || "");
+    if (!m) { return ""; }
+    return lang === "en" ? m[1] + "-" + m[2] + "-" + m[3] : m[3] + "." + m[2] + "." + m[1];
+  }
+
+  part("data", function (ctx) {
+    var line = null;
+    function paint(snap) {
+      var text = snap && snap.meta ? showDate(snap.meta.made, ctx.lang) : "";
+      if (!line && !text) { return; }
+      if (!line) {
+        line = el("span", "gpm-fresh");
+        ctx.header.insertBefore(line, ctx.actions);
+      }
+      line.textContent = text ? ctx.t.freshness + text : "";
+      line.hidden = !text;
+    }
+    function apply(snap) { ctx.setData(snap); paint(snap); }
+    return ctx.db().then(function (db) { return readSnapshot(db, apply); }).then(apply);
+  });
+
   // ---- the start --------------------------------------------------------------------------------------------------
   function init() {
     var profile;
@@ -107,9 +225,26 @@
     var actions = header.querySelector(".gpm-actions");
     if (title && profile.title && profile.title[lang]) { title.textContent = profile.title[lang]; }
     if (!actions) { actions = el("div", "gpm-actions"); header.appendChild(actions); }
-    var desktopPromise = null;
+    var desktopPromise = null, dbPromise = null, last = emptySnapshot(), listeners = [];
+    // The last read, for tests and nothing else: a getter, so the page cannot assign it.
+    try { Object.defineProperty(window, "__gpm", { value: Object.freeze({ get data() { return last; } }) }); } catch (e) { /* kept */ }
     var ctx = {
       profile: profile, lang: lang, t: t, header: header, actions: actions,
+      // the last snapshot read, and a way to hear the next ones: ctx.onData(fn) calls fn(snapshot) on every change
+      get data() { return last; },
+      onData: function (fn) { if (typeof fn === "function") { listeners.push(fn); } },
+      setData: function (snap) {
+        last = snap;
+        listeners.slice().forEach(function (fn) { try { fn(snap); } catch (e) { /* one listener does not stop the others */ } });
+      },
+      db: function () {
+        if (!dbPromise) {
+          dbPromise = Promise.resolve().then(function () {
+            return window.claude && typeof window.claude.use === "function" ? window.claude.use("db") : null;
+          }).catch(function () { return null; });
+        }
+        return dbPromise;
+      },
       desktop: function () {
         if (!desktopPromise) {
           desktopPromise = Promise.resolve().then(function () {
@@ -119,11 +254,9 @@
         return desktopPromise;
       }
     };
-    return PARTS.reduce(function (chain, p) {
-      return chain.then(function () {
-        try { return Promise.resolve(p.run(ctx)).catch(function () {}); } catch (e) { return undefined; }
-      });
-    }, Promise.resolve());
+    PARTS.forEach(function (p) {
+      try { Promise.resolve(p.run(ctx)).catch(function () {}); } catch (e) { /* this part is off */ }
+    });
   }
 
   try { init(); } catch (e) { /* the page stays as it is */ }

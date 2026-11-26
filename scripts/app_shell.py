@@ -5,13 +5,15 @@
   check    references/app-profiles.yaml (or --profiles PATH) against them: {"ok": bool, "errors": [...]}
   wrap     an HTML page + a profile -> an installable app: the permission manifest, the shell (shell.js, shell.css),
            the profile as JSON; the page's own body goes into <div class="gpm-page">. Writes nothing on a refusal.
+  snapshot sections + products (+ a theme, + connector bindings) -> one JSON file per database document under
+           DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
 A profile holds shell code and placeholders only (`<jira_project>`, `<dashboard_id>`) — never a user's value. Only the
 levels `page` and `app` exist; `full`, `full-access` and `commands` arrive in v4.13.1 and are refused. The file is only
 read, never written; local-context.md is never read. Every command ends with one `APP_RESULT {json}` line.
 Stdlib only (Python 3.9). Exit 0; 1 when a check fails; 2 for a wrong argument.
 """
-import argparse, html, json, os, re, sys
+import argparse, datetime, html, json, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROFILES = os.path.join(os.path.dirname(HERE), "references", "app-profiles.yaml")
@@ -29,6 +31,15 @@ LATER_TEXT = "arrives in v4.13.1"
 PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "badge", "tray", "notify", "connectors",
                 "commands")
 MODULE_KEYS = ("id", "block", "source", "home", "title")
+SECTION = re.compile(r"^[a-z0-9][a-z0-9.-]{0,63}$")
+PRODUCT = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+DOC_MAX = 256 * 1024          # a database document, serialized
+SEGMENT_MAX = 200             # a path segment, in bytes
+LABEL_MAX = 24
+THRESHOLDS = {"warning": 0.10, "critical": 0.25}
+PEOPLE_KEYS = ("email", "e-mail", "author", "assignee", "person", "owner", "reporter")
+THEME_KEYS = ("v", "id", "light", "dark", "font", "radius")
 
 
 class Bad(Exception):
@@ -379,6 +390,195 @@ def wrap_page(page, name, prof, lang):
             + page[body_open.end():body_end.start()] + tail + page[body_end.start():])
 
 
+# ---- snapshot -----------------------------------------------------------------------------------------------------
+
+def check_theme(theme):
+    """The errors of one theme `{v: 1, id, light: {token: #rrggbb}, dark: {…}, font, radius}` — [] when it is clean.
+    Task 4 tightens it (the token list, the fonts); the shape is checked here."""
+    if not isinstance(theme, dict):
+        return ["theme: not a mapping"]
+    errs = ["theme: unknown key '%s'" % k for k in theme if k not in THEME_KEYS]
+    errs += ["theme: '%s' is missing" % k for k in THEME_KEYS if k not in theme]
+    if theme.get("v") != 1 or isinstance(theme.get("v"), bool):
+        errs.append("theme: v must be 1")
+    if not isinstance(theme.get("id"), str) or not theme.get("id"):
+        errs.append("theme: id must be text")
+    if not isinstance(theme.get("font"), str) or not theme.get("font"):
+        errs.append("theme: font must be text")
+    for side in ("light", "dark"):
+        tokens = theme.get(side)
+        if side not in theme:
+            continue
+        if not isinstance(tokens, dict) or not tokens:
+            errs.append("theme: %s must be a mapping of tokens" % side)
+            continue
+        for k, v in tokens.items():
+            if not isinstance(v, str) or not COLOR.match(v):
+                errs.append("theme: %s.%s must be #rrggbb" % (side, k))
+    r = theme.get("radius")
+    if "radius" in theme and (isinstance(r, bool) or not isinstance(r, int) or not 0 <= r <= 24):
+        errs.append("theme: radius must be a whole number 0-24")
+    return errs
+
+
+def strip_people(data, label):
+    """`data` without the keys that name a person (any depth, any case) -> (clean copy, ['label: key.path', …])."""
+    dropped = []
+
+    def walk(node, path):
+        if isinstance(node, dict):
+            out = {}
+            for k, v in node.items():
+                if isinstance(k, str) and k.lower() in PEOPLE_KEYS:
+                    dropped.append("%s: %s" % (label, ".".join(path + [k])))
+                else:
+                    out[k] = walk(v, path + [k])
+            return out
+        if isinstance(node, list):
+            return [walk(v, path + [str(i)]) for i, v in enumerate(node)]
+        return node
+    return walk(data, []), dropped
+
+
+def _size(doc):
+    return len(json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+
+
+def _path_safe(made):
+    return re.sub(r"[^A-Za-z0-9._-]", "-", made)
+
+
+def _build(sections, products, theme, made, connectors=None):
+    """-> (documents {path: doc}, over [{path, bytes}], dropped [text]). Bad before anything is built on a wrong id."""
+    if not isinstance(made, str) or not made.strip():
+        raise Bad("made is missing")
+    ids = set()
+    for p in products:
+        if not isinstance(p.get("id"), str) or not PRODUCT.match(p["id"]):
+            raise Bad("product id '%s' must match %s" % (p.get("id"), PRODUCT.pattern))
+        if p["id"] in ids:
+            raise Bad("product '%s' is given twice" % p["id"])
+        ids.add(p["id"])
+        label = p.get("label")
+        if not isinstance(label, str) or not label.strip() or ":" in label or len(label) > LABEL_MAX:
+            raise Bad("product '%s': label must be 1-%d characters, no colon" % (p["id"], LABEL_MAX))
+        if p.get("color") is not None and not (isinstance(p["color"], str) and COLOR.match(p["color"])):
+            raise Bad("product '%s': color must be #rrggbb" % p["id"])
+    docs, over, dropped, written = {}, [], [], {}
+    seen = set()
+    for name, product, data in sections:
+        if not isinstance(name, str) or not SECTION.match(name):
+            raise Bad("section name '%s' must match %s" % (name, SECTION.pattern))
+        if product not in ids:
+            raise Bad("section '%s': product '%s' is not one of the products" % (name, product))
+        did = "%s--%s" % (name, product)
+        if len(did.encode("utf-8")) > SEGMENT_MAX:
+            raise Bad("section '%s': the document id is longer than %d bytes" % (did, SEGMENT_MAX))
+        if did in seen:
+            raise Bad("section '%s' is given twice" % did)
+        seen.add(did)
+        clean, drop = strip_people(data, did)
+        dropped += drop
+        doc = {"v": 1, "product": product, "section": name, "made": made, "data": clean}
+        if _size(doc) > DOC_MAX:
+            over.append({"path": "snapshot/" + did, "bytes": _size(doc)})
+            continue
+        docs["snapshot/" + did] = doc
+        written[did] = made
+    meta = {"v": 1, "made": made,
+            "products": [{"id": p["id"], "label": p["label"], "color": p.get("color")} for p in products],
+            "thresholds": dict(THRESHOLDS), "sections": written}
+    if connectors:
+        meta["connectors"] = {role: dict(b) for role, b in connectors.items()}
+    docs["snapshot/meta"] = meta
+    if theme is not None:
+        errs = check_theme(theme)
+        if errs:
+            raise Bad("; ".join(errs))
+        docs["snapshot/theme"] = theme
+    run_id = _path_safe(made)
+    if len(run_id.encode("utf-8")) > SEGMENT_MAX:
+        raise Bad("made is longer than %d bytes" % SEGMENT_MAX)
+    docs["runs/" + run_id] = {"at": made, "sections": sorted(written), "ok": not over}
+    for path, doc in docs.items():
+        if _size(doc) > DOC_MAX:
+            raise Bad("document %s is over %d KiB" % (path, DOC_MAX // 1024))
+    return docs, over, dropped
+
+
+def build_snapshot(sections, products, theme, made, connectors=None):
+    """The database documents of one snapshot: {path: document}. `sections` = [(name, product id, data)], `products` =
+    [{id, label, color|None}]. A section over 256 KiB is left out (and out of meta.sections); people's keys are dropped."""
+    return _build(sections, products, theme, made, connectors)[0]
+
+
+def _now():
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_product(spec):
+    """`ID:LABEL[:#rrggbb]` -> {id, label, color}."""
+    parts = (spec or "").split(":")
+    if len(parts) not in (2, 3) or not parts[0] or not parts[1]:
+        raise Bad("product '%s': expected ID:LABEL[:#rrggbb] (a label has no colon)" % spec)
+    color = parts[2] if len(parts) == 3 else None
+    if color is not None and not COLOR.match(color):
+        raise Bad("product '%s': color must be #rrggbb" % parts[0])
+    return {"id": parts[0], "label": parts[1], "color": color}
+
+
+def parse_section(spec):
+    """`NAME:PRODUCT:FILE` -> (name, product, data)."""
+    name, _, rest = (spec or "").partition(":")
+    product, _, path = rest.partition(":")
+    if not name or not product or not path:
+        raise Bad("section '%s': expected NAME:PRODUCT:FILE" % spec)
+    return name, product, _read_json(path, "section %s" % name)
+
+
+def _read_json(path, what):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError) as e:
+        raise Bad("%s: the file %s does not read as JSON (%s)" % (what, path, e))
+
+
+def cmd_snapshot(a):
+    doc = load_profiles(a.profiles)
+    prof = (doc.get("profiles") or {}).get(a.profile)
+    if prof is None:
+        raise Bad("no profile '%s' (there are: %s)" % (a.profile, ", ".join(sorted(doc.get("profiles") or {}))))
+    roles = [c.get("role") for c in prof.get("connectors") or [] if isinstance(c, dict)]
+    connectors = {}
+    for spec in a.connector:
+        parts = spec.split(":")
+        if len(parts) != 3 or not all(x.strip() for x in parts):
+            raise Bad("connector '%s': expected ROLE:SERVER:TOOL" % spec)
+        if parts[0] not in roles:
+            raise Bad("connector role '%s' is not declared by profile '%s' (it declares: %s)" % (parts[0], a.profile, ", ".join(roles) or "none"))
+        connectors[parts[0]] = {"server": parts[1].strip(), "tool": parts[2].strip()}
+    products = [parse_product(x) for x in a.product]
+    sections = [parse_section(x) for x in a.section]
+    theme = _read_json(a.theme, "theme") if a.theme else None
+    made = a.at or _now()
+    if a.at and not re.fullmatch(r"\d{4}-\d\d-\d\dT[0-9:.]+(Z|[+-]\d\d:\d\d)?", a.at):
+        raise Bad("--at must be an ISO time, e.g. 2026-11-26T10:00:00Z")
+    docs, over, dropped = _build(sections, products, theme, made, connectors)
+    out = []
+    try:
+        for path, d in docs.items():
+            target = os.path.join(a.out, path + ".json")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w", encoding="utf-8", newline="") as f:
+                json.dump(d, f, ensure_ascii=False)
+            out.append({"path": path, "bytes": os.path.getsize(target)})
+    except OSError as e:
+        raise Bad("the snapshot does not write: %s" % e)
+    result(ok=not over, docs=out, over=over, dropped=dropped, made=made)
+    return 1 if over else 0
+
+
 # ---- the commands -------------------------------------------------------------------------------------------------
 
 def cmd_schema(_a):
@@ -430,6 +630,16 @@ def main(argv=None):
     w.add_argument("--connector", action="append", default=[], metavar="SERVER:TOOL[,TOOL]")
     w.add_argument("--profiles", default=None)
     w.set_defaults(fn=cmd_wrap)
+    n = sub.add_parser("snapshot")
+    n.add_argument("--profile", required=True)
+    n.add_argument("--section", action="append", default=[], metavar="NAME:PRODUCT:FILE")
+    n.add_argument("--product", action="append", default=[], metavar="ID:LABEL[:#rrggbb]")
+    n.add_argument("--connector", action="append", default=[], metavar="ROLE:SERVER:TOOL")
+    n.add_argument("--theme", default=None)
+    n.add_argument("--at", default=None)
+    n.add_argument("--out", required=True)
+    n.add_argument("--profiles", default=None)
+    n.set_defaults(fn=cmd_snapshot)
     a = ap.parse_args(argv)
     try:
         return a.fn(a)
