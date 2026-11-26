@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.12.2
+**Version:** 4.12.3
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.12.3** — **The plugin's logo in Claude** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). `.claude-plugin/plugin.json` now carries `icon: ./assets/logo.png` — the same 512 px logo the Codex and ChatGPT card has shown since v3.0.1 — so Claude's plugin list can show it beside the name. Nothing else changes.
 
 **New in v4.12.2** — **Sprint and quarter reports read Story Points again on Atlassian MCP v2** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). v4.11.0 moved the plugin to v2 by its tool names and inputs; a live pass of every read on a v2 site on 2026-11-26 found what the names did not show: v2 returns an issue's custom fields under `fields.customFields`, keyed by the field's display name, and leaves an empty field out, while the patterns `jira-data-protocol.md` read a saved search with looked for `fields.customfield_N` — so on v2 `product-reporter` and the Planning Suite found no Story Points, no epic and no developer in a sprint's search. A new script, `scripts/jira_rows.py`, reads a saved Jira response of either server as one compact JSON line per issue (custom fields by id, a user as account id and name, closed sprints as a count — and no e-mail address, description or comment text); the protocol's no-shell patterns are rewritten for v2 and tested against a fixture. §1c of `integration-strategy.md` records the rest of the pass: `view: "evidence"` brings every comment (one epic — 98 000 characters), so custom fields are asked for by id; a session that holds both servers uses v2; the format guide names a second reference to read before a new page. The writes on v2 — a page created and updated, an issue created — are still not run live. See [CHANGELOG.md](CHANGELOG.md).
 
@@ -996,7 +998,7 @@ The plugin is defined against Claude Code / Cowork and degrades by **observed ca
 | Skill descriptions | full while the listing fits 1% of the context window; over it, the least-used skills show names only — descriptions stay within 400 characters (v3.10.1) | shortened to fit one shared ≈15k-character budget (~190 chars each on a host with 80 skills) — descriptions are ordered for that cut | ? | ? |
 | Per-skill result | 33 full | 17 full / 16 degraded | 22 degraded / 11 n/a | 23 degraded / 10 n/a |
 
-**Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Claude Code has no logo field, so it reads `.claude-plugin/` only; validator check 1 keeps the two manifests' version and description identical.
+**Codex card.** `.codex-plugin/plugin.json` carries the `interface` block Codex and ChatGPT render — display name, category, brand color and the logo in `assets/` (`logo.png` 512, `composer-icon.png` 128). Since v4.12.3 `.claude-plugin/plugin.json` names the same `logo.png` in `icon` — the field Anthropic's directory reads for a plugin's listing ([plugins reference](https://code.claude.com/docs/en/plugins-reference#directory-listing-fields)); Claude Code itself does not read it at load time. Validator check 1 keeps the two manifests' version and description identical and the icon a square PNG of 512–2048 px under 2 MB.
 
 **Codex — install and update.** Codex refreshes configured Git marketplaces **when it starts** (plugin startup and `codex plugin list`) and then refreshes the installed plugin cache — [openai/codex#17425](https://github.com/openai/codex/pull/17425); it does **not** check periodically while the app stays open — [openai/codex#38401](https://github.com/openai/codex/issues/38401). So a release reaches a running Codex only after a restart, or after the update commands further below. First install:
 
@@ -1144,5 +1146,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.12.2  
+**Version:** 4.12.3  
 **Last Updated:** November 2026
