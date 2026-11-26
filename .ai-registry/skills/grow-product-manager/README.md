@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.11.0
+**Version:** 4.12.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.12.0** — **«Редагування на сторінці»: the journey map is edited on its page, and on the host's own artifact page the team edits it together, live** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). Every page `render-html` writes carries the switch «Редагувати»: cards are dragged between cells, a side panel edits a row's text, its stage and lane, its parent, its code and the stage's target, «+ Додати» adds a row, and a health-check, metric or anomaly row stays locked. On the host's artifact page each edit is a document of the page's own `edits` collection, so everyone who may edit the artifact sees the others' edits as they are made, with who made them; a viewer sees the marks without the switch. Elsewhere the page saves or copies its edits. Either way the note changes only through the board's preview: «забери правки зі сторінки карти шляху» → `journey_map.py page-diff` → `board-take` with the PM's class for each evidence row, and a child map's row goes into the child's own note. `cjm-research` 0.20.0 (Step J9). New test `testing/journey_page_edit_test.py`.
 
 **New in v4.11.0** — **«Atlassian MCP v2»: the plugin moves to Atlassian's v2 server before v1 is switched off on 2027-03-01** (33 skills, 3 agents, 7 commands, 12 connectors, 3 hooks). `.mcp.json` declares `https://mcp.atlassian.com/v2/mcp`, and every skill, agent and reference names the v2 tools with the parameters that change the result without an error: a page is read with `detail: "full"` (the default is an excerpt), an update carries a fresh `snapshotToken`, a page is created with `contentType: "page"` in a space by its numeric id, and `listJiraProjects`, `listConfluenceSpaces`, `listJiraProjectIssueTypesMetadata` run through `executeRead`. `references/integration-strategy.md` §1c now describes v2 as the declared server, with the v1 names in one column until 2027-03-01; the write gate covers both name sets until then. **After updating, reconnect Atlassian once** in the plugin's Connectors tab: the host matches a declared server by its URL, so a v1 connection is not picked up. Touched: `task-creator`, `requirements-creator`, `write-concept`, `product-research`, `product-reporter`, `product-analysis`, `meeting-processor`, `knowledge-library`, `design-bridge`, `brainstorm-features`, `plugin-configurator` (patch each). New test `testing/atlassian_v2_test.py`.
 
@@ -236,7 +238,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.19.0)
+### 1. CJM Research (v0.20.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -246,7 +248,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - **Full** — Complete CJM analysis with all data points and insights
 - **Health-Check** — Assess overall funnel health and drop-off zones
 - **Comparison** — Compare customer journeys across platforms or segments
-- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`)
+- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`); since v0.20.0 editing on the page — the switch «Редагувати» on every page of the map, the edits handed over as a file or a copied text and taken through the board's preview (`journey-protocol.md` §9, §12, `journey_map.py page-diff`)
 
 **Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
 
@@ -681,7 +683,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.19.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio and nested maps |
+| CJM Research | v0.20.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio, nested maps and editing on its page |
 | Product Analysis | v0.19.1 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.1 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
@@ -1132,5 +1134,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.11.0  
+**Version:** 4.12.0  
 **Last Updated:** November 2026

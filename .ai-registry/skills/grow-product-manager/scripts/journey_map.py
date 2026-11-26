@@ -13,6 +13,8 @@
   board-diff   the board's last state against a read-back: what the team changed, moved, added and removed, the
                health-check edits apart (named, never taken)
   board-take   what the PM took from the board into the note — every other byte kept; --dry-run is the preview
+  page-diff    the edits made on the map's page (v4.12.0) — a file the page saved, or the text it copied — as a diff
+               board-take reads: one preview for the board's and the page's edits, a child's rows into its own note
   nest         the nesting (v4.10.0): the map's subtree of child maps by their `parent` links, each child's roll-up
                (pains by class, anomalies, outcome metric, last health point) — never a copy of a row — and the
                findings of the nesting; nothing written
@@ -61,7 +63,7 @@ FINDINGS = ("no_owner", "stale_review", "no_outcome", "empty_stage", "undeclared
             "pain_no_action", "few_solutions", "stale_metric", "duplicate_id", "link", "secret", "contact")
 MODEL_FINDINGS = ("opportunity_no_story", "two_pains", "person_name")
 COMMANDS = ("parse", "check", "render-html", "health", "refresh", "tree", "board-layout", "board-state", "board-diff",
-            "board-take", "nest", "schema")
+            "board-take", "page-diff", "nest", "schema")
 NEST_FINDINGS = ("orphan_child", "nest_cycle", "too_deep", "other_product_parent", "self_parent")
 ORPHAN_WHY = ("no_parent", "bad_parent", "no_stage", "no_stage_in_parent", "no_step")       # why a child hangs on nothing (§14)
 MAX_DEPTH = 3                                    # root → child → grandchild (R38); deeper is a reference by name only
@@ -653,12 +655,12 @@ def write_text(path, text):
 
 # ------------------------------------------------------------------ html
 LABELS = {
-    "uk": {"title": "Карта шляху", "note": "Нотатка", "owner": "Власник", "reviewed": "Рев'ю", "generated": "Згенеровано",
+    "uk": {"lang": "uk", "title": "Карта шляху", "note": "Нотатка", "owner": "Власник", "reviewed": "Рев'ю", "generated": "Згенеровано",
            "health": "Здоров'я", "no_trend": "тренду немає — у знімках немає health_score у frontmatter",
            "gap": "немає доказів", "target": "ціль", "no_outcome": "⚠️ TBD", "lanes": "Доріжки",
            "not_shown": "Рядків не показано: %d — без джерела чи доказу, поза етапами або доріжками; їх називають знахідки нотатки",
            "lane": dict(LANES)},
-    "en": {"title": "Journey map", "note": "Note", "owner": "Owner", "reviewed": "Reviewed", "generated": "Generated",
+    "en": {"lang": "en", "title": "Journey map", "note": "Note", "owner": "Owner", "reviewed": "Reviewed", "generated": "Generated",
            "health": "Health", "no_trend": "no trend — no snapshot has health_score in its frontmatter",
            "gap": "no evidence", "target": "target", "no_outcome": "⚠️ TBD", "lanes": "Lanes",
            "not_shown": "Rows not shown: %d — no source or evidence, off the stages or lanes; the note's findings name them",
@@ -734,10 +736,325 @@ TREE_LABELS = {"uk": {"children": "Дочірні карти", "above": "Над 
                       "open its note (past three levels — a name only)", "deeper_list": "Deeper — maps of their own: %s"}}
 
 
-def _grid(note, L, chips=None):
+# ------------------------------------------------------------------ editing on the page (v4.12.0, §9)
+# The switch «Редагувати» on every page of the map (the user's decision, 2026-11-25): the page reads what it may edit from
+# the attributes of its markup (`edit_attrs`), keeps the edits in memory and hands them over as a file of edits — saved, or
+# copied as text — never a request; `page-diff` turns that file into a diff the board's take reads (§12). The script is
+# fixed bytes: no data of a note ever goes into it.
+EDIT_KIND = "journey-page-edits"
+EDIT_VERSION = 1
+EDIT_OPS = ("text", "move", "add", "remove", "parent", "code", "target")
+EDIT_ATTRS = ("map", "digest", "stage", "lane", "title", "row", "parent", "code", "target", "locked")
+PAGE_SOURCE = {"uk": "сторінка команди", "en": "team page"}
+EDIT_LABELS = {
+    "uk": {"on": "Редагувати", "off": "Готово", "save": "Зберегти правки", "copy": "Скопіювати правки",
+           "count": "Правок: %d", "copied": "Скопійовано. Встав правки в чат із PM: вони потраплять у карту після його перегляду.",
+           "copyfail": "Копіювання заблоковане — виділи текст у полі нижче й скопіюй його.",
+           "saved": "Файл правок збережено — надішли його PM.",
+           "savefail": "Збереження заблоковане — скористайся «Скопіювати правки».",
+           "locked": "Цей рядок не редагується тут: метрики й рядки health-check оновлює сам health-check.",
+           "unsaved": "Є незбережені правки.", "moved": "Рядок перенесено. Щоб повернути, відкрий його й натисни «Відмінити правки рядка».",
+           "help": "Перетягни картку в іншу клітинку, щоб перенести її. Клацни картку, щоб змінити текст і звʼязки. «+ Додати» "
+                   "в клітинці створює новий рядок. Сторінка нічого не надсилає: коли закінчиш, натисни «Скопіювати правки» "
+                   "й передай їх PM — у карту вони потраплять лише після його перегляду («забери правки зі сторінки карти шляху»).",
+           "t-row": "Редагування рядка", "t-new": "Новий рядок", "text": "Текст", "stage": "Етап", "lane": "Доріжка",
+           "parent": "Належить до (parent)", "ph": "Рядок цього етапу, з якого виростає цей: біль і рішення — з можливості, "
+           "експеримент — з рішення, ініціатива — з болю, можливості чи рішення.",
+           "pnone": "На цьому етапі ще немає рядка, до якого можна привʼязати цей. Спершу додай його.",
+           "c-init": "Код епіка чи фічі в Jira, наприклад PROJ-123", "c-exp": "Id експерименту з реєстру, наприклад exp-назва-20261020",
+           "target": "Цільова можливість етапу (лише одна на етап)", "remove": "Прибрати рядок з карти",
+           "restore": "Повернути рядок", "reset": "Відмінити правки рядка", "close": "Закрити",
+           "apply": "Застосувати", "cancel": "Скасувати", "none": "— не вказано —", "add": "+ Додати",
+           "b-edit": "змінено", "b-new": "новий", "b-gone": "прибрано",
+           "you": "ти", "someone": "колега", "by": "Останню правку зробив(ла): %s", "syncfail": "Правку не збережено у спільне сховище — перевір доступ і спробуй ще раз.",
+           "s-wait": "Підключаю спільні правки…", "s-slow": "Спільні правки поки недоступні — можливо, немає звʼязку.",
+           "s-on": "Спільні правки: усі бачать їх одразу", "s-off": "Спільні правки недоступні", "s-stale": "%d старих правок не показано",
+           "help-shared": "Правки зберігаються одразу, і всі, хто має доступ до редагування, бачать їх наживо. Перетягни картку, щоб перенести; клацни, щоб змінити текст і звʼязки; «+ Додати» створює рядок. У карту правки потрапляють лише після перегляду PM («забери правки зі сторінки карти шляху»)."},
+    "en": {"on": "Edit", "off": "Done", "save": "Save edits", "copy": "Copy edits",
+           "count": "Edits: %d", "copied": "Copied. Paste the edits into a chat with the PM: they reach the map after the PM's preview.",
+           "copyfail": "Copying is blocked — select the text in the field below and copy it.",
+           "saved": "The file of edits is saved — send it to the PM.",
+           "savefail": "Saving is blocked — use «Copy edits».",
+           "locked": "This row is not edited here: the health-check updates metrics and its own rows.",
+           "unsaved": "There are unsaved edits.", "moved": "The row is moved. To undo, open it and press «Undo this row's edits».",
+           "help": "Drag a card into another cell to move it. Click a card to change its text and links. «+ Add» in a cell "
+                   "creates a row. The page sends nothing: when you are done, press «Copy edits» and give them to the PM — "
+                   "they reach the map only after the PM's preview («take the edits from the journey map's page»).",
+           "t-row": "Edit the row", "t-new": "New row", "text": "Text", "stage": "Stage", "lane": "Lane",
+           "parent": "Belongs to (parent)", "ph": "A row of this stage it grows from: a pain or a solution from an opportunity, "
+           "an experiment from a solution, an initiative from a pain, an opportunity or a solution.",
+           "pnone": "This stage has no row this one can belong to yet. Add it first.",
+           "c-init": "The epic's or feature's Jira code, e.g. PROJ-123", "c-exp": "The experiment's registry id, e.g. exp-name-20261020",
+           "target": "The stage's target opportunity (one per stage)", "remove": "Remove the row from the map",
+           "restore": "Bring the row back", "reset": "Undo this row's edits", "close": "Close",
+           "apply": "Apply", "cancel": "Cancel", "none": "— not set —", "add": "+ Add",
+           "b-edit": "edited", "b-new": "new", "b-gone": "removed",
+           "you": "you", "someone": "a colleague", "by": "Last edited by: %s", "syncfail": "The edit is not saved to the shared store — check your access and try again.",
+           "s-wait": "Connecting the shared edits…", "s-slow": "The shared edits are not reachable yet — maybe no connection.",
+           "s-on": "Shared edits: everyone sees them at once", "s-off": "The shared edits are unavailable", "s-stale": "%d old edits not shown",
+           "help-shared": "Edits are saved at once, and everyone who may edit sees them live. Drag a card to move it; click it to change its text and links; «+ Add» creates a row. Edits reach the map only after the PM's preview («take the edits from the journey map's page»)."},
+}
+CSS_EDIT = r"""
+.edit-bar{margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}.edit-bar button,.edit-form button{font:inherit;padding:6px 12px;border:1px solid #adb5bd;border-radius:6px;background:#fff;color:#1f2328;cursor:pointer}
+.edit-bar button:hover,.edit-form button:hover{background:#f1f3f5}.edit-bar .edit-toggle{border-color:#1c7ed6;color:#1c7ed6;font-weight:600}.edit-bar .edit-toggle::before{content:"\270E  "}
+body.editing .edit-bar{position:sticky;top:0;z-index:20;background:#fff;border:1px solid #d0d7de;border-radius:10px;padding:10px 12px;box-shadow:0 4px 14px rgba(0,0,0,.08)}
+body.editing .edit-bar .edit-toggle{background:#1c7ed6;color:#fff}body.editing .edit-bar .edit-toggle::before{content:"\2713  "}
+.edit-bar .edit-copy{border-color:#2b8a3e;color:#2b8a3e;font-weight:600}.edit-count{padding:3px 10px;border-radius:999px;background:#f1f3f5;color:#57606a;font-size:13px}.edit-count.some{background:#fff3bf;color:#7c5800;font-weight:600}
+.edit-msg{display:none;flex-basis:100%;padding:8px 10px;border-radius:6px;background:#e7f5ff;color:#1864ab;font-size:13px}.edit-msg.shown{display:block}
+.edit-bar .edit-help{flex-basis:100%;margin:0;color:#57606a;font-size:13px;line-height:1.5}
+.edit-bar .edit-save,.edit-bar .edit-copy,.edit-bar .edit-count,.edit-bar .edit-help{display:none}body.editing .edit-bar .edit-save,body.editing .edit-bar .edit-copy,body.editing .edit-bar .edit-count{display:inline-block}body.editing .edit-bar .edit-help{display:block}
+.edit-sync{display:none;font-size:13px;color:#2b8a3e}body.shared .edit-sync{display:inline-block}body.shared .edit-sync::before{content:"\25CF  "}
+body.readonly .edit-toggle{display:none}body.shared.editing .edit-bar .edit-save,body.shared.editing .edit-bar .edit-copy{display:none}
+body:not(.shared) .edit-bar .edit-help-shared,body.shared.editing .edit-bar .edit-help:not(.edit-help-shared){display:none!important}
+.f-who{margin:-8px 0 0;color:#868e96;font-size:12px}.f-who:empty{display:none}
+.edit-out{flex-basis:100%;min-height:70px;max-height:140px;font:12px monospace}body.has-edits .edit-bar .edit-help{display:none}
+@media (min-width:900px){body.panel{padding-right:396px}}
+.edit-add{display:none;width:100%;margin-top:4px;font:inherit;font-size:12px;border:1px dashed #ced4da;border-radius:6px;background:transparent;color:#868e96;cursor:pointer;padding:3px 6px;text-align:left}
+body.editing .edit-add{display:block;opacity:.3}body.editing td:hover>.edit-add,body.editing .edit-add:focus{opacity:1}@media (hover:none){body.editing .edit-add{opacity:1}}.edit-add:hover{border-color:#1c7ed6;color:#1c7ed6;background:#e7f5ff}
+body.editing .item[data-row],body.editing .item.added{cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;position:relative}body.editing .item[data-row]:hover,body.editing .item.added:hover{box-shadow:0 0 0 2px #74c0fc}
+body.editing .item[data-locked]{cursor:not-allowed;opacity:.65;touch-action:auto}body.editing .item[data-locked]:hover{box-shadow:none}body.drag-on,body.drag-on *{cursor:grabbing!important}
+.item.dragging{opacity:.35}.drag-ghost{position:fixed;z-index:50;margin:0;pointer-events:none;transform-origin:0 0;transform:rotate(1deg);box-shadow:0 8px 24px rgba(0,0,0,.2);opacity:.95}
+td.drop-ok{background:#e7f5ff!important;outline:2px dashed #1c7ed6;outline-offset:-3px}
+.item.edited{box-shadow:0 0 0 2px #f08c00}.item.removed{opacity:.45;text-decoration:line-through}.item.added{border-left-color:#f08c00;background:#fff9db}.item.current{box-shadow:0 0 0 3px #1c7ed6!important}
+.item[data-eb]::after{content:attr(data-eb);position:absolute;top:-8px;right:6px;padding:0 6px;border-radius:999px;background:#f08c00;color:#fff;font-size:10px;line-height:16px;text-decoration:none}
+.edit-form{position:fixed;top:0;right:0;bottom:0;z-index:30;width:min(380px,100vw);background:#fff;border-left:1px solid #d0d7de;box-shadow:-8px 0 24px rgba(0,0,0,.12);padding:16px;display:flex;flex-direction:column;gap:12px;overflow:auto;box-sizing:border-box}
+.edit-form[hidden],.edit-form [hidden]{display:none}.f-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.f-title{font-size:16px}.edit-form .f-close{border:0;font-size:20px;padding:0 6px;line-height:1}
+.f-where{margin:-6px 0 0;color:#57606a;font-size:13px}.edit-form label{display:flex;flex-direction:column;font-size:13px;font-weight:600;color:#343a40;gap:4px}.edit-form label.chk{flex-direction:row;align-items:center;gap:8px;font-weight:400}
+.edit-form small{font-weight:400;color:#868e96;line-height:1.4}.f-two{display:flex;gap:8px}.f-two label{flex:1;min-width:0}
+.edit-form textarea{min-height:80px;font:inherit;font-weight:400;padding:6px;border:1px solid #ced4da;border-radius:6px}.edit-form select,.edit-form input:not([type]){font:inherit;font-weight:400;padding:5px;border:1px solid #ced4da;border-radius:6px;min-width:0}
+.f-acts{display:flex;gap:8px}.edit-form .f-apply{background:#1c7ed6;border-color:#1c7ed6;color:#fff;font-weight:600}.edit-form .f-apply:hover{background:#1971c2}
+.f-more{margin-top:auto;padding-top:12px;border-top:1px solid #e9ecef;display:flex;flex-direction:column;gap:6px;align-items:flex-start}.edit-form .f-more button{border:0;padding:4px 0;background:none;color:#57606a}.edit-form .f-remove{color:#c92a2a!important}
+@media (max-width:640px){.edit-form{top:auto;left:0;width:100%;max-height:85vh;border-left:0;border-top:1px solid #d0d7de;border-radius:12px 12px 0 0}}"""
+# Fixed bytes — no data of a note in it — and no request: the page's edits, a file or a copied text, nothing sent.
+EDIT = r'''(function(){var bar=document.querySelector(".edit-bar");if(!bar)return;
+function q(s,r){return(r||document).querySelector(s);}
+function qa(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));}
+function A(e,k){return(e&&e.getAttribute("data-"+k))||"";}
+function L(k){return A(bar,"l-"+k);}
+var P={pain:["opportunity"],solution:["opportunity"],experiment:["solution"],initiative:["pain","opportunity","solution"]};
+var CODE={initiative:"c-init",experiment:"c-exp"},LOCK={metric:1,anomaly:1},FLAG="🎯 ",SEP="\u0001";
+var ed={},meta={},adds={},nadd=0,cur=null,dirty=false,drag=null,dragged=false,home={},items={},names={};
+var shared=null,me=null,canWrite=true,stale=0;
+var form=q(".edit-form",bar),out=q(".edit-out",bar),cnt=q(".edit-count",bar),msg=q(".edit-msg",bar),tog=q(".edit-toggle",bar),
+sync=q(".edit-sync",bar);
+var f={title:q(".f-title",form),where:q(".f-where",form),who:q(".f-who",form),text:q(".f-text",form),stage:q(".f-stage",form),
+lane:q(".f-lane",form),parent:q(".f-parent",form),phint:q(".f-phint",form),code:q(".f-code",form),clabel:q(".f-clabel",form),
+target:q(".f-target",form),remove:q(".f-remove",form),reset:q(".f-reset",form)};
+function on(){return document.body.classList.contains("editing");}
+function say(k,keep){msg.textContent=k?L(k):"";msg.className="edit-msg"+(k?" shown":"");clearTimeout(say.t);
+if(k&&!keep)say.t=setTimeout(function(){say("");},6000);}
+function box(el,show){(el.closest(".f-box")||el).hidden=!show;}
+function wrapOf(e){return e.closest(".wrap");}
+function own(list,w){return list.filter(function(e){return e.closest(".wrap")===w;});}
+function key(w,row){return A(w,"map")+SEP+row;}
+function wrapByMap(m){return qa(".wrap[data-map]").filter(function(x){return A(x,"map")===m;})[0];}
+function txt(it){var t=q(".t",it).textContent;return t.indexOf(FLAG)===0?t.slice(FLAG.length):t;}
+function cellOf(it){var td=it.closest("td");return{stage:A(td,"stage"),lane:A(td,"lane")};}
+function stagesOf(w){var tr=own(qa("tbody tr",w),w)[0],ths=own(qa("thead th.stage",w),w);if(!tr)return[];
+return own(qa("td[data-stage]",tr),w).map(function(td,i){var th=ths[i],n=th&&th.firstChild&&th.firstChild.nodeType===3?th.firstChild.nodeValue:A(td,"stage");
+return{id:A(td,"stage"),name:n};});}
+function lanesOf(w){return own(qa("tbody tr",w),w).map(function(tr){var td=q("td[data-lane]",tr),th=q("th",tr);
+return td?{id:A(td,"lane"),name:th?th.textContent:A(td,"lane")}:null;}).filter(function(x){return x&&!LOCK[x.id];});}
+function nameOf(list,id){for(var i=0;i<list.length;i++){if(list[i].id===id)return list[i].name;}return id;}
+function tdOf(w,stage,lane){return own(qa("td[data-stage]",w),w).filter(function(t){return A(t,"stage")===stage&&A(t,"lane")===lane;})[0];}
+function place(it,td){if(td&&it.parentNode!==td)td.insertBefore(it,q(".edit-add",td));}
+qa("td[data-stage]").forEach(function(td){if(LOCK[A(td,"lane")])return;var b=document.createElement("button");
+b.type="button";b.className="edit-add";b.textContent=L("add");td.appendChild(b);});
+qa(".item[data-row]").forEach(function(it,i){var w=wrapOf(it);if(!w)return;var c=cellOf(it),k=key(w,A(it,"row"));items[k]=it;
+home[k]={o:{text:txt(it),stage:c.stage,lane:c.lane,parent:A(it,"parent"),code:A(it,"code"),target:A(it,"target")==="1"},
+td:it.parentNode,ord:i,t:q(".t",it).textContent};it._ord=i;});
+function now(k){var h=home[k],e=ed[k]||{},v={};for(var x in h.o){v[x]=e.hasOwnProperty(x)?e[x]:h.o[x];}v.remove=!!e.remove;return v;}
+function who(by){return by?(by===me?L("you"):names[by]||L("someone")):"";}
+function badge(it,k,by){if(k){it.setAttribute("data-eb",L(k)+(shared&&by?" · "+who(by):""));}else{it.removeAttribute("data-eb");}}
+function render(){var tds=[];for(var k in home){if(!home.hasOwnProperty(k))continue;var it=items[k],h=home[k];
+if(it.parentNode!==h.td){h.td.insertBefore(it,q(".edit-add",h.td));if(tds.indexOf(h.td)<0)tds.push(h.td);}
+q(".t",it).textContent=h.t;it.classList.remove("edited");it.classList.remove("removed");badge(it,"");}
+tds.forEach(function(td){qa(":scope > .item[data-row]",td).sort(function(a,b){return a._ord-b._ord;}).forEach(function(it){
+td.insertBefore(it,q(".edit-add",td));});});
+qa(".item.added").forEach(function(d){d.remove();});
+for(var j in ed){if(!ed.hasOwnProperty(j)||!items[j])continue;var e=ed[j],it2=items[j],v=now(j),w=wrapOf(it2);
+if(e.hasOwnProperty("text")||e.hasOwnProperty("target"))q(".t",it2).textContent=(v.target?FLAG:"")+v.text;
+if(e.hasOwnProperty("stage")||e.hasOwnProperty("lane"))place(it2,tdOf(w,v.stage,v.lane));
+it2.classList.toggle("edited",!e.remove);it2.classList.toggle("removed",!!e.remove);badge(it2,e.remove?"b-gone":"b-edit",(meta[j]||{}).by);}
+Object.keys(adds).sort().forEach(function(id){var a=adds[id],w2=wrapByMap(a.map);if(!w2)return;var d=document.createElement("div");
+d.className="item added";d.setAttribute("data-add",id);d.setAttribute("tabindex","0");badge(d,"b-new",a.by);
+var t=document.createElement("div");t.className="t";t.textContent=(a.target?FLAG:"")+a.text;d.appendChild(t);place(d,tdOf(w2,a.stage,a.lane));});
+count2();}
+function count2(){var n=Object.keys(adds).length+Object.keys(ed).length;
+cnt.textContent=L("count").replace("%d",n);cnt.classList.toggle("some",n>0);document.body.classList.toggle("has-edits",n>0);dirty=!shared&&n>0;}
+function docId(s){return s.replace(/[^A-Za-z0-9_\-.:+]/g,function(c){return"~"+c.charCodeAt(0).toString(16)+"~";}).slice(0,190);}
+function stamp(){return{by:me||"",at:new Date().toISOString()};}
+function commitRow(k,e){var has=false;for(var y in e){if(e.hasOwnProperty(y))has=true;}
+if(has){ed[k]=e;meta[k]=stamp();}else{delete ed[k];delete meta[k];}render();
+if(shared){var p=k.split(SEP),w=wrapByMap(p[0]),ref=shared.collection("edits").doc(docId("r~"+p[0]+"~"+p[1]));
+(has?ref.set({kind:"row",map:p[0],row:p[1],digest:A(w,"digest"),edit:e,by:me||"",at:meta[k].at}):ref.delete()).catch(fail);}}
+function commitAdd(id,a){if(a){a.by=me||"";adds[id]=a;}else{delete adds[id];}render();
+if(shared){var w=a?wrapByMap(a.map):null,ref=shared.collection("edits").doc(id);
+(a?ref.set({kind:"add",map:a.map,digest:A(w,"digest"),add:{stage:a.stage,lane:a.lane,text:a.text,parent:a.parent,code:a.code,
+target:!!a.target},by:me||"",at:new Date().toISOString()}):ref.delete()).catch(fail);}}
+function fail(){say("syncfail",1);}
+function opt(sel,value,label,pick){var o=document.createElement("option");o.value=value;o.textContent=label;if(pick)o.selected=true;
+sel.appendChild(o);}
+function fillSel(sel,list,value){sel.innerHTML="";list.forEach(function(x){opt(sel,x.id,x.name,x.id===value);});}
+function fillParents(w,stage,lane,value,self){f.parent.innerHTML="";opt(f.parent,"",L("none"),!value);var ok=P[lane]||[],n=0,ls=lanesOf(w);
+own(qa(".item[data-row]",w),w).forEach(function(it){var c=cellOf(it);if(c.stage!==stage||ok.indexOf(c.lane)<0||A(it,"row")===self||
+it.classList.contains("removed"))return;n++;var t=txt(it);opt(f.parent,A(it,"row"),nameOf(ls,c.lane)+": "+(t.length>60?t.slice(0,58)+"…":t),
+A(it,"row")===value);});if(value&&f.parent.value!==value)opt(f.parent,value,value,true);
+f.phint.textContent=n?L("ph"):L("pnone");box(f.parent,!!P[lane]);}
+function lanes(){if(!cur)return;var st=f.stage.value,ln=f.lane.value;box(f.code,!!CODE[ln]);f.clabel.textContent=CODE[ln]?L(CODE[ln]):"";
+box(f.target,ln==="opportunity");fillParents(cur.w,st,ln,f.parent.value||cur.v.parent,cur.row||"");
+f.where.textContent=nameOf(cur.ss,st)+" · "+nameOf(cur.ls,ln);}
+f.stage.addEventListener("change",lanes);f.lane.addEventListener("change",lanes);
+function open(c){cur=c;var v=c.v;c.ss=stagesOf(c.w);c.ls=lanesOf(c.w);f.text.value=v.text;fillSel(f.stage,c.ss,v.stage);fillSel(f.lane,c.ls,v.lane);
+fillParents(c.w,v.stage,v.lane,v.parent,c.row||"");f.code.value=v.code;f.target.checked=!!v.target;
+f.title.textContent=c.row?L("t-row"):L("t-new");f.remove.textContent=c.row&&v.remove?L("restore"):L("remove");
+var by=c.row?(meta[c.k]||{}).by:c.add!=null?adds[c.add].by:"";f.who.textContent=shared&&by?L("by").replace("%s",who(by)):"";
+box(f.remove,!!c.row||c.add!=null);box(f.reset,!!c.row&&!!ed[c.k]);lanes();form.hidden=false;document.body.classList.add("panel");
+qa(".item.current").forEach(function(x){x.classList.remove("current");});if(c.it)c.it.classList.add("current");f.text.focus();}
+function close(){form.hidden=true;document.body.classList.remove("panel");qa(".item.current").forEach(function(x){x.classList.remove("current");});cur=null;}
+function openRow(it){var w=wrapOf(it),k=key(w,A(it,"row"));open({w:w,it:it,row:A(it,"row"),k:k,v:now(k)});}
+function openAdd(td,id,it){var w=wrapOf(td);var a=id!=null?adds[id]:{map:A(w,"map"),stage:A(td,"stage"),lane:A(td,"lane"),text:"",parent:"",code:"",target:false};
+open({w:w,td:td,add:id,it:it||null,v:{text:a.text,stage:a.stage,lane:a.lane,parent:a.parent,code:a.code,target:a.target,remove:false}});}
+function diff(k,v){var o=home[k].o,e={};["text","stage","lane","parent","code","target"].forEach(function(x){if(v[x]!==o[x])e[x]=v[x];});
+return v.remove?{remove:true}:e;}
+function vals(){var st=f.stage.value,ln=f.lane.value,o=cur.row?home[cur.k].o:{parent:"",code:"",target:false};
+return{text:f.text.value.replace(/\s+/g," ").trim(),stage:st,lane:ln,parent:P[ln]?f.parent.value:o.parent,
+code:CODE[ln]?f.code.value.trim():o.code,target:ln==="opportunity"?f.target.checked:o.target,remove:false};}
+function newId(){nadd++;return"a~"+(me?docId(me).slice(-12):"local")+"~"+Date.now().toString(36)+nadd;}
+function apply(){if(!cur)return;var v=vals();if(!v.text){f.text.focus();return;}
+if(cur.row){commitRow(cur.k,diff(cur.k,v));}
+else{commitAdd(cur.add!=null?cur.add:newId(),{map:A(cur.w,"map"),stage:v.stage,lane:v.lane,text:v.text,parent:v.parent,code:v.code,target:v.target});}
+close();}
+function remove(){if(!cur)return;if(cur.row){var v=now(cur.k);v.remove=!v.remove;commitRow(cur.k,diff(cur.k,v));}
+else if(cur.add!=null){commitAdd(cur.add,null);}close();}
+function reset(){if(!cur||!cur.row)return;commitRow(cur.k,{});close();}
+q(".f-apply",form).addEventListener("click",apply);q(".f-cancel",form).addEventListener("click",close);q(".f-close",form).addEventListener("click",close);
+f.remove.addEventListener("click",remove);f.reset.addEventListener("click",reset);
+form.addEventListener("keydown",function(e){if(e.key==="Escape"){e.preventDefault();close();}
+else if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();apply();}});
+function target(x,y){var el=document.elementFromPoint(x,y),td=el&&el.closest("td[data-stage]");
+return td&&drag&&wrapOf(td)===drag.w&&!LOCK[A(td,"lane")]?td:null;}
+function lit(td){qa("td.drop-ok").forEach(function(t){if(t!==td)t.classList.remove("drop-ok");});if(td)td.classList.add("drop-ok");}
+document.addEventListener("pointerdown",function(ev){if(!on()||ev.button!==0)return;var it=ev.target.closest(".item[data-row],.item.added");
+if(!it||it.closest(".edit-bar")||A(it,"locked")||it.classList.contains("chip"))return;ev.stopPropagation();
+var rb=it.getBoundingClientRect();drag={it:it,x:ev.clientX,y:ev.clientY,ox:ev.clientX-rb.left,oy:ev.clientY-rb.top,go:false,w:wrapOf(it),g:null,cx:0,cy:0};},true);
+document.addEventListener("pointermove",function(ev){if(!drag)return;var dx=ev.clientX-drag.x,dy=ev.clientY-drag.y;
+if(!drag.go){if(Math.abs(dx)+Math.abs(dy)<6)return;drag.go=true;var g=drag.it.cloneNode(true);g.className+=" drag-ghost";
+g.style.width=drag.it.offsetWidth+"px";g.style.left="0px";g.style.top="0px";document.body.appendChild(g);drag.g=g;var z=g.getBoundingClientRect();drag.cx=z.left;drag.cy=z.top;
+drag.it.classList.add("dragging");document.body.classList.add("drag-on");}
+ev.preventDefault();drag.g.style.left=(ev.clientX-drag.ox-drag.cx)+"px";drag.g.style.top=(ev.clientY-drag.oy-drag.cy)+"px";
+var w=drag.w,r=w.getBoundingClientRect();if(ev.clientX>r.right-40)w.scrollLeft+=18;else if(ev.clientX<r.left+40)w.scrollLeft-=18;
+if(ev.clientY>window.innerHeight-40)window.scrollBy(0,18);else if(ev.clientY<40)window.scrollBy(0,-18);
+lit(target(ev.clientX,ev.clientY));},{passive:false});
+function drop(ev){if(!drag)return;var d=drag,td=d.go&&ev?target(ev.clientX,ev.clientY):null;drag=null;if(!d.go)return;dragged=true;
+setTimeout(function(){dragged=false;},0);lit(null);d.g.remove();d.it.classList.remove("dragging");document.body.classList.remove("drag-on");
+if(!td||td===d.it.parentNode)return;if(d.it.hasAttribute("data-row")){var k=key(d.w,A(d.it,"row")),v=now(k);v.stage=A(td,"stage");v.lane=A(td,"lane");
+if(!P[v.lane])v.parent=home[k].o.parent;commitRow(k,diff(k,v));}else{var id=A(d.it,"add"),a=adds[id];
+commitAdd(id,{map:a.map,text:a.text,stage:A(td,"stage"),lane:A(td,"lane"),parent:a.parent,code:a.code,target:a.target&&A(td,"lane")==="opportunity"});}
+say("moved");}
+document.addEventListener("pointerup",drop);document.addEventListener("pointercancel",function(){drop(null);});
+document.addEventListener("click",function(ev){if(!on()||dragged)return;
+var t=ev.target;if(t.closest(".edit-form")||t.closest(".edit-bar"))return;var w=t.closest(".wrap");if(w&&w._moved)return;
+var b=t.closest(".edit-add");if(b){openAdd(b.closest("td"),null);return;}
+var a=t.closest(".item.added");if(a){openAdd(a.closest("td"),A(a,"add"),a);return;}
+var it=t.closest(".item[data-row]");if(!it)return;if(A(it,"locked")){say("locked");return;}say("");openRow(it);});
+document.addEventListener("keydown",function(ev){if(!on()||ev.key!=="Enter")return;var t=ev.target;
+if(t.matches&&t.matches(".item[data-row],.item.added")){ev.preventDefault();t.click();}});
+tog.addEventListener("click",function(){var go=document.body.classList.toggle("editing");tog.textContent=go?L("off"):L("on");
+qa(".item[data-row]").forEach(function(it){if(go)it.setAttribute("tabindex","0");else if(!it.classList.contains("chip"))it.removeAttribute("tabindex");});
+if(!go)close();say("");});
+function build(){var day=new Date().toISOString().slice(0,10),maps={},n=0;
+function m(name){var w=wrapByMap(name);if(!maps[name])maps[name]={digest:A(w,"digest"),edits:[]};return maps[name].edits;}
+for(var k in ed){if(!ed.hasOwnProperty(k))continue;var p=k.split(SEP),e=ed[k],l=m(p[0]),r=p[1],o=home[k].o;
+if(e.remove){l.push({op:"remove",row:r});continue;}
+if(e.hasOwnProperty("text"))l.push({op:"text",row:r,text:e.text});
+if(e.hasOwnProperty("stage")||e.hasOwnProperty("lane"))l.push({op:"move",row:r,stage:e.hasOwnProperty("stage")?e.stage:o.stage,
+lane:e.hasOwnProperty("lane")?e.lane:o.lane});
+if(e.hasOwnProperty("parent"))l.push({op:"parent",row:r,parent:e.parent});
+if(e.hasOwnProperty("code"))l.push({op:"code",row:r,code:e.code});
+if(e.hasOwnProperty("target"))l.push({op:"target",row:r,target:!!e.target});}
+Object.keys(adds).sort().forEach(function(id){var a=adds[id];n++;m(a.map).push({op:"add",id:"p"+n,stage:a.stage,lane:a.lane,text:a.text,
+parent:a.parent,code:a.code,target:!!a.target});});
+return JSON.stringify({kind:"journey-page-edits",version:1,product:A(bar,"product"),root:A(bar,"root"),made:day,maps:maps},null,1);}
+function put(){out.value=build();out.hidden=true;return out.value;}
+q(".edit-save",bar).addEventListener("click",function(){var s=put();try{var u=URL.createObjectURL(new Blob([s],
+{type:"application/json"}));var a=document.createElement("a");a.href=u;a.download=A(bar,"root")+".page-edits.json";
+document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u);},1000);dirty=false;say("saved",1);}
+catch(_){out.hidden=false;say("savefail",1);}});
+q(".edit-copy",bar).addEventListener("click",function(){var s=put();function fb(){out.hidden=false;try{out.focus();out.select();
+if(document.execCommand("copy")){out.hidden=true;dirty=false;say("copied",1);}else say("copyfail",1);}catch(_){say("copyfail",1);}}
+try{navigator.clipboard.writeText(s).then(function(){dirty=false;say("copied",1);},fb);}catch(_){fb();}});
+window.addEventListener("beforeunload",function(e){if(dirty){e.preventDefault();e.returnValue=L("unsaved");return L("unsaved");}});
+function names2(ids,u){ids=ids.filter(function(x){return x&&!names.hasOwnProperty(x)&&x!==me;});if(!ids.length||!u)return;
+u.profiles(ids).then(function(ps){ids.forEach(function(x){names[x]=(ps[x]&&ps[x].name)||"";});render();},function(){});}
+function live(db,u){shared=db;document.body.classList.add("shared");sync.textContent=L("s-wait");var t=setTimeout(function(){sync.textContent=L("s-slow");},10000);
+db.collection("edits").onSnapshot(function(s){if(!s.metadata.fromCache){clearTimeout(t);sync.textContent=L("s-on");}
+var e2={},m2={},a2={},by=[];stale=0;s.docs.forEach(function(d){var x=d.data()||{},w=wrapByMap(String(x.map||""));
+if(!w){return;}if(x.digest!==A(w,"digest")){stale++;return;}
+if(x.kind==="row"&&x.edit&&typeof x.edit==="object"){var k=key(w,String(x.row||""));if(!home[k])return;e2[k]=x.edit;m2[k]={by:x.by,at:x.at};}
+else if(x.kind==="add"&&x.add&&typeof x.add==="object"){var a=x.add;a2[d.id]={map:String(x.map),stage:String(a.stage||""),lane:String(a.lane||""),
+text:String(a.text||""),parent:String(a.parent||""),code:String(a.code||""),target:!!a.target,by:x.by};}
+else return;by.push(String(x.by||""));});
+ed=e2;meta=m2;adds=a2;render();names2(by,u);if(stale)sync.textContent=L("s-on")+" · "+L("s-stale").replace("%d",stale);},
+function(){clearTimeout(t);sync.textContent=L("s-off");});}
+var C=window.claude;if(C&&typeof C.use==="function"){Promise.all([C.use("db"),C.use("user")]).then(function(r){var db=r[0],u=r[1];if(!db)return;
+var ask=u?Promise.all([u.id(),u.canEdit()]):Promise.resolve([null,true]);ask.then(function(x){me=x[0];canWrite=x[1]!==false;
+if(!canWrite){document.body.classList.add("readonly");}live(db,u);});},function(){});}
+count2();})();'''
+
+
+def edit_attrs(**kw):
+    """The page's editing attributes (§9): ` data-<k>="<v>"` for every value that is not empty, in the order given —
+    page-safe values only (the caller passes them through nt.safe), escaped here."""
+    return "".join(' data-%s="%s"' % (k, esc(v)) for k, v in kw.items() if v not in ("", None))
+
+
+def edit_bar(note, note_name, lang):
+    """The switch «Редагувати» and what it shows (§9): one line of markup, its words in the page's language — the
+    script reads them from the bar's attributes, never carries them. Since the user's review of 2026-11-25: cards are
+    dragged between cells, a side panel with labelled fields edits a row, «+ Додати» adds one."""
+    E = EDIT_LABELS.get(lang, EDIT_LABELS["en"])
+    words = "".join(' data-l-%s="%s"' % (k, esc(E[k])) for k in (
+        "on", "off", "count", "copied", "copyfail", "saved", "savefail", "locked", "unsaved", "moved", "none", "ph", "pnone",
+        "c-init", "c-exp", "t-row", "t-new", "remove", "restore", "add", "b-edit", "b-new", "b-gone", "you", "someone", "by",
+        "syncfail", "s-wait", "s-slow", "s-on", "s-off", "s-stale"))
+    return ('<div class="edit-bar"%s%s><button type="button" class="edit-toggle">%s</button><span class="edit-count"></span>'
+            '<button type="button" class="edit-copy">%s</button><button type="button" class="edit-save">%s</button>'
+            '<span class="edit-sync"></span><span class="edit-msg" role="status"></span><p class="edit-help">%s</p><p class="edit-help edit-help-shared">%s</p>'
+            '<div class="edit-form" hidden role="dialog"><div class="f-head"><b class="f-title"></b>'
+            '<button type="button" class="f-close" aria-label="%s">\u00d7</button></div><p class="f-where"></p><p class="f-who"></p>'
+            '<label>%s<textarea class="f-text"></textarea></label>'
+            '<div class="f-two"><label>%s<select class="f-stage"></select></label><label>%s<select class="f-lane"></select></label></div>'
+            '<label class="f-box">%s<select class="f-parent"></select><small class="f-phint"></small></label>'
+            '<label class="f-box"><span class="f-clabel"></span><input class="f-code"></label>'
+            '<label class="chk f-box"><input type="checkbox" class="f-target">%s</label>'
+            '<div class="f-acts"><button type="button" class="f-apply">%s</button><button type="button" class="f-cancel">%s</button></div>'
+            '<div class="f-more"><button type="button" class="f-reset">%s</button><button type="button" class="f-remove">%s</button></div></div>'
+            '<textarea class="edit-out" readonly hidden></textarea></div>') % (
+        edit_attrs(product=nt.safe(note["product"]), root=nt.safe(os.path.splitext(note_name)[0])), words,
+        esc(E["on"]), esc(E["copy"]), esc(E["save"]), esc(E["help"]), esc(E["help-shared"]), esc(E["close"]), esc(E["text"]), esc(E["stage"]),
+        esc(E["lane"]), esc(E["parent"]), esc(E["target"]), esc(E["apply"]), esc(E["cancel"]), esc(E["reset"]), esc(E["remove"]))
+
+
+EDIT_ATTR_RE = re.compile(r' data-(?:%s)="[^"]*"' % "|".join(EDIT_ATTRS))
+
+
+def strip_edit(page):
+    """The page without its editing (v4.12.0): the bar, its CSS, its script and its attributes — what is left is the page of
+    v4.10.0 byte for byte (the tests' regression)."""
+    page = page.replace(CSS_EDIT, "", 1).replace("\n<script>%s</script>" % EDIT, "", 1)
+    page = re.sub(r'\n<div class="edit-bar"[^\n]*', "", page, count=1)
+    return EDIT_ATTR_RE.sub("", page)
+
+
+def _grid(note, L, chips=None, name=None):
     """The lines of one map's grid: the rows the page may show, the gap marks, and — on a tree page — the chips of its
-    child maps at the top of their stage's first lane (`chips`: {stage id: [html]})."""
+    child maps at the top of their stage's first lane (`chips`: {stage id: [html]}). Since v4.12.0 the grid carries what
+    the page's editing reads (§9): the map's name and the digest of its rows on its frame, each cell's stage, lane and
+    title, each row's id, lane, parent, code, target and whether it is locked — attributes of the markup, page-safe, never
+    in the script."""
     chips = chips or {}
+    name = name if name is not None else os.path.splitext(os.path.basename(note.get("path") or ""))[0]
     out = []
     live = [r for r in note["rows"] if not r["gap"]]
     stages = note["stages"]
@@ -745,7 +1062,8 @@ def _grid(note, L, chips=None):
     hidden = sum(1 for r in live if not page_worthy(r, declared))
     if hidden:
         out.append('<p class="meta">%s</p>' % esc(L["not_shown"] % hidden))
-    out.append('<div class="wrap" tabindex="0"><table class="grid"><thead><tr><th class="corner"></th>')
+    out.append('<div class="wrap" tabindex="0"%s><table class="grid"><thead><tr><th class="corner"></th>' % edit_attrs(
+        map=nt.safe(name), digest=table_sig(note)["table"]))
     for s in stages:
         out.append('<th class="stage">%s · %s<div class="o">%s</div></th>' % (
             shown(s["id"]), shown(s["name"]), shown(s["outcome"] or L["no_outcome"])))
@@ -754,7 +1072,7 @@ def _grid(note, L, chips=None):
     for li, (lane, _) in enumerate(LANES):
         out.append('<tr><th class="lane">%s</th>' % esc(L["lane"][lane]))
         for s in stages:
-            out.append("<td>")
+            out.append("<td%s>" % edit_attrs(stage=nt.safe(s["id"]), lane=lane, title=nt.safe(cell_title(s["id"], lane, L["lang"]))))
             if li == 0 and not has_evidence[s["id"]]:
                 out.append('<div class="item gap">⚠️ %s</div>' % esc(L["gap"]))
             if li == 0:
@@ -765,8 +1083,11 @@ def _grid(note, L, chips=None):
                 tg = r["target"].strip().lower() in YES and lane == "opportunity"
                 meta = " · ".join(x for x in (r["step"], r["level"] if lane == "metric" else "", r["code"], r["source"],
                                               r["class"], r["date"], L["target"] if tg else "") if x)
-                out.append('<div class="item l-%s%s"><div class="t">%s%s</div><div class="m">%s</div></div>' % (
-                    esc(lane), " target" if tg else "", "🎯 " if tg else "", shown(r["text"]), shown(meta)))
+                out.append('<div class="item l-%s%s"%s><div class="t">%s%s</div><div class="m">%s</div></div>' % (
+                    esc(lane), " target" if tg else "", edit_attrs(
+                        row=nt.safe(r["id"]), lane=lane, parent=nt.safe(r["parent"]), code=nt.safe(r["code"].strip()),
+                        target="1" if tg else "", locked="1" if (_locked(r) or not r["id"]) else ""),
+                    "🎯 " if tg else "", shown(r["text"]), shown(meta)))
             out.append("</td>")
         out.append("</tr>")
     out.append("</tbody></table></div>")
@@ -797,7 +1118,7 @@ def _tree_parts(nest, lang):
             body.append('<p class="meta">%s: %s · %s · %s: %s · %s: %s</p>' % (
                 esc(L["note"]), esc(k["note"] + ".md"), shown(kn["product"]), esc(L["owner"]), shown(kn["owner"] or "⚠️"),
                 esc(L["reviewed"]), shown(kn["reviewed"] or "⚠️")))
-            body.extend(_grid(kn, L, kchips))
+            body.extend(_grid(kn, L, kchips, k["note"]))
             body.extend(kbody)
             body.append("</details>")
         for x in n["deeper"]:
@@ -815,19 +1136,22 @@ def _tree_parts(nest, lang):
 def render_html(note, note_name, lang, nest=None):
     """The page of the map — and, given its nesting (`nest_of`) with child maps, maps above it or references past the
     depth, the tree page of §14: the same grid with a roll-up chip on each child's step and each child's grid in a
-    <details> below. A map without any of them is the page of v4.9.0, byte for byte."""
+    <details> below. A map without any of them is the page of v4.9.0, byte for byte — apart from the editing of v4.12.0
+    (§9): the switch «Редагувати», its CSS, its one fixed script and the attributes it reads (`strip_edit` removes exactly
+    them)."""
     L = LABELS.get(lang, LABELS["en"])
     tree = nest is not None and bool(nest["tree"]["children"] or nest["tree"]["deeper"] or nest["ancestors"])
     T = TREE_LABELS.get(lang, TREE_LABELS["en"])
     title = note["journey"] or note["title"] or note_name
     out = ["<!doctype html>", '<html lang="%s"><head><meta charset="utf-8">' % esc(lang),
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(title), CSS + (CSS_TREE if tree else "")),
+           "<title>%s — %s</title><style>%s</style></head><body>" % (esc(L["title"]), shown(title), CSS + (CSS_TREE if tree else "") + CSS_EDIT),
            "<h1>%s: %s</h1>" % (esc(L["title"]), shown(title)),
            '<p class="meta">%s: %s · %s · %s: %s · %s: %s</p>' % (
                esc(L["note"]), shown(note_name), shown(note["product"]), esc(L["owner"]), shown(note["owner"] or "⚠️"),
                esc(L["reviewed"]), shown(note["reviewed"] or "⚠️")),
-           '<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(datetime.date.today().isoformat()))]
+           '<p class="meta">%s: %s</p>' % (esc(L["generated"]), esc(datetime.date.today().isoformat())),
+           edit_bar(note, note_name, lang)]
     if tree and nest["ancestors"]:
         out.append('<p class="meta">%s</p>' % esc(T["above"] % " → ".join(
             "«%s» (%s)" % (a["journey"], a["note"]) for a in nest["ancestors"])))
@@ -841,11 +1165,12 @@ def render_html(note, note_name, lang, nest=None):
     else:
         out.append('<p class="meta">%s</p>' % esc(L["no_trend"]))
     chips, body = _tree_parts(nest, lang) if tree else ({}, [])
-    out.extend(_grid(note, L, chips))
+    out.extend(_grid(note, L, chips, os.path.splitext(note_name)[0]))
     if body:
         out.append("<h2>%s</h2>" % esc(T["children"]))
         out.extend(body)
     out.append("<script>%s</script>" % (PAN_TREE if tree else PAN))
+    out.append("<script>%s</script>" % EDIT)
     out.append("</body></html>")
     return "\n".join(out) + "\n"
 
@@ -1258,11 +1583,14 @@ def nest_text(nest):
 
 # ------------------------------------------------------------------ the board (§11–§12, since v4.8.0)
 BOARD_ROLES = ("cell", "row", "header", "lane_name", "rollup", "team", "orphan", "frame", "other")
-DIFF_CATEGORIES = ("changed", "moved", "added", "removed", "orphaned", "hc_edits", "other", "unrecorded")
+DIFF_CATEGORIES = ("changed", "moved", "added", "removed", "relinked", "recoded", "retargeted", "orphaned", "hc_edits",
+                   "other", "unrecorded")
+LINK_CATEGORIES = ("relinked", "recoded", "retargeted")       # only from the page (v4.12.0): a board's sticky carries no link
 TAKE_REFUSED = ("health_check", "metric_lane", "no_cell", "needs_drop", "not_removed", "taken", "secret", "empty",
                 "not_takeable", "unknown", "other_note", "conflict")
-TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code", "unused")
-COUNTED = ("changed", "moved", "added", "removed", "orphaned", "hc_edits")
+TAKE_NAMED = ("contact_removed", "link_removed", "no_class", "bad_class", "orphan", "bad_parent", "bad_code", "bad_target",
+              "unused")
+COUNTED = ("changed", "moved", "added", "removed", "relinked", "recoded", "retargeted", "orphaned", "hc_edits")
 TEAM_SOURCE = {"uk": "дошка команди", "en": "team board"}
 STATE_KIND = "journey-board"
 HC_LANES = ("metric", "anomaly")
@@ -1589,7 +1917,7 @@ def board_diff(last, now, note):
     declared = [s["id"] for s in note["stages"]]
     rows = {r["id"]: r for r in note_rows(note)}
     shown = {rid for rid, r in rows.items() if r["shown"]}
-    out = {k: [] for k in DIFF_CATEGORIES}
+    out = {k: [] for k in DIFF_CATEGORIES if k not in LINK_CATEGORIES}     # a sticky carries no link: the page's alone
 
     def plugin(it):
         return it.get("origin", "plugin") != "team"
@@ -1652,7 +1980,7 @@ def board_diff(last, now, note):
             out["removed"].append(e)
         else:
             out["other"].append(dict(e, role=role, change="removed"))
-    out["counts"] = {k: len(out[k]) for k in COUNTED}
+    out["counts"] = {k: len(out[k]) for k in COUNTED if k not in LINK_CATEGORIES}
     return out
 
 
@@ -1726,10 +2054,14 @@ def take_note(note, diff, take, picked, parents, drop, when):
         by_id.setdefault(r["id"], r)
     uk_lanes = any(r["cells"][pos["lane"]].strip().lower() in LANE_ALIAS for r in live if pos["lane"] < len(r["cells"]))
     team_source = "%s %s" % (TEAM_SOURCE.get(lang, TEAM_SOURCE["en"]), when)
+    page_source = "%s %s" % (PAGE_SOURCE.get(lang, PAGE_SOURCE["en"]), when)
+
+    def source_of(e):                                # an edit from the page (v4.12.0) is the team page's, else the board's
+        return page_source if isinstance(e, dict) and e.get("via") == "page" else team_source
     applied, refused, named, ask, prop = [], [], [], [], []
     used_keys = set()
     ents = {}
-    for cat in ("changed", "moved", "added", "removed", "hc_edits", "orphaned", "other", "unrecorded"):
+    for cat in ("changed", "moved", "added", "removed") + LINK_CATEGORIES + ("hc_edits", "orphaned", "other", "unrecorded"):
         for e in diff.get(cat, []) or []:
             if isinstance(e, dict) and e.get("id") is not None:   # a health-check edit reads as what it did — the row decides
                 c = {"text": "changed", "moved": "moved", "removed": "removed"}.get(e.get("change"), cat) if cat == "hc_edits" else cat
@@ -1737,7 +2069,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
     by_row = {}
     for k, es in ents.items():
         for cat, e in es:
-            if e.get("row") and cat in ("changed", "moved", "removed"):
+            if e.get("row") and cat in ("changed", "moved", "removed") + LINK_CATEGORIES:
                 by_row.setdefault(str(e["row"]), (k, es))
 
     def refuse(i, why, detail=""):
@@ -1790,7 +2122,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
             ask.append({"element": i, "row": rid, "lane": lane, "text": text, "classes": list(LANE_CLASSES[lane]) + [""]})
         return cls
 
-    edits, moves, news, drops = {}, {}, [], set()
+    edits, moves, news, drops, links, new_targets, new_pars = {}, {}, [], set(), [], [], []
     used = {r["id"] for r in note["rows"]}
     new_ids = {}                                     # a new row's id by the diff's order — the preview's and the take's agree
     for cat in ("added", "changed", "moved"):
@@ -1814,7 +2146,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
         done.add(i)
         cats = {c for c, _ in es}
         e0 = es[0][1]
-        rid = e0.get("row") if cats & {"changed", "moved", "removed"} else None
+        rid = e0.get("row") if cats & ({"changed", "moved", "removed"} | set(LINK_CATEGORIES)) else None
         r = by_id.get(rid) if rid else None
         if rid and r is None:
             refuse(i, "unknown", "row %s is not in the note" % rid)
@@ -1834,12 +2166,12 @@ def take_note(note, diff, take, picked, parents, drop, when):
                     if t is None:
                         break
                     cls = klass(i, rid, r["lane"], t)
-                    ed = {"text": t, "source": team_source, "date": when, "class": cls}
+                    ed = {"text": t, "source": source_of(e), "date": when, "class": cls}
                     if code:
                         ed["code"] = code
                     edits[rid] = dict(edits.get(rid, {}), **ed)
                     applied.append({"element": i, "row": rid, "action": "text", "before": r["text"], "after": t,
-                                    "source": team_source, "class": cls})
+                                    "source": source_of(e), "class": cls})
                 elif cat == "moved":
                     st, ln = e.get("stage_to"), e.get("lane_to")
                     if not st or st not in declared or ln not in LANE_IDS:
@@ -1857,6 +2189,8 @@ def take_note(note, diff, take, picked, parents, drop, when):
                     elif ln not in LANE_CLASSES and cls_now:
                         named.append({"element": i, "row": rid, "why": "bad_class", "detail": "%s takes no class (§2) — %s cleared" % (ln, cls_now)})
                         edits[rid] = dict(edits.get(rid, {}), **{"class": ""})
+                elif cat in LINK_CATEGORIES:             # a link the page changed (v4.12.0): checked once the moves are known
+                    links.append((i, rid, cat, e))
             continue
         if not cats & {"added", "changed", "moved"}:
             refuse(i, "not_takeable", "%s is not a team's sticky (%s)" % (i, ", ".join(sorted(cats))))
@@ -1875,6 +2209,13 @@ def take_note(note, diff, take, picked, parents, drop, when):
             continue
         ls, code = code_line(ln, _lines(text), i, None, named)
         code = code or ""
+        page_code = _norm(e0.get("code")) if e0.get("via") == "page" else ""
+        if page_code and not code:                   # the page's own code field (v4.12.0), checked as the sticky's line is
+            if ln in ("initiative", "experiment") and (CODE if ln == "initiative" else EXP_ID).match(page_code) and not cn.scan(page_code):
+                code = page_code
+            else:
+                named.append({"element": i, "row": None, "why": "bad_code", "detail": "%r is no %s" % (
+                    nt.safe(page_code), "epic or feature code" if ln == "initiative" else "registry id" if ln == "experiment" else "code of this lane")})
         t = clean(" ".join(ls), i)
         if t is None:
             continue
@@ -1890,22 +2231,93 @@ def take_note(note, diff, take, picked, parents, drop, when):
             refuse(i, "unknown", "no new row for %s in the diff" % i)
             continue
         cls = klass(i, nid, ln, t)
-        par = pick(parents, i, nid)
-        if par:
-            pr = by_id.get(par)
-            if pr is None or ln not in PARENTS or pr["lane"] not in PARENTS[ln] or pr["stage"] != st:
-                named.append({"element": i, "row": nid, "why": "bad_parent", "detail": "%s cannot hang under %s" % (ln, par)})
-                par = ""
-        if not par and ln in NEEDS_PARENT:
-            cands = [r["id"] for r in live if r["stage"] == st and r["lane"] in PARENTS[ln]]
-            named.append({"element": i, "row": nid, "why": "orphan", "detail": "%s needs its parent" % _a(ln)})
-            prop.append({"element": i, "row": nid, "lane": ln, "candidates": cands})
+        if e0.get("via") == "page" and ln in HC_LANES:   # the page adds no metric or anomaly row (R25), as a board's move cannot
+            refuse(i, "metric_lane", "a new row in the metric and anomaly lanes is never taken — the health-check writes them")
+            continue
+        par = pick(parents, i, nid) or (_norm(e0.get("parent")) if e0.get("via") == "page" else "")
         if ln == "initiative" and not code:
             named.append({"element": i, "row": nid, "why": "bad_code", "detail": "no epic or feature code on the sticky's own second line"})
-        news.append((st, {"id": nid, "stage": st, "lane": lane_cell(ln), "text": t, "parent": par, "code": code, "source": team_source,
-                          "class": cls, "date": when}))
+        values = {"id": nid, "stage": st, "lane": lane_cell(ln), "text": t, "parent": par, "code": code, "source": source_of(e0),
+                  "class": cls, "date": when}
+        if e0.get("via") == "page" and e0.get("target"):
+            if ln == "opportunity":
+                new_targets.append((i, nid, st, values))
+            else:
+                named.append({"element": i, "row": nid, "why": "bad_target", "detail": "%s is no opportunity — a target only on one" % _a(ln)})
+        news.append((st, values))
         applied.append({"element": i, "row": nid, "action": "add", "cell": cell_title(st, ln, lang), "text": t, "class": cls,
-                        "source": team_source, "parent": par, "code": code})
+                        "source": source_of(e0), "parent": par, "code": code})
+        new_pars.append((i, nid, st, ln, par, values, applied[-1]))
+    yes = "так" if lang == "uk" else "yes"
+
+    def stage_lane(r):
+        return moves.get(r["id"], (r["stage"], r["lane"])) if by_id.get(r["id"]) is r else (r["stage"], r["lane"])
+    for i, nid, st, ln, par, values, a in new_pars:  # a new row's parent: where the parent stands once the moves are taken
+        if par:
+            pr = by_id.get(par)
+            if pr is None or ln not in PARENTS or stage_lane(pr)[1] not in PARENTS[ln] or stage_lane(pr)[0] != st:
+                named.append({"element": i, "row": nid, "why": "bad_parent", "detail": "%s cannot hang under %s" % (ln, nt.safe(par))})
+                par = values["parent"] = a["parent"] = ""
+        if not par and ln in NEEDS_PARENT:
+            cands = [r["id"] for r in live if stage_lane(r)[0] == st and stage_lane(r)[1] in PARENTS[ln]]
+            named.append({"element": i, "row": nid, "why": "orphan", "detail": "%s needs its parent" % _a(ln)})
+            prop.append({"element": i, "row": nid, "lane": ln, "candidates": cands})
+    target_now = {r["id"]: r["target"].strip().lower() in YES for r in live}
+    for i, rid, cat, e in links:                     # the page's links (v4.12.0): §5's rules, as check names them
+        r = by_id[rid]
+        st, ln = stage_lane(r)
+        if cat == "relinked":
+            v = _norm(e.get("parent_now"))
+            pr = by_id.get(v) if v else None
+            if v and (pr is None or ln not in PARENTS or stage_lane(pr)[1] not in PARENTS[ln] or stage_lane(pr)[0] != st or v == rid):
+                named.append({"element": i, "row": rid, "why": "bad_parent", "detail": "%s cannot hang under %s (§5)" % (ln, nt.safe(v))})
+                continue
+            if not v and ln in NEEDS_PARENT:
+                named.append({"element": i, "row": rid, "why": "orphan", "detail": "%s needs its parent — not cleared" % _a(ln)})
+                prop.append({"element": i, "row": rid, "lane": ln, "candidates": [x["id"] for x in live if stage_lane(x)[0] == st
+                                                                                   and stage_lane(x)[1] in PARENTS[ln]]})
+                continue
+            edits[rid] = dict(edits.get(rid, {}), parent=v)
+            applied.append({"element": i, "row": rid, "action": "parent", "before": r["parent"], "after": v})
+        elif cat == "recoded":
+            v = _norm(e.get("code_now"))
+            ok = ln in ("initiative", "experiment") and v and (CODE if ln == "initiative" else EXP_ID).match(v) and not cn.scan(v)
+            if not ok:
+                named.append({"element": i, "row": rid, "why": "bad_code", "detail": "%r is no %s — not written" % (
+                    nt.safe(v), "epic or feature code" if ln == "initiative" else "registry id" if ln == "experiment" else "code of this lane")})
+                continue
+            edits[rid] = dict(edits.get(rid, {}), code=v)
+            applied.append({"element": i, "row": rid, "action": "code", "before": r["code"], "after": v})
+        else:
+            v = bool(e.get("target_now"))
+            if ln != "opportunity":
+                named.append({"element": i, "row": rid, "why": "bad_target", "detail": "%s is no opportunity — a target only on one" % _a(ln)})
+                continue
+            target_now[rid] = v
+            edits[rid] = dict(edits.get(rid, {}), target=yes if v else "")
+            applied.append({"element": i, "row": rid, "action": "target", "before": r["target"], "after": yes if v else ""})
+    for st in {stage_lane(r)[0] for r in live}:      # one target per stage (§5): a second one the take would make is not set
+        on = [r["id"] for r in live if target_now.get(r["id"]) and stage_lane(r)[0] == st]
+        if len(on) > 1:
+            for a in [a for a in applied if a.get("action") == "target" and a["after"] and a["row"] in on]:
+                applied.remove(a)
+                edits[a["row"]].pop("target", None)
+                named.append({"element": a["element"], "row": a["row"], "why": "bad_target",
+                              "detail": "a second target on %s — one target opportunity per stage" % st})
+                target_now[a["row"]] = False
+        on = [x for x in on if target_now.get(x)]
+        if len(on) > 1:                              # still two: a move brought a target onto a stage that has one
+            for rid in [x for x in on if x in moves and moves[x][0] != by_id[x]["stage"]]:
+                edits[rid] = dict(edits.get(rid, {}), target="")
+                named.append({"element": rid, "row": rid, "why": "bad_target",
+                              "detail": "moved onto %s, which has its target — the moved row's target is cleared" % st})
+                target_now[rid] = False
+    for i, nid, st, values in new_targets:
+        if any(target_now.get(r["id"]) and stage_lane(r)[0] == st for r in live) or any(
+                x[2] == st and x[3].get("target") for x in new_targets if x[1] != nid):
+            named.append({"element": i, "row": nid, "why": "bad_target", "detail": "a second target on %s — one target opportunity per stage" % st})
+        else:
+            values["target"] = yes
     removed = {str(e.get("row")) for e in diff.get("removed", []) or [] if isinstance(e, dict) and e.get("row")}
     for rid in drop:
         r = by_id.get(rid)
@@ -1960,7 +2372,7 @@ def take_note(note, diff, take, picked, parents, drop, when):
             out.extend(inserts[n])
     taken = {a.get("element") for a in applied} | {a.get("row") for a in applied}
     left = []
-    for cat in ("changed", "moved", "removed", "hc_edits", "added"):
+    for cat in ("changed", "moved", "removed") + LINK_CATEGORIES + ("hc_edits", "added"):
         for e in diff.get(cat, []) or []:
             if isinstance(e, dict) and e.get("id") is not None and str(e["id"]) not in taken and (e.get("row") or None) not in taken:
                 left.append({"id": e["id"], "row": e.get("row"), "category": cat, "change": e.get("change")})
@@ -2068,6 +2480,27 @@ def check_protocol(root):
             r"^\|\s*`cjm-research`\s*\|.*`cjm-research/<product>/journey-", ap, re.M):
         errs.append("artifact-publishing.md §5: the `cjm-research` key row has no `journey-` key")
     errs += _check_nest(proto, skill, texts.get("references/artifact-publishing.md", ""), rep)
+    errs += _check_page(proto, skill)
+    return errs
+
+
+def _check_page(proto, skill):
+    """Check 28's page part (v4.12.0 — no new check): §9 «Editing on the page» names the page's ops as the script does;
+    §15 keeps the page from any request and from a write past §12's preview; the skill's Step J9 runs `page-diff`."""
+    errs = []
+    s9 = nt.section(proto, "9. The script")
+    if "**Editing on the page**" not in s9:
+        errs.append("journey-protocol.md §9 has no «Editing on the page» (v4.12.0)")
+    ops = [nt.tick(r[0]) or "?" for r in nt.table_after(s9, r"\| Op \| What \|")]
+    if ops != list(EDIT_OPS):
+        errs.append("journey-protocol.md §9: the page's ops %s ≠ journey_map.py EDIT_OPS %s" % ("|".join(ops), "|".join(EDIT_OPS)))
+    if EDIT_KIND not in s9:
+        errs.append("journey-protocol.md §9 does not name the file of edits' kind «%s»" % EDIT_KIND)
+    s15 = nt.section(proto, "15. What never happens")
+    if "A request from the page" not in s15:
+        errs.append("journey-protocol.md §15 does not keep the page from any request (v4.12.0)")
+    if skill is not None and not re.search(r"^- \*\*J9\b.*page-diff", skill, re.M):
+        errs.append("skills/cjm-research/SKILL.md has no step J9 that runs page-diff (the page's edits, v4.12.0)")
     return errs
 
 
@@ -2153,6 +2586,9 @@ def check_board_protocol(root):
         for word in TEAM_SOURCE.values():
             if word not in s12:
                 errs.append("journey-protocol.md §12 does not name the team's source «%s <date>» (journey_map.py TEAM_SOURCE)" % word)
+        for word in PAGE_SOURCE.values():
+            if word not in s12:
+                errs.append("journey-protocol.md §12 does not name the page's source «%s <date>» (journey_map.py PAGE_SOURCE)" % word)
     ap = texts.get("references/artifact-publishing.md")
     if ap is not None:
         if not re.search(r"^\|\s*`board`\s*\|.*`cjm-research`", nt.section(ap, "1. The kind"), re.M):
@@ -2613,6 +3049,10 @@ def _plain(e, child):
     rid = str(e.get("row") or "")
     if rid.startswith(pre_r):
         out["row"] = rid[len(pre_r):]
+    for key in ("parent", "parent_now", "parent_last"):         # a link the page changed (v4.12.0) names a row of the child
+        v = str(e.get(key) or "")
+        if v.startswith(pre_r):
+            out[key] = v[len(pre_r):]
     for key in ("stage", "stage_to", "stage_from"):
         v = str(e.get(key) or "")
         if v:
@@ -2683,16 +3123,23 @@ def take_diffs(note, name, diffs):
                     elsewhere.append({"id": str(e["id"]), "category": cat, "row": e.get("row"),
                                       "note": owner or str(d.get("map") or "?"), "board": i})
     groups = {}
-    for cat, what in (("changed", "text"), ("moved", "cell")):
+    for cat, what in (("changed", "text"), ("moved", "cell"), ("relinked", "parent"), ("recoded", "code"), ("retargeted", "target")):
         for e in merged[cat]:
             if e.get("row"):
                 groups.setdefault((what, str(e["row"])), []).append(e)
     conflicts = []
     for (what, rid), es in sorted(groups.items()):
-        vals = {(_norm(e.get("now")) if what == "text" else (e.get("stage_to"), e.get("lane_to"))) for e in es}
+        def val(e):
+            if what == "text":
+                return _norm(e.get("now"))
+            if what == "cell":
+                return (e.get("stage_to"), e.get("lane_to"))
+            return json.dumps(e.get(what + "_now"))
+        vals = {val(e) for e in es}
         if len({e["board"] for e in es}) > 1 and len(vals) > 1:
             conflicts.append({"row": rid, "what": what, "versions": [
-                dict({"id": str(e["id"]), "board": e["board"]}, **({"now": e.get("now")} if what == "text" else {"to": e.get("to")}))
+                dict({"id": str(e["id"]), "board": e["board"]}, **({"now": e.get("now")} if what == "text" else {"to": e.get("to")}
+                                                                   if what == "cell" else {"now": e.get(what + "_now")}))
                 for e in es]})
     for e in merged["removed"]:                      # gone from one board, changed or moved on another: the PM decides
         rid = str(e.get("row") or "")
@@ -2770,6 +3217,285 @@ def cmd_board_take(args):
     return 0
 
 
+EDIT_MAX_BYTES = 2 * 1024 * 1024                  # a file of edits past this is no page's — refused unread
+EDIT_MAX_TEXT = 4000
+PAGE_SKIPS = ("stale", "unknown_map", "unknown_row", "bad_edit", "locked")
+
+
+def read_edits(path):
+    """The file of edits a page saved, or a text holding it (pasted into the chat, a copy with words around it) — its JSON
+    object checked for its kind and version; raises Bad. It is another person's input: nothing in it is trusted."""
+    try:
+        if os.path.getsize(path) > EDIT_MAX_BYTES:
+            raise Bad("the file of edits is larger than %d bytes — no page's" % EDIT_MAX_BYTES)
+        with open(path, encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as e:
+        raise Bad("the file of edits does not read: %s" % (e.strerror or type(e).__name__))
+    except UnicodeDecodeError:
+        raise Bad("the file of edits is not UTF-8 text")
+    start, end = raw.find("{"), raw.rfind("}")
+    try:
+        data = json.loads(raw[start:end + 1]) if start >= 0 and end > start else None
+    except ValueError:
+        data = None
+    if not isinstance(data, dict) or data.get("kind") != EDIT_KIND:
+        raise Bad("the text is not a file of edits from a journey map's page (kind «%s»)" % EDIT_KIND)
+    if data.get("version") != EDIT_VERSION:
+        raise Bad("the file of edits is version %r — this plugin reads version %d" % (data.get("version"), EDIT_VERSION))
+    if not isinstance(data.get("maps"), dict):
+        raise Bad("the file of edits holds no maps")
+    return data
+
+
+SHARED_MAX_DOCS = 5000
+
+
+def read_shared(path):
+    """The page's shared edits (since v4.12.0, the user's decision of 2026-11-25): a folder of the artifact's `edits`
+    documents, one JSON file each, as the host's database tool saves them. Another person's input: each document is read
+    on its own, a file too large, unreadable or not an object skipped. Returns [(doc id, body)]."""
+    docs = []
+    names = sorted(x for x in os.listdir(path) if x.endswith(".json"))[:SHARED_MAX_DOCS]
+    for fn in names:
+        fp = os.path.join(path, fn)
+        try:
+            if os.path.getsize(fp) > EDIT_MAX_BYTES:
+                continue
+            with open(fp, encoding="utf-8") as fh:
+                body = json.load(fh)
+        except (OSError, ValueError, UnicodeDecodeError):
+            continue
+        if isinstance(body, dict):
+            # the host's database tool spells an id's "~" as "@" in the file name; the page's ids never hold an "@" (docId)
+            docs.append((unicodedata.normalize("NFC", fn[:-5]).replace("@", "~"), body))
+    return docs
+
+
+def shared_edits(docs, sigs):
+    """The shared documents as a file of edits (§9): a row's document becomes its ops, an added row's an `add`; a document
+    made on an older version of its map (its digest) or of an unknown map is named, never read. `sigs`: {name_key: (name,
+    digest)}. Returns (data, docs by row key and by add, skipped)."""
+    maps, rows, skipped, n = {}, {}, [], 0
+    for did, b in docs:
+        m = _s(b.get("map")) or ""
+        hit = sigs.get(name_key(m))
+        if hit is None:
+            skipped.append({"why": "unknown_map", "map": nt.safe(m), "row": None, "doc": nt.safe(did),
+                            "detail": "no map of this page is named so — the document is not read"})
+            continue
+        real, digest = hit
+        if b.get("digest") != digest:
+            skipped.append({"why": "stale", "map": nt.safe(real), "row": nt.safe(str(b.get("row"))) if b.get("row") else None,
+                            "doc": nt.safe(did), "detail": "made on an older version of the map — edit its fresh page again"})
+            continue
+        ops = maps.setdefault(real, {"digest": digest, "edits": []})["edits"]
+        if b.get("kind") == "row" and isinstance(b.get("edit"), dict) and _s(b.get("row")):
+            r, e = _s(b.get("row")), b["edit"]
+            rows.setdefault((real, r), []).append(did)
+            if e.get("remove") is True:
+                ops.append({"op": "remove", "row": r})
+                continue
+            for k in ("text", "parent", "code"):
+                if k in e:
+                    ops.append({"op": k, "row": r, k: e[k]})
+            if "stage" in e or "lane" in e:
+                ops.append({"op": "move", "row": r, "stage": e.get("stage"), "lane": e.get("lane")})
+            if "target" in e:
+                ops.append({"op": "target", "row": r, "target": e["target"] is True})
+        elif b.get("kind") == "add" and isinstance(b.get("add"), dict):
+            n += 1
+            a = b["add"]
+            ops.append({"op": "add", "id": "p%d" % n, "stage": a.get("stage"), "lane": a.get("lane"), "text": a.get("text"),
+                        "parent": a.get("parent"), "code": a.get("code"), "target": a.get("target") is True, "doc": did})
+        else:
+            skipped.append({"why": "bad_edit", "map": nt.safe(real), "row": None, "doc": nt.safe(did),
+                            "detail": "a document that is no row's edit and no added row"})
+    return {"kind": EDIT_KIND, "version": EDIT_VERSION, "maps": maps}, rows, skipped
+
+
+def _s(v):
+    """A value of the file as a short string, or None when it is not one (another person's input)."""
+    if isinstance(v, bool) or v is None:
+        return None
+    if isinstance(v, (int, float)):
+        v = str(v)
+    if not isinstance(v, str) or len(v) > EDIT_MAX_TEXT:
+        return None
+    return unicodedata.normalize("NFC", v)
+
+
+def page_diff(note, name, nest, data, lang):
+    """The page's edits as a diff the board's take reads (§12): one element per row the page changed (`p<n>`), its entries
+    in the categories of board-diff plus the links of v4.12.0 (relinked, recoded, retargeted), each `via: page`; a child
+    map's rows and cells keyed as on a tree board (`<child>#<id>`, `<child> · <stage>`), so `board-take --note <child>`
+    takes them into the child's own note. Texts page-safe, as a board's are. Returns (diff, skipped)."""
+    maps = {name_key(name): (name, note, "")}
+    for k in (tree_blocks(nest) if nest else []):
+        maps[name_key(k["note"])] = (k["note"], nest["maps"][k["note"]], k["note"])
+    out = {k: [] for k in DIFF_CATEGORIES}
+    skipped, seq, seen = [], [0], set()
+
+    def skip(why, mp, detail, row=None):
+        skipped.append({"why": why, "map": nt.safe(str(mp)), "row": nt.safe(str(row)) if row is not None else None, "detail": detail})
+
+    for mname in sorted(data["maps"], key=lambda x: (name_key(x) != name_key(name), str(x))):
+        block = data["maps"][mname]
+        hit = maps.get(name_key(str(mname)))
+        if hit is None:
+            skip("unknown_map", mname, "no map of this page is named so — its edits are not read")
+            continue
+        real, n, pre = hit
+        if sum(1 for x in data["maps"] if name_key(str(x)) == name_key(str(mname))) > 1:   # one map named twice: neither read
+            if name_key(str(mname)) not in seen:
+                skip("bad_edit", real, "the map is named twice in the file — none of its edits is read")
+            seen.add(name_key(str(mname)))
+            continue
+        if not isinstance(block, dict) or not isinstance(block.get("edits"), list):
+            skip("bad_edit", real, "the map's entry holds no list of edits")
+            continue
+        if block.get("digest") != table_sig(n)["table"]:
+            skip("stale", real, "the page was made from an older version of the map — edit its fresh page again")
+            continue
+        declared = [st["id"] for st in n["stages"]]
+        rows = {r["id"]: r for r in n["rows"] if not r["gap"] and r["id"] and page_worthy(r, declared)}   # the page's rows only
+        el = {}
+
+        def K(rid):
+            return ("%s#%s" % (pre, rid)) if pre and rid else rid
+
+        def S(st):
+            return ("%s · %s" % (pre, st)) if pre and st else st
+
+        def elem(rid):
+            if rid not in el:
+                seq[0] += 1
+                el[rid] = "p%d" % seq[0]
+            return el[rid]
+
+        def cell(st, ln):
+            return cell_title(S(st), ln, lang) if st in declared and ln in LANE_IDS else ""
+        for e in block["edits"]:
+            op = e.get("op") if isinstance(e, dict) else None
+            if op not in EDIT_OPS:
+                skip("bad_edit", real, "an edit whose op is not one of %s" % ", ".join(EDIT_OPS))
+                continue
+            if op == "add":
+                st, ln, text = _s(e.get("stage")), _s(e.get("lane")), _s(e.get("text"))
+                if not st or not ln or not text or not text.strip():
+                    skip("bad_edit", real, "an added row without its cell or text")
+                    continue
+                seq[0] += 1
+                ent = {"id": "p%d" % seq[0], "kind": "sticky", "text": nt.safe(text), "cell": cell(st, ln),
+                       "stage": S(st) if st in declared else None, "lane": lane_of(ln), "via": "page"}
+                par, code = _s(e.get("parent")) or "", _s(e.get("code")) or ""
+                if par:
+                    ent["parent"] = K(nt.safe(par))
+                if code:
+                    ent["code"] = nt.safe(code)
+                if e.get("target") is True:
+                    ent["target"] = True
+                if _s(e.get("doc")):
+                    ent["doc"] = nt.safe(_s(e.get("doc")))
+                out["added"].append(ent)
+                continue
+            rid = _s(e.get("row"))
+            r = rows.get(rid) if rid else None
+            if r is None:
+                skip("unknown_row", real, "the page shows no row %s of the map" % nt.safe(str(rid)), rid)
+                continue
+            mid, base = elem(rid), {"row": K(rid), "via": "page"}
+            hc = _is_hc(r)
+            safe_now = nt.safe(r["text"])
+            if op == "text":
+                v = _s(e.get("text"))
+                if v is None or _norm(nt.safe(v)) == _norm(safe_now):
+                    continue
+                ent = dict(base, id=mid, last=safe_now, now=nt.safe(v), **_cell_fields("cell", (S(r["stage"]), r["lane"]),
+                                                                                       cell(r["stage"], r["lane"])))
+                out["hc_edits" if hc else "changed"].append(dict(ent, change="text") if hc else dict(ent, team=False))
+            elif op == "move":
+                st, ln = _s(e.get("stage")) or r["stage"], lane_of(_s(e.get("lane")) or r["lane"])
+                if (st, ln) == (r["stage"], r["lane"]):
+                    continue
+                to = (S(st), ln) if st in declared and ln else None
+                ent = dict(base, id=mid, text=safe_now, **_cell_fields("from", (S(r["stage"]), r["lane"]), cell(r["stage"], r["lane"])))
+                ent.update(_cell_fields("to", to, cell(st, ln) if to else ""))
+                out["hc_edits" if hc else "moved"].append(dict(ent, change="moved") if hc else dict(ent, team=False))
+            elif op == "remove":
+                ent = dict(base, id=mid, text=safe_now, cell=cell(r["stage"], r["lane"]))
+                out["hc_edits" if hc else "removed"].append(dict(ent, change="removed") if hc else ent)
+            else:
+                field, cat = {"parent": ("parent", "relinked"), "code": ("code", "recoded"), "target": ("target", "retargeted")}[op]
+                if op == "target":
+                    v, last = e.get("target") is True, r["target"].strip().lower() in YES
+                else:
+                    v = _s(e.get(field))
+                    if v is None:
+                        skip("bad_edit", real, "an edit of %s without its value" % field, rid)
+                        continue
+                    v, last = _norm(nt.safe(v)), _norm(nt.safe(r[field]))
+                if v == last:
+                    continue
+                if _locked(r):
+                    skip("locked", real, "row %s (%s) — its links never change from the page (R25)" % (rid, r["lane"]), rid)
+                    continue
+                if op == "parent":
+                    v, last = K(v) if v else "", K(last) if last else ""
+                out[cat].append(dict(base, id=mid, **{field + "_last": last, field + "_now": v}))
+    out["counts"] = {k: len(out[k]) for k in COUNTED}
+    return out, skipped
+
+
+def cmd_page_diff(args):
+    note = load(args.note)
+    name = unicodedata.normalize("NFC", os.path.splitext(os.path.basename(args.note))[0])
+    lang = args.lang or note["lang"]
+    nest = page_nest(note, args.map, args.dir, lang)
+    nested = nest is not None and bool(nest["tree"]["children"])
+    shared, pre_skipped = None, []
+    if os.path.isdir(args.edits):                   # the shared edits of a published page (§9): the artifact's documents
+        sigs = {name_key(name): (name, table_sig(note)["table"])}
+        for k in (tree_blocks(nest) if nested else []):
+            sigs[name_key(k["note"])] = (k["note"], table_sig(nest["maps"][k["note"]])["table"])
+        data, shared, pre_skipped = shared_edits(read_shared(args.edits), sigs)
+    else:
+        data = read_edits(args.edits)
+    root = _s(data.get("root")) or ""
+    if root and name_key(root) != name_key(name):
+        raise Bad("the edits are of the page of %s — run page-diff with --note %s.md" % (nt.safe(root), nt.safe(root)))
+    prod = _s(data.get("product"))
+    if prod is not None and _product_key(prod) != _product_key(nt.safe(note["product"])):
+        raise Bad("the edits are of another product's map — never taken into this one")
+    diff, skipped = page_diff(note, name, nest if nested else None, data, lang)
+    skipped = pre_skipped + skipped
+    made = _s(data.get("made"))
+    payload = dict(ok=True, state="diff", surface="page", made=made if made and day(made) else None, **diff)
+    payload.update(note=table_sig(note), skipped=skipped, map=nt.safe(name))
+    if nested:
+        payload["tree"] = tree_sigs(nest)            # a take into a child checks its own note (§14)
+    if shared is not None:                           # which documents each element came from: cleared after a written take
+        docs = {}
+        for cat in DIFF_CATEGORIES:
+            for e in diff.get(cat, []):
+                if e.get("doc"):
+                    docs.setdefault(e["id"], []).append(e["doc"])
+                elif e.get("row"):
+                    mp, _, rid = e["row"].rpartition("#")
+                    for did in shared.get((mp or name, rid), []):
+                        if did not in docs.setdefault(e["id"], []):
+                            docs[e["id"]].append(nt.safe(did))
+        payload["docs"] = docs
+    if args.out:
+        try:
+            payload["out"] = _write_json(args.out, payload)
+        except OSError as e:
+            result(ok=False, error="the diff cannot be written: %s" % (e.strerror or type(e).__name__))
+            return 1
+    result(**payload)
+    return 0
+
+
 def cmd_nest(args):
     n = nest_of(args.note, args.map, args.dir, args.lang)
     if not args.json:
@@ -2787,7 +3513,7 @@ def cmd_schema(args):
            lanes_order=list(LANE_IDS), levels=list(LEVELS), classes=list(CLASSES), findings=list(FINDINGS),
            model_findings=list(MODEL_FINDINGS), commands=list(COMMANDS), board_roles=list(BOARD_ROLES),
            diff_categories=list(DIFF_CATEGORIES), take_refused=list(TAKE_REFUSED), take_named=list(TAKE_NAMED),
-           team_source=TEAM_SOURCE, nest_fields=list(NEST_FIELDS), nest_findings=list(NEST_FINDINGS), orphan_why=list(ORPHAN_WHY),
+           team_source=TEAM_SOURCE, page_source=PAGE_SOURCE, edit_ops=list(EDIT_OPS), edit_kind=EDIT_KIND, nest_fields=list(NEST_FIELDS), nest_findings=list(NEST_FINDINGS), orphan_why=list(ORPHAN_WHY),
            max_depth=MAX_DEPTH, errors=check_protocol(os.path.dirname(HERE)))
     return 0
 
@@ -2852,6 +3578,13 @@ def main(argv=None):
     p.add_argument("--drop", nargs="*", default=[], help="row ids gone from the board that leave the note")
     p.add_argument("--date", help="YYYY-MM-DD of the team's board (default: today, UTC)")
     p.add_argument("--dry-run", action="store_true", help="the preview: nothing written")
+    p = sub.add_parser("page-diff")
+    p.add_argument("--note", required=True, help="the map whose page the edits were made on — its root on a tree page")
+    p.add_argument("--edits", required=True, help="the file of edits the page saved, a text file holding the copied edits, or a folder of the published page's shared edits (one JSON document each)")
+    p.add_argument("--out", help="keep the diff for board-take")
+    p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     p = sub.add_parser("nest")
     p.add_argument("--note", required=True, help="the map whose subtree is shown — a root, or a child at its own level")
     p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest — ctx search --type cjm-journey's files")
@@ -2868,7 +3601,7 @@ def main(argv=None):
         return 2
     fn = {"parse": cmd_parse, "check": cmd_check, "render-html": cmd_render, "health": cmd_health,
           "refresh": cmd_refresh, "tree": cmd_tree, "board-layout": cmd_board_layout, "board-state": cmd_board_state,
-          "board-diff": cmd_board_diff, "board-take": cmd_board_take, "nest": cmd_nest, "schema": cmd_schema}.get(args.cmd)
+          "board-diff": cmd_board_diff, "board-take": cmd_board_take, "page-diff": cmd_page_diff, "nest": cmd_nest, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2
