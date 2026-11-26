@@ -28,6 +28,7 @@ Plan `2026-11-26-apps-v4.13.0` and the design `docs/superpowers/specs/2026-11-26
 - **TC-acc-4130-theme-product** | switch the theme (system, light, dark) and then the product | expected: the colours change at once, the choice is kept after a restart; the product chips filter the modules. | _pending_
 - **TC-acc-4130-edit-csp** | the switch «Редагувати» on a map in the installed app | expected: the editing script runs under the published page's real content-security policy; an edit is written to `edits`; no console error. | _pending_
 - **TC-acc-4130-connectors** | a real connector binding, then no binding | expected: live statuses and funnel numbers through the viewer's own connector with the consent prompt of the host and the cache replay; with none or a failed one, the snapshot's numbers with their date and the line «живі числа недоступні: <причина>». | _pending_
+- **TC-acc-4130-windows** | the whole acceptance list above on a Windows computer (install, permissions one by one, the tray item, notifications, the icon) | expected: as on macOS; or what differs is written down and the claims of the notes corrected. Not measured anywhere yet. | _pending_
 - **TC-acc-4130-icon** | reinstall the app | expected: the icon is the right one after the reinstall. | _pending_
 
 ## Release v4.12.1 — the reach check of a release (added 2026-11-26)

@@ -14,7 +14,7 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ## v4.13.0 «Застосунки» (2026-11-26)
 
-**A page the plugin published becomes an app you install on a Mac or a Windows computer.** Until now a published page — the journey map, the portfolio, the funnel — was a page in a browser tab. Now the plugin can wrap it in a small shell: the page gets a button «Встановити як застосунок», and what you install is a window of its own with an icon, a title and a menu. The first app is «CJM»: the portfolio of your journey maps, the maps, the funnel and your team's edits in one place. The plugin installs nothing for anyone — the person presses the button.
+**A page the plugin published becomes an app you install from the Claude desktop app.** The vendor's launch article (https://claude.com/resources/articles/install-as-app) offers the install for Mac and Windows; this release was measured on macOS only (Claude desktop app 8.9912.0, 2026-11-26), Windows has not been measured yet. Until now a published page — the journey map, the portfolio, the funnel — was a page in a browser tab. Now the plugin can wrap it in a small shell: the page gets a button «Встановити як застосунок», and what you install is a window of its own with an icon, a title and a menu. The first app is «CJM»: the portfolio of your journey maps, the maps, the funnel and your team's edits in one place. The plugin installs nothing for anyone — the person presses the button.
 
 ### What the app can do
 
@@ -22,24 +22,24 @@ When a skill changes, its version is bumped independently. The plugin version is
 - **Your product's look.** The theme is built from the colours of your design system, 2–3 candidates offered in one question; a colour pair that is too weak to read is named with its replacement and never shipped. Several products in one app: a switch between them, each with its label and colour.
 - **Modules.** The shell has six kinds of block — a table, a list, a number, a chart, a feed, a journey map — and the app is made of modules that use them. The owner can turn a module off, reorder them or add their own in `config/app`; the page reads that file as someone else's input.
 - **The journey map inside the app.** The same map as on the v4.12.0 page, with the same switch «Редагувати» and the same shared edits of the team; a map is picked from a list when there are several. The edits are still a draft: they reach the note only through its preview, as before.
-- **A badge, a menu-bar item and notifications.** The badge on the icon counts the team's edits waiting for you; the menu-bar (tray) item names the weakest journey; a notification comes for a new team edit and for a funnel stage that fell below its baseline by the threshold. A notification never carries a person's name.
+- **A badge, a menu-bar item and notifications.** The badge on the icon counts the team's edits not yet taken into the note; the menu-bar (tray) item names the weakest journey; a notification comes for a new team edit and for a funnel stage that has got worse, past the threshold below its baseline, since it was last seen on this computer (never on first sight). A notification never carries a person's name.
 - **Permissions one at a time.** The panel «Дозволи» asks for each permission only when you press its button, each with a 30 second wait, never on load and never several in one call (three in one call hung the app when measured). A permission you did not grant leaves its feature off silently.
 - **Live numbers from your own connectors.** Issue statuses and the funnel's numbers are read through the connectors of the person who opens the app, once when the data arrives and again on «Оновити» — never polled. The app's own numbers stay as the base with their date, and a missing connector is said in words.
 - **Updates without a new version.** The numbers live in the artifact's database, in a snapshot, so a new snapshot updates the app and the permissions are not asked again. A new version of the page is published only when the shell or the profile changed, and then the person is told first that the permissions will be asked again.
 - **A browser or a phone.** Where the platform cannot install, the page works as in v4.12.0; every part of the shell that is absent or refused switches itself off with no error.
 
-Every snapshot is a publication: one question before every write into the database, and a scheduled run never writes to it. The database's rules give the snapshot, the settings and the log to the owner alone — a colleague who may edit the page can write edits, never the numbers.
+Every snapshot is a publication: one question before every write into the database, and a scheduled run never writes to it. The database's rules let everyone who may view the page read the snapshot, the settings and the log, and only the owner write them — a colleague who may edit the page can write edits, never the numbers.
 
 ### What it does not do yet
 
 - **No files, no commands, no full access.** An app that reads a folder or runs the plugin's commands on your computer arrives in v4.13.1, after a second security audit. A profile that asks for it is refused with «arrives in v4.13.1».
-- **No «Ask Claude» button** — left out of the first release by the design's decision.
+- **No «Ask Claude» button** — not in this release.
 - **No «Open in Claude» item in the menu.** The profile can name it, but the shell leaves it out: the platform gives a page no call for it.
 - **PM OS** is a placeholder profile with no screens. Its modules and sources belong to its own protocol and release; this release gives it the shell, the blocks, the theme, the products, `config/app`, `runs` and the rules.
 
 ### Still to be measured on a real computer
 
-What the host's probe page showed on 2026-11-26 (install, permissions, notifications, the menu-bar item, the badge, a database read) is in `references/native-surfaces.md` §7. The acceptance run on the maintainer's computer still has to show, with fictional Zorg data and, for one real product, only in its owner's account: the editing script of the map under the published page's real content-security policy; the theme's fonts on a real network; the first snapshot read by the installed app; a real connector binding; the icon after a reinstall; the permissions asked one by one; a snapshot update without a new version and without the permissions asked again; a colleague who edits the page cannot write the snapshot. Until it has run, the cases are `_pending_` in `testing/test-cases.md`.
+**Windows has not been measured at all** — the install, the permissions, the tray item and the notifications there are still to be shown. What the host's probe page showed on 2026-11-26 on macOS (install, permissions, notifications, the menu-bar item, the badge, a database read) is in `references/native-surfaces.md` §7. The acceptance run on the maintainer's computer still has to show, with fictional Zorg data and, for one real product, only in its owner's account: the editing script of the map under the published page's real content-security policy; the theme's fonts on a real network; the first snapshot read by the installed app; a real connector binding; the icon after a reinstall; the permissions asked one by one; a snapshot update without a new version and without the permissions asked again; a colleague who edits the page cannot write the snapshot. Until it has run, the cases are `_pending_` in `testing/test-cases.md`.
 
 ### Added
 
