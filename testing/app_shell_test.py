@@ -117,5 +117,16 @@ check("4 placeholders pass", errs == [], errs)
 errs = sh.check_profile("zorg", prof(title={"uk": "ABC-123", "en": "Z"}))
 check("4 a value in the title is refused too", has(errs, "value in a template"), errs)
 
+# fix round 1: a value hidden in angle brackets, and a scalar where a list belongs
+for label, text in (("bracketed URL", "<https://zorg.example/x>"), ("bracketed Jira key", "<ABC-123>"),
+                    ("bracketed e-mail", "<a@b.co>"), ("bracketed UUID", "<123e4567-e89b-12d3-a456-426614174000>")):
+    errs = sh.check_profile("zorg", prof(connectors=[{"role": "issue-status", "needs": text}]))
+    check("4 %s is not a placeholder" % label, has(errs, "value in a template"), errs)
+for key in ("permissions", "modules", "menu"):
+    errs = sh.check_profile("zorg", prof(**{key: "full-access"}))
+    check("5 %s as a scalar is refused" % key, has(errs, key, "must be a list"), errs)
+errs = sh.check_profile("zorg", prof(permissions="full-access", modules="x", menu="y"))
+check("5 a scalar full-access cannot bypass the gate", len(errs) >= 3, errs)
+
 print("\nRESULT: %s (%d failed)" % ("GREEN ✅" if not fails else "RED ❌", fails))
 sys.exit(1 if fails else 0)

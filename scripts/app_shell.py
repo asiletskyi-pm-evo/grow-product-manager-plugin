@@ -170,7 +170,7 @@ def load_profiles(path=None):
 
 # ---- the check ----------------------------------------------------------------------------------------------------
 
-_PLACEHOLDER = re.compile(r"<[^<>\s]+>")
+_PLACEHOLDER = re.compile(r"<[a-z][a-z0-9_]*>")
 _VALUE_LIKE = (
     ("URL", re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://|\bwww\.|\b[\w-]+\.(?:com|ai|io|net|org|app|dev|atlassian)\b/?", re.I)),
     ("e-mail", re.compile(r"[^\s@]+@[^\s@]+\.[A-Za-z]{2,}")),
@@ -214,7 +214,10 @@ def check_profile(name, prof):
     if glyph not in GLYPHS:
         errs.append("%s: unknown glyph '%s'" % (w, glyph))
     perms = prof.get("permissions") or []
-    for p in perms if isinstance(perms, list) else []:
+    if not isinstance(perms, list):
+        errs.append("%s: permissions must be a list" % w)
+        perms = []
+    for p in perms:
         if p == "full-access":
             errs.append("%s: permission full-access %s" % (w, LATER_TEXT))
         elif p in LATER:
@@ -225,7 +228,10 @@ def check_profile(name, prof):
         errs.append("%s: commands %s" % (w, LATER_TEXT))
     ids, homes = set(), 0
     modules = prof.get("modules") or []
-    for i, m in enumerate(modules if isinstance(modules, list) else []):
+    if not isinstance(modules, list):
+        errs.append("%s: modules must be a list" % w)
+        modules = []
+    for i, m in enumerate(modules):
         mw = "%s module %s" % (w, (m or {}).get("id", i) if isinstance(m, dict) else i)
         if not isinstance(m, dict):
             errs.append("%s: not a mapping" % mw)
@@ -249,7 +255,10 @@ def check_profile(name, prof):
     if homes > 1:
         errs.append("%s: more than one home module (%d)" % (w, homes))
     menu = prof.get("menu") or []
-    for e in menu if isinstance(menu, list) else []:
+    if not isinstance(menu, list):
+        errs.append("%s: menu must be a list" % w)
+        menu = []
+    for e in menu:
         if isinstance(e, str):
             if e not in ids:
                 errs.append("%s: menu entry '%s' is not a module id" % (w, e))
