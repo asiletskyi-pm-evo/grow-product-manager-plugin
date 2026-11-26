@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.5.2
+version: 0.5.3
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
@@ -52,6 +52,8 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 6. **Registry copy** — only when the repo has `testing/registry_copy.py`. A registry that syncs a subfolder (`.ai-registry/skills/<name>/`) never reads the root, so that folder is a generated copy. Last, once every file above is final: stage the release's files (`git add <explicit list>`), then run `python3 testing/registry_copy.py`. It rebuilds the copy from the index — unstaged work in progress never reaches it — and derives the Cursor manifest from plugin.json. Never edit the copy by hand; a file fixed after this point means staging and rebuilding again. Validator check 22 fails while the copy's version lags plugin.json. The marketplace entry installs from this copy (since v4.1.1: a host that imports the whole repository refuses a tree with a second plugin manifest), so the copy is what every user gets, and host-smoke's Codex leg installs it.
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
+
+**A release that changes the shell of a published app** (since v4.13.0, pitfall P11) — a file under `scripts/app_shell/`, the `wrap` function of `scripts/app_shell.py`, or a profile's modules or menu in `references/app-profiles.yaml` — also raises `SHELL_VERSION` in `scripts/app_shell.py`; the validator cannot see the omission.
 
 Skill frontmatter versions are normally bumped in the feature PRs themselves; verify they match the CHANGELOG claims.
 

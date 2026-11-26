@@ -8,6 +8,8 @@ no board.
                needs attention, the maps that need it first; the hand CJM notes (`type: cjm`) partly: funnel, stages,
                the metric rows per stage, snapshot. A markdown table for the chat, then the result line.
   render-html  the same portfolio as one self-contained page: numbers only — no row text, no link, no request
+  app-data     the same portfolio as an app's data (v4.13.0): portfolio.json (a table block) and, when the product has
+               a funnel-level health-check snapshot, funnel.json (a chart block) — numbers, never a person
   schema       the commands, columns, attention reasons, hand-CJM fields and findings, skip reasons the protocol must
                agree with (validate-consistency.sh check 30)
 
@@ -31,6 +33,7 @@ import note_table as nt  # noqa: E402
 import publications as pub  # noqa: E402
 
 COMMANDS = ("list", "render-html", "schema")
+APP_COMMANDS = ("app-data",)          # since v4.13.0: the app's data — its row stands after `schema` in §13's table
 COLUMNS = (("journey", "шлях"), ("owner", "власник"), ("stages", "етапи"), ("health", "здоров'я"), ("delta", "зміна"),
            ("health_date", "дата точки"), ("reviewed", "рев'ю"), ("pains", "болі"), ("anomalies", "аномалії"),
            ("gaps", "розриви"), ("findings", "знахідки"), ("published", "опубліковано"), ("attention", "увага"))
@@ -625,8 +628,9 @@ def check_protocol(root):
             errs.append("journey-protocol.md has no §13 «The portfolio»")
         crow = nt.table_after(s13, r"\| Command \| What \|")
         cmds = [nt.cmd_name(r[0]) for r in crow]
-        if cmds != list(COMMANDS):
-            errs.append("journey-protocol.md §13: the commands %s ≠ journey_portfolio.py COMMANDS %s" % ("|".join(cmds), "|".join(COMMANDS)))
+        if cmds != list(COMMANDS + APP_COMMANDS):
+            errs.append("journey-protocol.md §13: the commands %s ≠ journey_portfolio.py COMMANDS + APP_COMMANDS %s" % (
+                "|".join(cmds), "|".join(COMMANDS + APP_COMMANDS)))
         have = flags_of()
         for r in crow:
             name = nt.cmd_name(r[0])
@@ -728,8 +732,83 @@ def cmd_render(args):
     return 0
 
 
+# ------------------------------------------------------------------ the app's data (v4.13.0)
+APP_COLUMNS = ("journey", "score", "delta", "attention_count", "reviewed")
+APP_TITLES = {"uk": ("Карта", "Здоров'я", "Зміна", "Потребує уваги", "Переглянуто"),
+              "en": ("Journey", "Health", "Change", "Needs attention", "Reviewed")}
+VALUE = re.compile(r"^\s*([-+]?\d+(?:[.,]\d+)?)\s*(%?)\s*$")
+
+
+def app_portfolio(p, lang):
+    """The portfolio as a `table` block's data: one row per journey map, in the portfolio's order — its journey, its
+    note's name, its health and delta, how many reasons it needs attention, its review; `attention` crit for a critical
+    anomaly, warn for any other reason; `weakest` the map with the lowest score. Never an owner or any person."""
+    rows = []
+    for m in p["maps"]:
+        reasons = [a["reason"] for a in m["attention"]]
+        rows.append({"journey": m["journey"], "map": os.path.splitext(m["note"])[0], "score": m["health"]["score"],
+                     "delta": m["health"]["delta"], "attention_count": len(reasons), "reviewed": m["reviewed"],
+                     "attention": "crit" if "critical_anomaly" in reasons else "warn" if reasons else "ok"})
+    scored = [r for r in rows if isinstance(r["score"], (int, float))]
+    low = min(scored, key=lambda r: r["score"]) if scored else None
+    return {"columns": [{"key": k, "title": t} for k, t in zip(APP_COLUMNS, APP_TITLES.get(lang, APP_TITLES["en"]))],
+            "rows": rows, "weakest": {"title": low["journey"], "map": low["map"], "score": low["score"]} if low else None}
+
+
+def _value(v):
+    """(number or None, unit) of a snapshot's value such as "43.5%"."""
+    m = VALUE.match(str(v if v is not None else ""))
+    if not m:
+        return None, ""
+    f = float(m.group(1).replace(",", "."))
+    return (int(f) if f.is_integer() else f), m.group(2)
+
+
+def app_funnel(folder, product):
+    """The newest funnel-level health-check snapshot of the product (one without `map:`) as a `chart` block's data:
+    {stages: [{id, title, value, baseline, unit}], date, score} — None when there is none."""
+    if not folder or not os.path.isdir(folder):
+        return None
+    best = None
+    for n in sorted(os.listdir(folder)):
+        if not n.endswith(".md"):
+            continue
+        s, _ = jm.inspect_snapshot(os.path.join(folder, n))
+        if s is None or s["map"] or not s["product"] or not jm._same_product(s["product"], product) or jm.day(s["date"]) is None:
+            continue
+        if best is None or (s["date"], n) > (best["date"], best["name"]):
+            best = s
+    if best is None:
+        return None
+    stages = []
+    for st in best["stages"]:
+        value, unit = _value(st.get("value"))
+        base, bunit = _value(st.get("baseline"))
+        stages.append({"id": plain(st.get("id")), "title": plain(st.get("metric")), "value": value, "baseline": base,
+                       "unit": unit or bunit})
+    return {"stages": stages, "date": best["date"], "score": best["score"]}
+
+
+def cmd_app_data(args):
+    p, today = _portfolio(args)
+    port = app_portfolio(p, args.lang)
+    funnel = app_funnel(args.snapshots, args.product)
+    try:
+        os.makedirs(args.out_dir, exist_ok=True)
+        for name, data in (("portfolio.json", port), ("funnel.json", funnel)):
+            if data is None:
+                continue
+            with open(os.path.join(args.out_dir, name), "w", encoding="utf-8", newline="") as fh:
+                json.dump(data, fh, ensure_ascii=False)
+    except OSError as e:
+        result(ok=False, error="the data cannot be written: %s" % (e.strerror or type(e).__name__))
+        return 1
+    result(ok=True, out_dir=args.out_dir, maps=len(port["rows"]), funnel=funnel is not None, weakest=port["weakest"])
+    return 0
+
+
 def cmd_schema(args):
-    result(ok=True, commands=list(COMMANDS), columns=[list(c) for c in COLUMNS], attention=[list(a) for a in ATTENTION],
+    result(ok=True, commands=list(COMMANDS), app_commands=list(APP_COMMANDS), columns=[list(c) for c in COLUMNS], attention=[list(a) for a in ATTENTION],
            drop=DROP, cjm_fields=list(CJM_FIELDS), cjm_findings=list(CJM_FINDINGS), skips=[list(s) for s in SKIPS],
            errors=check_protocol(os.path.dirname(HERE)))
     return 0
@@ -738,7 +817,7 @@ def cmd_schema(args):
 def build_parser():
     ap = argparse.ArgumentParser(prog="journey_portfolio.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
-    for name in ("list", "render-html"):
+    for name in ("list", "render-html", "app-data"):
         p = sub.add_parser(name)
         p.add_argument("--product", required=True, help="the product of the portfolio — another product's note is left out")
         p.add_argument("--note", action="extend", nargs="+", default=[], help="a journey map or a hand CJM note — its type decides")
@@ -748,6 +827,8 @@ def build_parser():
         p.add_argument("--lang", default="en", choices=sorted(LABELS))
         if name == "render-html":
             p.add_argument("--out", required=True, help="CJM/journeys/<product>/portfolio.html")
+        if name == "app-data":
+            p.add_argument("--out-dir", required=True, help="a scratch folder: portfolio.json and funnel.json for app_shell.py snapshot")
     sub.add_parser("schema")
     return ap, sub
 
@@ -768,10 +849,10 @@ def main(argv=None):
             return 0
         result(ok=False, error="wrong arguments — see journey_portfolio.py <command> --help")
         return 2
-    fn = {"list": cmd_list, "render-html": cmd_render, "schema": cmd_schema}.get(args.cmd)
+    fn = {"list": cmd_list, "render-html": cmd_render, "app-data": cmd_app_data, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
-        result(ok=False, error="a command is needed: %s" % "|".join(COMMANDS))
+        result(ok=False, error="a command is needed: %s" % "|".join(COMMANDS + APP_COMMANDS))
         return 2
     try:
         return fn(args)
