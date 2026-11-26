@@ -97,7 +97,8 @@
         button.type = "button";
         ctx.actions.appendChild(button);
         button.addEventListener("click", function () {
-          var asked = desktop.install.request().then(function (answer) {
+          // inside the promise: a request() that throws at once is a refusal in words, never an error on the page
+          var asked = Promise.resolve().then(function () { return desktop.install.request(); }).then(function (answer) {
             if (answer === "installed") { return; }
             if (answer === "cancelled") { throw refusal(t.cancelled); }
             throw refusal(answer === "unavailable" ? t.unavailable : t.failed);
@@ -142,13 +143,46 @@
     }
     if (isObj(raw.connectors)) {
       Object.keys(raw.connectors).forEach(function (role) {
-        var b = raw.connectors[role];
-        if (/^[a-z0-9][a-z0-9-]{0,63}$/.test(role) && isObj(b) && str(b.server, 100) && str(b.tool, 100)) {
-          meta.connectors[role] = { server: b.server, tool: b.tool };
-        }
+        var b = /^[a-z0-9][a-z0-9-]{0,63}$/.test(role) ? cleanBinding(raw.connectors[role]) : null;
+        if (b) { meta.connectors[role] = b; }
       });
     }
     return meta;
+  }
+
+  // A role's binding {server, tool, input, pick} (the same rules as `snapshot --connectors` in app_shell.py): the
+  // connector's display name and tool, the tool's arguments (plain JSON, at most 4 KiB and 6 levels, the placeholders
+  // {codes} / "{codes[]}" only) and three dot-paths that read the answer. A binding that does not fit is dropped.
+  var PICK_PATH = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+){0,7}$/;
+  var INPUT_MAX = 4096, INPUT_DEPTH = 6;
+  function inputFits(v, depth) {
+    if (Array.isArray(v) || isObj(v)) {
+      if (depth > INPUT_DEPTH) { return false; }
+      var keys = Array.isArray(v) ? null : Object.keys(v);
+      if (keys && keys.some(function (k) { return k.indexOf("{") >= 0 || k.indexOf("}") >= 0; })) { return false; }
+      return (keys ? keys.map(function (k) { return v[k]; }) : v).every(function (x) { return inputFits(x, depth + 1); });
+    }
+    if (typeof v === "string") {
+      var rest = v.split("{codes}").join("");
+      return v === "{codes[]}" || (rest.indexOf("{") < 0 && rest.indexOf("}") < 0);
+    }
+    return v === null || typeof v === "boolean" || num(v) !== null;
+  }
+  function cleanBinding(b) {
+    try {
+      if (!isObj(b) || !str(b.server, 100) || !str(b.tool, 100) || !isObj(b.input) || !isObj(b.pick)) { return null; }
+      var text = JSON.stringify(b.input);
+      if (unescape(encodeURIComponent(text)).length > INPUT_MAX || !inputFits(b.input, 1)) { return null; }
+      var keys = Object.keys(b.pick).sort().join(",");
+      if (keys !== "items,key,value") { return null; }
+      var pick = {};
+      var ok = ["items", "key", "value"].every(function (k) {
+        var v = b.pick[k];
+        pick[k] = v;
+        return typeof v === "string" && (PICK_PATH.test(v) || (k === "items" && v === ""));
+      });
+      return ok ? { server: b.server, tool: b.tool, input: JSON.parse(text), pick: pick } : null;
+    } catch (e) { return null; }
   }
 
   function cleanSection(id, raw) {
@@ -360,9 +394,11 @@
     if (title && profile.title && profile.title[lang]) { title.textContent = profile.title[lang]; }
     if (!actions) { actions = el("div", "gpm-actions"); header.appendChild(actions); }
     var desktopPromise = null, dbPromise = null, last = emptySnapshot(), listeners = [];
+    var editsList = null, editsFns = [], editsStarted = false;
     // The last read, for tests and nothing else: a getter, so the page cannot assign it.
     try { Object.defineProperty(window, "__gpm", { value: Object.freeze({ get data() { return last; } }) }); } catch (e) { /* kept */ }
-    var ctx = {
+    var ctx;
+    ctx = {
       profile: profile, lang: lang, t: t, header: header, actions: actions,
       // the last snapshot read, and a way to hear the next ones: ctx.onData(fn) calls fn(snapshot) on every change
       get data() { return last; },
@@ -370,6 +406,32 @@
       setData: function (snap) {
         last = snap;
         listeners.slice().forEach(function (fn) { try { fn(snap); } catch (e) { /* one listener does not stop the others */ } });
+      },
+      // The shared edits (collection `edits`) are read once for everyone: ctx.watchEdits(fn) calls fn(list) now (when
+      // there is an answer already) and on every change; list = [{id, x, local}], x the document's own object, local
+      // true while it is this window's own write not yet confirmed. Whoever reads the documents checks their shape.
+      watchEdits: function (fn) {
+        if (typeof fn !== "function") { return; }
+        editsFns.push(fn);
+        if (editsList) { try { fn(editsList); } catch (e) { /* a listener must not break the others */ } }
+        if (editsStarted) { return; }
+        editsStarted = true;
+        ctx.db().then(function (db) {
+          if (!db || typeof db.collection !== "function") { return; }
+          try {
+            db.collection("edits").onSnapshot(function (qs) {
+              var list = [];
+              try {
+                Array.prototype.slice.call(qs && qs.docs ? qs.docs : []).forEach(function (d) {
+                  var x = d && typeof d.data === "function" ? d.data() : null;
+                  if (isObj(x) && typeof d.id === "string") { list.push({ id: d.id, x: x, local: !!(d.metadata && d.metadata.hasPendingWrites) }); }
+                });
+              } catch (e) { list = []; }
+              editsList = list;
+              editsFns.slice().forEach(function (f) { try { f(list); } catch (e) { /* one listener does not stop the others */ } });
+            }, function () { /* no edits without the database's leave */ });
+          } catch (e) { /* no edits */ }
+        });
       },
       db: function () {
         if (!dbPromise) {

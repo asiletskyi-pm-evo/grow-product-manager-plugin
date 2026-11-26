@@ -149,6 +149,15 @@
   // ---- blocks -----------------------------------------------------------------------------------------------------------
   // A block renderer takes the data of one section document and the view -> an element, or null when the data does not
   // hold what the block shows. `view` = {meta, filter, chip(id), shows(id)}; `info` = {id, product, section, made}.
+  // A renderer tells the registry about a node it drew and that something else may add to: decorate(kind, node, key) —
+  // kinds `stage` (a chart stage's head, key = the stage id) and `code` (a map row, key = its code, from map.js).
+  // Whoever registered with onDecorate (live.js) hears it; with nobody registered nothing changes in the output.
+  var DECORATORS = [];
+  function onDecorate(fn) { if (typeof fn === "function") { DECORATORS.push(fn); } }
+  function decorate(kind, node, key) {
+    DECORATORS.forEach(function (fn) { try { fn(kind, node, key); } catch (e) { /* one decorator does not stop the others */ } });
+  }
+
   function mark(level) {
     var span = el("span", "gpm-attn gpm-attn-" + level);
     var dot = el("span", "gpm-mark");
@@ -202,7 +211,7 @@
     return out;
   }
 
-  function items(data, view, withDate) {
+  function items(data, view, withDate, info) {
     var list = (Array.isArray(data.items) ? data.items : []).filter(function (it) {
       return isObj(it) && str(it.title, 300) && (!str(it.product, 64) || view.shows(it.product));
     }).slice(0, MAX_ITEMS);
@@ -212,7 +221,8 @@
       var li = el("li", "gpm-item");
       var level = attention(it.attention);
       if (level) { li.appendChild(mark(level)); }
-      if (str(it.product, 64)) { li.appendChild(view.chip(it.product)); }
+      // the card's own header already names the product: the row says it only when it is another one (or there is no header)
+      if (str(it.product, 64) && !(info && info.header && it.product === info.product)) { li.appendChild(view.chip(it.product)); }
       if (withDate && str(it.at, 40)) {
         var d = S.showDate(it.at, S.lang) || it.at;
         li.appendChild(el("span", "gpm-at", d));
@@ -223,8 +233,8 @@
     });
     return ul;
   }
-  function list(data, view) { return items(data, view, false); }
-  function feed(data, view) { return items(data, view, true); }
+  function list(data, view, info) { return items(data, view, false, info); }
+  function feed(data, view, info) { return items(data, view, true, info); }
 
   function sparkline(trend) {
     var pts = trend.slice(0, MAX_TREND);
@@ -283,6 +293,7 @@
       if (base !== null) { head.appendChild(el("span", "gpm-stage-base", S.t.baseline + " " + base + unit)); }
       if (level && level !== "ok") { head.appendChild(mark(level)); }
       row.appendChild(head);
+      if (str(s.id, 64)) { decorate("stage", head, s.id); }
       var scale = top > 0 ? 100 / top : 0;
       var g = svg("svg", { "class": "gpm-bars", viewBox: "0 0 100 10", preserveAspectRatio: "none", role: "img", width: "100%", height: "10" });
       g.setAttribute("aria-label", s.title + ": " + s.value + (base !== null ? " / " + base : ""));
@@ -306,8 +317,18 @@
   var SOURCES = { "@edits": function () { return placeholder(S.t.editsPlaceholder); } };
   S.blocks = RENDER;
   S.sources = SOURCES;
+  S.onDecorate = onDecorate;
+  S.decorate = decorate;
   S.productChip = productChip;
   S.productSwitch = productSwitch;
+  // What the window's menu and tray need of the modules: the product and the tab shown, a way to open a tab and to hear
+  // of a change (the modules part below fills them in).
+  var viewFns = [];
+  S.view = function () { return { product: "", tab: null }; };
+  S.openTab = function () { return false; };
+  S.onView = function (fn) { if (typeof fn === "function") { viewFns.push(fn); } };
+  function viewChanged() { viewFns.slice().forEach(function (f) { try { f(); } catch (e) { /* one listener does not stop the others */ } }); }
+  var HAS_MODULES = "gpm-has-modules";      // on <html> while the modules are shown: the host's own page colour must not show under them
 
   // ---- the owner's config/app ---------------------------------------------------------------------------------------
   // One block entry: {block, source, title} + `bad` when it is not one this page can show. A title is text (a profile's
@@ -438,11 +459,23 @@
     var cards = [];
     if (SOURCES[b.source]) {
       cards.push({ key: "", node: SOURCES[b.source](view), product: "" });
+    } else if (typeof RENDER[b.block].all === "function") {
+      // a renderer that draws every document of its block at once (map.js: a picker, one map at a time)
+      var docs = docsOf(snap, b.source).filter(function (d) {
+        return view.filter === "" || groupKey(snap.meta, d.sec.product) === view.filter;
+      }).map(function (d) {
+        return { data: d.sec.data, info: { id: d.id, product: d.sec.product, section: d.sec.section, made: d.sec.made } };
+      });
+      var whole = docs.length ? RENDER[b.block].all(docs, view) : null;
+      if (whole) {
+        cards.push({ key: "", node: whole, product: "" });
+        docs.forEach(function (d) { dates.push(snap.meta.sections[d.info.id] || d.info.made); });
+      }
     } else {
       docsOf(snap, b.source).forEach(function (d) {
         var key = groupKey(snap.meta, d.sec.product);
         if (view.filter !== "" && key !== view.filter) { return; }
-        var node = RENDER[b.block](d.sec.data, view, { id: d.id, product: d.sec.product, section: d.sec.section, made: d.sec.made });
+        var node = RENDER[b.block](d.sec.data, view, { id: d.id, product: d.sec.product, section: d.sec.section, made: d.sec.made, header: key !== "" });
         if (!node) { return; }
         cards.push({ key: key, node: node, product: d.sec.product });
         dates.push(snap.meta.sections[d.id] || d.sec.made);
@@ -510,11 +543,18 @@
     if (!root) { return; }
     var config = null, active = stored(STORE_TAB), product = null, switchEl = null;
 
+    var shownTab = null;
+    S.view = function () { return { product: product || "", tab: shownTab }; };
+    S.openTab = function (id) { pickTab(id); return shownTab === id; };
+
     function showPage() {
+      document.documentElement.classList.remove(HAS_MODULES);
+      shownTab = null;
       root.hidden = true;
       if (page) { page.hidden = false; }
       if (switchEl && switchEl.parentNode) { switchEl.parentNode.removeChild(switchEl); }
       switchEl = null;
+      viewChanged();
     }
 
     function pickProduct(id) { product = id; keep(STORE_PRODUCT, id); paint(); }
@@ -573,7 +613,10 @@
 
       root.hidden = false;
       if (page) { page.hidden = true; }
+      document.documentElement.classList.add(HAS_MODULES);
+      shownTab = r.active;
       refocus();
+      viewChanged();
       function refocus() {
         if (!focusKey) { return; }
         var sel = focusKey.indexOf("tab:") === 0 ? '[data-tab="' + focusKey.slice(4) + '"]' : '[data-product="' + focusKey.slice(8) + '"]';
