@@ -127,6 +127,13 @@ with_person["rows"] = [dict(r, assignee="Somebody", owner="Somebody") for r in w
 d2, over, dropped = sh._build([("directions", "zorg", with_person)], PRODUCTS, None, MADE)
 check("3.4 a person's key in a section is dropped and named",
       not any(k in sh.PEOPLE_KEYS for k, _ in walk(d2["snapshot/directions--zorg"])) and dropped and not over, dropped)
+LATER = "2026-11-26T11:00:00Z"
+part = sh.build_snapshot([("meetings", "zorg", fixture("meetings"))], PRODUCTS, None, LATER, prev_meta=docs["snapshot/meta"])
+kept = part["snapshot/meta"]["sections"]
+check("3.6 a partial run keeps the dates of the sections it did not write (protocol §4, step 4)",
+      set(part) == {"snapshot/meetings--zorg", "snapshot/meta", "runs/2026-11-26T11-00-00Z"}
+      and kept.get("meetings--zorg") == LATER and kept.get("directions--zorg") == MADE
+      and len(kept) == len(sources) * 2 and "--prev-meta" in protocol, kept)
 with tempfile.TemporaryDirectory() as d:
     args = ["snapshot", "--profile", "pm-os", "--at", MADE, "--out", os.path.join(d, "db")]
     for p in PRODUCTS:

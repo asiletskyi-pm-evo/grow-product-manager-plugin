@@ -26,7 +26,7 @@ A section's data has the shape of the block that shows it (the shell's blocks: `
 | `metrics` | `goal` | number | the top goal: the value now, its unit, the change | the user's tracker or dashboard |
 | `metrics` | `metrics` | table | the second level under the goal: a row per stage and platform with the value, the change to the period before and the change year over year | the user's tracker or dashboard |
 | `rhythms` | `rhythms` | table | a row per recurring source — a tracker, a board, a scheduled run — with the date of its last update and its age | the list of the user's published results, the schedule |
-| `rhythms` | `runs-log` | feed | the last refresh runs of the pult: when, how many sections, what was skipped and why | the `runs` documents of §3 |
+| `rhythms` | `runs-log` | feed | the last refresh runs of the pult, written per product: when, how many of that product's sections, what was skipped and why | the `runs` documents of §3 |
 | `context` | `context-health` | number | how many records of the context store are stale | `ctx health` |
 | `context` | `context-inbox` | list | the proposals waiting in the inbox, as questions | `ctx inbox list` |
 
@@ -51,7 +51,7 @@ Rules for every section:
 1. Read the record `pm-os`. Without it there is nothing to refresh: say so in one line and stop.
 2. Check the consent of §5 when the run is scheduled. Without a valid consent the run follows `native-surfaces.md` §4: it builds the snapshot files, writes nothing to the database, and ends with the one line for the next interactive run.
 3. For each section, read its source by role (`integration-strategy.md`), in the read-only way, and shape the data as §2 says. A source that does not answer: skip the section, note it for `runs-log`.
-4. Build the documents: `app_shell.py snapshot --profile pm-os --product … --section … --out <scratch dir>`. A refusal (a wrong id, a weak theme) stops the run with the script's words.
+4. Build the documents: `app_shell.py snapshot --profile pm-os --product … --section … --prev-meta <the current snapshot/meta> --out <scratch dir>`. `--prev-meta` keeps the dates of the sections this run did not write, so a skipped section still shows the date of its last document; without it a partial run would drop them. A refusal (a wrong id, a weak theme) stops the run with the script's words.
 5. Write the batch to the page's database. Interactive run — after the question of `native-surfaces.md` §3, as for every publication; scheduled run under §5 — without it.
 6. One line at the end: how many sections were written, which were skipped and why.
 
