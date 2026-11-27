@@ -90,6 +90,7 @@ try:
     folder = cp.copy_dir(env.home, "zorg-growth")
     with FakeMcp(tree=tree()) as fake:
         open(os.path.join(prov, "zorg-growth.yaml"), "w", encoding="utf-8").write(REG.format(url=fake.url))
+        env.trust("zorg-growth")                        # since v4.12.4: the first run trusts nothing — the user's yes
 
         print("— 1. a copy in one command")
         rc, out, res = env.run("repo", "copy", "zorg-growth", "--now", "2026-10-29T09:00:00+02:00")

@@ -191,6 +191,19 @@ SEEDS = [
     ("core-is-data: a sample value in double quotes in a scripts command",
      "skills/context-connect/references/connect-steps.md", "append",
      '`python3 "<plugin root>/scripts/provider_bundle.py" --core x --name "Name Surname"`', "core-is-data"),
+    # v4.12.4: the audit of 2026-11-26 — finding 1 (check 32) and finding 3 (check 33)
+    ("core-is-data: a request in the command line of `ctx graph`",
+     "skills/context-navigator/SKILL.md", "append",
+     "→ `python3 \"<plugin root>/scripts/ctx.py\" graph '<X>'` (a `'` in it written `'\\''`)", "core-is-data"),
+    ("core-is-data: a request after an option of `ctx graph`",
+     "references/context-protocol.md", "append",
+     "Then `ctx graph --depth 2 '<note>'`.", "core-is-data"),
+    ("db-least-rights: Editors write the whole store of a page",
+     "skills/cjm-research/SKILL.md", "append",
+     '- the publication declares `capabilities: {db: {rules: [{path: "", read: "view", write: "admin"}]}}`', "db-least-rights"),
+    ("db-least-rights: a rule set with no root rule",
+     "references/journey-protocol.md", "append",
+     'The page declares `db: {rules: [{path: "edits", read: "view", write: "admin"}]}`.', "db-least-rights"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare
