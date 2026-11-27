@@ -53,6 +53,7 @@ CHECKS = """
 31. publish-protocol     a skill that publishes to ARTIFACT or DOCS, or that artifact-publishing.md names as its consumer, without citing artifact-publishing.md
 32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`, since v4.12.4 any `ctx graph '<…>'`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule; any value of a scripts command in double quotes, a delta in the command line
 33. db-least-rights     a shipped doc that declares an artifact `db` rule letting anyone below the owner write the whole store (`path: ""` with write view|interact|admin), or a db rule set with no root rule (since v4.12.4)
+34. withdrawn-trust    README or CHANGELOG describing the first run trusting registrations by itself without saying it was withdrawn in v4.12.4 (since v4.12.5)
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1701,6 +1702,19 @@ for _f in _CID_DOCS:
             if 'path: ""' not in _m.group(1):
                 fail("db-least-rights", f"{_rel}:{_ln}: a db rule set with no root rule — every path no rule names falls back "
                                         "to the host's default, where Contributors write; add `{path: \"\", read: \"view\", write: \"owner\"}`")
+
+# ============================================================ withdrawn trust (34)
+# v4.12.5: the audit of 2026-11-26 read the v4.9.1 entry of CHANGELOG.md — «the first run trusts the registrations
+# already there» — as the plugin's behaviour, though v4.12.4 withdrew it. A history line that describes it says so.
+_WT_RX = re.compile(r"trusts? the registrations already there|becomes trusted at that run|trusted at its own first run", re.I)
+for _rel in ("README.md", "CHANGELOG.md"):
+    _f = os.path.join(root, _rel)
+    if not os.path.isfile(_f):
+        continue
+    for _ln, _line in enumerate(open(_f, encoding="utf-8").read().splitlines(), 1):
+        if _WT_RX.search(_line) and not re.search(r"[Ww]ithdrawn in v4\.12\.4|since v4\.12\.4|v4\.12\.4[^\n]*(?:trusts nothing|no registration)", _line):
+            fail("withdrawn-trust", f"{_rel}:{_ln}: describes the first run trusting registrations by itself without "
+                                    "«withdrawn in v4.12.4» — a scanner reads the history as the plugin's behaviour")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")
