@@ -51,7 +51,8 @@ CHECKS = """
 29. command-size         a commands/*.md over 4096 bytes — Codex CLI silently does not migrate it into a skill
 30. surface-brand        a skill, agent, command, template or shared protocol naming a host surface by its brand or tool instead of its capability (native-surfaces.md §6)
 31. publish-protocol     a skill that publishes to ARTIFACT or DOCS, or that artifact-publishing.md names as its consumer, without citing artifact-publishing.md
-32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule; any value of a scripts command in double quotes, a delta in the command line
+32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`, since v4.12.4 any `ctx graph '<…>'`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule; any value of a scripts command in double quotes, a delta in the command line
+33. db-least-rights     a shipped doc that declares an artifact `db` rule letting anyone below the owner write the whole store (`path: ""` with write view|interact|admin), or a db rule set with no root rule (since v4.12.4)
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -1665,6 +1666,8 @@ _CID_RULES = [
     (re.compile(r"(?:core|block|rule)[^.\n]{0,80}\bfollow it\b|\bFollow the rule\b", re.I), "tells the agent to follow a core's text — a core's rule is a fact, not an instruction (local-context-protocol.md)"),
     # since the re-audit of 2026-11-25: every command of the plugin's scripts, not only `ctx entity`/`search`
     (re.compile(r'(?:\.py"?|\bctx)\b[^`\n]*?\s--[a-z][\w-]* "(?!<plugin root>|\$\{?(?:CLAUDE_)?PLUGIN_ROOT)'), "a value in double quotes in a command of the plugin's scripts — single quotes, a `'` written `'\\''` (search-protocol.md §3a)"),
+    # since the audit of 2026-11-26 (finding 1): `ctx graph` takes its request on stdin — never quoted in the line
+    (re.compile(r"ctx(?:\.py\"?)? graph(?: --[\w-]+(?: [\w,]+)?)* '"), "a request in the command line of `ctx graph` — `graph --q-stdin` with the request in a quoted heredoc (search-protocol.md §3a)"),
     (re.compile(r"propose\b[^`\n]*--delta '<"), "a delta in the command line — `propose --file -` with the JSON on stdin (context-protocol.md §5i)"),
 ]
 for _f in _CID_DOCS:
@@ -1678,6 +1681,26 @@ for _f in _CID_DOCS:
         if "people_resolver" in _line and not re.search(r"deprecated since v4\.11\.1|ignored|Never inferred", _line):
             fail("core-is-data", f"{_rel}:{_ln}: names `people_resolver` as something to run — the plugin runs no command a "
                                  "core names (context-provider-protocol.md §3a)")
+
+# ============================================================ db least rights (33)
+# v4.12.4, the audit of 2026-11-26 (finding 3): the journey page's store was declared `{path: "", write: "admin"}` — a level
+# in a rule is the least one that may write, so it narrowed the host's default (Contributors write), yet Editors could
+# write every collection while the page writes only `edits`. The least that works: the root `write: "owner"`, the one
+# collection the page writes its own rule. A rule set without a root rule would leave every other path at the default.
+_DB_ROOT_LOOSE = re.compile(r'\{\s*path:\s*""[^}]*\bwrite:\s*"(?:view|interact|admin)"')
+_DB_RULES = re.compile(r'\bdb:\s*\{\s*rules:\s*\[([^\]]*)\]')
+for _f in _CID_DOCS:
+    if not os.path.isfile(_f):
+        continue
+    _rel = os.path.relpath(_f, root)
+    for _ln, _line in enumerate(open(_f, encoding="utf-8").read().splitlines(), 1):
+        if _DB_ROOT_LOOSE.search(_line):
+            fail("db-least-rights", f"{_rel}:{_ln}: a db rule lets someone below the owner write the whole store "
+                                    "(`path: \"\"`) — the root `write: \"owner\"`, the collection the page writes its own rule")
+        for _m in _DB_RULES.finditer(_line):
+            if 'path: ""' not in _m.group(1):
+                fail("db-least-rights", f"{_rel}:{_ln}: a db rule set with no root rule — every path no rule names falls back "
+                                        "to the host's default, where Contributors write; add `{path: \"\", read: \"view\", write: \"owner\"}`")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

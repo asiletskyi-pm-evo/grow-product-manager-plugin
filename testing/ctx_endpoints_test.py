@@ -142,18 +142,42 @@ with tempfile.TemporaryDirectory() as d:
             crp.normalise({"id": "zorg-folder", "kind": "bundle", "paths": [d]})]
     check("3.0 no trust file before the first run", not os.path.lexists(ce.trust_file(home)))
     lines = ce.seed(home, regs, now=NOW)
-    check("4.1 the first run trusts the registrations with an address already there — one line each, by the protocol's "
-          "words", lines[:2] == ["Довірено наявну реєстрацію zorg-core: https://context.zorg.example (змінна ZORG_MCP_HEADERS → "
-                                 "заголовок X-Token)",
-                                 "Довірено наявну реєстрацію zorg-brain: http://127.0.0.1:9 (без змінної)"], lines)
-    check("4.2 …a remote http address is not trusted, and is named", len(lines) == 3 and lines[2].startswith("Не довірено zorg-old:")
-          and "https" in lines[2], lines)
+    check("4.1 since v4.12.4 (the audit of 2026-11-26) the first run trusts nothing already there — one line, by the "
+          "protocol's words (mutation: the seed of v4.9.1 back)",
+          lines == ["довіра адресам: жодну наявну реєстрацію не довірено автоматично — кожну адресу схвалиш сам, одним "
+                    "питанням (ctx provider trust <id>)"], lines)
     data = json.loads(raw(home))
-    check("4.3 the file: schema, seeded_at, one entry per trusted registration, «seeded»",
-          data.get("schema") == "provider-trust/1" and data.get("seeded_at") == NOW
-          and [(e["id"], e["url"], e["headers_env"], e["how"]) for e in data["entries"]]
-          == [("zorg-core", "https://context.zorg.example/mcp", "ZORG_MCP_HEADERS", "seeded"),
-              ("zorg-brain", "http://127.0.0.1:9/mcp", None, "seeded")], data)
+    check("4.3 the file: schema, seeded_at, no entry", data.get("schema") == "provider-trust/1"
+          and data.get("seeded_at") == NOW and data["entries"] == [], data)
+    check("4.2 …so every registration with an address is refused as new until the user approves it",
+          all(ce.verdict(r) is not None and ce.verdict(r).why in ("new", "transport") for r in regs[:3]),
+          [ce.verdict(r) and ce.verdict(r).line for r in regs[:3]])
+    ce.approve(home, regs[0], now=NOW)                  # the user's yes, as `ctx provider trust <id> --code` gives it
+    ce.approve(home, regs[1], now=NOW)
+    check("4.2b …and an approval is the one way in: `how: approved`",
+          [(e["id"], e["how"]) for e in json.loads(raw(home))["entries"]] == [("zorg-core", "approved"), ("zorg-brain", "approved")]
+          and ce.verdict(regs[0]) is None, raw(home))
+    sd = new_home(d, "seeded-before")                   # a trust file a first run of v4.9.1–v4.12.3 wrote
+    os.makedirs(os.path.dirname(ce.trust_file(sd)), mode=0o700)
+    open(ce.trust_file(sd), "w").write(json.dumps({"schema": "provider-trust/1", "seeded_at": NOW, "entries": [
+        {"id": "zorg-core", "url": "https://context.zorg.example/mcp", "query_sha256": None, "headers_env": "ZORG_MCP_HEADERS",
+         "at": NOW, "how": "seeded"}]}))
+    old = repo("zorg-core", "https://context.zorg.example/mcp", "ZORG_MCP_HEADERS", sd)
+    ov = ce.verdict(old)
+    check("4.9 v4.12.4: an entry an earlier first run seeded is no approval — reason `seeded`, its words, how to approve "
+          "(mutation: a seeded entry passes)", ov is not None and ov.why == "seeded" and ov.line == "zorg-core: адресу не "
+          "схвалено (довірено без твого схвалення: https://context.zorg.example) — нічого не надіслано. Схвалити: ctx "
+          "provider trust zorg-core", ov and ov.line)
+    f0 = Factory()
+    try:
+        ce.client_for(old, factory=f0)
+        sent = True
+    except ce.Untrusted:
+        sent = False
+    check("4.10 …and client_for builds no client for it: no request, no header", not sent and f0.calls == [], f0.calls)
+    ce.approve(sd, old, now=NOW)
+    check("4.11 …the user's approval replaces it, and then it passes", ce.verdict(old) is None
+          and json.loads(raw(sd))["entries"][0]["how"] == "approved", raw(sd))
     mode = stat.S_IMODE(os.stat(ce.trust_file(home)).st_mode)
     dmode = stat.S_IMODE(os.stat(os.path.dirname(ce.trust_file(home))).st_mode)
     check("3.1 the trust file is 0600, its folder 0700", mode == 0o600 and dmode == 0o700, (oct(mode), oct(dmode)))
@@ -173,8 +197,9 @@ with tempfile.TemporaryDirectory() as d:
           and json.loads(raw(empty))["entries"] == [])
     late = new_home(d, "late")
     put = ce.seed(late, regs, late=["/vault/Notes/_System/providers/zorg-x.yaml"], now=NOW)
-    check("4.7 a registration still downloading puts the first run off: one line, no file",
-          len(put) == 1 and "завантаж" in put[0] and not os.path.lexists(ce.trust_file(late)), put)
+    check("4.7 since v4.12.4 a registration still downloading does not matter: nothing is trusted from what is there — "
+          "the file, empty, the one line", len(put) == 1 and "не довірено автоматично" in put[0]
+          and json.loads(raw(late))["entries"] == [], put)
     ro = new_home(d, "ro")
     os.chmod(os.path.join(ro, ".grow-pm"), 0o500)
     try:
@@ -474,14 +499,12 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE, require_headers={"X-
     open(os.path.join(prov, "zorg-growth.yaml"), "w").write(reg_text("zorg-growth", fake.url, "ZORG_MCP_HEADERS"))
     open(os.path.join(prov, "zorg-brain.yaml"), "w").write(reg_text("zorg-brain", fake.url, ""))
     rc, out, res = env.run("repo", "status")
-    seeded = [l for l in out.splitlines() if l.startswith("Довірено")]
-    check("10.1 the first repo status after the update trusts both, one line each, and the requests go",
-          rc == 0 and seeded == ["Довірено наявну реєстрацію zorg-brain: %s (без змінної)" % fake.url.rsplit("/", 1)[0],
-                                 "Довірено наявну реєстрацію zorg-growth: %s (змінна ZORG_MCP_HEADERS → заголовок X-Token)"
-                                 % fake.url.rsplit("/", 1)[0]]
-          and reqs(fake) > 0 and all(r["trusted"] for r in res["repos"]), (out, seeded))
+    first = [l for l in out.splitlines() if l.startswith("довіра адресам")]
+    check("10.1 v4.12.4: the first repo status trusts neither — one line, no request, both «не схвалено»",
+          rc == 0 and len(first) == 1 and "не довірено автоматично" in first[0] and reqs(fake) == 0
+          and not any(r["trusted"] for r in res["repos"]) and "Довірено" not in out, (out, first))
     rc, out, res = env.run("repo", "status")
-    check("10.2 the second run: no line", rc == 0 and "Довірено" not in out, out)
+    check("10.2 the second run: no first-run line", rc == 0 and "довіра адресам" not in out, out)
 
 # 11. validate check 31 — the one way to a client, the trust file's place, and the protocol's words are the code's ----------
 import re, shutil  # noqa: E402,E401
@@ -515,8 +538,17 @@ if callable(cp31):
          'LOOPBACK = ("127.0.0.1", "::1", "localhost", "0.0.0.0")'),
         ("the shadow line reworded", "scripts/ctx_common.py", 'SHADOWED = "реєстрація %s: два файли не збігаються, взято приватний"',
          'SHADOWED = "реєстрація %s: два файли, взято приватний"'),
-        ("the first-run line reworded", "scripts/ctx_endpoints.py", 'lines.append("Довірено наявну реєстрацію %s: %s (%s%s)"',
-         'lines.append("Довірено реєстрацію %s: %s (%s%s)"'),
+        ("the first-run line reworded", "scripts/ctx_endpoints.py", 'FIRST_RUN = ("довіра адресам: жодну наявну реєстрацію не довірено автоматично',
+         'FIRST_RUN = ("довіра адресам: нічого не схвалено'),
+        # since v4.12.4 (the audit of 2026-11-26, finding 2): the first run that trusts by itself cannot come back
+        ("the first run seeds again", "scripts/ctx_endpoints.py", "    _mark(home, stamp)\n    return [FIRST_RUN",
+         "    entries = [_entry(r['id'], parse(r['endpoint']['url']), '', now, SEEDED) for r in repos]\n    _mark(home, stamp)\n    return [FIRST_RUN"),
+        ("a seeded entry passes the verdict", "scripts/ctx_endpoints.py", 'if entry.get("how") != APPROVED:',
+         'if entry.get("how") not in (APPROVED, SEEDED):'),
+        ("an entry written as seeded", "scripts/ctx_endpoints.py", "entry = _entry(rid, parse(url), var, now, APPROVED)",
+         "entry = _entry(rid, parse(url), var, now, SEEDED)"),
+        ("the reason gone from the protocol", "references/context-provider-protocol.md", "| `seeded` | `довірено без твого схвалення",
+         "| `seeded` | `довірено автоматично"),
     ]
     with tempfile.TemporaryDirectory() as d:
         for name, rel, old, new in DRIFTS:
@@ -586,7 +618,7 @@ with tempfile.TemporaryDirectory() as d:
     bare = new_home(d, "bare", installed=False)
     said = ce.seed(bare, [repo("zorg-core", "https://context.zorg.example/mcp", "", bare)], now=NOW)
     check("12.9 #4 a home with no earlier install (another --home, a sandbox HOME): the file, empty, one line — nothing "
-          "trusted", json.loads(raw(bare))["entries"] == [] and len(said) == 1 and "Довірено" not in said[0], said)
+          "trusted", json.loads(raw(bare))["entries"] == [] and len(said) == 1 and "не довірено автоматично" in said[0], said)
 
     # #5 — approve and revoke under a lock: nothing lost between a read and a write
     h5 = new_home(d, "lock")
@@ -623,12 +655,13 @@ with tempfile.TemporaryDirectory() as d:
     h6 = new_home(d, "dup")
     lines6 = ce.seed(h6, [repo("zorg", "https://context.zorg.example/mcp", "", h6), repo("zorg", "https://evil.example/mcp", "", h6)],
                      now=NOW)
-    check("12.12 #6 the first run never seeds an id twice", [e["url"] for e in json.loads(raw(h6))["entries"]]
-          == ["https://context.zorg.example/mcp"] and len([l for l in lines6 if l.startswith("Довірено")]) == 1, lines6)
+    check("12.12 #6 the first run seeds no id at all — twice or once (since v4.12.4)", json.loads(raw(h6))["entries"] == []
+          and len(lines6) == 1, lines6)
 
     # #8 — a path a registration writes reaches a line only encoded
     h8 = new_home(d, "path")
     ce.seed(h8, [repo("zorg-core", "https://context.zorg.example/mcp", "", h8)], now=NOW)
+    ce.approve(h8, repo("zorg-core", "https://context.zorg.example/mcp", "", h8), now=NOW)
     pv = ce.verdict(repo("zorg-core", "https://context.zorg.example/x$(touch)`id`;", "", h8))
     check("12.13 #8 a changed path is shown percent-encoded: no `, $( or ; reaches the line",
           pv is not None and not any(c in pv.line for c in ("`", "$(", ";")) and "%24%28" in pv.line, pv and pv.line)
@@ -645,7 +678,7 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE) as fake:
     check("12.15 #2 trust <id> without --code shows the pair and its code, and how to approve on a yes",
           (res2 or {}).get("code") and "код: %s" % (res2 or {}).get("code") in out2
           and "ctx provider trust zorg-growth --code %s" % (res2 or {}).get("code") in out2, out2)
-    env.run("repo", "status")                           # the first run: zorg-growth was there, it is seeded
+    env.run("repo", "status")                           # the first run: the trust file, empty (since v4.12.4)
     open(os.path.join(env.home, ".grow-pm", "providers", "zorg-other.yaml"), "w").write(reg_text("zorg-other", fake.url))
     rc3, out3, res3 = env.run("provider", "trust", "zorg-other", "--code", "000000000000")
     check("12.16 #2 a wrong code is refused (exit 4), nothing approved", rc3 == 4 and "не збігається" in out3 and not any(
@@ -678,7 +711,7 @@ with tempfile.TemporaryDirectory() as d:
     again = ce.seed(h, [evil], now="2026-11-21T09:00:00+02:00")
     check("13.1 #1 a trust folder removed after the first run: no second seed — the file comes back empty, one line says so",
           os.path.lexists(ce.trust_file(h)) and json.loads(raw(h))["entries"] == [] and len(again) == 1
-          and "Довірено" not in again[0] and ce.verdict(evil) is not None, (again, os.path.lexists(ce.trust_file(h)) and raw(h)))
+          and "не довірено автоматично" in again[0] and ce.verdict(evil) is not None, (again, os.path.lexists(ce.trust_file(h)) and raw(h)))
     check("13.2 #1 …the mark of the first run lives outside the trust folder", any(
         os.path.lexists(os.path.join(h, ".grow-pm", n)) for n in os.listdir(os.path.join(h, ".grow-pm")) if "trust" in n and n != "trust"),
           os.listdir(os.path.join(h, ".grow-pm")))
@@ -711,8 +744,8 @@ with tempfile.TemporaryDirectory() as d:
     h7 = new_home(d, "hdr")
     os.environ["ZORG_DB_URL"] = "Postgres: //dbuser:DBPASS7@db.zorg.example/x"
     lines7 = ce.seed(h7, [repo("zorg-db", "https://context.zorg.example/mcp", "ZORG_DB_URL", h7)], now=NOW)
-    check("13.6 #7 the first-run line names the header the variable gives, never its value",
-          lines7 and "змінна ZORG_DB_URL → заголовок Postgres" in lines7[0] and "DBPASS7" not in lines7[0], lines7)
+    check("13.6 #7 the first-run line never names a variable's value (since v4.12.4 it names no registration at all)",
+          len(lines7) == 1 and "DBPASS7" not in lines7[0] and "не довірено автоматично" in lines7[0], lines7)
 
 # #2 / #6 / #7 / #9 through the command line
 with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE) as fake:

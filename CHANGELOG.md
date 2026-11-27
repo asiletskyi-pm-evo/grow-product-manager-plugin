@@ -12,6 +12,47 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.12.4 (2026-11-26)
+
+**Three findings of the security audit of 2026-11-26 closed.** The company's audit of the registry copy (commit 15ea847) reported three HIGH findings. Each was checked against the code: the first and the second are real, the third named a rule that already narrowed the host's default, yet left Editors free to write every collection of the page's store. All three are fixed at the source, and a lint or validator check now fails the tree if one comes back.
+
+### Fixed
+
+- **A request in the command line of `ctx graph`** (audit finding 1, `context-navigator` 0.5.3). The skill built `ctx graph '<X>'` and asked the model to write a `'` in X as `'\''`. The escaping is correct shell, but it relied on the model doing it right every time, while X can come from a note's or a meeting's title — the one place v4.11.1 left out of «words from a note never stand in the command line» (`references/search-protocol.md` §3a). `ctx graph` now takes `--q-stdin`: the request on stdin, one line, in a quoted heredoc; words and stdin together, two lines, or nothing are a usage error (exit 3).
+- **The first run trusted the registrations already there** (audit finding 2, `references/context-provider-protocol.md` §13). Since v4.9.1 the first `ctx` command that may reach a server trusted, once, every registration with an address it found (the user's decision R37, named as a known limit). A registration lies in the vault's `_System/providers/`, which syncs, so one planted there before a new machine's first run got the searches, the notes' names and the header its variable gives. Now the first run creates the trust file **empty** and prints one line, `довіра адресам: жодну наявну реєстрацію не довірено автоматично — …`; each address is refused as `new` until the user approves it (`ctx provider trust <id>` → `--code` on the user's yes). An entry an earlier first run wrote (`how: seeded`) is refused with the new reason `seeded` — `довірено без твого схвалення: <scheme://host>` — until the user approves it once.
+- **The journey page's store declared write rights wider than its flow** (audit finding 3, `cjm-research` 0.20.1, `references/journey-protocol.md` §9). The publication declared `db` with one rule, `{path: "", read: "view", write: "admin"}`. A level in a rule is the least one that may write, so the rule narrowed the host's default (Contributors write) — the audit's «admin rights» read it the other way — but Editors could write every collection while the page writes only `edits`. Now two rules: `{path: "", read: "view", write: "owner"}` and `{path: "edits", read: "view", write: "admin"}`. The root rule stays on purpose: without it a path no rule names would fall back to the default. A page published before keeps its rules until its next publication.
+
+### Added
+
+- **`skill_lint.py` check 32** also refuses a shipped doc that puts a request in the command line of `ctx graph` (`ctx graph '<…>'`).
+- **`skill_lint.py` check 33 `db-least-rights`** — a shipped doc that declares a `db` rule letting anyone below the owner write the whole store (`path: ""` with `write` view, interact or admin), or a rule set with no root rule.
+- **Validator check 31** (`ctx_endpoints.check_protocol`) — the first run writes no entry, no entry is written as `seeded`, the verdict passes only an `approved` entry, the first-run line and the reason `seeded` are the protocol's words. `testing/ctx_endpoints_test.py` seeds each drift and the check names it.
+- **Tests** — `testing/ctx_graph_test.py`: `--q-stdin` walks the same notes as the argument, a request with quotes, `;` and `$(…)` runs nothing, the usage errors. `testing/ctx_endpoints_test.py`: the first run trusts nothing, an approval is the one way in, a seeded entry builds no client and is replaced by an approval.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx.py` | `graph --q-stdin`; the first run's help text |
+| `scripts/ctx_endpoints.py` | `seed` trusts nothing; the reason `seeded`; check 31's new rules |
+| `scripts/session_start.py` | the Skills line names the first run's new line |
+| `skills/context-navigator/SKILL.md` | 0.5.3 — `ctx graph --q-stdin` |
+| `skills/cjm-research/SKILL.md` | 0.20.1 — the two `db` rules |
+| `references/search-protocol.md` | §3a: `ctx graph` on stdin |
+| `references/context-protocol.md` | the `graph` row |
+| `references/context-provider-protocol.md` | §13: the first run, the reason `seeded`, known limit (1) |
+| `references/journey-protocol.md` | §9 «Shared edits»: the two rules |
+| `references/local-context-protocol.md` | the first run's line a skill repeats |
+| `testing/skill_lint.py` | check 32 (graph), check 33 |
+| `testing/ctx_graph_test.py`, `testing/ctx_endpoints_test.py`, `testing/ctx_cli_test.py`, `testing/session_start_test.py` | the new behaviour; approvals where a test relied on the first run trusting |
+
+### Backwards compatibility
+
+- **One question per provider, once.** A trust file a first run of v4.9.1–v4.12.3 wrote keeps its entries, but each `seeded` entry is refused until you approve it: the skill shows the address and asks one question, and `ctx provider trust <id> --code <code>` runs only on your yes. An entry you approved yourself (`how: approved`) is not asked again.
+- A journey page published on the host's artifact keeps its old `db` rule until it is published again.
+
+---
+
 ## v4.12.3 (2026-11-26)
 
 **The plugin's logo in Claude.** Claude's plugin list shows a picture beside each plugin's name; ours showed the default one. The logo has been in `assets/` since v3.0.1, named only by the Codex manifest.
