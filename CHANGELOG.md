@@ -12,6 +12,78 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.14.0 «PM OS, фаза 1» (2026-11-27)
+
+**The profile of the pult: one private app for a product manager's day.** v4.13.0 shipped the app shell with the profile `pm-os` as an empty placeholder. This release fills it and adds the protocol that says what the pult shows, what its data may hold and when a run may write that data. It is the first phase of PM OS: the pult for a day. Meetings and operations, the depth of metrics, the People module and a skill that sets the pult up are later phases.
+
+### What the pult shows
+
+- **Five modules in the side rail.** «Сьогодні» — a sentence counted by the app itself (how many things wait, how many signals and where, what the calendar says of this minute), «Чекає на тебе», the day by time, the focuses of the day, and beside them the signals and the freshness of the sources. «Напрямки» — the directions in work with the closed, open and stale work as parts of one bar, and those on hold or closed. «Метрики» — the goal, the change of the second-level metrics to their baseline, the same metric across platforms, the table, and a pace. «Ритми» — every recurring source with its age on a scale, and the journal of the pult's own updates. «Контекст» — the questions waiting in the inbox of the context store and how many records are stale.
+- **The screen of one metric** opens from «Метрики» and stands under it: the last full period as a number, the metric over time, by segment, and the last periods as a table.
+- **«Налаштування» at the rail's foot.** A switch per module with what the module shows, the theme, the products with their marks, and the state of the data's updates. A switch writes the owner's layout from the page itself, on the owner's own click only; for anyone else the switches are closed.
+- **Several products in one app.** Every section carries its product; a row of a shared list names it, and the product switch filters the modules.
+- **Buttons that hand you a phrase.** A page cannot start Claude (`references/desktop-app-protocol.md` §2), so «Оновити зараз», «Задати базу» and «Відкликати згоду» copy the phrase to say to Claude and tell you where to paste it.
+
+### What a section may hold
+
+A source and its date on every number; counts and codes from the issue tracker, never a description or a comment; never the body of a letter; no person's name, e-mail, assignee, author or count per person — a letter or a meeting whose title names a person is shown as its kind and time. Text only: no link and no markup. The thresholds of attention are the user's own. The People contour sends nothing to the pult.
+
+### The one rule this release changes
+
+`references/data-policy.md` says a scheduled run never publishes to a hosted surface. There is now one exception, narrow on purpose (`references/pm-os-protocol.md` §5): the user may give a **standing consent** for the data of their own private pult, because a board refreshed many times a day cannot ask each time.
+
+- It is asked once, at set-up, as its own question that names what will be written, where, who can open it, how often and how to take it back.
+- It covers only the `snapshot` and `runs` documents of the pult's own database — never a new version of the page, never the owner's layout, never another page, document, Jira or Confluence.
+- It applies only while the pult is shared with no one: the run reads the page's audience before every write, and anything but private means nothing is written.
+- It applies only to a run on the user's own machine. Every write is in the journal the pult shows. «Відклич згоду на пульт» takes it back in one step.
+
+Everything else keeps its question, as before.
+
+### What it does not do yet
+
+- **No skill sets the pult up or refreshes it by itself.** The set-up step and the refresh skill belong to a later phase. Until then the profile and the protocol are what a session follows when the user asks for a pult.
+- **No refresh in one click.** It needs the commands of the user's machine, which arrive with full access (v4.14.1 in the plan).
+- **No badge, tray item or notification** for the pult; the profile names none.
+- **No People module**, and no module for meetings or operations beyond the day strip.
+
+### Added
+
+- **`references/pm-os-protocol.md`** — what the pult is, the 32 sections and the block each one feeds, the shape of every block, how a module is composed in the rail, the rules for every section, where the settings and the data live, a refresh run (a partial run keeps the dates of the sections it skipped, through `snapshot --prev-meta`), the standing consent, and what happens when something is absent.
+- **`testing/pm_os_test.py`** (66 checks, with a browser pass on node and Playwright, skipped with a line when they are absent) — the profile and what `check` refuses in it, the agreement of the profile, the protocol's table and the fixtures, a snapshot for two products, a partial snapshot, the wrapped page, and the rail, the counters, the day's sentence, the product filter, the metric's screen, the settings, a switch's write, the phrases for Claude and a viewer who is not the owner.
+- **`testing/fixtures/app/pm-os/`** — 30 fixtures on the fictional products Zorg and Zorg Pay.
+
+### Changed
+
+- **`references/app-profiles.yaml`** — the profile `pm-os`: `layout: rail`, the plugin's mark as its icon, the five modules, the screen `metric` under `metrics`, the module `settings` at the foot, the ask for fresh data, a menu and one connector role with a placeholder. The profile `cjm` is unchanged.
+- **`SHELL_VERSION` stays 2, on purpose** (`release-manager` pitfall P11). The shell's files are byte for byte those of v4.13.0, and the page `wrap` makes for `cjm` is the same. The page for `pm-os` changes because the profile is filled, and no skill of v4.13.0 built an app from the empty profile, so no published app needs a new page: the two `pm-os` pins in `testing/app_shell_test.py` are updated instead, and no installed app is asked its permissions again.
+- **Full access moves from v4.13.1 to v4.14.1.** v4.13.0 said the app that reads a folder or runs the plugin's commands «arrives in v4.13.1». This release takes a number above it, so that promise is renumbered and nothing else about it changes: still the next release of the apps, still after its measurement and a second security audit. The refusal of `app_shell.py check` and `wrap` now reads «arrives in v4.14.1», and `references/desktop-app-protocol.md`, `references/native-surfaces.md`, `references/artifact-publishing.md` and the README's v4.13.0 paragraph say the same. The design in `docs/superpowers/specs/` and the v4.13.0 entry below keep the number they were written with.
+- **`references/data-policy.md`**, **`references/native-surfaces.md`** — one sentence each for the exception above, pointing at `pm-os-protocol.md` §5.
+- **`references/desktop-app-protocol.md`** §2 — the composition of a module in the rail is read from `pm-os-protocol.md` §2.
+- **`AGENTS.md`** — rows for the app shell and for the pult.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/pm-os-protocol.md` | new |
+| `references/app-profiles.yaml` | the profile `pm-os` filled |
+| `references/data-policy.md`, `references/native-surfaces.md`, `references/desktop-app-protocol.md` | the standing consent's exception; the link to the pult's protocol |
+| `testing/pm_os_test.py`, `testing/fixtures/app/pm-os/*` | new test and fixtures |
+| `scripts/app_shell.py` | the refusal's text: «arrives in v4.14.1» |
+| `references/artifact-publishing.md` | the full-access number |
+| `testing/app_shell_test.py` | the two `pm-os` pins; the refusal's text |
+| `testing/Testing-process.md`, `testing/test-cases.md` | the new test and its cases |
+| `AGENTS.md` | two rows |
+| `README.md`, `.claude-plugin/*.json`, `.codex-plugin/plugin.json`, `.ai-registry/` | «New in v4.14.0», the version, the registry copy |
+
+No skill changes; no skill version is bumped.
+
+### Backwards compatibility
+
+Nothing that exists changes. The app «CJM» and every page already published are untouched: the shell's files and `SHELL_VERSION` are the same. A scheduled run still publishes and writes nothing unless the user gave the standing consent for their own private pult, and no step of this release asks for that consent by itself. Nothing in a user's `local-context.md`, vault or notes changes.
+
+---
+
 ## v4.13.0 «Застосунки» (2026-11-26)
 
 **A page the plugin published becomes an app you install from the Claude desktop app.** The vendor's launch article (https://claude.com/resources/articles/install-as-app) offers the install for Mac and Windows; this release was measured on macOS only (Claude desktop app 8.9912.0, 2026-11-26), Windows has not been measured yet. Until now a published page — the journey map, the portfolio, the funnel — was a page in a browser tab. Now the plugin can wrap it in a small shell: the page gets a button «Встановити як застосунок», and what you install is a window of its own with an icon, a title and a menu. The first app is «CJM»: the portfolio of your journey maps, the maps, the funnel and your team's edits in one place. The plugin installs nothing for anyone — the person presses the button.

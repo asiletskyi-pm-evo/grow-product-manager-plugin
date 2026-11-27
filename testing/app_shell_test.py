@@ -2,7 +2,7 @@
 """TC-app-4130 — scripts/app_shell.py, the app profiles and their check (v4.13.0 «Застосунки»).
 
 The repo's references/app-profiles.yaml is checked clean; hand-made profiles (fictional product Zorg) show that
-`level: full`, `full-access` and `commands` are refused with «arrives in v4.13.1», that every unknown key is named by its
+`level: full`, `full-access` and `commands` are refused with «arrives in v4.14.1», that every unknown key is named by its
 own error, and that a URL, e-mail, UUID or Jira key is refused while `<placeholder>` values pass. Stdlib only; run from
 the repo root. `wrap` turns a Zorg page into an app (manifest, shell, profile); the browser steps (node + global
 Playwright, as in journey_page_edit_test.py) are skipped with a line when Playwright is absent:
@@ -86,7 +86,7 @@ for label, p in (("level full", prof(level="full")),
                  ("full-access", prof(permissions=["notifications", "full-access"])),
                  ("commands", prof(commands=["x"]))):
     errs = sh.check_profile("zorg", p)
-    check("2 %s is refused with 'arrives in v4.13.1'" % label, has(errs, "arrives in v4.13.1"), errs)
+    check("2 %s is refused with 'arrives in v4.14.1'" % label, has(errs, "arrives in v4.14.1"), errs)
 for perm in ("shortcuts", "overlay"):
     errs = sh.check_profile("zorg", prof(permissions=[perm]))
     check("2 permission %s is refused as unknown for now" % perm, has(errs, perm, "unknown for now"), errs)
@@ -238,7 +238,7 @@ with tempfile.TemporaryDirectory() as d:
         f.write("version: 1\nprofiles:\n  zorg:\n    level: full\n    title: {uk: \"Z\", en: \"Z\"}\n    icon: {glyph: os}\n")
     src = os.path.join(d, "in.html")
     rc, text, res = run("wrap", "--page", src, "--profile", "zorg", "--profiles", bad_prof, "--out", os.path.join(d, "r.html"))
-    check("9 a profile that fails check_profile is refused with its errors; no file", rc == 1 and "arrives in v4.13.1" in res.get("error", "")
+    check("9 a profile that fails check_profile is refused with its errors; no file", rc == 1 and "arrives in v4.14.1" in res.get("error", "")
           and not os.path.exists(os.path.join(d, "r.html")), text)
     nasty = dict(BASE, title={"uk": "</script><b>&", "en": "Z"})
     check("9 a profile title with markup is escaped in the page", "</script><b>" not in sh.wrap_page(ZORG, "zorg", nasty, "uk").split("<body", 1)[1].split("<script", 1)[0], "")
