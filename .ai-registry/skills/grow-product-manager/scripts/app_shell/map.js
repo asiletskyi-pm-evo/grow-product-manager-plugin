@@ -18,7 +18,18 @@
       mapNewer: "Карту оновлено. Онови сторінку, щоб бачити й редагувати нову версію.",
       mapReload: "Оновити сторінку",
       mapTwin: "Ця карта має ту саму назву, що й інша карта застосунку: редагуй її на її власній сторінці.",
-      mapOwnPage: "Редагування карт — на їхніх сторінках: ця сторінка вже має редагування карти."
+      mapOwnPage: "Редагування карт — на їхніх сторінках: ця сторінка вже має редагування карти.",
+      mapStage: "Стадія %d",
+      mapNoGoal: "Ціль ще не задана",
+      mapNoEvidence: "Немає доказів",
+      mapHealthNone: "Здоровʼя ще не міряли.",
+      mapHealthOne: "Здоровʼя %s.",
+      mapHealthDelta: "Здоровʼя %s, %s від попереднього знімка.",
+      mapGapOne: "На стадії %s ще немає доказів.",
+      mapGapMany: "На стадіях %s ще немає доказів.",
+      mapReviewed: "Переглянуто %s",
+      mapLegend: "Під кожним доказом його джерело і як його отримано:",
+      mapLane: "Лінія"
     },
     en: {
       mapPick: "Maps",
@@ -26,7 +37,18 @@
       mapNewer: "The map was updated. Reload the page to see and edit the new version.",
       mapReload: "Reload the page",
       mapTwin: "This map has the same name as another map of the app: edit it on its own page.",
-      mapOwnPage: "Maps are edited on their own pages: this page already has a map's editing."
+      mapOwnPage: "Maps are edited on their own pages: this page already has a map's editing.",
+      mapStage: "Stage %d",
+      mapNoGoal: "No target yet",
+      mapNoEvidence: "No evidence",
+      mapHealthNone: "Health is not measured yet.",
+      mapHealthOne: "Health %s.",
+      mapHealthDelta: "Health %s, %s since the previous snapshot.",
+      mapGapOne: "Stage %s has no evidence yet.",
+      mapGapMany: "Stages %s have no evidence yet.",
+      mapReviewed: "Reviewed %s",
+      mapLegend: "Under each piece of evidence, its source and how it was obtained:",
+      mapLane: "Lane"
     }
   });
 
@@ -48,13 +70,14 @@
       var s = g.stages[i];
       if (!isObj(s) || !str(s.id, 200) || !Array.isArray(s.cells) || s.cells.length !== LANES.length) { return null; }
       ids[s.id] = true;
-      stages.push({ id: s.id, title: txt(s.title), outcome: txt(s.outcome), gap: s.gap === true, cells: s.cells.map(txt) });
+      stages.push({ id: s.id, title: txt(s.title), outcome: txt(s.outcome), goal: typeof s.goal === "string" ? txt(s.goal) : null,
+        gap: s.gap === true, cells: s.cells.map(txt) });
     }
     var rows = list(g.rows, MAX_ROWS).filter(function (r) {
       return isObj(r) && str(r.id, 200) && typeof r.stage === "string" && ids[r.stage] === true && LANES.indexOf(r.lane) >= 0;
     }).map(function (r) {
       return { id: r.id, stage: r.stage, lane: r.lane, text: txt(r.text), parent: txt(r.parent), code: txt(r.code),
-        target: r.target === true && r.lane === "opportunity", locked: r.locked === true, meta: txt(r.meta) };
+        target: r.target === true && r.lane === "opportunity", locked: r.locked === true, meta: typeof r.src === "string" ? txt(r.src) : txt(r.meta) };
     });
     return { map: g.map, product: txt(g.product), sig: g.table_sig, stages: stages, rows: rows, notShown: txt(g.not_shown_text) };
   }
@@ -88,7 +111,12 @@
     g.lanes = d.lanes.map(function (l) { return txt(l.title); });
     g.journey = txt(d.journey) || g.map;
     g.texts = {};
-    ["title", "meta", "above", "health", "no_trend", "gap", "children"].forEach(function (k) { g.texts[k] = txt(tx[k]); });
+    ["title", "meta", "above", "health", "no_trend", "gap", "children", "locked"].forEach(function (k) { g.texts[k] = txt(tx[k]); });
+    // the bands over the lanes (three words) and the evidence classes with what each means — the note's language
+    g.bands = list(tx.bands, 3).map(txt);
+    g.classes = list(tx.classes, 12).filter(isObj).map(function (c) { return { word: txt(c.word), means: txt(c.means) }; })
+      .filter(function (c) { return c.word; });
+    g.reviewed = txt(d.reviewed);
     var h = isObj(d.health) ? d.health : {};
     g.points = list(h.points, MAX_POINTS).filter(function (p) { return isObj(p) && str(p.date, 40) && num(p.score) !== null; })
       .map(function (p) { return { date: p.date, score: p.score, snapshot: txt(p.snapshot) }; });
@@ -126,38 +154,67 @@
   function item(cls, t, m) {
     var d = el("div", "item " + cls);
     d.appendChild(el("div", "t", t));
-    d.appendChild(el("div", "m", m));
+    if (m) { d.appendChild(el("div", "m", m)); }
     return d;
   }
 
   // One grid: the frame with the map's name and digest, a cell per stage and lane with its stage, lane and title, a card
   // per row with its id, lane, parent, code, target and lock — the attributes EDIT reads. `chips` = {stage id: [node]}.
   // `plain` draws the same map without those attributes (a twin of another map's name): nothing of it is edited.
+  // What EDIT reads stays where it reads it: a stage's name is the first text node of its header, the first row of the
+  // body is a lane, every lane row has its cells — so the first band stands in the head and the others are rows of
+  // their own with no cell, which EDIT passes over.
+  var BAND_AT = { 0: 0, 4: 1, 6: 2 }, LOCKED_LANES = { metric: true, anomaly: true };
+  function bandRow(text, span) {
+    var tr = el("tr", "band"), th = el("th", "band");
+    th.setAttribute("colspan", String(span));
+    th.setAttribute("scope", "colgroup");
+    th.appendChild(el("span", null, text));
+    tr.appendChild(th);
+    return tr;
+  }
+  function stageHead(s, i) {
+    var th = el("th", "stage" + (s.gap ? " gap" : ""));
+    th.setAttribute("scope", "col");
+    th.appendChild(document.createTextNode(s.title || s.id));
+    th.appendChild(el("span", "n", S.t.mapStage.replace("%d", String(i + 1))));
+    var goal = s.goal === null ? s.outcome : s.goal;
+    th.appendChild(el("div", "o" + (goal ? "" : " none"), goal || S.t.mapNoGoal));
+    if (s.gap) {
+      var mk = el("div", "gpm-stage-mark");
+      var dot = el("span", "gpm-mark gpm-mark-warn");
+      dot.setAttribute("aria-hidden", "true");
+      mk.appendChild(dot);
+      mk.appendChild(document.createTextNode(S.t.mapNoEvidence));
+      th.appendChild(mk);
+    }
+    return th;
+  }
   function grid(g, m, chips, plain) {
     var frag = document.createDocumentFragment();
-    if (g.notShown) { frag.appendChild(el("p", "meta", g.notShown)); }
     var wrap = el("div", "wrap");
     wrap.setAttribute("tabindex", "0");
     if (!plain) { wrap.setAttribute("data-map", g.map); wrap.setAttribute("data-digest", g.sig); }
     var table = el("table", "grid");
+    var span = g.stages.length + 1;
     var thead = el("thead"), hr = el("tr");
-    hr.appendChild(el("th", "corner"));
-    g.stages.forEach(function (s) {
-      var th = el("th", "stage");
-      th.appendChild(document.createTextNode(s.id + " · " + s.title));
-      th.appendChild(el("div", "o", s.outcome));
-      hr.appendChild(th);
-    });
+    hr.appendChild(el("th", "corner", S.t.mapLane));
+    g.stages.forEach(function (s, i) { hr.appendChild(stageHead(s, i)); });
     thead.appendChild(hr);
+    if (m.bands[0]) { thead.appendChild(bandRow(m.bands[0], span)); }
     table.appendChild(thead);
     var tbody = el("tbody");
     LANES.forEach(function (lane, li) {
-      var tr = el("tr");
-      tr.appendChild(el("th", "lane", m.lanes[li]));
+      if (li > 0 && BAND_AT[li] !== undefined && m.bands[BAND_AT[li]]) { tbody.appendChild(bandRow(m.bands[BAND_AT[li]], span)); }
+      var tr = el("tr", LOCKED_LANES[lane] ? "locked" : null);
+      var lh = el("th", "lane", m.lanes[li]);
+      lh.setAttribute("scope", "row");
+      // «лише з даних» under a lane only the data fills, while editing — an attribute shown by CSS: the lane's text stays its name
+      if (LOCKED_LANES[lane] && m.texts.locked) { lh.setAttribute("data-lk", m.texts.locked); }
+      tr.appendChild(lh);
       g.stages.forEach(function (s) {
         var td = el("td");
         if (!plain) { td.setAttribute("data-stage", s.id); td.setAttribute("data-lane", lane); td.setAttribute("data-title", s.cells[li]); }
-        if (li === 0 && s.gap) { td.appendChild(el("div", "item gap", m.texts.gap)); }
         if (li === 0) { (chips[s.id] || []).forEach(function (c) { td.appendChild(c); }); }
         g.rows.forEach(function (r) {
           if (r.stage !== s.id || r.lane !== lane) { return; }
@@ -180,6 +237,7 @@
     table.appendChild(tbody);
     wrap.appendChild(table);
     frag.appendChild(wrap);
+    if (g.notShown) { frag.appendChild(el("p", "meta gpm-map-hidden", g.notShown)); }
     return { node: frag, wrap: wrap };
   }
 
@@ -262,31 +320,65 @@
     return m ? draw(box, m, opts || {}) : null;
   }
 
+  // dd.mm.yyyy of a yyyy-mm-dd, or the text as it came
+  function dmy(v) {
+    var x = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || "");
+    return x ? x[3] + "." + x[2] + "." + x[1] : v;
+  }
+  function signed(n) { return n > 0 ? "+" + n : n < 0 ? "\u2212" + Math.abs(n) : "0"; }
+  // The map's state in one or two sentences: its health against the previous point, and the stages without evidence.
+  function summary(m) {
+    var p = m.points, out = [];
+    if (!p.length) { out.push(S.t.mapHealthNone); }
+    else if (p.length === 1) { out.push(S.t.mapHealthOne.replace("%s", String(p[0].score))); }
+    else {
+      var last = p[p.length - 1].score, prev = p[p.length - 2].score;
+      out.push(S.t.mapHealthDelta.replace("%s", String(last)).replace("%s", signed(Math.round((last - prev) * 10) / 10)));
+    }
+    var gaps = m.stages.filter(function (s) { return s.gap; }).map(function (s) { return "«" + (s.title || s.id) + "»"; });
+    if (gaps.length) { out.push((gaps.length === 1 ? S.t.mapGapOne : S.t.mapGapMany).replace("%s", gaps.join(", "))); }
+    return out.join(" ");
+  }
+  function legend(m) {
+    if (!m.classes.length) { return null; }
+    var box = el("div", "gpm-map-legend");
+    box.appendChild(el("span", null, S.t.mapLegend));
+    m.classes.forEach(function (c) {
+      var x = el("span");
+      x.appendChild(el("b", null, c.word));
+      if (c.means) { x.appendChild(document.createTextNode(" \u2014 " + c.means)); }
+      box.appendChild(x);
+    });
+    return box;
+  }
+
   function draw(box, m, opts) {
     var n = 0, prefix = opts.prefix || "gpm-map";
     var ids = function () { n += 1; return prefix + "-n" + n; };
     var wraps = [];
-    box.appendChild(el("h2", "gpm-map-title", m.texts.title));
-    box.appendChild(el("p", "meta", m.texts.meta));
-    if (m.texts.above) { box.appendChild(el("p", "meta", m.texts.above)); }
-    box.appendChild(el("h3", null, m.texts.health));
-    if (m.points.length) {
-      box.appendChild(sparkline(m.points));
-      var pts = el("table", "pts");
-      [function (p) { return el("td", null, p.date); }, function (p) { return el("td", null, String(p.score)); },
-        function (p) { return el("td", "m", p.snapshot); }].forEach(function (cell) {
-        var tr = el("tr");
-        m.points.forEach(function (p) { tr.appendChild(cell(p)); });
-        pts.appendChild(tr);
-      });
-      box.appendChild(pts);
-    } else {
-      box.appendChild(el("p", "meta", m.texts.no_trend));
+    // the head: the journey's name and product, its state in words, the day of its review; the trend once it has two points
+    var head = el("div", "gpm-map-head");
+    var line = el("div", "gpm-map-name");
+    line.appendChild(el("h2", "gpm-map-title", m.journey));
+    if (m.product && opts.chip) { line.appendChild(opts.chip(m.product)); }
+    head.appendChild(line);
+    head.appendChild(el("p", "gpm-map-sum", summary(m)));
+    if (m.reviewed) { head.appendChild(el("p", "meta", S.t.mapReviewed.replace("%s", dmy(m.reviewed)))); }
+    if (m.texts.above) { head.appendChild(el("p", "meta", m.texts.above)); }
+    if (m.points.length > 1) {
+      var tr = el("div", "gpm-map-trend");
+      var sp = sparkline(m.points);
+      sp.setAttribute("aria-label", m.texts.health);
+      tr.appendChild(sp);
+      head.appendChild(tr);
     }
+    box.appendChild(head);
     var sub = tree(m, m, ids, wraps, !!opts.plain);
     var g = grid(m, m, sub.chips, !!opts.plain);
     wraps.unshift(g.wrap);
     box.appendChild(g.node);
+    var lg = legend(m);
+    if (lg) { box.appendChild(lg); }
     if (sub.body.length) {
       box.appendChild(el("h3", null, m.texts.children));
       sub.body.forEach(function (b) { box.appendChild(b); });
@@ -419,7 +511,7 @@
       var twin = Object.prototype.hasOwnProperty.call(names, data.map);
       names[data.map] = true;
       if (twin) { box.appendChild(note(S.t.mapTwin)); }
-      var r = draw(box, data, { prefix: "gpm-map-" + i, plain: twin });
+      var r = draw(box, data, { prefix: "gpm-map-" + i, plain: twin, chip: view.chip });
       var b = el("button", null, null);
       b.type = "button";
       b.appendChild(document.createTextNode(data.journey));
@@ -452,6 +544,9 @@
     var bar = state.root.querySelector(".edit-bar");
     var cur = state.maps.filter(function (mp) { return mp.id === state.selected; })[0];
     if (bar && cur) {
+      // the bar stands in the map shown, after its head: the switch beside the name, the editing bar over the grid
+      var hd = cur.box.querySelector(".gpm-map-head");
+      if (hd && hd.nextSibling !== bar) { cur.box.insertBefore(bar, hd.nextSibling); }
       bar.setAttribute("data-root", cur.box.getAttribute("data-map"));
       if (cur.product) { bar.setAttribute("data-product", cur.product); } else { bar.removeAttribute("data-product"); }
     }

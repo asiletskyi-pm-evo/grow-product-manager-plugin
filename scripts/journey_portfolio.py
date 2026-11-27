@@ -733,26 +733,126 @@ def cmd_render(args):
 
 
 # ------------------------------------------------------------------ the app's data (v4.13.0)
-APP_COLUMNS = ("journey", "score", "delta", "attention_count", "reviewed")
-APP_TITLES = {"uk": ("Карта", "Здоров'я", "Зміна", "Потребує уваги", "Переглянуто"),
-              "en": ("Journey", "Health", "Change", "Needs attention", "Reviewed")}
+APP_COLUMNS = ("journey", "score", "delta", "state")
+APP_TITLES = {"uk": ("Шлях", "Здоров'я", "Зміна", "Стан"), "en": ("Journey", "Health", "Change", "State")}
+HEALTH_LIMIT = 75    # the meter's mark: below it a map's health reads as weak (the canvas of v4.13.0)
+APP_WORDS = {
+    "uk": {"stages": ("%d стадія без доказів", "%d стадії без доказів", "%d стадій без доказів"), "ok": "усе гаразд",
+           "maps": ("%d шлях", "%d шляхи", "%d шляхів"), "need": ("%d потребує уваги", "%d потребують уваги", "%d потребують уваги"),
+           "need_none": "жоден не потребує уваги", "lead_one": "Один шлях, %s.", "lead_none": "уваги не потребує",
+           "lead_some": "потребує уваги", "weakest": "Найслабший — «%s», здоров'я %s.", "of": "%s: ",
+           "change": "здоров'я %s", "no_maps": "Карт шляху ще немає."},
+    "en": {"stages": ("%d stage without evidence", "%d stages without evidence"), "ok": "all fine",
+           "maps": ("%d journey", "%d journeys"), "need": ("%d needs attention", "%d need attention"),
+           "need_none": "none needs attention", "lead_one": "One journey, %s.", "lead_none": "needs no attention",
+           "lead_some": "needs attention", "weakest": "The weakest is «%s», health %s.", "of": "%s: ",
+           "change": "health %s", "no_maps": "No journey maps yet."},
+}
 VALUE = re.compile(r"^\s*([-+]?\d+(?:[.,]\d+)?)\s*(%?)\s*$")
 
 
-def app_portfolio(p, lang):
+def _plural(n, forms):
+    """The form of a count: uk one / few / many, en one / other."""
+    if len(forms) == 2:
+        return forms[0] if n == 1 else forms[1]
+    if n % 10 == 1 and n % 100 != 11:
+        return forms[0]
+    return forms[1] if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else forms[2]
+
+
+def _signed(v):
+    """+3, −9, 0 — the change as it is read; "" with no change known."""
+    if not isinstance(v, (int, float)):
+        return ""
+    v = int(v) if float(v).is_integer() else round(v, 1)
+    return "+%s" % v if v > 0 else "\u2212%s" % abs(v) if v < 0 else "0"
+
+
+def _state(m, lang):
+    """A map's attention in words: its reasons, a stage count said as one."""
+    W, named = APP_WORDS.get(lang, APP_WORDS["en"]), dict(ATTENTION) if lang == "uk" else EN_ATTENTION
+    out = []
+    for a in m["attention"]:
+        if a["reason"] == "empty_stage":
+            n = len(m["gaps"]["empty_stage"])
+            out.append(_plural(n, W["stages"]) % n)
+        else:
+            out.append(named.get(a["reason"], a["reason"]))
+    return ", ".join(out) or W["ok"]
+
+
+def app_portfolio(p, lang, product=""):
     """The portfolio as a `table` block's data: one row per journey map, in the portfolio's order — its journey, its
-    note's name, its health and delta, how many reasons it needs attention, its review; `attention` crit for a critical
-    anomaly, warn for any other reason; `weakest` the map with the lowest score. Never an owner or any person."""
+    note's name, its health on a meter (scale 100, the mark at HEALTH_LIMIT), its change since the previous point as a
+    signed word, its state in words; `attention` crit for a critical anomaly, warn for any other reason, and the same
+    level marks the state cell; `weakest` the map with the lowest score. Never an owner or any person."""
     rows = []
     for m in p["maps"]:
         reasons = [a["reason"] for a in m["attention"]]
-        rows.append({"journey": m["journey"], "map": os.path.splitext(m["note"])[0], "score": m["health"]["score"],
-                     "delta": m["health"]["delta"], "attention_count": len(reasons), "reviewed": m["reviewed"],
-                     "attention": "crit" if "critical_anomaly" in reasons else "warn" if reasons else "ok"})
+        level = "crit" if "critical_anomaly" in reasons else "warn" if reasons else "ok"
+        score = m["health"]["score"]
+        row = {"journey": m["journey"], "map": os.path.splitext(m["note"])[0], "score": score,
+               "score_text": str(score) if isinstance(score, (int, float)) else "—", "delta": _signed(m["health"]["delta"]) or "—",
+               "state": _state(m, lang), "attention": level, "reviewed": m["reviewed"]}
+        marks = {}
+        if isinstance(score, (int, float)) and score < HEALTH_LIMIT:
+            marks["score"] = "warn"
+        if level != "ok":
+            marks["state"] = level
+        if marks:
+            row["marks"] = marks
+        if product:
+            row["product"] = product
+        rows.append(row)
     scored = [r for r in rows if isinstance(r["score"], (int, float))]
     low = min(scored, key=lambda r: r["score"]) if scored else None
-    return {"columns": [{"key": k, "title": t} for k, t in zip(APP_COLUMNS, APP_TITLES.get(lang, APP_TITLES["en"]))],
-            "rows": rows, "weakest": {"title": low["journey"], "map": low["map"], "score": low["score"]} if low else None}
+    t = APP_TITLES.get(lang, APP_TITLES["en"])
+    cols = [{"key": "journey", "title": t[0]},
+            {"key": "score", "title": t[1], "kind": "meter", "scale": 100, "limit": HEALTH_LIMIT, "sub": "score_text"},
+            {"key": "delta", "title": t[2], "kind": "num"}, {"key": "state", "title": t[3]}]
+    return {"columns": cols, "rows": rows,
+            "weakest": {"title": low["journey"], "map": low["map"], "score": low["score"]} if low else None}
+
+
+def app_lead(port, lang, label=""):
+    """The portfolio in one or two sentences — how many journeys, how many need attention, the weakest — for a `lead`
+    block; the product's label first when it is given (two products share one introduction)."""
+    W = APP_WORDS.get(lang, APP_WORDS["en"])
+    rows = port["rows"]
+    head = (W["of"] % label) if label else ""
+    if not rows:
+        return {"text": head + W["no_maps"]}
+    need = sum(1 for r in rows if r["attention"] != "ok")
+    if len(rows) > 1:
+        text = "%s, %s." % (_plural(len(rows), W["maps"]) % len(rows), _plural(need, W["need"]) % need if need else W["need_none"])
+    else:
+        text = W["lead_one"] % (W["lead_some"] if need else W["lead_none"])
+    w = port["weakest"]
+    if w and len(rows) > 1:
+        text += " " + W["weakest"] % (w["title"], w["score"])
+    return {"text": head + text}
+
+
+def app_changes(p, lang, product=""):
+    """What changed, for a `list` block beside the table: each map whose health moved since its previous point or that
+    needs attention — its name, the change, the level of its attention. None when nothing did."""
+    W = APP_WORDS.get(lang, APP_WORDS["en"])
+    items = []
+    for m in p["maps"]:
+        d = _signed(m["health"]["delta"])
+        reasons = [a["reason"] for a in m["attention"]]
+        if (not d or d == "0") and not reasons:
+            continue
+        level = "crit" if "critical_anomaly" in reasons else "warn" if reasons else "ok"
+        words = [W["change"] % d] if d and d != "0" else []
+        rest = dict(m, attention=[a for a in m["attention"] if not (words and a["reason"] == "health_drop")])
+        if rest["attention"]:
+            words.append(_state(rest, lang))
+        item = {"title": "«%s»: %s" % (m["journey"], ", ".join(words)), "attention": level}
+        if product:
+            item["product"] = product
+        items.append(item)
+    return {"items": items} if items else None
 
 
 def _value(v):
@@ -791,11 +891,14 @@ def app_funnel(folder, product):
 
 def cmd_app_data(args):
     p, today = _portfolio(args)
-    port = app_portfolio(p, args.lang)
+    port = app_portfolio(p, args.lang, args.product)
+    lead = app_lead(port, args.lang, args.label or "")
+    changes = app_changes(p, args.lang, args.product)
     funnel = app_funnel(args.snapshots, args.product)
     try:
         os.makedirs(args.out_dir, exist_ok=True)
-        for name, data in (("portfolio.json", port), ("funnel.json", funnel)):
+        for name, data in (("portfolio.json", port), ("portfolio-lead.json", lead), ("portfolio-changes.json", changes),
+                           ("funnel.json", funnel)):
             if data is None:
                 continue
             with open(os.path.join(args.out_dir, name), "w", encoding="utf-8", newline="") as fh:
@@ -828,7 +931,9 @@ def build_parser():
         if name == "render-html":
             p.add_argument("--out", required=True, help="CJM/journeys/<product>/portfolio.html")
         if name == "app-data":
-            p.add_argument("--out-dir", required=True, help="a scratch folder: portfolio.json and funnel.json for app_shell.py snapshot")
+            p.add_argument("--out-dir", required=True, help="a scratch folder: portfolio.json, portfolio-lead.json, "
+                           "portfolio-changes.json and funnel.json for app_shell.py snapshot")
+            p.add_argument("--label", help="the product's name as people read it, said first in the portfolio's lead")
     sub.add_parser("schema")
     return ap, sub
 

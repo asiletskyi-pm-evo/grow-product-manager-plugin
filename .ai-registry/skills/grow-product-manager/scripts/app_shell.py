@@ -17,26 +17,38 @@ levels `page` and `app` exist; `full`, `full-access` and `commands` arrive in v4
 read, never written; local-context.md is never read. Every command ends with one `APP_RESULT {json}` line.
 Stdlib only (Python 3.9). Exit 0; 1 when a check fails; 2 for a wrong argument.
 """
-import argparse, colorsys, copy, datetime, html, json, math, os, re, sys
+import argparse, base64, colorsys, copy, datetime, html, json, math, os, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROFILES = os.path.join(os.path.dirname(HERE), "references", "app-profiles.yaml")
 SHELL_DIR = os.path.join(HERE, "app_shell")
 
-SHELL_VERSION = 1
+SHELL_VERSION = 2
 LEVELS = ("page", "app")
 PERMISSIONS = ("notifications", "menu-bar")
 LATER = ("full-access", "shortcuts", "overlay")
-BLOCKS = ("table", "list", "number", "chart", "feed", "map")
+BLOCKS = ("table", "list", "number", "chart", "feed", "map", "lead", "bars", "line", "day")
+LAYOUTS = ("tabs", "rail")    # how the modules are reached: tabs over the panel (the default) or a side rail
+AT_SOURCES = ("@edits", "@summary", "@modules", "@theme")   # sources that are not sections: the team's edits; the app's state in a
+# sentence, counted by the shell; the switches of the modules (the owner's config/app); the theme switch
+AT_BLOCK = {"@summary": "lead", "@modules": "list", "@theme": "list"}   # the one block each of them is shown by
+PLACES = ("main", "aside")    # where a block of a composed module stands: the main column (the default) or the side one
 GLYPHS = ("journey", "os", "chart")
+ICON_IMAGES = {"plugin": os.path.join("assets", "app-icon.png")}   # icon.image -> a PNG of the plugin itself, 256×256
+ICON_KEYS = ("glyph", "image")
+ICON_IMAGE_MAX = 96 * 1024
 ACTIONS = ("edit",)
 LANGS = ("uk", "en")
 LATER_TEXT = "arrives in v4.13.1"
 PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "badge", "tray", "notify", "connectors",
-                "commands")
-MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks")
-BLOCK_ENTRY_KEYS = ("block", "source", "title")
-SHELL_FILES = ("shell.js", "blocks.js", "map.js", "desk.js", "live.js")   # embedded in this order, each only if it exists (map.js: only with a map block)
+                "commands", "layout", "refresh")
+MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks", "counts", "foot", "under", "where", "about", "back")
+BLOCK_ENTRY_KEYS = ("block", "source", "title", "place", "group", "ask")
+ASK_WHEN = ("always", "empty")   # a block's `ask`: a button that hands the user a phrase to say to Claude — always, or while the block is empty
+WORDS_MAX = {"where": 40, "back": 40, "about": 120, "label": 40, "say": 200}   # the longest text of each kind, in characters
+GROUP_ID = re.compile(r"[a-z][a-z0-9-]{0,31}")   # a block's `group`: the blocks that share it stand in one section (rail layout)
+COUNT_WORD_MAX = 24           # a word the rail says after a module's count: one per plural form, two or three of them
+SHELL_FILES = ("shell.js", "blocks.js", "charts.js", "map.js", "desk.js", "live.js")   # embedded in this order, each only if it exists (map.js: only with a map block)
 TITLE_MAX = 80                # a title in the owner's config/app, in characters
 MAX_BLOCKS = 8                # blocks in one composed module
 MAX_CUSTOM = 20               # custom modules in config/app
@@ -235,16 +247,39 @@ def _title(t, where, errs):
         errs.append("%s: title needs both uk and en" % where)
 
 
+def _words(t, kind, where, errs):
+    """A text of the profile in both languages, each 1..WORDS_MAX[kind] characters."""
+    if not isinstance(t, dict) or set(t) != set(LANGS) or any(
+            not isinstance(t[k], str) or not t[k].strip() or len(t[k]) > WORDS_MAX[kind] for k in t):
+        errs.append("%s: %s needs uk and en, each 1-%d characters" % (where, kind, WORDS_MAX[kind]))
+
+
+def _check_ask(a, where, errs, keys=("label", "say", "when")):
+    """`ask`: {label, say, when?} — the button's words and the phrase it hands over, both written in the profile, never
+    read from a document."""
+    if not isinstance(a, dict) or any(k not in keys for k in a):
+        errs.append("%s: must be a mapping with %s" % (where, ", ".join(keys)))
+        return
+    _words(a.get("label"), "label", where, errs)
+    _words(a.get("say"), "say", where, errs)
+    if "when" in a and a["when"] not in ASK_WHEN:
+        errs.append("%s: unknown when '%s'" % (where, a["when"]))
+
+
 def _check_block(block, source, where, custom, errs):
     """One block and its source: the block from BLOCKS (a custom module never takes `map`), the source a section name
-    (SECTION) or `@edits` — never a URL or anything else."""
+    (SECTION), `@edits`, or `@summary` under the block `lead` — never a URL or anything else."""
     if block not in BLOCKS:
         errs.append("%s: unknown block '%s'" % (where, block))
     elif custom and block == "map":
         errs.append("%s: the block map is not allowed in a custom module" % where)
-    if not isinstance(source, str) or not (SECTION.match(source) or source == "@edits"):
-        errs.append("%s: source must be a section name (%s) or @edits, got '%s'" % (
+    if not isinstance(source, str) or not (SECTION.match(source) or source in AT_SOURCES):
+        errs.append("%s: source must be a section name (%s), @edits or @summary, got '%s'" % (
             where, SECTION.pattern, source if isinstance(source, str) else type(source).__name__))
+    elif source in AT_BLOCK and block != AT_BLOCK[source]:
+        errs.append("%s: the source %s is shown by the block %s only" % (where, source, AT_BLOCK[source]))
+    elif custom and source in ("@modules", "@theme"):
+        errs.append("%s: the source %s is not allowed in a custom module" % (where, source))
 
 
 def _check_forms(m, where, custom, errs):
@@ -275,6 +310,20 @@ def _check_forms(m, where, custom, errs):
             if k not in BLOCK_ENTRY_KEYS:
                 errs.append("%s: unknown key '%s'" % (bw, k))
         _check_block(b.get("block"), b.get("source"), bw, custom, errs)
+        if "place" in b and b["place"] not in PLACES:
+            errs.append("%s: unknown place '%s'" % (bw, b["place"]))
+        if "group" in b:
+            if custom:
+                errs.append("%s: a group is not allowed in a custom module" % bw)
+            elif not isinstance(b["group"], str) or not GROUP_ID.fullmatch(b["group"]):
+                errs.append("%s: group must match %s" % (bw, GROUP_ID.pattern))
+            elif b.get("block") == "map" or b.get("source") in AT_SOURCES:
+                errs.append("%s: a map or an @ source does not stand in a group" % bw)
+        if "ask" in b:
+            if custom:
+                errs.append("%s: an ask is not allowed in a custom module" % bw)
+            else:
+                _check_ask(b["ask"], "%s ask" % bw, errs)
         if "title" in b:
             if custom:
                 _plain_title(b["title"], bw, errs)
@@ -303,9 +352,15 @@ def check_profile(name, prof):
     elif level not in LEVELS:
         errs.append("%s: unknown level '%s'" % (w, level))
     _title(prof.get("title"), w, errs)
+    if "layout" in prof and prof["layout"] not in LAYOUTS:
+        errs.append("%s: unknown layout '%s'" % (w, prof["layout"]))
     glyph = (prof.get("icon") or {}).get("glyph") if isinstance(prof.get("icon"), dict) else None
     if glyph not in GLYPHS:
         errs.append("%s: unknown glyph '%s'" % (w, glyph))
+    if isinstance(prof.get("icon"), dict):
+        errs += ["%s: icon: unknown key '%s'" % (w, k) for k in prof["icon"] if k not in ICON_KEYS]
+        if "image" in prof["icon"] and prof["icon"]["image"] not in ICON_IMAGES:
+            errs.append("%s: unknown icon image '%s' (one of: %s)" % (w, prof["icon"]["image"], ", ".join(sorted(ICON_IMAGES))))
     perms = prof.get("permissions") or []
     if not isinstance(perms, list):
         errs.append("%s: permissions must be a list" % w)
@@ -342,8 +397,40 @@ def check_profile(name, prof):
         if m.get("home"):
             homes += 1
         _title(m.get("title"), mw, errs)
+        if "counts" in m:
+            c = m["counts"]
+            if not isinstance(c, dict) or set(c) != set(LANGS) or not all(
+                    isinstance(c[l], list) and 2 <= len(c[l]) <= 3 and all(
+                        isinstance(x, str) and x.strip() and len(x) <= COUNT_WORD_MAX for x in c[l]) for l in c):
+                errs.append("%s: counts must be {%s}, each a list of 2-3 words of 1-%d characters" % (
+                    mw, ", ".join(LANGS), COUNT_WORD_MAX))
     if homes > 1:
         errs.append("%s: more than one home module (%d)" % (w, homes))
+    # the modules that are not tabs: `foot` — one entry at the foot of the rail (settings); `under` — a screen opened from
+    # its parent module, with a way back
+    feet = [m for m in modules if isinstance(m, dict) and "foot" in m]
+    if len([m for m in feet if m.get("foot") is True]) > 1:
+        errs.append("%s: more than one foot module" % w)
+    tabs = {m.get("id") for m in modules if isinstance(m, dict) and not m.get("foot") and "under" not in m}
+    for m in modules:
+        if not isinstance(m, dict):
+            continue
+        mw = "%s module %s" % (w, m.get("id"))
+        if "foot" in m and (m["foot"] is not True or m.get("home") or "under" in m):
+            errs.append("%s: foot is true or absent, never on the home module or with under" % mw)
+        if "under" in m and (m.get("home") or m["under"] not in tabs):
+            errs.append("%s: under must name a tab module of this profile, and the home module is under none" % mw)
+        if "back" in m and "under" not in m:
+            errs.append("%s: back is the way back of a module that is under another" % mw)
+        for kind in ("where", "about", "back"):
+            if kind in m:
+                _words(m[kind], kind, mw, errs)
+    if "refresh" in prof:
+        r = prof["refresh"]
+        _check_ask(r if not isinstance(r, dict) else {k: v for k, v in r.items() if k != "source"},
+                   "%s refresh" % w, errs, keys=("label", "say"))
+        if isinstance(r, dict) and "source" in r and not (isinstance(r["source"], str) and SECTION.match(r["source"])):
+            errs.append("%s refresh: source must be a section name" % w)
     menu = prof.get("menu") or []
     if not isinstance(menu, list):
         errs.append("%s: menu must be a list" % w)
@@ -503,6 +590,20 @@ def _journey_map():
     return journey_map
 
 
+def _icon_image(prof):
+    """The plugin's own mark as an <img> for the header (and, through it, the installed app's icon) — '' when the
+    profile names none. The bytes are the plugin's file, never a user's."""
+    which = (prof.get("icon") or {}).get("image")
+    if which is None:
+        return ""
+    path = os.path.join(os.path.dirname(HERE), ICON_IMAGES[which])
+    with open(path, "rb") as f:
+        raw = f.read()
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n") or len(raw) > ICON_IMAGE_MAX:
+        raise Bad("icon image '%s': %s must be a PNG of at most %d KiB" % (which, ICON_IMAGES[which], ICON_IMAGE_MAX // 1024))
+    return '<img class="gpm-logo" alt="" width="28" height="28" src="data:image/png;base64,%s">' % base64.b64encode(raw).decode("ascii")
+
+
 def wrap_page(page, name, prof, lang):
     """The page as an app: manifest + meta + style in <head>, header + modules + the page's body in .gpm-page, the
     profile and the shell script at the end of <body>. Bad on anything it cannot wrap; the same input, the same bytes."""
@@ -537,8 +638,8 @@ def wrap_page(page, name, prof, lang):
     shown["connectors"] = [{"role": c.get("role")} for c in prof.get("connectors") or []]
     shown.update(name=name, lang=lang, shell=SHELL_VERSION)
     title = html.escape((prof.get("title") or {}).get(lang, ""), quote=False)
-    shell = ('<header class="gpm-shell"><span class="gpm-title">%s</span><div class="gpm-actions"></div></header>'
-             '<main class="gpm-modules" hidden></main><div class="gpm-page">' % title)
+    shell = ('<header class="gpm-shell">%s<span class="gpm-title">%s</span><div class="gpm-actions"></div></header>'
+             '<main class="gpm-modules" hidden></main><div class="gpm-page">' % (_icon_image(prof), title))
     tail = '</div><script id="gpm-profile" type="application/json">%s</script>' % _json_in_script(shown)
     for fname in SHELL_FILES:
         if not os.path.exists(os.path.join(SHELL_DIR, fname)):
@@ -1051,7 +1152,8 @@ def cmd_theme(a):
 
 def cmd_schema(_a):
     result(ok=True, version=SHELL_VERSION, levels=list(LEVELS), permissions=list(PERMISSIONS), later=list(LATER),
-           blocks=list(BLOCKS), glyphs=list(GLYPHS), actions=list(ACTIONS))
+           blocks=list(BLOCKS), glyphs=list(GLYPHS), actions=list(ACTIONS),
+           layouts=list(LAYOUTS), places=list(PLACES))
     return 0
 
 

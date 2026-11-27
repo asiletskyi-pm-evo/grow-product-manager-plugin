@@ -1,0 +1,20 @@
+# The cjm profile in the tabs layout, as shell 1 drew it: the browser pass of app_shell_test.py keeps testing the tabs
+# layout (the default of `layout`) with it, while references/app-profiles.yaml gives cjm the side rail (shell 2).
+version: 2
+profiles:
+  cjm:
+    level: app
+    title: {uk: "CJM", en: "CJM"}
+    icon: {glyph: journey}
+    permissions: [notifications, menu-bar]
+    modules:
+      - {id: portfolio, block: table, source: portfolio, home: true, title: {uk: "Портфель", en: "Portfolio"}}
+      - {id: map, block: map, source: map, title: {uk: "Карти", en: "Maps"}}
+      - {id: funnel, block: chart, source: funnel, title: {uk: "Воронка", en: "Funnel"}}
+      - {id: edits, block: feed, source: "@edits", title: {uk: "Правки команди", en: "Team edits"}}
+    menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits]
+    badge: "@edits.pending"
+    tray: {title: portfolio.weakest, menu: map}
+    notify: [edits.new, threshold.crossed]
+    connectors: [{role: issue-status, needs: "<jira_project>"}, {role: funnel-numbers, needs: "<dashboard_id>"}]
+    commands: []
