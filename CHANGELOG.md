@@ -49,7 +49,7 @@ Every snapshot is a publication: one question before every write into the databa
 - **`scripts/app_shell/`** — the shell's own files, embedded byte for byte into a wrapped page: `shell.js`, `blocks.js`, `charts.js`, `map.js`, `desk.js`, `live.js`, `shell.css`; **`assets/app-icon.png`** — the plugin's logo as the app's icon.
 - **`journey_map.py app-data`** and **`journey_portfolio.py app-data`** — a map and the portfolio as the data of one section of the snapshot; a map too large for one database document stays out and is named. The map's data carries the app's words (each stage's target as a sentence, each row's source line, the bands, the classes used); the portfolio's comes with `portfolio-lead.json` and `portfolio-changes.json`, and `--products FILE` (the same products file as `snapshot`) puts the product's label first in the lead.
 - **`publications.py record --app PROFILE:SHELL[:PERM,PERM]`** — the publication record remembers that a place is an app, with its profile, shell number and permissions; `find` returns them, so the skill sees what changed.
-- **Lint check 34 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
+- **Lint check 35 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
 - **Tests** — `testing/app_shell_test.py` (446 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (66), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
 - **A release guard** — `release-manager` pitfall P11 and a line in Step 3: a release that changes the shell's files, the `wrap` function, the map's editing code that `wrap` embeds or a profile's modules or menu raises `SHELL_VERSION` (and the profiles file's `version` with it); otherwise a published app is never offered its new page. A pin test in `testing/app_shell_test.py` keeps the hash of shell 1's bytes per profile and language and goes red on any such change.
 - **`docs/superpowers/specs/2026-11-26-desktop-apps-design.md`** and its Ukrainian twin — the design this release follows.
@@ -72,7 +72,7 @@ Every snapshot is a publication: one question before every write into the databa
 | `skills/release-manager/SKILL.md`, `skills/release-manager/references/release-pitfalls.md` | 0.5.4 — P11, the agent runs the release machine's checks |
 | `references/artifact-publishing.md`, `references/journey-protocol.md`, `references/native-surfaces.md`, `references/vault-schema.md` | the app in each |
 | `testing/app_shell_test.py`, `testing/journey_app_data_test.py`, `testing/publications_test.py`, `testing/fixtures/app/*` | new tests and fixtures |
-| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 34 and its seeds |
+| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 35 and its seeds |
 | `testing/Testing-process.md`, `testing/test-cases.md` | the new tests, the shell-version rule, the acceptance cases |
 | `docs/superpowers/specs/2026-11-26-desktop-apps-design.md`, `….uk.md` | the design |
 | `README.md`, `.claude-plugin/*.json`, `.codex-plugin/plugin.json`, `.ai-registry/` | «New in v4.13.0», the version, the registry copy |
@@ -80,6 +80,33 @@ Every snapshot is a publication: one question before every write into the databa
 ### Backwards compatibility
 
 No page that exists changes: a page without the shell is published, edited and read exactly as in v4.12.0, and the `edits` collection keeps its format. The app is an offer after a map's page, made only when the product has a map and never without the one question. The publication record gains an optional field; a record without it reads as before. Nothing in a user's `local-context.md`, vault or notes changes, and a scheduled run still publishes and writes nothing.
+
+---
+
+## v4.12.5 (2026-11-27)
+
+**The history says the auto-trust is gone.** The company audit rescanned the registry copy on 2026-11-27 at commit f780296 — v4.12.3, before v4.12.4 reached it — and kept one HIGH finding, «automatic trust of provider registrations», citing the v4.9.1 entry of this changelog about the first run's automatic trust (withdrawn in v4.12.4). The audit read the history as the plugin's behaviour; the code was fixed in v4.12.4, but the old text still stood unmarked in this file and in README.
+
+### Changed
+
+- **CHANGELOG v4.9.1** — the three lines that describe the first run trusting registrations by itself (Added, Known limits, Backwards compatibility) each end with «Withdrawn in v4.12.4».
+- **README «New in v4.9.1»** — the same sentence in the past tense, with the withdrawal.
+
+### Added
+
+- **`skill_lint.py` check 34 `withdrawn-trust`** — a line of README or CHANGELOG that describes the first run trusting registrations by itself and does not say it was withdrawn in v4.12.4. `testing/seeded_leak_test.py` seeds one.
+
+### Files
+
+| File | Change |
+|---|---|
+| `CHANGELOG.md`, `README.md` | the history marked; this entry, «New in v4.12.5» |
+| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 34 and its seed |
+| `scripts/ctx_endpoints.py`, `testing/ctx_endpoints_test.py` | comments name the withdrawal |
+
+### Backwards compatibility
+
+Nothing changes in the plugin.
 
 ---
 
@@ -613,7 +640,7 @@ Nothing breaks. A map without a `parent` and without children behaves as in v4.9
 ### Added
 
 - **The trust file** `~/.grow-pm/trust/providers.json` (`provider-trust/1`, 0600 in a 0700 folder, outside every vault and the registrations' folder): per id the normalised address (no login, password, query or fragment), the sha256 of its query, the variable's NAME (never its value), the day and `seeded` | `approved`; written under a lock. A file that is a link, not JSON or of another schema refuses every address and is never rewritten.
-- **The first run after the update** (R37) — the first `ctx` command that may reach a server trusts the registrations already there, once, one line each: `Довірено наявну реєстрацію <id>: <scheme://host> (змінна <VAR> → заголовок <Name> | без змінної)`. Only in a home with an install from before; the mark `~/.grow-pm/.trust-seeded` keeps it once — a trust file that goes later comes back empty, never seeded again. A remote http address is not trusted and is named; a registration still downloading puts it off; a home that cannot be written (Codex read-only) leaves no file and every address refused.
+- **The first run after the update** (R37) — the first `ctx` command that may reach a server trusts the registrations already there, once, one line each: `Довірено наявну реєстрацію <id>: <scheme://host> (змінна <VAR> → заголовок <Name> | без змінної)`. Only in a home with an install from before; the mark `~/.grow-pm/.trust-seeded` keeps it once — a trust file that goes later comes back empty, never seeded again. A remote http address is not trusted and is named; a registration still downloading puts it off; a home that cannot be written (Codex read-only) leaves no file and every address refused. **Withdrawn in v4.12.4** (the audit of 2026-11-26): the first run trusts no registration by itself — every address is approved by the user, one question each.
 - **The refusal line** — `<id>: адресу не схвалено (нова: <host> | змінилась: <old> → <new> | …) — нічого не надіслано. Схвалити: ctx provider trust <id>`, at most 300 characters with its tail whole: `repo status` shows it (`не схвалено`, `trusted` in `CTX_RESULT`) and probes nothing; the daily sync prints it for a due repository, sends nothing, starts no copy and never holds a skill; `search` gives it in place of «не відповів» and sends no query (`--get`: exit 5); `repo copy` is refused (exit 4) before anything is written; `provider adopt|plan|apply` give it as the fetch's error. With no trust file yet the reason is `файлу довіри ще немає` and nothing is offered to approve; an id that is not kebab-case is masked and gets no command to paste.
 - **`ctx provider trust <id>`** reads only: the address as parsed, the variable and the header it gives (never the value), the registration file and a code; **`trust <id> --code <code>`** approves exactly that pair — a registration switched between the question and the yes is refused. **`trust --list`** (reads only) and **`untrust <id>`**; `trust --code` and `untrust` are writing commands of `ctx`.
 - **Skills never approve on their own** — the daily sync's refusal line at Step 0c, `context-navigator`'s search and `repo status` each lead to one question at the end of the answer naming the address `trust <id>` showed; `--code` runs only on the user's own yes (`references/local-context-protocol.md` Step 0c, the digest's `Skills:` line). `context-connect` 0.9.2: writing a registration with an address, or replacing the address a core proposes, is one question that approves it too, and a refresh never adds a missing address by itself. `context-navigator` 0.5.1.
@@ -622,7 +649,7 @@ Nothing breaks. A map without a `parent` and without children behaves as in v4.9
 
 ### Known limits
 
-- A registration planted before the first run after the update becomes trusted at that run (R37, the user's decision) — and so does what a new machine's synced vault holds at its own first run.
+- A registration planted before the first run after the update becomes trusted at that run (R37, the user's decision) — and so does what a new machine's synced vault holds at its own first run. **Withdrawn in v4.12.4** (the audit of 2026-11-26): the first run trusts no registration by itself — every address is approved by the user, one question each.
 - Whoever can write `~/.grow-pm` can edit the trust file too — the edge of this model.
 - The `paths` and `writable` of a vault's registration still shape the write boundary (§7) — not part of the finding, named for the next audit.
 
@@ -641,7 +668,7 @@ Nothing breaks. A map without a `parent` and without children behaves as in v4.9
 
 ### Backwards compatibility
 
-An approved registration behaves as in v4.9.0 (compared on the same fake server: `repo status`, `provider plan`, `search`). On your machine the first skill after the update trusts the registrations already there, once, and says so in one line each; nothing else changes until a registration's address does. A registration with plain http to another computer, or an address that is not plainly one, stops being reached — `repo status` says why.
+An approved registration behaves as in v4.9.0 (compared on the same fake server: `repo status`, `provider plan`, `search`). On your machine the first skill after the update trusts the registrations already there, once, and says so in one line each; nothing else changes until a registration's address does. A registration with plain http to another computer, or an address that is not plainly one, stops being reached — `repo status` says why. **Withdrawn in v4.12.4** (the audit of 2026-11-26): the first run trusts no registration by itself — every address is approved by the user, one question each.
 
 ---
 
