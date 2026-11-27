@@ -12,6 +12,49 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.15.0 «Лише v2» (2026-11-27)
+
+**Every Jira and Confluence write the skills make speaks Atlassian MCP v2, and was run on a live site.** v4.11.0 moved the plugin to v2 by its tool names and inputs; v4.12.2 fixed the reads after a live pass. The writes had been checked only against what `discover` says of each operation. This release runs them on the user's own site, on their «так» — a private page in their personal space, two test issues labelled `grow-pm-test` and closed at once — and brings every write the skills make to what the server actually takes. It also drops the v1 call shapes: Atlassian switches `/v1/mcp` off on 2027-03-01, and the plugin no longer falls back to it.
+
+### What the live pass found (2026-11-27)
+
+- **A Blocks link reads inward → outward.** `createJiraIssueLink` with `linkType: "Blocks"` makes `inwardIssue` block `outwardIssue`; read back from the blocked issue, the blocker is its `inwardIssue` with «is blocked by». Swapped keys make the opposite dependency without an error.
+- **The reporter is `{"accountId": …}`.** `editJiraIssue` refused a bare account id string as «Reporter is required», though the tool's description says it is taken; a project whose create screen has no Reporter refuses it on create, and the reporter is the connected user there.
+- **The Team field takes the team's id.** By name it is refused as «a non-existing team»; `additional_fields: {"Team": "<id>"}` and `components: [{"name": …}]` work on create.
+- **A page takes no labels on create.** `addLabelsToConfluenceContent` after `createConfluenceContent` — a feature page without its `feature` label falls out of the auto-assembly of `planning-core.md` §2.
+- **An append is one edit.** `updateConfluenceContent` with `edits: [{"name": "appendNodeToEnd", "value": "<p>…</p>"}]` and the draft's token; `dryRun: true` returns the resulting HTML; without `draft: true` it publishes.
+- **`getConfluenceContent` takes `content_id`**, in snake case, unlike the write tools' `contentId`.
+- **Uploads are v2's own.** `createConfluenceAttachment` and `uploadAttachmentToJiraIssue` prepare an upload and return a `curl` with a five-minute token in its command line. The byte step was not reached: the cloud session's proxy refuses the Atlassian hosts. It stays **left to do on the user's machine**.
+
+### What changes
+
+- **`references/integration-strategy.md` 1c** — v2 only: the v1 column is gone; a session with only v1 tools says once that Atlassian has to be reconnected and goes on without it, never calling a v1 tool. Seven silent differences instead of five (the replaced multi-value list, the link direction), and rows for every write: comments (Jira and Confluence), transitions, links, labels, attachments, a change of issue type, components. The write gate keeps the v1 names `createConfluencePage` / `updateConfluencePage`: the plugin never calls them, but another installed plugin may still bring a v1 server into the session.
+- **`references/visual-annotation-protocol.md` Step V-6** — v2's upload first, then the REST chain with an API token, the browser, a placeholder. An `uploadCommand` is never run as returned: it is checked (one `curl`, an Atlassian address, the file this run wrote) and sent with the token on stdin (`curl --config -`), as the REST link sends the API token. A session that cannot reach Atlassian does not mint a token for nothing.
+- **`scripts/jira_rows.py`** — reads the v2 shape only; a v1 response (`fields.customfield_N`) is exit 2 with the reason and the way out, never a report of missing estimates. `references/jira-data-protocol.md` drops the v1 shape and patterns.
+- **`task-creator` 0.16.0** — Step 7 maps every field to `createJiraIssue`'s inputs (Team by id, Components in `additional_fields`, the reporter not sent); Step 8 sets the reporter as `{accountId}` only when it must differ, an issue type within a level by `issuetype`, Task ↔ Sub-task by `convertJiraIssueHierarchy`; Step 10 names the blocker as `inwardIssue`; Step 12 reads the links back with `fields: ["issuelinks", …]` and checks their direction.
+- **`design-bridge` 0.10.2** — the deck's attachment through `createConfluenceAttachment`, its Jira comment through `addOrEditJiraIssueComment`, a rerun edits that comment.
+- **`release-manager` 0.5.5** — Step 8.3 appends the release to the Confluence changelog with one `appendNodeToEnd` edit after a dry run, never a whole body.
+- **`quarterly-planning` 0.8.3**, **`roadmap-architect` 0.8.1** — `q{N}` labels and label fixes send the issue's whole list; a link fix names the blocker as `inwardIssue`; an epic's parent is a field, not a link.
+- **`references/planning-core.md` §2** — how a page's labels are written on v2.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/integration-strategy.md` | §1c rewritten: v2 only, the write rows, seven silent differences |
+| `references/visual-annotation-protocol.md` | Step V-6: v2 upload first, the token on stdin |
+| `references/jira-data-protocol.md`, `scripts/jira_rows.py` | the v2 shape only; v1 refused |
+| `references/planning-core.md` | page labels on v2 |
+| `references/artifact-style-gate.md`, `commands/setup.md`, `scripts/write_gate.py`, `README.md` | why the gate keeps the v1 names |
+| `skills/task-creator/SKILL.md`, `skills/task-creator/references/post-creation-verification.md` | the v2 inputs of every field, the link direction, the read-back of links |
+| `skills/design-bridge/SKILL.md`, `skills/design-bridge/references/design-bridge-playbook.md` | attachment and comment on v2 |
+| `skills/release-manager/SKILL.md`, `skills/quarterly-planning/SKILL.md`, `skills/roadmap-architect/SKILL.md` | append edit; whole label lists; link direction |
+| `testing/atlassian_v2_test.py` | the protocols in scope; check 6 — the measured writes |
+| `testing/jira_rows_test.py`, `testing/fixtures/jira/search-v2-last.json` | v1 refused; a v2 last page |
+| `testing/test-cases.md`, `AGENTS.md` | the new cases; the row of the Jira reader |
+| `scripts/app_shell.py`, `references/desktop-app-protocol.md`, `testing/app_shell_test.py` | the refusal of `full` / `full-access` / `commands` reads «arrives in a later release»: this release takes the next number, and the owner-only full access was planned as v4.14.1 (an error message only — the shell's bytes and `SHELL_VERSION` do not change) |
+| `README.md`, `.claude-plugin/*.json`, `.codex-plugin/plugin.json`, `.ai-registry/` | «New in v4.15.0», the version, the registry copy |
+
 ## v4.14.0 «PM OS, фаза 1» (2026-11-27)
 
 **The profile of the pult: one private app for a product manager's day.** v4.13.0 shipped the app shell with the profile `pm-os` as an empty placeholder. This release fills it and adds the protocol that says what the pult shows, what its data may hold and when a run may write that data. It is the first phase of PM OS: the pult for a day. Meetings and operations, the depth of metrics, the People module and a skill that sets the pult up are later phases.

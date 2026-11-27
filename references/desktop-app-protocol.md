@@ -12,7 +12,7 @@
 | `app` | the installed app's window: its own window, icon and title, the application menu, the badge on the icon, notifications, the menu-bar (tray) item, live numbers from connectors — no files, no commands | since v4.13.0 |
 | full access | files and the plugin's commands on the owner's own computer | **not available yet** — v4.14.1 |
 
-A profile with `level: full`, the permission `full-access` or a non-empty `commands` is refused by `app_shell.py check` and by `wrap` with «arrives in v4.14.1»; `shortcuts` and `overlay` are refused as unknown for now (a later release). The skill says it in one line and builds nothing. In a browser or on a phone a wrapped page works as in v4.12.0: every part of the shell that is absent or refused switches itself off silently, with no console error.
+A profile with `level: full`, the permission `full-access` or a non-empty `commands` is refused by `app_shell.py check` and by `wrap` with «arrives in a later release»; `shortcuts` and `overlay` are refused as unknown for now (a later release). The skill says it in one line and builds nothing. In a browser or on a phone a wrapped page works as in v4.12.0: every part of the shell that is absent or refused switches itself off silently, with no console error.
 
 ## 2. Profiles
 

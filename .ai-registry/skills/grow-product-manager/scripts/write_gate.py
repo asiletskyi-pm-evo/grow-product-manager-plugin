@@ -4,8 +4,10 @@
 Runs before createJiraIssue / editJiraIssue / createConfluenceContent /
 updateConfluenceContent on any connector — the Atlassian MCP v2 names, which
 .mcp.json declares since v4.11.0 — and before createConfluencePage /
-updateConfluencePage, the v1 Confluence names, kept until Atlassian switches v1
-off on 2027-03-01 (references/integration-strategy.md 1c; Jira keeps its names). It does NOT
+updateConfluencePage, the v1 Confluence names: the plugin speaks v2 only since
+v4.15.0, but another installed plugin may still bring a v1 server into the
+session, and a write is asked about whichever server makes it
+(references/integration-strategy.md 1c; Jira keeps its names). It does NOT
 judge the artifact — a hook
 sees only the tool call, never the conversation (hooks reference: prompt/command
 hooks receive the hook input JSON). What it can do deterministically is put a
@@ -71,7 +73,7 @@ CONTENT_KEYS = ("description", "body", "content", "bodyContent", "value", "text"
 FILE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
 MIN_CONTENT = 200  # characters — below this an edit is metadata, not an artifact
 GATED_OPS = ("createJiraIssue", "editJiraIssue", "createConfluencePage", "updateConfluencePage",
-             "createConfluenceContent", "updateConfluenceContent")  # Jira, the v1 Confluence names (until 2027-03-01), the v2 ones
+             "createConfluenceContent", "updateConfluenceContent")  # Jira, the v1 Confluence names (another plugin's v1 server), the v2 ones
 UPDATE_OPS = ("editJiraIssue", "updateConfluencePage", "updateConfluenceContent")
 DRY_RUN_OPS = ("updateConfluenceContent",)  # the one gated tool whose schema has `dryRun` (persists nothing)
 DESTRUCTIVE_OPS = ("executeDestructive",)  # since v4.11.1: always asks, no pause, no size threshold

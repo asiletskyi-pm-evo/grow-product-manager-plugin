@@ -3,13 +3,12 @@
 
 A Jira search over a sprint or a quarter is larger than a host shows inline, so the host saves it to a file
 (references/jira-data-protocol.md → Large-response extraction). This script reads that file and prints what a report
-or a plan computes from — on either shape of the Atlassian MCP server:
+or a plan computes from. It reads the shape of Atlassian MCP v2: `fields.customFields`, keyed by the field's display
+name, each `{"id": "customfield_N", "value": …}`; a field with no value is absent, and has no key in the row's `cf`.
 
-- v2 (`fields.customFields`, keyed by the field's display name, each `{"id": "customfield_N", "value": …}`; a field
-  with no value is absent);
-- v1 (`fields.customfield_N` beside the system fields; a field with no value is `null`) — until 2027-03-01.
-
-Both read the same way: a custom field with no value has no key in the row's `cf`.
+Since v4.15.0 the plugin speaks v2 only (references/integration-strategy.md 1c). A response of the v1 server —
+`fields.customfield_N` beside the system fields — is refused with exit 2 and the reason, never read as an issue with
+no custom fields: that would report every estimate as missing.
 
     python3 jira_rows.py <saved-file> [<saved-file> …] [--sprint-history]
     python3 jira_rows.py -            # the response on stdin
@@ -22,11 +21,11 @@ is `{"id", "name", "state"}`, and only the sprints that are not closed are print
 `--sprint-history` prints every sprint of the history, with its dates. A description and a comment's text are never
 printed: `comments` is their count.
 
-After a file's rows comes one line `{"_page": …}`: the file's name, the number of issues, `shape` (`v2`, `v1`,
-`none` when no issue carries a custom field), `has_next` and `next_page_token` for the next page, and `cf_names` — the
-display name of each custom field id (v2 only; v1 does not carry the names).
+After a file's rows comes one line `{"_page": …}`: the file's name, the number of issues, `shape` (`v2`, `none` when
+no issue carries a custom field), `has_next` and `next_page_token` for the next page, and `cf_names` — the display
+name of each custom field id.
 
-It reads and prints; it writes nothing and calls nothing. A file that is not a Jira response: exit 2. Stdlib only
+It reads and prints; it writes nothing and calls nothing. A file that is not a v2 Jira response: exit 2. Stdlib only
 (Python 3.9).
 """
 import json, os, re, sys
@@ -80,11 +79,9 @@ def row(issue, history=False):
                     names[cell["id"]] = label
                     raw.append(cell.get("value"))
                     cf[cell["id"]] = reduce(cell.get("value"), history)
-        elif CF.match(name):                                            # v1
-            shape = "v1" if shape == "none" else shape
-            if value is not None:                                       # as on v2: no value — no key
-                raw.append(value)
-                cf[name] = reduce(value, history)
+        elif CF.match(name):                                            # the v1 server's shape
+            raise Bad("a response of Atlassian MCP v1 (fields.%s): the plugin reads v2 only — reconnect Atlassian "
+                      "(references/integration-strategy.md 1c)" % name)
         elif name in SKIP:
             continue
         elif name == "status" and isinstance(value, dict):

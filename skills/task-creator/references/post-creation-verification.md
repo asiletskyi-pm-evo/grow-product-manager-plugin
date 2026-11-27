@@ -8,7 +8,7 @@ Pick one of the created tasks (preferably a development task — FE or BE — as
 
 **12b. Read the task back from Jira:**
 
-Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send.
+Use `getJiraIssue` to fetch the created task with all fields. This ensures we verify what was actually saved, not what we intended to send. On Atlassian MCP v2 the default `compact` view drops the custom fields and the links: pass `fields: ["summary", "issuetype", "parent", "reporter", "labels", "components", "description", "issuelinks", "<the Team field id>"]` — the Team field comes under `fields.customFields` by its display name (`references/integration-strategy.md` 1c, point 4). `view: "evidence"` gives the same and every comment besides, so keep it for when the Team field's id is unknown.
 
 **Maker–checker separation (v0.11.0):** the agent that created the tasks does not evaluate them. The maker fetches the raw task data (this step), then passes it — with `artifact_type: task batch` (Gate 4a and 4b `n/a`), the requirements content and the check table below, one call per `lens` (`form`, then `groundedness`; since v3.8.0 named explicitly — without a lens the checker returns only an input-incomplete finding) — to the **`grow-product-manager:artifact-checker`** agent (`references/artifact-style-gate.md` → Execution model) that has no access to this conversation's reasoning. The checker returns findings; the maker applies fixes (12d). If subagents are unavailable — run inline and mark the report "незалежність перевірки знижена (inline)".
 
@@ -26,7 +26,7 @@ Use `getJiraIssue` to fetch the created task with all fields. This ensures we ve
 | **Description** | Contains "Why", "What", "How" and "Requirements" (with Confluence link) sections, plus "Definition of Done" on a critical / important task — the Step 7 format | Parse description content |
 | **AC ids in DoD** (since v3.9.0) | A Definition of Done cites the spec's acceptance criteria the task must pass by id (`AC-N`, or by position) — ids only, no AC text copied, no criterion rewritten into an invented threshold | Compare with the spec's acceptance criteria |
 | **Issue Type** | Correct type (Task/Design/Analytics/QA) | Check issue type field |
-| **Links** | Correct dependency links created (if linking was confirmed) | Check issue links via `getJiraIssue` |
+| **Links** | Correct dependency links created (if linking was confirmed), in the right direction | `fields.issuelinks` of the read-back: on a blocked task the blocker shows as `inwardIssue` with the type's inward wording («is blocked by»); a Design task that reads «is blocked by» BE is a swapped link (`integration-strategy.md` 1c, point 7) |
 | **List formatting** | "What"/"How"/DoD are lists or short structured blocks, not paragraph prose | Gate 2 checklist (`references/artifact-style-gate.md`) |
 | **No ungrounded tech content** | No technical assumptions outside the "Технічні рекомендації (AI)" section; that section (if present) opens with the AI callout | Gate 1 source test against the requirements page |
 | **Eval-set task** (since v3.9.0, AI-driven spec) | When QA — Eval set stayed ticked: `[QA] {FeatureName} - Eval set` exists, its `draft` cases come only from behaviour-spec rules and its DoD cites the eval criterion by id; when it was dropped, the Step 11 report says why | Read it back with `getJiraIssue` too; `n/a` for a spec that is not AI-driven |

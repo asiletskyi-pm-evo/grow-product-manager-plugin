@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.14.0
+**Version:** 4.15.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.15.0** — **«Лише v2»: every Jira and Confluence write the skills make speaks Atlassian MCP v2, checked on a live site** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). v4.11.0 moved the plugin to v2 by its tool names and v4.12.2 fixed how it reads; the writes had only been checked against the operations' descriptions. This release ran them on a real site — a private page created, labelled, updated by an append edit after a dry run, commented on; two test issues created with the Team field and a component, edited, linked, commented on and closed — and writes what it found into `references/integration-strategy.md` 1c: a Blocks link has the blocker as `inwardIssue`, a multi-value field is replaced by the list sent, the reporter is `{accountId}`, the Team field takes the team's id, a page takes its labels after the create. `task-creator`, `design-bridge`, `release-manager`, `quarterly-planning` and `roadmap-architect` follow them, and attachments go through v2's own upload operations first (`visual-annotation-protocol.md` Step V-6, with the short-lived token kept off the command line). The plugin no longer carries v1 call shapes: a session with only the v1 server is asked once to reconnect Atlassian, and `scripts/jira_rows.py` refuses a v1 response instead of reading it as issues with no estimates.
 
 **New in v4.14.0** — **«PM OS, фаза 1»: the profile of the pult — one private app for a product manager's day** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). The app shell of v4.13.0 shipped the profile `pm-os` empty; this release fills it: five modules in the side rail — «Сьогодні» (what waits for you, the day by time, the focuses, the signals and the freshness of the sources beside them), «Напрямки», «Метрики» with the screen of one metric over time under it, «Ритми» and «Контекст» — and «Налаштування» at the rail's foot, where you turn a module off and pick the theme. `references/pm-os-protocol.md` says which section each block reads, what a section may hold (a source and a date, counts and codes, never a person, never a letter's or a ticket's text), how a refresh run fills the sections, and the one **standing consent** under which a scheduled run on your own computer may write the data of your own private pult without asking each time: asked once as its own question, only the `snapshot` and `runs` documents, only while the pult is shared with no one, every write in the journal, taken back with «Відклич згоду на пульт». A page cannot start Claude, so «Оновити зараз», «Задати базу» and «Відкликати згоду» hand you the phrase to say to Claude. **What this release does not do yet:** no skill sets the pult up or refreshes it by itself — the set-up step and the refresh come with a later phase; until then the profile and the protocol are what a session follows when you ask for a pult. Nothing changes for the app «CJM» or for any page already published: the shell's files are the same, so `SHELL_VERSION` stays 2 and no app is asked its permissions again.
 
@@ -344,7 +346,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 7. Task Creator (v0.15.5)
+### 7. Task Creator (v0.16.0)
 
 **Description:** Automatically create Jira tasks and issues from requirements, breaking down work into actionable engineering tasks.
 
@@ -480,7 +482,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 13. Design Bridge (v0.10.1) — brand-agnostic since v1.11.0
+### 13. Design Bridge (v0.10.2) — brand-agnostic since v1.11.0
 
 **Description:** Orchestrator skill that turns concepts, requirements, research, and hypotheses into brand-themed design deliverables (decks, prototypes, handoffs, research enrichment). Invoked either directly ("create deck from concept", "build prototype", "run design handoff") or as an optional **Step D** hook from other skills (write-concept, requirements-creator, brainstorm-features, product-research).
 
@@ -523,7 +525,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 15. Roadmap Architect (v0.8.0) — Planning Suite
+### 15. Roadmap Architect (v0.8.1) — Planning Suite
 
 **Description:** Maintains the canonical structure of work — maps missions/goals → initiatives → epics → features, enforces labeling (labels, names, links), finds gaps, and generates the roadmap tree. Since v4.6.0 it also builds the user story map: a backbone of activities and steps, cards of value under it, release slices with an outcome and no date; a slice goes into the feature structure in one «так», and the map is published as a board the team edits and a progress dashboard (the vault note stays the source of truth). Since v4.11.2 the board is the host's own board type first — no Miro account needed — and Miro only when its tools are in the session; one team board per map.
 
@@ -543,7 +545,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 17. Quarterly Planning (v0.8.2) — Planning Suite
+### 17. Quarterly Planning (v0.8.3) — Planning Suite
 
 **Description:** Builds a quarterly roadmap, reviews the previous quarter's delivery (plan-vs-actual), and stress-tests the plan against team capacity.
 
@@ -565,7 +567,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.5.4) — NEW in v1.28.0
+### 19. Release Manager (v0.5.5) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
@@ -707,7 +709,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Brainstorm Features | v0.15.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
 | Write Concept | v0.16.3 | Write product concept documents (PRDs) |
 | Requirements Creator | v0.17.4 | Create and analyze feature requirements |
-| Task Creator | v0.15.5 | Create Jira tasks from requirements |
+| Task Creator | v0.16.0 | Create Jira tasks from requirements |
 | Diagram & Prototype Creator | v0.16.1 | Visualize concepts with diagrams, prototypes, infographics |
 | Flow Walkthrough | v0.6.2 | Walk a customer flow in the real product (web / desktop / iPhone-on-Mac / Android adb): evidence pack + report |
 | Product Landscape | v0.5.2 | Registry and map of competitor / adjacent / benchmark products: scan, discover, characterize, map, cross-product research |
@@ -715,13 +717,13 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Plugin Configurator | v2.17.4 | Configure plugin for your organization |
 | Knowledge Library | v0.10.3 | Manage curated knowledge sources and the tools registry |
 | Template Library | v0.3.4 | Manage multilingual artifact templates with per-product scope |
-| Design Bridge | v0.10.1 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
+| Design Bridge | v0.10.2 | Orchestrate brand-themed decks, prototypes, handoffs, and research enrichment (brand config in `local-context.md`) |
 | Product Reporter | v0.12.3 | Operational Jira reports (sprint plan/review, quarter review, initiative status, member review) + goal-report (3T5F) mode — renamed from team-ops-reporter |
-| Roadmap Architect | v0.8.0 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
+| Roadmap Architect | v0.8.1 | Canonical work structure: goal → initiative → epic → feature, labeling, gaps, roadmap tree, user story map with release slices |
 | Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
-| Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
+| Quarterly Planning | v0.8.3 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.4 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.5.4 | Release the plugin repo: bump → validate → PR → Release → mirror sync → reach check, with pitfall guards |
+| Release Manager | v0.5.5 | Release the plugin repo: bump → validate → PR → Release → mirror sync → reach check, with pitfall guards |
 | Focus Advisor | v0.11.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.3 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.3 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -983,7 +985,7 @@ Every protocol keeps a fallback chain that never widens an agent's tools (named 
 | Hook | Event | Does |
 |---|---|---|
 | Context digest | `SessionStart` (startup, resume, clear, compact) | `scripts/session_start.py` looks for `local-context.md` where this session can see it (`~/.grow-pm/`, connected folders under `$HOME/mnt/*/`, the working directory) and hands the model a short `GROW_PM_SESSION` digest: path, configurator version, `user.language`, product names, onboarding mode and deferred steps, whether vault / CJM / team language are configured. Step 0a of every skill becomes a lookup. Re-runs after context compaction, so the location survives long sessions. In a hosted session where the shell cannot see your files it says so — skills then read the file through device tools as before. Since v4.12.1 the digest ends with a `plugin copies:` line when another copy of the plugin on the machine is at another version (local manifests only, `references/host-profiles.md` §8). |
-| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluenceContent`, `updateConfluenceContent` (Atlassian MCP v2; the v1 names `createConfluencePage`, `updateConfluencePage` stay gated until v1 is switched off on 2027-03-01) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits and an `updateConfluenceContent` dry run (`dryRun: true`) pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. For one bulk job (a docs sync, a batch of tasks): `/grow-product-manager:setup --write-gate pause <minutes>` skips this question for up to 240 minutes and it comes back on its own; the provider-boundary and generated-region questions stay on. Opt-out: `/grow-product-manager:setup --write-gate off`. |
+| Write gate | `PreToolUse` on `createJiraIssue`, `editJiraIssue`, `createConfluenceContent`, `updateConfluenceContent` (Atlassian MCP v2; the v1 names `createConfluencePage`, `updateConfluencePage` stay gated for a v1 server another plugin may still bring) | `scripts/write_gate.py` asks you to confirm before a content-bearing write, with the checklist the artifact quality gate expects to be done by then (gate report in chat, your go-ahead, not a sandbox). Metadata-only edits and an `updateConfluenceContent` dry run (`dryRun: true`) pass silently. A hook sees only the tool call, never the conversation — so this is a human-in-the-loop step, not an automatic judge. For one bulk job (a docs sync, a batch of tasks): `/grow-product-manager:setup --write-gate pause <minutes>` skips this question for up to 240 minutes and it comes back on its own; the provider-boundary and generated-region questions stay on. Opt-out: `/grow-product-manager:setup --write-gate off`. |
 | Provider boundary (since v3.10.0) | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit` | The same `scripts/write_gate.py` asks you to confirm before a file is written inside a shared-context provider's local folder — a team core you registered as read-only (`references/context-provider-protocol.md` §7). Paths the provider leaves to you (your focus note, your overlay folder) and every folder outside the provider's are never asked about. Same opt-out as the write gate; a write-gate pause does not cover it. |
 | Irreversible Atlassian operation (since v4.11.1) | `PreToolUse` on `executeDestructive` (Atlassian MCP v2) | The same `scripts/write_gate.py` always asks before a delete or another operation with no draft and no undo, naming the operation. A write-gate pause does not cover it. |
 | Address approval (since v4.11.1) | `PreToolUse` on `Bash` | The same `scripts/write_gate.py` asks before a command that approves a provider's server address (`ctx provider trust <id> --code`), so the approval is your own click (`references/context-provider-protocol.md` §13). It also asks before a command, or a `Write`/`Edit`, that changes the gate itself, its config or the provider trust store (`setup.py --write-gate …` included). Every other command passes silently. Neither a pause nor `--write-gate off` covers these questions; they read a command's text, so they confirm what the agent does rather than sandbox it. |
@@ -1154,5 +1156,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.14.0  
+**Version:** 4.15.0  
 **Last Updated:** November 2026
