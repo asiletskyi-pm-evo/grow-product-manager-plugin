@@ -11,9 +11,8 @@ query — to that url without a check. Covered here, on temp homes and the ficti
    computer (127.0.0.1, ::1, localhost) — a remote http address gets no request at all, header or not;
 3. the trust file `~/.grow-pm/trust/providers.json`: 0600 in a 0700 folder, never a header value, never credentials;
    one that cannot be read refuses everything and is never rewritten by a first run;
-4. the first run after the update (R37): every registration with an address already there is trusted, once, one line
-   each — a remote http one is not, and is named; the file holds `seeded_at`; an empty list is a file; a registration
-   still downloading puts the first run off;
+4. the first run (since v4.12.4, R37 withdrawn): the trust file created empty — no registration is trusted by itself,
+   one line; an entry an earlier first run seeded is refused as `seeded` until the user approves it;
 5. the verdict: the pair «address + variable name» you approved, matched with the id; anything else — a new id, another
    address, another variable — gets nothing (R36: an address with no variable needs approval as well);
 6. `client_for`, the one way to a client: the approved address and the header from the environment, or `Untrusted`
@@ -491,7 +490,7 @@ with tempfile.TemporaryDirectory() as d:
                           (["provider", "trust", "--list"], False)):
         check("9.20 writes(%s) is %s" % (" ".join(args), writing), ctxmain.writes(ctxmain.build_parser().parse_args(args)) is writing)
 
-# 10. the first run through the command line (R37) ------------------------------------------------------------------
+# 10. the first run through the command line (v4.12.4) ---------------------------------------------------------------
 with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE, require_headers={"X-Token": SECRET}) as fake:
     env = Env(d)
     prov = os.path.join(env.home, ".grow-pm", "providers")

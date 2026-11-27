@@ -270,7 +270,7 @@ def _locked(home):
         os.close(fd)                                    # closing releases the lock
 
 
-# ------------------------------------------------------------------ the first run (R37)
+# ------------------------------------------------------------------ the first run (R37 withdrawn in v4.12.4)
 def seed(home, repos, late=(), now=None):
     """The first run: lines to print (see the module's doc). Since v4.12.4 (the audit of 2026-11-26, R37 withdrawn) it
     trusts nothing: when there is no trust file it is created empty, whatever registrations are there — a registration
