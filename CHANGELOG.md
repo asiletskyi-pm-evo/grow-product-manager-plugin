@@ -47,10 +47,10 @@ Every snapshot is a publication: one question before every write into the databa
 - **`references/desktop-app-protocol.md`** — the shared protocol: the three levels (page, app, full access later), profiles, the one question before the first build, build and publish, the data channel and its rules, connectors as data, permissions, updating, a map too large for one database document, what never happens.
 - **`references/app-profiles.yaml`** and **`scripts/app_shell.py`** — the profiles `cjm` and `pm-os` with placeholders only, and the script: `schema`, `check` (a profile or an owner's `config/app`), `wrap`, `theme`, `snapshot` (the products as a file, `--products FILE`, so a label from your context never reaches a command line). `SHELL_VERSION` is 2: the first shell was never released, and the rail layout and the chart blocks of PM OS's shell 2 come in this release. The script never reads `local-context.md` and never writes into the plugin's files.
 - **`scripts/app_shell/`** — the shell's own files, embedded byte for byte into a wrapped page: `shell.js`, `blocks.js`, `charts.js`, `map.js`, `desk.js`, `live.js`, `shell.css`; **`assets/app-icon.png`** — the plugin's logo as the app's icon.
-- **`journey_map.py app-data`** and **`journey_portfolio.py app-data`** — a map and the portfolio as the data of one section of the snapshot; a map too large for one database document stays out and is named. The map's data carries the app's words (each stage's target as a sentence, each row's source line, the bands, the classes used); the portfolio's comes with `portfolio-lead.json` and `portfolio-changes.json`, and `--label` puts the product's name first in the lead.
+- **`journey_map.py app-data`** and **`journey_portfolio.py app-data`** — a map and the portfolio as the data of one section of the snapshot; a map too large for one database document stays out and is named. The map's data carries the app's words (each stage's target as a sentence, each row's source line, the bands, the classes used); the portfolio's comes with `portfolio-lead.json` and `portfolio-changes.json`, and `--products FILE` (the same products file as `snapshot`) puts the product's label first in the lead.
 - **`publications.py record --app PROFILE:SHELL[:PERM,PERM]`** — the publication record remembers that a place is an app, with its profile, shell number and permissions; `find` returns them, so the skill sees what changed.
-- **Lint check 33 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
-- **Tests** — `testing/app_shell_test.py` (446 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (65), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
+- **Lint check 34 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
+- **Tests** — `testing/app_shell_test.py` (446 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (66), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
 - **A release guard** — `release-manager` pitfall P11 and a line in Step 3: a release that changes the shell's files, the `wrap` function, the map's editing code that `wrap` embeds or a profile's modules or menu raises `SHELL_VERSION` (and the profiles file's `version` with it); otherwise a published app is never offered its new page. A pin test in `testing/app_shell_test.py` keeps the hash of shell 1's bytes per profile and language and goes red on any such change.
 - **`docs/superpowers/specs/2026-11-26-desktop-apps-design.md`** and its Ukrainian twin — the design this release follows.
 
@@ -72,7 +72,7 @@ Every snapshot is a publication: one question before every write into the databa
 | `skills/release-manager/SKILL.md`, `skills/release-manager/references/release-pitfalls.md` | 0.5.4 — P11, the agent runs the release machine's checks |
 | `references/artifact-publishing.md`, `references/journey-protocol.md`, `references/native-surfaces.md`, `references/vault-schema.md` | the app in each |
 | `testing/app_shell_test.py`, `testing/journey_app_data_test.py`, `testing/publications_test.py`, `testing/fixtures/app/*` | new tests and fixtures |
-| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 33 and its seeds |
+| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 34 and its seeds |
 | `testing/Testing-process.md`, `testing/test-cases.md` | the new tests, the shell-version rule, the acceptance cases |
 | `docs/superpowers/specs/2026-11-26-desktop-apps-design.md`, `….uk.md` | the design |
 | `README.md`, `.claude-plugin/*.json`, `.codex-plugin/plugin.json`, `.ai-registry/` | «New in v4.13.0», the version, the registry copy |
@@ -80,6 +80,47 @@ Every snapshot is a publication: one question before every write into the databa
 ### Backwards compatibility
 
 No page that exists changes: a page without the shell is published, edited and read exactly as in v4.12.0, and the `edits` collection keeps its format. The app is an offer after a map's page, made only when the product has a map and never without the one question. The publication record gains an optional field; a record without it reads as before. Nothing in a user's `local-context.md`, vault or notes changes, and a scheduled run still publishes and writes nothing.
+
+---
+
+## v4.12.4 (2026-11-26)
+
+**Three findings of the security audit of 2026-11-26 closed.** The company's audit of the registry copy (commit 15ea847) reported three HIGH findings. Each was checked against the code: the first and the second are real, the third named a rule that already narrowed the host's default, yet left Editors free to write every collection of the page's store. All three are fixed at the source, and a lint or validator check now fails the tree if one comes back.
+
+### Fixed
+
+- **A request in the command line of `ctx graph`** (audit finding 1, `context-navigator` 0.5.3). The skill built `ctx graph '<X>'` and asked the model to write a `'` in X as `'\''`. The escaping is correct shell, but it relied on the model doing it right every time, while X can come from a note's or a meeting's title — the one place v4.11.1 left out of «words from a note never stand in the command line» (`references/search-protocol.md` §3a). `ctx graph` now takes `--q-stdin`: the request on stdin, one line, in a quoted heredoc; words and stdin together, two lines, or nothing are a usage error (exit 3).
+- **The first run trusted the registrations already there** (audit finding 2, `references/context-provider-protocol.md` §13). Since v4.9.1 the first `ctx` command that may reach a server trusted, once, every registration with an address it found (the user's decision R37, named as a known limit). A registration lies in the vault's `_System/providers/`, which syncs, so one planted there before a new machine's first run got the searches, the notes' names and the header its variable gives. Now the first run creates the trust file **empty** and prints one line, `довіра адресам: жодну наявну реєстрацію не довірено автоматично — …`; each address is refused as `new` until the user approves it (`ctx provider trust <id>` → `--code` on the user's yes). An entry an earlier first run wrote (`how: seeded`) is refused with the new reason `seeded` — `довірено без твого схвалення: <scheme://host>` — until the user approves it once; `ctx provider trust --list` names such an entry `довірено без схвалення`, never `діє`.
+- **The journey page's store declared write rights wider than its flow** (audit finding 3, `cjm-research` 0.20.1, `references/journey-protocol.md` §9). The publication declared `db` with one rule, `{path: "", read: "view", write: "admin"}`. A level in a rule is the least one that may write, so the rule narrowed the host's default (Contributors write) — the audit's «admin rights» read it the other way — but Editors could write every collection while the page writes only `edits`. Now two rules: `{path: "", read: "view", write: "owner"}` and `{path: "edits", read: "view", write: "admin"}`. The root rule stays on purpose: without it a path no rule names would fall back to the default. A page published before keeps its rules until its next publication.
+
+### Added
+
+- **`skill_lint.py` check 32** also refuses a shipped doc that puts a request in the command line of `ctx graph` (`ctx graph '<…>'`).
+- **`skill_lint.py` check 33 `db-least-rights`** — a shipped doc that declares a `db` rule letting anyone below the owner write the whole store (`path: ""` with `write` view, interact or admin), or a rule set with no root rule.
+- **Validator check 31** (`ctx_endpoints.check_protocol`) — the first run writes no entry, no entry is written as `seeded`, the verdict passes only an `approved` entry, the first-run line and the reason `seeded` are the protocol's words. `testing/ctx_endpoints_test.py` seeds each drift and the check names it.
+- **Tests** — `testing/ctx_graph_test.py`: `--q-stdin` walks the same notes as the argument, a request with quotes, `;` and `$(…)` runs nothing, the usage errors. `testing/ctx_endpoints_test.py`: the first run trusts nothing, an approval is the one way in, a seeded entry builds no client and is replaced by an approval.
+
+### Files
+
+| File | Change |
+|---|---|
+| `scripts/ctx.py` | `graph --q-stdin`; the first run's help text; `trust --list` names a seeded entry |
+| `scripts/ctx_endpoints.py` | `seed` trusts nothing; the reason `seeded`; check 31's new rules |
+| `scripts/session_start.py` | the Skills line names the first run's new line |
+| `skills/context-navigator/SKILL.md` | 0.5.3 — `ctx graph --q-stdin` |
+| `skills/cjm-research/SKILL.md` | 0.20.1 — the two `db` rules |
+| `references/search-protocol.md` | §3a: `ctx graph` on stdin |
+| `references/context-protocol.md` | the `graph` row |
+| `references/context-provider-protocol.md` | §13: the first run, the reason `seeded`, known limit (1) |
+| `references/journey-protocol.md` | §9 «Shared edits»: the two rules |
+| `references/local-context-protocol.md` | the first run's line a skill repeats |
+| `testing/skill_lint.py` | check 32 (graph), check 33 |
+| `testing/ctx_graph_test.py`, `testing/ctx_endpoints_test.py`, `testing/ctx_cli_test.py`, `testing/session_start_test.py` | the new behaviour; approvals where a test relied on the first run trusting |
+
+### Backwards compatibility
+
+- **One question per provider, once.** A trust file a first run of v4.9.1–v4.12.3 wrote keeps its entries, but each `seeded` entry is refused until you approve it: the skill shows the address and asks one question, and `ctx provider trust <id> --code <code>` runs only on your yes. An entry you approved yourself (`how: approved`) is not asked again.
+- A journey page published on the host's artifact keeps its old `db` rule until it is published again.
 
 ---
 

@@ -11,16 +11,17 @@ registrations' folder (§13 «Trusted endpoints»).
 - trust_file(home)       `<home>/.grow-pm/trust/providers.json` — schema `provider-trust/1`, mode 0600 in a 0700
                          folder: {schema, seeded_at, entries: [{id, url, headers_env, at, how}]}. `url` is the address
                          as `parse` normalises it (no credentials, no query); `headers_env` the variable's NAME or null —
-                         a value is never stored; `how` is `seeded` (the first run) or `approved` (`ctx provider trust`).
+                         a value is never stored; `how` is `approved` (`ctx provider trust`) — `seeded`, which a first run of v4.9.1–
+                         v4.12.3 wrote, approves nothing since v4.12.4.
 - parse(url)             an `Address` (normal, origin, request_url) or None — `ctx_mcp.split_url` underneath
 - load(home)             the file as a dict, None when there is none; `TrustError` when it cannot be read (a link, not
                          JSON, another schema) — such a file refuses everything and is never rewritten by a first run
-- seed(home, repos, late, now)   the first run after the update (R37): when there is no trust file, every registration
-                         with an address that may be reached is trusted — one line each, `Довірено наявну реєстрацію …`
-                         — and the file keeps `seeded_at`; an empty list is a file too, so it happens once. A remote http
-                         address is not trusted and is named; a registration still downloading (`late`) puts it off.
-- verdict(repo, home)    None when the registration's pair is the one approved for its id, else an `Untrusted` (not
-                         raised): its `why` — new · changed · transport · unreadable — and its `line` for the user
+- seed(home, repos, late, now)   the first run: when there is no trust file it is created empty (`seeded_at` kept) —
+                         since v4.12.4 no registration is trusted by itself (R37 withdrawn, the audit of 2026-11-26),
+                         one line, `довіра адресам: жодну наявну реєстрацію не довірено автоматично …`
+- verdict(repo, home)    None when the registration's pair is the one the user approved for its id (`how: approved`),
+                         else an `Untrusted` (not raised): its `why` — new · changed · seeded · transport · unreadable —
+                         and its `line` for the user; an entry an earlier first run wrote (`how: seeded`) is no approval
 - client_for(repo, home, factory, **kw)   the one way to an MCP client (validate check 31): `Untrusted` is raised before
                          the factory is called, so no request, no header; else the factory gets the approved address and
                          the header `ctx_mcp.headers_from_env` reads from the variable
@@ -59,7 +60,9 @@ ID = re.compile(r"[a-z0-9][a-z0-9-]{0,63}\Z")           # an id a command line m
 VAR = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}\Z")     # a variable name, nothing a shell or a line would read otherwise
 COMMAND = "ctx provider trust"
 REASONS = {"new": "нова", "changed": "змінилась", "transport": "не https", "unreadable": "файл довіри не читається",
-           "unseeded": "файлу довіри ще немає"}
+           "unseeded": "файлу довіри ще немає", "seeded": "довірено без твого схвалення"}
+FIRST_RUN = ("довіра адресам: жодну наявну реєстрацію не довірено автоматично — кожну адресу схвалиш сам, одним "
+             "питанням (%s <id>)")
 SEED_MARK = (".grow-pm", ".trust-seeded")               # the first run happened in this home — outside trust/, which may go
 LINE_MAX = 300                                          # a refusal line, its «Схвалити: …» tail included (callers clip at 300)
 NOTHING_SENT = "нічого не надіслано"
@@ -82,7 +85,6 @@ class Untrusted(Exception):
 
 
 Address = collections.namedtuple("Address", "normal origin request_url query_sha shown")
-INSTALL_MARKS = ("local-context.md", "providers", "index", ".ctx-summary.json", "cores")   # an install from before v4.9.1
 LOCK_WAIT_S = 10.0
 
 
@@ -270,56 +272,28 @@ def _locked(home):
 
 # ------------------------------------------------------------------ the first run (R37)
 def seed(home, repos, late=(), now=None):
-    """The first run after the update: lines to print (see the module's doc). Nothing when the trust file is there —
-    readable or not, a link or not. `late` lists registrations not read in time (still downloading): the run is put off
-    with one line, so a registration iCloud has not brought down is not shut out of it. A home that cannot be written
-    (a read-only sandbox, the guard) is one line: no file, nothing trusted."""
+    """The first run: lines to print (see the module's doc). Since v4.12.4 (the audit of 2026-11-26, R37 withdrawn) it
+    trusts nothing: when there is no trust file it is created empty, whatever registrations are there — a registration
+    lies in a vault that syncs, so one planted there before the first run would otherwise get your queries and your
+    header. Each address is approved by the user, one question each (`ctx provider trust <id>` → `--code`). One line
+    when some registration has an address. Nothing when the trust file is there — readable or not, a link or not. A home
+    that cannot be written (a read-only sandbox, the guard) is one line: no file, nothing approved. `late` (a
+    registration still downloading) no longer matters: nothing is trusted from what is there, so nothing waits for it."""
     path = trust_file(home)
     if os.path.lexists(path) or os.path.islink(os.path.dirname(path)):
         return []
     addressed = any((r.get("endpoint") or {}).get("url") for r in repos or ())
-    mark = os.path.join(home, *SEED_MARK)
-    if os.path.lexists(mark):                           # review of the branch #1: the first run was here — never a second
-        stamp = now or datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-        try:
-            if not _write(home, {"schema": SCHEMA, "seeded_at": stamp, "entries": []}, exclusive=True):
-                return []
-        except (OSError, cs.PathRefused, TrustError):
-            return []                                   # the verdicts say «файлу довіри ще немає»
-        return ["файлу довіри не було, хоча перший запуск тут уже відбувся — створено порожній: кожну адресу схвалиш "
-                "заново (%s <id>)" % COMMAND] if addressed else []
-    if late:
-        return ["довіру адресам ще не встановлено: реєстрація ще завантажується (%s) — до наступного запуску %s"
-                % (_safe(os.path.basename(late[0])), NOTHING_SENT)]
-    entries, lines, ids = [], [], set()
-    installed = any(os.path.lexists(os.path.join(home, ".grow-pm", m)) for m in INSTALL_MARKS)
-    for repo in repos or ():
-        rid, ep = repo.get("id") or "", repo.get("endpoint") or {}
-        if not ep.get("url") or rid in ids:             # an id once (review 1 #6)
-            continue
-        if not installed:                               # another --home, a sandbox HOME: nothing of it is «already there»
-            lines = ["довіра адресам: у цій домівці не було попередньої установки — жодну реєстрацію не довірено "
-                     "автоматично; схвалення — %s <id>" % COMMAND]
-            break
-        address, var = parse(ep["url"]), ep.get("headers_env") or ""
-        problem = _problem(rid, ep["url"], var)
-        if problem:
-            lines.append("Не довірено %s: %s" % (_shown(rid), problem))
-            continue
-        ids.add(rid)
-        entries.append(_entry(rid, address, var, now, SEEDED))
-        lines.append("Довірено наявну реєстрацію %s: %s (%s%s)" % (rid, address.origin, var_shown(var), _query_word(address)))
     stamp = now or datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     try:
-        if not _write(home, {"schema": SCHEMA, "seeded_at": stamp, "entries": entries}, exclusive=True):
-            return []                                   # another run seeded it meanwhile: its lines were its own
+        if not _write(home, {"schema": SCHEMA, "seeded_at": stamp, "entries": []}, exclusive=True):
+            return []                                   # another run created it meanwhile
     except (OSError, cs.PathRefused, TrustError) as e:
         if not addressed:                               # review of the branch #4: nothing to say on every skill start
             return []
         why = e.strerror if isinstance(e, OSError) and e.strerror else str(e) or type(e).__name__
         return ["файл довіри не створено (%s) — жодну адресу не схвалено, %s" % (_safe(why, 200), NOTHING_SENT)]
     _mark(home, stamp)
-    return lines
+    return [FIRST_RUN % COMMAND] if addressed else []
 
 
 def _mark(home, stamp):
@@ -395,6 +369,8 @@ def verdict(repo, home=None):
     entry = next((e for e in data.get("entries") or () if e.get("id") == rid), None)
     if entry is None:
         return _refusal(rid, "new", new)
+    if entry.get("how") != APPROVED:                    # since v4.12.4: an entry a first run wrote (v4.9.1–v4.12.3) is
+        return _refusal(rid, "seeded", "%s: %s" % (REASONS["seeded"], address.origin))   # no approval of yours
     if (entry.get("url") == address.normal and (entry.get("query_sha256") or None) == address.query_sha
             and (entry.get("headers_env") or None) == (var or None)):
         return None
@@ -473,7 +449,7 @@ def revoke(home, rid):
 # ------------------------------------------------------------------ validate check 31
 PROTOCOL = "references/context-provider-protocol.md"
 ALLOWED_CLIENT_FILES = ("ctx_mcp.py", "ctx_endpoints.py")       # where the client class and the header reader may be named
-WORDS = ("Довірено наявну реєстрацію", "адресу не схвалено", NOTHING_SENT, "ctx provider trust <id>", "--code <code>",
+WORDS = ("жодну наявну реєстрацію не довірено автоматично", "адресу не схвалено", NOTHING_SENT, "ctx provider trust <id>", "--code <code>",
          "ctx provider trust --list", "ctx provider untrust <id>", "~/.grow-pm/trust/providers.json", SCHEMA)
 
 
@@ -546,9 +522,22 @@ def check_protocol(root):
     shadow = re.search(r'SHADOWED = "реєстрація %s: ([^"]+)"', common)
     if not shadow or "реєстрація <id>: %s" % shadow.group(1) not in sec:
         errs.append("ctx_common.py SHADOWED and the line §13 «A private registration wins» names differ")
-    first = re.search(r'lines\.append\("(Довірено[^%"]*)%s', me)
-    if not first or first.group(1).strip() != "Довірено наявну реєстрацію":
-        errs.append("scripts/ctx_endpoints.py: the first-run line is not «Довірено наявну реєстрацію …» as §13 names it")
+    # since v4.12.4 (the audit of 2026-11-26, finding 2): no address is trusted without the user — the first run writes
+    # no entry, an entry is written only as `approved`, and the verdict passes only an approved one
+    seed_body = re.search(r"def seed\(.*?(?=\ndef )", me, re.S)
+    if not seed_body or re.search(r"_entry\(|entries\.append|SEEDED", seed_body.group(0)):
+        errs.append("scripts/ctx_endpoints.py: the first run trusts a registration by itself — it must create the trust file "
+                    "empty; each address is approved by the user (ctx provider trust <id> --code)")
+    if re.search(r'^[^"\n]*\b_entry\([^\n]*\bSEEDED\b', me, re.M):
+        errs.append("scripts/ctx_endpoints.py: an entry is written as `seeded` — only `approved` (ctx provider trust)")
+    verd = re.search(r"def verdict\(.*?(?=\ndef )", me, re.S)
+    if not verd or not re.search(r'entry\.get\("how"\) != APPROVED', verd.group(0)):
+        errs.append("scripts/ctx_endpoints.py: verdict passes an entry that is not `approved` — an entry an earlier first run "
+                    "seeded is no approval of the user's")
+    first = re.search(r'FIRST_RUN = \("([^"]*)"', me)
+    if not first or "жодну наявну реєстрацію не довірено автоматично" not in first.group(1):
+        errs.append("scripts/ctx_endpoints.py: the first-run line is not «довіра адресам: жодну наявну реєстрацію не довірено "
+                    "автоматично …» as §13 names it")
     parser = _read(root, "scripts/ctx.py") or ""
     for cmd in ("trust", "untrust"):
         if 'pp.add_parser("%s"' % cmd not in parser:

@@ -102,12 +102,14 @@ class Env:
     def note(self, rel):
         return os.path.join(self.vault, *rel.split("/"))
 
-    def cli(self, *args):
+    def cli(self, *args, stdin=None):
         env = dict(os.environ)
         env.pop("GROW_PM_CONTEXT_PATH", None)
         env.pop("GROW_PM_PROVIDER_PATHS", None)
         p = subprocess.run([sys.executable, CTX] + list(args) + ["--home", self.home, "--context", self.ctx],
-                           capture_output=True, text=True, env=env, timeout=180)
+                           capture_output=True, text=True, env=env, timeout=180,
+                           input=stdin if stdin is not None else None,
+                           stdin=None if stdin is not None else subprocess.DEVNULL)
         lines = [l for l in p.stdout.splitlines() if l.strip()]
         try:
             res = json.loads(lines[-1][len("CTX_RESULT "):]) if lines and lines[-1].startswith("CTX_RESULT ") else None
@@ -311,6 +313,22 @@ with tempfile.TemporaryDirectory() as d:
           [(n["path"], n["kinds"]) for n in res["nodes"]])
     rc, out, res = env.cli("graph", "--kind", "links", "Roadmap")
     check("…an unknown kind is a usage error (exit 3)", rc == 3 and "--kind takes" in out, out[-300:])
+    # since v4.12.4 (audit 2026-11-26, finding 1): the request on stdin — never in the command line
+    rc, out, res = env.cli("graph", "--q-stdin", "--json", stdin="Notes/Meetings/Standup 2026-10-01.md\n")
+    nodes_in = {n["path"] for n in (res or {}).get("nodes", [])}
+    check("v4.12.4 `ctx graph --q-stdin`: the request read from stdin walks the same notes as the argument",
+          rc == 0 and res["how"] == "path" and ALPHA in nodes_in, (rc, out[-400:]))
+    probe = os.path.join(d, "ran")
+    rc, out, res = env.cli("graph", "--q-stdin", "--json", stdin="Roadmap'; touch %s; echo '$(touch %s)\n" % (probe, probe))
+    check("…a request with quotes, `;` and `$(…)` is a request, nothing runs", not os.path.exists(probe), (rc, out[-300:]))
+    rc, out, _ = env.cli("graph", "--q-stdin", stdin="")
+    check("…nothing on stdin is a usage error (exit 3)", rc == 3 and "--q-stdin" in out, (rc, out[-200:]))
+    rc, out, _ = env.cli("graph", "--q-stdin", stdin="Roadmap\nAlpha\n")
+    check("…two lines are a usage error: graph walks one request", rc == 3 and "one request" in out, (rc, out[-200:]))
+    rc, out, _ = env.cli("graph", "Roadmap", "--q-stdin", stdin="Alpha\n")
+    check("…words and stdin together are a usage error", rc == 3 and "not both" in out, (rc, out[-200:]))
+    rc, out, _ = env.cli("graph")
+    check("…no request at all is a usage error", rc == 3 and "takes a request" in out, (rc, out[-200:]))
     rc, out, res = env.cli("graph", "ZorgCore/Teams/team-alpha.md", "--depth", "2", "--json")
     bea = {n["path"]: n for n in res["nodes"]}.get(BEA_CORE, {})
     check("v4.0.0 review I-4: a sensitive node — no type, its edge kind without the field (fm, never fm:team) — and the "

@@ -816,7 +816,7 @@ def app_portfolio(p, lang, product=""):
 
 def app_lead(port, lang, label=""):
     """The portfolio in one or two sentences — how many journeys, how many need attention, the weakest — for a `lead`
-    block; the product's label first when it is given (two products share one introduction)."""
+    block; the product's label first when it is given (two products share one introduction) — from the products file."""
     W = APP_WORDS.get(lang, APP_WORDS["en"])
     rows = port["rows"]
     head = (W["of"] % label) if label else ""
@@ -889,10 +889,29 @@ def app_funnel(folder, product):
     return {"stages": stages, "date": best["date"], "score": best["score"]}
 
 
+def label_of(path, product):
+    """The product's label from the products file of `app_shell.py snapshot --products` — a JSON list of {id, label,
+    color?}. A label comes from the user's context, so it travels as a file, never as a command-line value
+    (search-protocol §3a). "" without a file or without that product in it."""
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError) as e:
+        raise Bad("products: the file does not read (%s)" % (getattr(e, "strerror", None) or type(e).__name__))
+    if not isinstance(raw, list):
+        raise Bad("products: the file must be a list [{id, label, color?}]")
+    for x in raw:
+        if isinstance(x, dict) and x.get("id") == product and isinstance(x.get("label"), str):
+            return plain(x["label"])[:80]
+    return ""
+
+
 def cmd_app_data(args):
     p, today = _portfolio(args)
     port = app_portfolio(p, args.lang, args.product)
-    lead = app_lead(port, args.lang, args.label or "")
+    lead = app_lead(port, args.lang, label_of(args.products, args.product))
     changes = app_changes(p, args.lang, args.product)
     funnel = app_funnel(args.snapshots, args.product)
     try:
@@ -933,7 +952,7 @@ def build_parser():
         if name == "app-data":
             p.add_argument("--out-dir", required=True, help="a scratch folder: portfolio.json, portfolio-lead.json, "
                            "portfolio-changes.json and funnel.json for app_shell.py snapshot")
-            p.add_argument("--label", help="the product's name as people read it, said first in the portfolio's lead")
+            p.add_argument("--products", help="the products file of app_shell.py snapshot: the product's label opens the lead")
     sub.add_parser("schema")
     return ap, sub
 

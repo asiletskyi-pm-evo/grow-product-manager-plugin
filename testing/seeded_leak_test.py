@@ -12,7 +12,7 @@ seeds (checks 19-22, JCRL v3.5.0), the judgment-points seeds (check 23,
 v3.7.0 and v3.9.0), the evidence-class seeds (check 24, v3.8.0) and the judgment-binds
 seeds (check 25, v3.9.0) are preventive: their classes have not shipped. The provider-contract
 seed (check 26, v3.10.0) reproduces a class that did ship: invented tool names at vault level L2. The app-template
-seeds (check 33, v4.13.0) are preventive again, and prove that checks 9 and 16-18 read the shell's files too.
+seeds (check 34, v4.13.0) are preventive again, and prove that checks 9 and 16-18 read the shell's files too.
 
 Usage: python3 testing/seeded_leak_test.py [PLUGIN_ROOT]   (default: repo root)
 Exit 0 = every seeded defect was caught; exit 1 = at least one slipped through.
@@ -192,7 +192,20 @@ SEEDS = [
     ("core-is-data: a sample value in double quotes in a scripts command",
      "skills/context-connect/references/connect-steps.md", "append",
      '`python3 "<plugin root>/scripts/provider_bundle.py" --core x --name "Name Surname"`', "core-is-data"),
-    # v4.13.0: check 33 — the app templates (references/app-profiles.yaml, scripts/app_shell/*) hold shell code and
+    # v4.12.4: the audit of 2026-11-26 — finding 1 (check 32) and finding 3 (check 33)
+    ("core-is-data: a request in the command line of `ctx graph`",
+     "skills/context-navigator/SKILL.md", "append",
+     "→ `python3 \"<plugin root>/scripts/ctx.py\" graph '<X>'` (a `'` in it written `'\\''`)", "core-is-data"),
+    ("core-is-data: a request after an option of `ctx graph`",
+     "references/context-protocol.md", "append",
+     "Then `ctx graph --depth 2 '<note>'`.", "core-is-data"),
+    ("db-least-rights: Editors write the whole store of a page",
+     "skills/cjm-research/SKILL.md", "append",
+     '- the publication declares `capabilities: {db: {rules: [{path: "", read: "view", write: "admin"}]}}`', "db-least-rights"),
+    ("db-least-rights: a rule set with no root rule",
+     "references/journey-protocol.md", "append",
+     'The page declares `db: {rules: [{path: "edits", read: "view", write: "admin"}]}`.', "db-least-rights"),
+    # v4.13.0: check 34 — the app templates (references/app-profiles.yaml, scripts/app_shell/*) hold shell code and
     # placeholders only; a user's values go into the published page or its database. Preventive: no class has shipped.
     ("app-template: an e-mail in a copy of the app profiles",
      "references/app-profiles.yaml", "append",

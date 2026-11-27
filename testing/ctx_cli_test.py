@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.join(ROOT, "testing"))
 os.environ["NO_PROXY"] = "127.0.0.1,localhost"          # the fake MCP server is local; a proxy in the environment must not see it
 os.environ["no_proxy"] = "127.0.0.1,localhost"
 from mcp_fake import FakeMcp  # noqa: E402
+import ctx_testenv as tenv  # noqa: E402
 
 CTX = os.path.join(ROOT, "scripts", "ctx.py")
 FIX = os.path.join(ROOT, "testing", "fixtures", "ctx")
@@ -716,6 +717,10 @@ def repos_env(d, url, patch=(), core_extra=""):
            "blocks_file: %s\nblocks_source: mcp\nteam: team-alpha\n")
     open(os.path.join(prov, "zorg-growth.yaml"), "w", encoding="utf-8").write(reg % ("zorg-growth", url, GROWTH_FILE))
     open(os.path.join(prov, "zorg-dead.yaml"), "w", encoding="utf-8").write(reg % ("zorg-dead", "http://127.0.0.1:9/mcp", GROWTH_FILE))
+    # since v4.12.4 the first run trusts nothing already there: the user's approval of both addresses, as
+    # `ctx provider trust <id> --code` gives it (the refusals themselves are ctx_endpoints_test.py's)
+    for rid, u in (("zorg-growth", url), ("zorg-dead", "http://127.0.0.1:9/mcp")):
+        tenv.approve(e.home, {"id": rid, "endpoint": {"url": u}})
     return e
 
 
@@ -1274,6 +1279,7 @@ with FakeMcp(tree={CORE_BLOCKS_PATH: read(CORE_FIX, CORE_BLOCKS)}) as fake:
             "schema: provider-registration/2\nid: zorg-core\nkind: mcp\nauthority: org\nendpoint:\n  url: %s\n  root: \"ZorgCore/\"\n"
             "blocks_file: Core/_System/context-blocks.md\nblocks_source: auto\ncore_root: %s\nteam: team-alpha\nrole: pm\n"
             "jira_write: own\n%s" % (fake.url, core, SKIP_PRODUCT))
+        tenv.approve(e.home, {"id": "zorg-core", "endpoint": {"url": fake.url}})     # since v4.12.4: the user's yes
         run_ok(e, "migrate", "--apply")
         run_ok(e, "provider", "adopt", "zorg-core", "--apply")
         rc, out, r = apply_run(e, core, "zorg-core")
@@ -4479,9 +4485,11 @@ with tempfile.TemporaryDirectory() as d:
 
 with tempfile.TemporaryDirectory() as d:
     env = SearchEnv(d)
+    closed = closed_url()
     open(os.path.join(env.vault, "Notes", "_System", "providers", "zorg-growth.yaml"), "w", encoding="utf-8").write(
         "schema: provider-registration/2\nid: zorg-growth\ntitle: Zorg growth\nkind: mcp\nauthority: team\n"
-        "endpoint:\n  url: %s\n  root: \"Growth/\"\nstatus: active\n" % closed_url())
+        "endpoint:\n  url: %s\n  root: \"Growth/\"\nstatus: active\n" % closed)
+    tenv.approve(env.home, {"id": "zorg-growth", "endpoint": {"url": closed}})   # since v4.12.4: approved, yet no server
     rc, out, res = run_ok(env, "search", "--q", "mobile cart", "--sources", "mcp")
     check("--sources mcp with no network: exit 5, one line about the repository", rc == 5 and res and res.get("ok") is False
           and "zorg-growth не відповів — без нього" in out, (rc, out[-400:]))

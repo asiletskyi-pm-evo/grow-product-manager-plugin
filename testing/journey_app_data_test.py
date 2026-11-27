@@ -281,7 +281,7 @@ try:
           and "1 стадія без доказів" in (by.get("journey-returns") or {}).get("state", ""), po.get("rows"))
     lead = jload(os.path.join(pdir, "portfolio-lead.json")) if os.path.exists(os.path.join(pdir, "portfolio-lead.json")) else {}
     chg = jload(os.path.join(pdir, "portfolio-changes.json")) if os.path.exists(os.path.join(pdir, "portfolio-changes.json")) else {}
-    check("2.3c portfolio-lead.json: one sentence — how many journeys, how many need attention, the weakest; no product label without --label",
+    check("2.3c portfolio-lead.json: one sentence — how many journeys, how many need attention, the weakest; no product label without --products",
           lead.get("text", "").startswith("3 шляхи, 2 потребують уваги.") and "Найслабший" in lead.get("text", ""), lead)
     check("2.3d portfolio-changes.json: a list item per map that moved or needs attention, its level, its product",
           chg.get("items") and all(set(i) == {"title", "attention", "product"} for i in chg["items"])
@@ -306,10 +306,14 @@ try:
           and [c["title"] for c in po2.get("columns", [])] == ["Journey", "Health", "Change", "State"], (fu2, po2.get("columns")))
     rc, out, res = jpr("app-data", "--product", "zorg", "--dir", os.path.join(FIX, "portfolio", "journeys", "zorg"),
                        "--today", "2026-11-24", "--out-dir", os.path.join(d, "port3"))
-    rc, out, res = jpr("app-data", "--product", "zorg", "--label", "Zorg", "--dir", os.path.join(FIX, "portfolio", "journeys", "zorg"),
+    rc, out, res = jpr("app-data", "--product", "zorg", "--products", os.path.join(APPFIX, "zorg-products.json"), "--dir", os.path.join(FIX, "portfolio", "journeys", "zorg"),
                        "--today", "2026-11-24", "--lang", "uk", "--out-dir", os.path.join(d, "port4"))
     l4 = jload(os.path.join(d, "port4", "portfolio-lead.json")) if os.path.exists(os.path.join(d, "port4", "portfolio-lead.json")) else {}
-    check("2.7b --label: the product's name opens the lead (two products share one introduction)", l4.get("text", "").startswith("Zorg: 3 шляхи"), l4)
+    check("2.7b --products: the product's label, read from the products file (never a command-line value), opens the lead", l4.get("text", "").startswith("Zorg: 3 шляхи"), l4)
+    rc5, out5, res5 = jpr("app-data", "--product", "zorg", "--products", os.path.join(d, "nope.json"), "--dir", os.path.join(FIX, "portfolio", "journeys", "zorg"),
+                          "--today", "2026-11-24", "--out-dir", os.path.join(d, "port5"))
+    check("2.7c a products file that does not read: exit 2, the reason in the result line, nothing written", rc5 == 2 and res5.get("ok") is False
+          and "products" in res5.get("error", "") and not os.path.exists(os.path.join(d, "port5")), out5[-300:])
     check("2.8 without a funnel snapshot: no funnel.json, funnel false", rc == 0 and res.get("funnel") is False
           and os.path.exists(os.path.join(d, "port3", "portfolio.json")) and not os.path.exists(os.path.join(d, "port3", "funnel.json")), out[-300:])
     check("2.9 the sections go through the snapshot command", run(SH, "APP_RESULT", "snapshot", "--profile", "cjm", "--out", os.path.join(d, "snap"),
