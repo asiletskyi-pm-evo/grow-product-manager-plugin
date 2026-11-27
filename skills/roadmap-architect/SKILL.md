@@ -1,6 +1,6 @@
 ---
 name: roadmap-architect
-version: 0.8.0
+version: 0.8.1
 description: Own the work structure — missions → initiatives → epics → features, labeling, roadmap tree, user story map with release slices — no dates, no capacity. Not quarter plans (quarterly-planning), not forecasts (project-planning), not a strategy memo (write-concept). UA — «наведи лад у структурі», «розміть епіки/фічі», «дерево roadmap», «мапа історій».
 ---
 
@@ -59,7 +59,7 @@ CQL by labels `epic`/`feature` + `getJiraIssue` epics per-key + goal map (`plann
 Find: features/epics without a quarter, without a goal, naming-convention violations (`planning-core` regex), orphan features (no epic), unformalized dependencies (graph gaps).
 
 ### Step 4 — Map (mode `map`)
-Propose label/link fixes (epic→goal, feature→epic, q-labels). **Gate before writing** to Jira/Confluence — a Confluence page after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); preserve existing labels.
+Propose label/link fixes (epic→goal, feature→epic, q-labels). **Gate before writing** to Jira/Confluence — a Confluence page after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); preserve existing labels — on Atlassian MCP v2 `editJiraIssue` replaces the list it is sent, so send the issue's current labels plus the fix; a link fix is `createJiraIssueLink` (`executeWrite`) with the blocker as `inwardIssue` for a Blocks link, and an epic→parent fix is the `parent` field, not a link (`references/integration-strategy.md` 1c, points 6–7).
 
 ### Step 4b — Onboard (mode `onboard`)
 Propose the new entity's name, labels and goal link per `planning-core` sec. 2 and 4; the same gate before writing as Step 4. **Pre-mortem (since v3.9.0, P4; `references/judgment-points.md` §7)** — only for a new mission or initiative, or a new epic when the request carries goal or outcome text; never a feature, never an existing entity. Derived, never asked:
@@ -73,7 +73,7 @@ Generate the Goal→Initiative→Epic→Feature tree (features as `code—name`)
 **Tree depth (since v3.6.0, `references/planning-core.md` §7).** When `role_defaults.planning_view` is `rollup`, the tree is presented goals → initiatives first (epic and feature counts, gaps per initiative) and expands epics and features on request; `slice` presents the full tree down to epics and features, as before. The saved tree, the gap report, the labeling checks and the write gate are the same for every profile; an automated run keeps the pre-v3.6.0 presentation.
 
 ### Step 6 — Save to Vault (Optional)
-Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.8.0", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…" — a story map the same way with `subtype: "story-map"` and its own fields (`product`, `epic`, `slices`, `baseline`; Step 7a), named `story-map-<slug>`.
+Per `references/vault-protocol.md` → Vault Save. IF vault_level > L0 AND sync_mode != "off": `vault_save({ type: "roadmap", product: active_product, skill: "roadmap-architect", skill_version: "0.8.1", tags: [goals covered], content: structure tree + gap report, related: [[goal artifacts]], extra_frontmatter: { subtype: "structure-tree", gaps_count } })` → "Saved to Vault: Roadmaps/{product}/…" — a story map the same way with `subtype: "story-map"` and its own fields (`product`, `epic`, `slices`, `baseline`; Step 7a), named `story-map-<slug>`.
 
 ### Step 7 — Story map (mode `story-map`, since v4.6.0)
 Read `references/story-map-protocol.md` whole first; it is the procedure. Three entries: «побудуй мапу історій» (from a concept, requirements, an epic or the conversation), «зріж реліз / запиши MVP», «онови мапу». The vault note is the source of truth; a map has no dates and never a Jira issue per card. Without SHELL — the note only, and the one line of protocol §10.

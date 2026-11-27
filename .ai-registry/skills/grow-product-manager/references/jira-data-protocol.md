@@ -52,16 +52,16 @@ project = PROJ AND (assignee = <accountId> OR cf[10041] = <accountId> OR cf[1003
 A search over a sprint or a quarter does not fit inline: the host **saves the response to a file** and shows its path (measured 2026-11-26 on Claude Code 2.1.332 with Atlassian MCP v2: 100 issues with eight fields — about 380 000 characters, two fifths of them avatar links). Do not read that file whole.
 
 1. **Ask only for the fields the mode needs** (`fields: ["summary", "status", "customfield_…"]`). With an explicit list v2 returns no description; `view: "evidence"` brings every comment of every issue, so it is not the way to custom fields in a search (`integration-strategy.md` 1c, point 4).
-2. **Know the shape.** It differs between the two servers, and a reader of the wrong one finds nothing and reports every estimate as missing:
+2. **Know the shape** (Atlassian MCP v2, the only server the plugin reads — `integration-strategy.md` 1c). A reader that expects another shape finds nothing and reports every estimate as missing:
 
-   | | v2 | v1 (until 2027-03-01) |
-   |---|---|---|
-   | a custom field | `fields.customFields["<display name>"] = {"id": "customfield_N", "value": …}` | `fields.customfield_N = …` |
-   | a field with no value | absent | `null` |
-   | a user | `accountId`, `emailAddress`, `avatarUrls`, `displayName`, … | the same, after a `self` link |
+   | | v2 |
+   |---|---|
+   | a custom field | `fields.customFields["<display name>"] = {"id": "customfield_N", "value": …}` |
+   | a field with no value | absent |
+   | a user | `accountId`, `emailAddress`, `avatarUrls`, `displayName`, … |
 
    Read a custom field by its **id**, never by its display name: the name is the site's own and changes with its language.
-3. **With SHELL — the script.** `python3 scripts/jira_rows.py <saved file> [<saved file> …]` prints one JSON line per issue, the same for both shapes: `key`, the system fields that came (`summary`, `status`, `category` — the status category's key, `type`, `assignee`, `resolved`, `versions`, `labels`, `parent`), `cf` — the custom fields by id, and `closed_sprints`. A user is `{"id", "name"}` — the account id and the display name; an e-mail address, a description and a comment's text never reach a row. A custom field with no value has no key in `cf`: read it as null (Story Points → 0). The sprints printed are the ones not closed; `--sprint-history` prints the whole history with dates (member-review buckets). After a file's rows comes `{"_page": …}`: `has_next`, `next_page_token` for the next page, `shape`, and on v2 `cf_names` — the display name of each id, the quickest way to learn a site's field ids. A file that is not a Jira response is exit 2: say so, never report from nothing.
+3. **With SHELL — the script.** `python3 scripts/jira_rows.py <saved file> [<saved file> …]` prints one JSON line per issue: `key`, the system fields that came (`summary`, `status`, `category` — the status category's key, `type`, `assignee`, `resolved`, `versions`, `labels`, `parent`), `cf` — the custom fields by id, and `closed_sprints`. A user is `{"id", "name"}` — the account id and the display name; an e-mail address, a description and a comment's text never reach a row. A custom field with no value has no key in `cf`: read it as null (Story Points → 0). The sprints printed are the ones not closed; `--sprint-history` prints the whole history with dates (member-review buckets). After a file's rows comes `{"_page": …}`: `has_next`, `next_page_token` for the next page, `shape`, and `cf_names` — the display name of each id, the quickest way to learn a site's field ids. A file that is not a Jira response is exit 2: say so, never report from nothing. A response of the v1 server (`fields.customfield_N` beside the system fields) is exit 2 too, since v4.15.0: the plugin reads v2 only — say in one line that Atlassian has to be reconnected (`integration-strategy.md` 1c).
 4. **No shell — `Grep -o`** the saved file with one alternation of the patterns below and parse the matches in document order. A `"key":` match opens a node; a field with no match before the next key has no value. Never align the matches by count — on v2 an empty field leaves no line.
 
 ```
@@ -77,8 +77,6 @@ statuses/[a-z]*\.png","name":"[^"]*"   # status name (not statusCategory)
 "state":"closed"   # count per node to detect carried-over (see below)
 "id":[0-9]+,"name":"[^"]*","state":"[a-z]+"   # sprint entries
 ```
-
-On v1 the user and custom-field lines are `"customfield_10014":(null|"[A-Z]+-[0-9]+")`, `"customfield_10036":(null|[0-9.]+)`, `"customfield_10041":(null|\{"self":"[^"]*","accountId":"[^"]*"` and `"assignee":(null|\{"self":"[^"]*","accountId":"[^"]*"` — a v1 user starts with its `self` link; the rest is the same.
 
 Notes:
 - The "Team = name" form returns 0; always use the team **id**.

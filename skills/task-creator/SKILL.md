@@ -1,6 +1,6 @@
 ---
 name: task-creator
-version: 0.15.5
+version: 0.16.0
 description: Create Jira tasks from requirements (usually a Confluence page) — FE/BE/Android/iOS/Design/Analytics breakdown inside an Epic. Not writing the requirements (requirements-creator). UA — «створи задачі для фічі», «розбий вимоги на задачі». EN — "break this spec into Jira tasks".
 ---
 
@@ -200,6 +200,8 @@ For each selected work type, create a Jira issue with these fields:
 | **Components** | Matching Confluence page labels |
 | **Labels** | Work-type label + feature code (e.g. `PROJ-1234.5`) + `a/b_test` if applicable + `grooming` if grooming mode (FE/BE/Android/iOS only) |
 
+**How the fields go into `createJiraIssue` (Atlassian MCP v2, `references/integration-strategy.md` 1c):** `projectKey`, `summary`, `issueType` (the type's name from `references/task-format.md`), `parent` (the Epic key), `labels` (the full list) and `description` with `contentFormat: "markdown"` are top-level inputs; the Team field and the Components go into `additional_fields` — `{"<Team field name or customfield_N>": "<the team's id>", "components": [{"name": "<component>"}]}`; the Team field takes the team's **id** (`team.jira_team_id`, or the `value.id` of the Team field on an existing task of the Epic), and a team's name is refused as «a non-existing team». The Reporter is the connected user, which is the user this skill creates for: it is not sent on create (a project whose create screen has no Reporter refuses it), and Step 8 sets it only when the user's accountId differs from the connected account. Take the component names from `listJiraProjectComponents` (`executeRead`) when they are not on an existing task of the Epic. A field the create rejects comes back with `allowedValues` and a `repairHint`: correct that field and retry once; a field it still will not take goes to Step 8. Never create the same task twice — a rejected create created nothing, a create that answered with a key did.
+
 #### Task title format:
 
 `[WorkType] FeatureName`, or `[WorkType] - Grooming - A/B Test - FeatureName` keeping only the qualifiers that apply (Grooming only for FE/BE/Android/iOS; Design and Analytics are never affected by it).
@@ -271,12 +273,15 @@ When the QA — Eval set option stays ticked (Step 4), one `[QA] {FeatureName} -
 ### Step 8: Set Additional Fields via Edit
 
 Some fields may not be settable during creation. After creating each task, use `editJiraIssue` to set:
-- **Team** (custom field) — if it didn't work during creation
-- **Issue Type** change — if Design/Analytics types need to be changed from Task
+- **Reporter** — `fields: {"reporter": {"accountId": "<accountId>"}}`, only when the reporter must differ from the connected user (a bare accountId string is refused as «Reporter is required» — measured 2026-11-27)
+- **Team** (custom field) — `additional_fields: {"<Team field>": "<the team's id>"}`, if it didn't work during creation
+- **Issue Type** change — if Design/Analytics types need to be changed from Task: `fields: {"issuetype": {"name": "<type>"}}` within one hierarchy level; Task ↔ Sub-task is a change of level and goes through `convertJiraIssueHierarchy` (`executeWrite`)
+
+`editJiraIssue` replaces a multi-value field: labels and components are sent as the whole list — the task's current list read back plus the change, never the change alone.
 
 ### Step 8.5: Attach Annotated Screenshots
 
-If the source requirements carry annotated screenshots (created by `requirements-creator` Step 4.2), or the user asks to visualize the tasks: attach the relevant `{feature-code}-screen-{N}.png` to the **Design and FE tasks** (the ones with UI changes) via `references/visual-annotation-protocol.md` Step V-6 (REST chain → browser → manual placeholder), and put the legend table into the task description. Markers on the image = functional requirement numbers the task implements. Prefer `steps/NN.png` from a `flow-walkthrough` evidence pack when one exists for the feature's flow (already verified, already local). Skip silently when there are none.
+If the source requirements carry annotated screenshots (created by `requirements-creator` Step 4.2), or the user asks to visualize the tasks: attach the relevant `{feature-code}-screen-{N}.png` to the **Design and FE tasks** (the ones with UI changes) via `references/visual-annotation-protocol.md` Step V-6 (Atlassian MCP v2 `uploadAttachmentToJiraIssue` → REST chain → browser → manual placeholder), and put the legend table into the task description. Markers on the image = functional requirement numbers the task implements. Prefer `steps/NN.png` from a `flow-walkthrough` evidence pack when one exists for the feature's flow (already verified, already local). Skip silently when there are none.
 
 ### Step 9: Ask About Linking
 
@@ -284,7 +289,7 @@ After all tasks are created, ask the user if they want to link tasks by the stan
 
 ### Step 10: Link Tasks (if confirmed)
 
-Use the "Blocks" link type with this dependency chain:
+Use the "Blocks" link type with this dependency chain. Each link is one `executeWrite` `createJiraIssueLink` with `linkType: "Blocks"`, `inwardIssue` = **the blocker** and `outwardIssue` = the blocked task: «Design blocks BE» is `inwardIssue: <Design key>`, `outwardIssue: <BE key>`. Swapped keys make the opposite dependency without an error (`references/integration-strategy.md` 1c, point 7); Step 12 reads the links back and checks their direction.
 
 1. **Design** is the first task — blocks everything else
 2. **BE** and **Analytics (coverage)** — come after Design, block FE/Android/iOS
@@ -349,7 +354,7 @@ After presenting the results, proactively ask:
 
 IF vault_level > L0 AND vault sync_mode != "off":
 
-1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.15.5", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
+1. `vault_save({ type: "task-breakdown", product: active_product, skill: "task-creator", skill_version: "0.16.0", tags: [feature area, platforms], content: created task list (keys, titles, work types, assignees) + epic link + requirements source, related: [[requirements artifact]], extra_frontmatter: { epic_key, jira_keys: [...] } })`
 2. Display: "Saved to Vault: Projects/task-breakdowns/{product}/…"
 
 ## Dry Run Mode
@@ -370,7 +375,7 @@ This skill can work together with **Write Concept / PRD** — if a PRD was just 
 - The Team field format varies by Jira instance — check an existing task to find the correct format
 - Feature code goes into Labels, not into the task title prefix
 - Use `contentFormat: "markdown"` when creating tasks with description
-- On Atlassian MCP v2 `createJiraIssue` takes `issueType` (not `issueTypeName`) and `assignee` (not `assignee_account_id`); `editJiraIssue` replaces labels and components, so send the whole list; read the Team field of an existing task with `fields: ["<the Team field id>"]` — it comes as `fields.customFields.<display name>.value`, and `view: "evidence"` is for when the id is unknown: it brings the task's comments too (`references/integration-strategy.md` 1c)
+- On Atlassian MCP v2 `createJiraIssue` takes `issueType` and `assignee` top-level and Team (by the team's id) and Components in `additional_fields`; the Reporter is the connected user, set otherwise only by `editJiraIssue` with `{"accountId": …}`; `editJiraIssue` replaces labels and components, so send the whole list; a Blocks link has the blocker as `inwardIssue`; read the Team field of an existing task with `fields: ["<the Team field id>"]` — it comes as `fields.customFields.<display name>.value`, and `view: "evidence"` is for when the id is unknown: it brings the task's comments too (`references/integration-strategy.md` 1c)
 
 ## Additional Resources
 

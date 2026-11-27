@@ -23,6 +23,7 @@ Story/Task-level issues are **out of roadmap scope** (they are the sprint-planni
 - Name: `{PROJ}-{epic}.{feature}[.{sub}] - {human name}` (e.g. `PROJ-1234.5 - Q&A - answer threads`).
 - Labels: `feature`, `q{N}-{year}` (quarter where the work is run/planned; may be several), team label.
 - Status field in the body: line `Status: {value}` from a controlled vocabulary (section 3).
+- Writing the labels (Atlassian MCP v2): `createConfluenceContent` takes no labels — right after the create, `addLabelsToConfluenceContent` (`executeWrite`, `contentId`, `labels: [{name: "feature"}, …]`) adds them; a page created without them falls out of the auto-assembly above, and the create still answers with success (`integration-strategy.md` 1c).
 
 **Epic (Confluence page + Jira issue):**
 - Confluence name: `Epic - {PROJ}-{epic} - {name}`; labels `epic`, `q{N}-{year}`.

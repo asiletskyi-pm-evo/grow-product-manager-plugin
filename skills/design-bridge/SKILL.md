@@ -1,6 +1,6 @@
 ---
 name: design-bridge
-version: 0.10.1
+version: 0.10.2
 description: Decks, hi-fi prototypes and design handoffs on your Design System or external design toolkit (Claude Design skills + Figma). Not quick diagrams, Mermaid or wireframes (diagram-prototyper). UA — «створи деку», «опублікуй деку», «hi-fi прототип/екран», «через мій дизайн-тулкіт», «дизайн-рев'ю макета у Figma». EN — "create a deck", "design review".
 ---
 
@@ -303,7 +303,7 @@ If any check fails → fix + rerun QA; escalate to the user if the blocker is no
 
 Depending on the deliverable — each publication below only after the publication question (`references/native-surfaces.md` §3: what it holds, where, who can open it there — and again before updating anything published earlier); a link shown in the chat or saved locally needs none:
 
-- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment and the Jira ticket as a comment with the link — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version — found by the deck's key `design-bridge/<product>/<slug>-<subtype>` (§5–§6); sharing is asked after Step 8 records the places (§7)
+- **deck** → the places of `references/artifact-publishing.md` (since v0.10.0): its candidates (§2) — the host's deck, the HTML deck in Atlassian Artifacts or on ARTIFACT `page`, and as before the upstream Confluence page as an attachment (`createConfluenceAttachment`, `references/visual-annotation-protocol.md` Step V-6 for running its upload) and the Jira ticket as a comment with the link (`addOrEditJiraIssueComment`; Atlassian MCP v2 — `references/integration-strategy.md` 1c) — ordered by the Step 2 audience (§3), in one question with «лише файл» (§4); a deck published earlier is offered as its next version — found by the deck's key `design-bridge/<product>/<slug>-<subtype>` (§5–§6); sharing is asked after Step 8 records the places (§7)
 - **prototype** → link from the concept / requirements page (inline); a build-first prototype has no page yet — its link is shown and saved (Step 8) for the concept's Prototype link (PRD §9) when write-concept resumes (since v3.9.0)
 - **handoff** → new Confluence page in the design space, or attach to a Jira epic
 - **research-enrichment** → inline in the upstream skill
@@ -322,7 +322,7 @@ vault_save({
   type: "presentation" | "prototype" | "handoff",
   product: active_product,
   skill: "design-bridge",
-  skill_version: "0.10.1",
+  skill_version: "0.10.2",
   tags: [subtype, audience, language, figma_embeds?],
   content: artifact_content,
   related: [upstream_artifact_id, figma_urls],

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""TC-jira-4122 — scripts/jira_rows.py, a saved Jira response as compact rows (v4.12.2).
+"""TC-jira-4122 — scripts/jira_rows.py, a saved Jira response as compact rows (v4.12.2; v2 only since v4.15.0).
 
 Atlassian MCP v2 moved an issue's custom fields from `fields.customfield_N` to `fields.customFields`, keyed by the
 field's display name, and leaves a field with no value out. The patterns references/jira-data-protocol.md used to
@@ -7,7 +7,8 @@ field's display name, and leaves a field with no value out. The patterns referen
 keeps the reader honest on the fictional «Zorg» responses under testing/fixtures/jira/:
 
 1. v2: every row, the custom fields by id, a user as {id, name}, the closed sprints as a count;
-2. v1 gives the same rows for the same issues;
+2. a response of the v1 server is refused with exit 2 and the reason (since v4.15.0 the plugin reads v2 only), never
+   read as issues with no estimates;
 3. nothing of a person but the account id and the display name reaches a row; no description, no comment text;
 4. the page line: the next page token, the shape, the names of the custom fields;
 5. `--sprint-history`, one issue (getJiraIssue), stdin, several files;
@@ -79,14 +80,11 @@ check("1.8 a field with no value has no key: no estimate, no assignee", c.get("c
       and c.get("closed_sprints") == 0, c)
 check("1.9 a quote inside a summary survives", by["PROJ-102"].get("summary") == 'Кнопка "Оплатити" не реагує на другий дотик', by["PROJ-102"].get("summary"))
 
-# 2. v1 reads the same
+# 2. v1 is refused (since v4.15.0)
 code1, rows1, pages1, p1 = run(os.path.join(FIX, "search-v1.json"))
-by1 = {r["key"]: r for r in rows1}
-check("2.1 v1: exit 0 and the shape is named", code1 == 0 and pages1 and pages1[0].get("shape") == "v1", (code1, pages1, p1.stderr))
-check("2.2 v1 gives the same custom fields as v2 for the same issue",
-      {k: v for k, v in a["cf"].items() if k != "customfield_10001"} == by1.get("PROJ-101", {}).get("cf"), by1.get("PROJ-101"))
-check("2.3 a null on v1 is the absent key of v2", by1.get("PROJ-103", {}).get("cf") == {}
-      and by1["PROJ-101"].get("closed_sprints") == 2, by1.get("PROJ-103"))
+check("2.1 v1: exit 2, no rows, no page line — never a report of missing estimates", code1 == 2 and not rows1 and not pages1,
+      (code1, rows1, pages1))
+check("2.2 the reason names v1 and the way out", "v1" in p1.stderr and "reconnect Atlassian" in p1.stderr, p1.stderr)
 
 # 3. what never reaches a row
 out = p.stdout + p1.stdout
@@ -100,7 +98,8 @@ check("4.1 the page: file, issues, shape, the next page token", (pg.get("file"),
       pg.get("next_page_token")) == ("search-v2.json", 3, "v2", True, "cursor-page-2"), pg)
 check("4.2 the page names each custom field id (v2)", pg.get("cf_names", {}).get("customfield_10036") == "Story Points"
       and pg["cf_names"].get("customfield_10020") == "Sprint", pg.get("cf_names"))
-check("4.3 the last page says so", pages1[0].get("has_next") is False and pages1[0].get("next_page_token") is None, pages1)
+_, _, pages_l, _ = run(os.path.join(FIX, "search-v2-last.json"))
+check("4.3 the last page says so", pages_l and pages_l[0].get("has_next") is False and pages_l[0].get("next_page_token") is None, pages_l)
 
 # 5. the other ways in
 _, rows_h, _, _ = run(os.path.join(FIX, "search-v2.json"), "--sprint-history")
@@ -112,9 +111,9 @@ check("5.2 one issue (getJiraIssue) is one row, with no next page", code5 == 0 a
       and pages5[0].get("has_next") is False, (code5, rows5, pages5))
 code6, rows6, pages6, _ = run("-", stdin=fixture("search-v2.json"))
 check("5.3 stdin reads the same", code6 == 0 and rows6 == rows and pages6[0].get("file") == "stdin", (code6, pages6))
-code7, rows7, pages7, _ = run(os.path.join(FIX, "search-v2.json"), os.path.join(FIX, "search-v1.json"))
+code7, rows7, pages7, _ = run(os.path.join(FIX, "search-v2.json"), os.path.join(FIX, "search-v2-last.json"))
 check("5.4 several files: the rows of each, then its page line", code7 == 0 and len(rows7) == 5
-      and [pg_["file"] for pg_ in pages7] == ["search-v2.json", "search-v1.json"], (code7, pages7))
+      and [pg_["file"] for pg_ in pages7] == ["search-v2.json", "search-v2-last.json"], (code7, pages7))
 
 # 6. not a Jira response
 code8, rows8, _, p8 = run(os.path.join(FIX, "not-jira.json"))
@@ -124,7 +123,7 @@ broken = os.path.join(d, "cut.json")
 open(broken, "w", encoding="utf-8").write(fixture("search-v2.json")[:400])
 code9, rows9, _, p9 = run(broken)
 check("6.2 a response cut in the middle: exit 2, no rows", code9 == 2 and not rows9 and "not JSON" in p9.stderr, (code9, p9.stderr))
-code10, rows10, _, p10 = run(os.path.join(d, "absent.json"), os.path.join(FIX, "search-v1.json"))
+code10, rows10, _, p10 = run(os.path.join(d, "absent.json"), os.path.join(FIX, "search-v2-last.json"))
 check("6.3 a missing file is exit 2, and the other file is still read", code10 == 2 and len(rows10) == 2, (code10, p10.stderr))
 code11, _, _, p11 = run()
 check("6.4 no file: usage, exit 2", code11 == 2 and "usage" in p11.stderr, (code11, p11.stderr))
