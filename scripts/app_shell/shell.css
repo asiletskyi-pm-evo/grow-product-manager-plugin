@@ -11,9 +11,6 @@
   --gpm-accent-fg: #ffffff;
   --gpm-radius: 8px;
   --gpm-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* the text on an added map card, whose light yellow (the map page's CSS_EDIT) is the same in either theme */
-  --gpm-on-added: #1f2328;
-  --gpm-on-added-muted: #5c646d;
 }
 /* the dark values: the OS asks for dark unless the person chose light; or the person chose dark */
 @media (prefers-color-scheme: dark) {
@@ -157,55 +154,114 @@
 .gpm-bar-warn { fill: var(--gpm-warn); }
 .gpm-bar-crit { fill: var(--gpm-crit); }
 .gpm-bar-base { stroke: var(--gpm-text); stroke-width: 2; }
-/* ---- the journey map (map.js): the map page's grid, in the shell's colours ---- */
+/* ---- the journey map (map.js): one table of stages × lanes in the shell's colours, the text plain, its source under it ---- */
 .gpm-maps { min-width: 0; font-size: 14px; line-height: 1.4; }
-.gpm-map-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.gpm-map-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
 .gpm-map-pick[hidden], .gpm-map[hidden], .gpm-map-pick button[hidden] { display: none; }
 .gpm-map-pick button, .gpm-map-reload {
-  display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px;
-  border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); background: var(--gpm-surface); color: var(--gpm-text);
-  font: 400 13px/1.2 var(--gpm-font); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px;
+  border: 1px solid var(--gpm-line-strong); border-radius: 999px; background: var(--gpm-surface); color: var(--gpm-text);
+  font: 400 14px/1.2 var(--gpm-font); cursor: pointer;
 }
-.gpm-map-pick button[aria-pressed="true"] { border-color: var(--gpm-accent); box-shadow: inset 0 -3px 0 var(--gpm-accent); font-weight: 600; }
-.gpm-map-pick button:focus-visible, .gpm-map-reload:focus-visible, .gpm-map .wrap:focus-visible { outline: 2px solid var(--gpm-accent); outline-offset: 2px; }
-.gpm-map-note { margin: 8px 0; padding: 8px 10px; border-left: 4px solid var(--gpm-warn); border-radius: var(--gpm-radius); background: var(--gpm-bg); color: var(--gpm-text); font-size: 13px; overflow-wrap: anywhere; }
-.gpm-map { min-width: 0; }
-.gpm-map h2 { margin: 8px 0 4px; font: 700 18px/1.3 var(--gpm-font); overflow-wrap: anywhere; }
-.gpm-map h3 { margin: 16px 0 6px; font: 700 15px/1.3 var(--gpm-font); }
-.gpm-map .meta { margin: 2px 0; color: var(--gpm-muted); overflow-wrap: anywhere; }
-.gpm-map .wrap { box-sizing: border-box; max-width: 100%; overflow: auto; margin-top: 12px; max-height: max(320px, 80vh); border: 1px solid var(--gpm-border); border-radius: var(--gpm-radius); background: var(--gpm-bg); cursor: grab; touch-action: pan-x pan-y; }
+.gpm-map-pick button[aria-pressed="true"] { border-color: var(--gpm-text); background: var(--gpm-text); color: var(--gpm-surface); font-weight: 600; }
+.gpm-map-pick button:focus-visible, .gpm-map-reload:focus-visible, .gpm-map .wrap:focus-visible { outline: 2px solid var(--gpm-text); outline-offset: 2px; }
+.gpm-map-note { margin: 8px 0; padding: 10px 12px; border-left: 3px solid var(--gpm-warn); border-radius: var(--gpm-radius); background: var(--gpm-surface); color: var(--gpm-text); font-size: 13px; overflow-wrap: anywhere; }
+/* the head beside the switch «Редагувати»; while editing, the bar takes its own row over the grid and stays in sight */
+.gpm-map { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: end; }
+.gpm-map > * { grid-column: 1 / -1; min-width: 0; }
+.gpm-map > .gpm-map-head { grid-column: 1; grid-row: 1; }
+.gpm-map > .edit-bar { grid-column: 2; grid-row: 1; }
+body.editing .gpm-map > .edit-bar { grid-column: 1 / -1; grid-row: 2; }
+@media (max-width: 640px) { .gpm-map > .edit-bar { grid-column: 1 / -1; grid-row: 2; } }
+.gpm-map-head { display: flex; flex-direction: column; gap: 6px; }
+.gpm-map-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.gpm-map h2.gpm-map-title { margin: 0; font: 700 24px/1.25 var(--gpm-font); overflow-wrap: anywhere; }
+.gpm-map-sum { margin: 0; max-width: 640px; color: var(--gpm-muted); font-size: 15px; }
+.gpm-map h3 { margin: 24px 0 8px; font: 700 15px/1.3 var(--gpm-font); }
+.gpm-map .meta { margin: 0; color: var(--gpm-muted); font-size: 13px; overflow-wrap: anywhere; }
+.gpm-map-trend { margin-top: 4px; }
+.gpm-map svg.spark { display: block; max-width: 100%; height: auto; }
+.gpm-map svg.spark polyline { stroke: var(--gpm-text); }
+.gpm-map svg.spark circle { fill: var(--gpm-text); }
+/* the grid: no frame of its own height — the page scrolls down, the grid sideways, the lanes stay at the left */
+.gpm-map .wrap { box-sizing: border-box; max-width: 100%; overflow-x: auto; overflow-y: hidden; margin-top: 20px; border: 1px solid var(--gpm-border); border-radius: 12px; background: var(--gpm-surface); cursor: grab; touch-action: pan-x pan-y; scrollbar-color: var(--gpm-line-strong) transparent; scrollbar-width: thin; }
+.gpm-map .wrap::-webkit-scrollbar { height: 10px; }
+.gpm-map .wrap::-webkit-scrollbar-thumb { background: var(--gpm-line-strong); border-radius: 999px; border: 3px solid var(--gpm-surface); }
+.gpm-map .wrap::-webkit-scrollbar-track { background: transparent; }
 .gpm-map .wrap.panning { cursor: grabbing; user-select: none; }
-.gpm-map table.grid { border-collapse: separate; border-spacing: 6px; }
-.gpm-map th, .gpm-map td { vertical-align: top; }
-.gpm-map th.stage { position: sticky; top: 0; z-index: 2; min-width: 190px; padding: 6px 8px; border-radius: 6px; background: var(--gpm-surface); color: var(--gpm-text); text-align: left; box-shadow: 0 -6px 0 var(--gpm-bg), inset 0 -3px 0 var(--gpm-accent); }
-.gpm-map th.stage .o { color: var(--gpm-muted); font-size: 12px; font-weight: 400; }
-.gpm-map th.lane { position: sticky; left: 0; z-index: 1; width: 140px; padding: 6px 8px; border-left: 4px solid var(--gpm-muted); border-radius: 4px; background: var(--gpm-surface); color: var(--gpm-text); text-align: left; font-weight: 600; box-shadow: -6px 0 0 var(--gpm-bg); }
-.gpm-map th.corner { position: sticky; top: 0; left: 0; z-index: 3; background: var(--gpm-bg); }
-.gpm-map .item { max-width: 240px; margin-bottom: 6px; padding: 6px 8px; border-left: 4px solid var(--gpm-border); border-radius: 6px; background: var(--gpm-surface); color: var(--gpm-text); overflow-wrap: anywhere; }
-.gpm-map .item .m { margin-top: 2px; color: var(--gpm-muted); font-size: 11px; }
-.gpm-map .item.gap { border: 1px dashed var(--gpm-warn); color: var(--gpm-warn); }
-.gpm-map .l-pain, .gpm-map .l-anomaly { border-left-color: var(--gpm-crit); }
-.gpm-map .l-metric, .gpm-map .l-experiment { border-left-color: var(--gpm-accent); }
-.gpm-map .l-opportunity { border-left-color: var(--gpm-warn); }
-.gpm-map .l-solution { border-left-color: var(--gpm-ok); }
-.gpm-map .l-initiative { border-left-color: var(--gpm-muted); }
+.gpm-map table.grid { width: 100%; border-collapse: collapse; table-layout: auto; }
+.gpm-map th, .gpm-map td { vertical-align: top; text-align: left; }
+.gpm-map td { min-width: 150px; padding: 12px; border: 1px solid var(--gpm-border); border-width: 1px 0 0 1px; background: var(--gpm-surface); color: var(--gpm-text); }
+.gpm-map th.corner { position: sticky; left: 0; z-index: 3; width: 128px; min-width: 128px; padding: 12px; vertical-align: bottom; background: var(--gpm-surface); border-bottom: 2px solid var(--gpm-text); color: var(--gpm-muted); font-size: 12px; font-weight: 400; }
+.gpm-map th.stage { min-width: 150px; padding: 12px; border-left: 1px solid var(--gpm-border); border-bottom: 2px solid var(--gpm-text); background: var(--gpm-surface); color: var(--gpm-text); font-size: 15px; font-weight: 700; display: table-cell; }
+/* «Стадія N» stands over the name, which stays the first text of the header (EDIT reads it) */
+.gpm-map th.stage { padding-top: 32px; position: relative; }
+.gpm-map th.stage .n { position: absolute; top: 12px; left: 12px; color: var(--gpm-muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.gpm-map th.stage .o { margin-top: 4px; color: var(--gpm-muted); font-size: 12px; font-weight: 400; line-height: 1.35; }
+.gpm-map .gpm-stage-mark { display: flex; align-items: center; gap: 8px; margin-top: 6px; color: var(--gpm-warn); font-size: 12px; font-weight: 600; }
+.gpm-map .gpm-mark-warn { width: 8px; height: 8px; border-radius: 0; background: var(--gpm-warn); transform: rotate(45deg); }
+.gpm-map tr.band th { padding: 6px 12px; background: var(--gpm-sunken); color: var(--gpm-muted); font-size: 12px; font-weight: 700; letter-spacing: .02em; border-top: 1px solid var(--gpm-border); }
+.gpm-map tr.band th > span { position: sticky; left: 12px; }
+.gpm-map th.lane { position: sticky; left: 0; z-index: 1; width: 128px; min-width: 128px; max-width: 160px; padding: 12px; border-top: 1px solid var(--gpm-border); background: var(--gpm-surface); color: var(--gpm-text); font-size: 13px; font-weight: 600; box-shadow: 1px 0 0 var(--gpm-border); }
+.gpm-map th.lane::first-letter { text-transform: uppercase; }
+body.editing .gpm-map th.lane[data-lk]::after { content: attr(data-lk); display: block; margin-top: 2px; color: var(--gpm-muted); font-size: 11px; font-weight: 400; }
+.gpm-map tr.locked td { background: var(--gpm-bg); }
+.gpm-map td:not(:has(.item))::before { content: "\2014"; color: var(--gpm-muted); }
+body.editing .gpm-map td:not(:has(.item))::before { display: block; margin-bottom: 6px; }
+.gpm-map .item { max-width: 260px; margin: 0 0 10px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--gpm-text); font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.gpm-map .item:last-child { margin-bottom: 0; }
+.gpm-map .item .m { margin-top: 3px; color: var(--gpm-muted); font-size: 12px; line-height: 1.35; }
 .gpm-map .target { font-weight: 700; }
-.gpm-map .item.chip { border-left-color: var(--gpm-accent); cursor: pointer; }
-.gpm-map .item.chip:focus-visible { outline: 2px solid var(--gpm-accent); }
-.gpm-map .item.ref { border-left-color: var(--gpm-muted); border-style: dashed; font-style: italic; }
-/* an added card keeps the v4.12.0 page's light yellow (CSS_EDIT), so its text is dark in either theme */
-.gpm-map .item.added { color: var(--gpm-on-added); }
-.gpm-map .item.added .m { color: var(--gpm-on-added-muted); }
+.gpm-map .item.chip { padding: 6px 8px; border: 1px solid var(--gpm-line-strong); border-radius: 6px; cursor: pointer; }
+.gpm-map .item.chip:focus-visible { outline: 2px solid var(--gpm-text); }
+.gpm-map .item.ref { padding: 6px 8px; border: 1px dashed var(--gpm-line-strong); border-radius: 6px; font-style: italic; }
+.gpm-map-legend { display: flex; flex-wrap: wrap; gap: 4px 20px; padding-top: 14px; color: var(--gpm-muted); font-size: 13px; }
+.gpm-map-legend b { color: var(--gpm-text); font-weight: 600; }
+.gpm-map .gpm-map-hidden { padding-top: 8px; }
 .gpm-map details.child { margin: 16px 0 0; padding-left: 12px; border-left: 3px solid var(--gpm-border); min-width: 0; }
 .gpm-map details.child > summary { margin: 4px 0; cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
 .gpm-map details.child > summary .m { color: var(--gpm-muted); font-size: 12px; font-weight: 400; }
-.gpm-map svg.spark { max-width: 100%; border: 1px solid var(--gpm-border); border-radius: 4px; background: var(--gpm-surface); }
-.gpm-map svg.spark polyline { stroke: var(--gpm-accent); }
-.gpm-map svg.spark circle { fill: var(--gpm-accent); }
-.gpm-map table.pts { display: block; max-width: 100%; overflow-x: auto; margin-top: 6px; border-collapse: collapse; background: var(--gpm-surface); }
-.gpm-map table.pts td { padding: 2px 8px; border: 1px solid var(--gpm-border); }
 .gpm-map-locked .edit-add { display: none !important; }
 .gpm-map-locked .item:not(.chip) { pointer-events: none; }
+/* ---- editing the map in the app: the page's editing script (CSS_EDIT) in the shell's colours, nothing of its own ---- */
+.gpm-maps .edit-bar { margin: 0; gap: 8px 12px; color: var(--gpm-text); }
+.gpm-maps .edit-bar button, .gpm-maps .edit-form button { min-height: 44px; padding: 0 16px; border: 1px solid var(--gpm-line-strong); border-radius: 8px; background: var(--gpm-surface); color: var(--gpm-text); font: 600 14px/1.2 var(--gpm-font); }
+.gpm-maps .edit-bar button:hover, .gpm-maps .edit-form button:hover { background: var(--gpm-sunken); }
+.gpm-maps .edit-bar .edit-toggle, .gpm-maps .edit-bar .edit-copy { border-color: var(--gpm-line-strong); color: var(--gpm-text); }
+.gpm-maps .edit-bar .edit-toggle::before, body.editing .gpm-maps .edit-bar .edit-toggle::before { content: none; }
+body.editing .gpm-maps .edit-bar { position: sticky; top: 0; margin-top: 20px; padding: 14px 20px; border: 1px solid var(--gpm-line-strong); border-radius: 12px; background: var(--gpm-surface); box-shadow: none; }
+body.editing .gpm-maps .edit-bar .edit-toggle { border-color: var(--gpm-text); background: var(--gpm-text); color: var(--gpm-surface); }
+.gpm-maps .edit-count { background: var(--gpm-sunken); color: var(--gpm-text); }
+.gpm-maps .edit-count.some { background: var(--gpm-sunken); color: var(--gpm-text); font-weight: 600; }
+.gpm-maps .edit-msg { background: var(--gpm-sunken); color: var(--gpm-text); }
+.gpm-maps .edit-bar .edit-help { color: var(--gpm-muted); }
+body.shared .gpm-maps .edit-sync { color: var(--gpm-muted); }
+body.shared .gpm-maps .edit-sync::before { content: none; }
+body.shared:not(.editing) .gpm-maps .edit-sync { display: none; }
+.gpm-maps .edit-out { background: var(--gpm-surface); color: var(--gpm-text); border: 1px solid var(--gpm-border); }
+.gpm-maps .edit-add { min-height: 32px; border: 1px dashed var(--gpm-line-strong); border-radius: 6px; color: var(--gpm-text); font-size: 13px; }
+body.editing .gpm-maps .edit-add { opacity: 0; }
+body.editing .gpm-maps td:hover > .edit-add, body.editing .gpm-maps .edit-add:focus { opacity: 1; }
+@media (hover: none) { body.editing .gpm-maps .edit-add { opacity: 1; } }
+.gpm-maps .edit-add:hover { border-color: var(--gpm-text); color: var(--gpm-text); background: var(--gpm-sunken); }
+body.editing .gpm-maps td:hover { background: var(--gpm-sunken); }
+body.editing .gpm-maps .item[data-row]:hover, body.editing .gpm-maps .item.added:hover { box-shadow: 0 0 0 2px var(--gpm-line-strong); }
+.gpm-maps td.drop-ok { background: var(--gpm-sunken) !important; outline: 2px dashed var(--gpm-text); }
+.gpm-maps .item.edited, .gpm-maps .item.added { padding-left: 8px; border-left: 3px solid var(--gpm-text); box-shadow: none; background: none; color: var(--gpm-text); }
+.gpm-maps .item.removed { opacity: .5; }
+.gpm-maps .item.current { box-shadow: 0 0 0 2px var(--gpm-text) !important; }
+.gpm-maps .item[data-eb] { padding-top: 22px; }
+.gpm-maps .item[data-eb]::after { top: 0; left: 8px; right: auto; padding: 1px 6px; border-radius: 4px; background: var(--gpm-sunken); color: var(--gpm-text); font-size: 11px; font-weight: 600; line-height: 16px; }
+.gpm-maps .edit-form { background: var(--gpm-surface); color: var(--gpm-text); border-color: var(--gpm-border); box-shadow: -8px 0 24px rgba(0, 0, 0, .16); font-family: var(--gpm-font); }
+.gpm-maps .edit-form label { color: var(--gpm-text); }
+.gpm-maps .edit-form small, .gpm-maps .f-where, .gpm-maps .f-who { color: var(--gpm-muted); }
+.gpm-maps .edit-form textarea, .gpm-maps .edit-form select, .gpm-maps .edit-form input:not([type]) { background: var(--gpm-surface); color: var(--gpm-text); border-color: var(--gpm-line-strong); }
+.gpm-maps .edit-form .f-apply { border-color: var(--gpm-text); background: var(--gpm-text); color: var(--gpm-surface); }
+.gpm-maps .edit-form .f-apply:hover { background: var(--gpm-text); }
+.gpm-maps .edit-form .f-close { min-height: 36px; border: 0; }
+.gpm-maps .f-more { border-top-color: var(--gpm-border); }
+.gpm-maps .edit-form .f-more button { min-height: 32px; border: 0; padding: 4px 0; background: none; color: var(--gpm-muted); }
+.gpm-maps .edit-form .f-remove { color: var(--gpm-crit) !important; }
 /* the host wraps a published file in its own skeleton with a white page: under the modules the page is the theme's */
 /* (the colour only: the modules and the header carry their own text colour, and the page's own text colour is never touched, R5) */
 html.gpm-has-modules, html.gpm-has-modules body { background: var(--gpm-bg); }
@@ -586,3 +642,7 @@ html.gpm-layout-rail .gpm-foot > .gpm-fresh { margin: 0 12px 12px; padding: 0; l
 .gpm-more-link::after { content: "›"; color: var(--gpm-muted); font-weight: 400; }
 .gpm-more-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 .gpm-group-number:has(+ .gpm-group-line), .gpm-group-line { flex: 1 1 100%; }
+/* ---- the funnel: the change against the base beside each stage; the rail's lead names the weakest, the table does not ---- */
+.gpm-stage-delta { display: inline-flex; align-items: center; gap: 6px; color: var(--gpm-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.gpm-stage-delta.gpm-ink-warn, .gpm-stage-delta.gpm-ink-crit { font-weight: 600; }
+.gpm-module-rail .gpm-weakest { display: none; }

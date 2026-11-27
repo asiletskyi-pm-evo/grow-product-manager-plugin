@@ -265,13 +265,27 @@ try:
     check("2.1 portfolio app-data: exit 0, portfolio.json and funnel.json written; the result names them",
           rc == 0 and res.get("ok") is True and res.get("funnel") is True and res.get("maps") == len(po.get("rows", [])) and po
           and res.get("out_dir") == pdir and "weakest" in res, out[-400:])
-    check("2.2 portfolio.json is a table block's data: the five columns in Ukrainian",
-          [(c["key"], c["title"]) for c in po.get("columns", [])] == [("journey", "Карта"), ("score", "Здоров'я"), ("delta", "Зміна"),
-                                                                       ("attention_count", "Потребує уваги"), ("reviewed", "Переглянуто")], po.get("columns"))
+    check("2.2 portfolio.json is a table block's data: four columns in Ukrainian — the health a meter (scale 100, mark 75, its number beside), the change a number",
+          [(c["key"], c["title"]) for c in po.get("columns", [])] == [("journey", "Шлях"), ("score", "Здоров'я"), ("delta", "Зміна"), ("state", "Стан")]
+          and po["columns"][1].get("kind") == "meter" and po["columns"][1].get("scale") == 100 and po["columns"][1].get("limit") == 75
+          and po["columns"][1].get("sub") == "score_text" and po["columns"][2].get("kind") == "num", po.get("columns"))
     prow = (po.get("rows") or [{}])[0]
-    check("2.3 a row: journey, map (the note's name), score, delta, attention_count, reviewed, attention ok|warn|crit",
-          set(prow) == {"journey", "map", "score", "delta", "attention_count", "reviewed", "attention"}
-          and all(r["attention"] in ("ok", "warn", "crit") for r in po["rows"]) and all(not r["map"].endswith(".md") for r in po["rows"]), po.get("rows"))
+    check("2.3 a row: journey, map (the note's name), score and its text, the change signed, the state in words, attention ok|warn|crit, the product",
+          set(prow) >= {"journey", "map", "score", "score_text", "delta", "state", "reviewed", "attention", "product"}
+          and all(r["attention"] in ("ok", "warn", "crit") for r in po["rows"]) and all(not r["map"].endswith(".md") for r in po["rows"])
+          and all(r["product"] == "zorg" for r in po["rows"]) and all(r["delta"] == "—" or r["delta"][0] in "+\u22120" for r in po["rows"]), po.get("rows"))
+    by = {r["map"]: r for r in po.get("rows", [])}
+    check("2.3b the state cell is marked at the row's level, the meter warns under 75; the state names a stage count as one",
+          all((r.get("marks") or {}).get("state") == (r["attention"] if r["attention"] != "ok" else None) for r in po.get("rows", []))
+          and all(((r.get("marks") or {}).get("score") == "warn") == (isinstance(r["score"], (int, float)) and r["score"] < 75) for r in po.get("rows", []))
+          and "1 стадія без доказів" in (by.get("journey-returns") or {}).get("state", ""), po.get("rows"))
+    lead = jload(os.path.join(pdir, "portfolio-lead.json")) if os.path.exists(os.path.join(pdir, "portfolio-lead.json")) else {}
+    chg = jload(os.path.join(pdir, "portfolio-changes.json")) if os.path.exists(os.path.join(pdir, "portfolio-changes.json")) else {}
+    check("2.3c portfolio-lead.json: one sentence — how many journeys, how many need attention, the weakest; no product label without --label",
+          lead.get("text", "").startswith("3 шляхи, 2 потребують уваги.") and "Найслабший" in lead.get("text", ""), lead)
+    check("2.3d portfolio-changes.json: a list item per map that moved or needs attention, its level, its product",
+          chg.get("items") and all(set(i) == {"title", "attention", "product"} for i in chg["items"])
+          and any("здоров'я" in i["title"] for i in chg["items"]), chg)
     scored = [r for r in po.get("rows", []) if r["score"] is not None]
     check("2.4 weakest: the row with the lowest score", scored and po.get("weakest") == {
         "title": min(scored, key=lambda r: r["score"])["journey"], "map": min(scored, key=lambda r: r["score"])["map"],
@@ -289,9 +303,13 @@ try:
     po2 = jload(os.path.join(d, "port2", "portfolio.json")) if os.path.exists(os.path.join(d, "port2", "portfolio.json")) else {}
     check("2.7 a value that does not parse is null and its stage is kept; --lang en titles the columns in English",
           fu2.get("date") == "2026-11-09" and fu2.get("stages", [{}])[0].get("value") is None and len(fu2.get("stages", [])) == 4
-          and [c["title"] for c in po2.get("columns", [])] == ["Journey", "Health", "Change", "Needs attention", "Reviewed"], (fu2, po2.get("columns")))
+          and [c["title"] for c in po2.get("columns", [])] == ["Journey", "Health", "Change", "State"], (fu2, po2.get("columns")))
     rc, out, res = jpr("app-data", "--product", "zorg", "--dir", os.path.join(FIX, "portfolio", "journeys", "zorg"),
                        "--today", "2026-11-24", "--out-dir", os.path.join(d, "port3"))
+    rc, out, res = jpr("app-data", "--product", "zorg", "--label", "Zorg", "--dir", os.path.join(FIX, "portfolio", "journeys", "zorg"),
+                       "--today", "2026-11-24", "--lang", "uk", "--out-dir", os.path.join(d, "port4"))
+    l4 = jload(os.path.join(d, "port4", "portfolio-lead.json")) if os.path.exists(os.path.join(d, "port4", "portfolio-lead.json")) else {}
+    check("2.7b --label: the product's name opens the lead (two products share one introduction)", l4.get("text", "").startswith("Zorg: 3 шляхи"), l4)
     check("2.8 without a funnel snapshot: no funnel.json, funnel false", rc == 0 and res.get("funnel") is False
           and os.path.exists(os.path.join(d, "port3", "portfolio.json")) and not os.path.exists(os.path.join(d, "port3", "funnel.json")), out[-300:])
     check("2.9 the sections go through the snapshot command", run(SH, "APP_RESULT", "snapshot", "--profile", "cjm", "--out", os.path.join(d, "snap"),
@@ -360,6 +378,9 @@ try:
             "junk": {"map.first-order--zorg": sec("map.first-order", "zorg", {"v": 1, "rows": "x"}), "meta": meta(["map.first-order--zorg"], P1)},
             "newer": sec("map.first-order", "zorg", dict(td, table_sig="1111111111111111"), made="2026-11-27T10:00:00Z"),
         }
+        port_secs = {n + "--zorg": sec(n, "zorg", jload(os.path.join(pdir, n + ".json")))
+                     for n in ("portfolio", "portfolio-lead", "portfolio-changes", "funnel") if os.path.exists(os.path.join(pdir, n + ".json"))}
+        cfg["port"] = dict(port_secs, meta=meta(port_secs, P1))
         cf = os.path.join(d, "cfg.json")
         write(cf, json.dumps(cfg, ensure_ascii=False))
         js = os.path.join(d, "pw.js")
@@ -388,6 +409,8 @@ const GRIDS = () => {
       return [A(it, 'row'), A(td, 'stage'), A(td, 'lane'), A(it, 'lane'), A(it, 'parent'), A(it, 'code'), A(it, 'target'), A(it, 'locked'),
               it.className, it.querySelector('.t').textContent, (it.querySelector('.m') || {}).textContent]; }),
     gaps: own('.item.gap', w).map(g => [A(g.closest('td'), 'stage'), g.textContent]),
+    gapHeads: own('thead th.stage.gap', w).map(th => [th.firstChild.nodeValue, (th.querySelector('.gpm-stage-mark') || {}).textContent || null]),
+    heads: own('thead th.stage', w).map(th => [th.firstChild.nodeValue, (th.querySelector('.n') || {}).textContent || null, (th.querySelector('.o') || {}).textContent]),
     chips: own('.item.chip', w).map(c => [A(c.closest('td'), 'stage'), c.querySelector('.t').textContent, c.querySelector('.m').textContent]),
     refs: own('.item.ref', w).map(c => [A(c.closest('td'), 'stage'), c.textContent]),
     adds: own('.edit-add', w).length}));
@@ -417,6 +440,9 @@ const SUMS = () => Array.from(document.querySelectorAll('details.child > summary
   [p, errs, reqs] = await open(C.app, MOCK({snapshot: C.tree})); await toMap(p);
   out.app = await p.evaluate(GRIDS); out.appSums = await p.evaluate(SUMS);
   out.appPts = await p.$$eval('.gpm-modules table.pts td', x => x.map(e => e.textContent));
+  out.appSum = await tx(p, '.gpm-map:not([hidden]) .gpm-map-sum'); out.appSpark = await p.$$eval('.gpm-map:not([hidden]) svg.spark', x => x.length);
+  out.appTitle = await tx(p, '.gpm-map:not([hidden]) .gpm-map-title');
+  out.appModuleTitle = await p.$eval('.gpm-module-title', e => e.className);
   out.appBars = await p.$$eval('.gpm-modules .edit-bar', x => x.length); out.pageHidden = await p.isHidden('.gpm-page');
   out.appToggle = await tx(p, '.gpm-modules .edit-toggle');
   // a chip opens its child's <details>
@@ -464,6 +490,14 @@ const SUMS = () => Array.from(document.querySelectorAll('details.child > summary
               pwned: await p.evaluate(() => !!window.__pwned), t: await p.$eval('.item[data-row] .t', e => e.textContent)}; out.evilErrs = errs; await p.close();
   [p, errs] = await open(C.app, MOCK({snapshot: C.junk})); await toMap(p);
   out.junk = {empties: await p.$$eval('.gpm-empty', x => x.map(e => e.textContent)), bars: await p.$$eval('.edit-bar', x => x.length)}; out.junkErrs = errs; await p.close();
+  // the portfolio on the rail: the lead sentence, the table with its meter, what changed beside it; the funnel's change to base
+  [p, errs] = await open(C.app, MOCK({snapshot: C.port}));
+  out.port = {lead: await tx(p, '.gpm-lead-text'), heads: await p.$$eval('.gpm-modules .gpm-table th', x => x.map(e => e.textContent)),
+              meters: await p.$$eval('.gpm-modules .gpm-c-meter', x => x.length), aside: await p.$$eval('.gpm-col-aside .gpm-item-title', x => x.map(e => e.textContent)),
+              asideHead: await tx(p, '.gpm-col-aside .gpm-block-title'), weakest: await p.$$eval('.gpm-weakest', x => x.filter(e => getComputedStyle(e).display !== 'none').length)};
+  await p.click('.gpm-tabs [data-tab="funnel"]'); await p.waitForTimeout(150);
+  out.port.deltas = await p.$$eval('.gpm-stage-delta', x => x.map(e => e.textContent)); out.port.funnelHead = await tx(p, '.gpm-block-chart .gpm-block-title');
+  out.portErrs = errs; await p.close();
   // phone width
   [p, errs] = await open(C.app, MOCK({snapshot: C.tree}), {width: 360, height: 640}); await toMap(p);
   out.phone = await p.evaluate(() => ({sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth})); await p.close();
@@ -484,17 +518,37 @@ const SUMS = () => Array.from(document.querySelectorAll('details.child > summary
               pg and proj(pg, (0, 1, 2, 4, 5, 6, 7)) == proj(ap, (0, 1, 2, 4, 5, 6, 7)) and len(pg) == 4, (proj(pg, (0, 1, 2, 4, 5, 6, 7))[:1], proj(ap, (0, 1, 2, 4, 5, 6, 7))[:1]))
         check("4.2 …the child maps to three levels: the same grids in the same order", [g["map"] for g in ap] == [
             "journey-first-order", "journey-shipping", "journey-payment", "journey-3ds"], [g["map"] for g in ap])
-        check("4.3 …and the same markup EDIT reads: stage headers, lanes, cells with their titles, each row's class, text and second line",
-              pg and all(a[k] == b_[k] for a, b_ in zip(pg, ap) for k in ("stages", "lanes", "cells", "rows")) and len(pg) == len(ap),
-              [(k, a[k][:2], b_[k][:2]) for a, b_ in zip(pg, ap) for k in ("stages", "lanes", "cells", "rows") if a[k] != b_[k]][:2])
-        check("4.4 …the gap marks, the roll-up chips, the references past the depth and the children's summaries the same",
-              pg and all(a[k] == b_[k] for a, b_ in zip(pg, ap) for k in ("gaps", "chips", "refs")) and br.get("pageSums") == br.get("appSums")
+        rows10 = lambda g: [r[:10] for r in g["rows"]]
+        check("4.3 …and the same markup EDIT reads: lanes, cells with their titles, each row's class and text",
+              pg and all(a[k] == b_[k] for a, b_ in zip(pg, ap) for k in ("lanes", "cells")) and all(rows10(a) == rows10(b_) for a, b_ in zip(pg, ap))
+              and len(pg) == len(ap), [(k, a[k][:2], b_[k][:2]) for a, b_ in zip(pg, ap) for k in ("lanes", "cells", "rows") if a[k] != b_[k]][:2])
+        st0 = td.get("stages") or []
+        check("4.3b the app's stage header: the stage's name first (what EDIT reads), «Стадія N» over it, its target as a sentence or «Ціль ще не задана»",
+              ap and [h[0] for h in ap[0]["heads"]] == [x["title"] for x in st0]
+              and [h[1] for h in ap[0]["heads"]] == ["Стадія %d" % (i + 1) for i in range(len(st0))]
+              and [h[2] for h in ap[0]["heads"]] == [x["goal"] or "Ціль ще не задана" for x in st0]
+              and any(x["goal"].startswith("Від ") for x in st0), (ap[0]["heads"] if ap else None, [x.get("goal") for x in st0]))
+        srcs = {r["id"]: r["src"] for r in td.get("rows", [])}
+        check("4.3c under each piece of evidence its source and how it was obtained (the data's `src`), never the page's raw line",
+              ap and all((r[10] or "") == (srcs.get(r[0]) or "") for r in ap[0]["rows"] if r[0] in srcs)
+              and any("побачено в продукті" in (r[10] or "") for r in ap[0]["rows"]), [r[10] for r in ap[0]["rows"]][:4] if ap else None)
+        check("4.4 …the roll-up chips, the references past the depth and the children's summaries the same; a gap is marked in its stage's header",
+              pg and all(a[k] == b_[k] for a, b_ in zip(pg, ap) for k in ("chips", "refs")) and br.get("pageSums") == br.get("appSums")
+              and all(len(a["gaps"]) == len(b_["gapHeads"]) and not b_["gaps"] for a, b_ in zip(pg, ap))
+              and all(h[1] == "Немає доказів" for g in ap for h in g["gapHeads"])
               and any(g["chips"] for g in ap) and any(g["refs"] for g in ap),
-              [(k, a[k], b_[k]) for a, b_ in zip(pg, ap) for k in ("gaps", "chips", "refs") if a[k] != b_[k]][:2] or (br.get("pageSums"), br.get("appSums")))
+              [(k, a[k], b_[k]) for a, b_ in zip(pg, ap) for k in ("chips", "refs") if a[k] != b_[k]][:2] or [(a["gaps"], b_["gapHeads"]) for a, b_ in zip(pg, ap)])
         check("4.5 EDIT ran in the app: the same «+ Додати» in every grid, one edit bar, the switch in the page's words, the page behind hidden",
               pg and [g["adds"] for g in pg] == [g["adds"] for g in ap] and br.get("appBars") == 1 and br.get("appToggle") == "Редагувати"
               and br.get("pageHidden") is True, ([g["adds"] for g in pg], [g["adds"] for g in ap], br.get("appBars")))
-        check("4.6 the health points the same as on the page", br.get("pts") and br.get("pts") == br.get("appPts"), (br.get("pts"), br.get("appPts")))
+        pts = br.get("pts") or []
+        n_ = len(pts) // 3
+        last_, prev_ = (pts[2 * n_ - 1], pts[2 * n_ - 2]) if n_ >= 2 else ("", "")
+        check("4.6 the health in words over the map: the last point and its change since the previous one; the trend line, no table of points",
+              n_ >= 2 and ("Здоровʼя %s," % last_) in (br.get("appSum") or "") and (("%+g" % (float(last_) - float(prev_))).replace("-", "\u2212") in (br.get("appSum") or ""))
+              and br.get("appSpark") == 1 and br.get("appPts") == [], (pts, br.get("appSum"), br.get("appSpark"), br.get("appPts")))
+        check("4.6b the map names itself: the journey's name as its heading; the module's own heading only for a screen reader",
+              br.get("appTitle") == td.get("journey") and "gpm-vh" in (br.get("appModuleTitle") or ""), (br.get("appTitle"), br.get("appModuleTitle")))
         check("4.7 a roll-up chip opens its child's map", br.get("closed") is False and br.get("opened") is True, (br.get("closed"), br.get("opened")))
 
         def norm(store):
@@ -531,6 +585,14 @@ const SUMS = () => Array.from(document.querySelectorAll('details.child > summary
               and ev.get("pwned") is False and "<img" in (ev.get("t") or "") and not br.get("evilErrs"), ev)
         jk = br.get("junk") or {}
         check("4.18 a section that is no map: the empty state, no bar, no error", jk.get("empties") and jk.get("bars") == 0 and not br.get("junkErrs"), jk)
+        pt = br.get("port") or {}
+        check("4.20 the portfolio in the app: the lead sentence over it, the table Шлях · Здоров'я (a meter per row) · Зміна · Стан, «Що змінилось» beside it, no second «weakest» line",
+              (pt.get("lead") or "").startswith("3 шляхи, 2 потребують уваги.") and pt.get("heads") == ["Шлях", "Здоров'я", "Зміна", "Стан"]
+              and pt.get("meters") == len(po.get("rows", [])) and pt.get("asideHead") == "Що змінилось" and len(pt.get("aside") or []) == len(chg.get("items", []))
+              and pt.get("weakest") == 0 and not br.get("portErrs"), (pt, br.get("portErrs")))
+        check("4.21 the funnel: each stage with a base says its change to it — «до бази −11,4%»; the block titled",
+              pt.get("deltas") and all(x.startswith("до бази ") for x in pt["deltas"]) and "до бази \u221211,4%" in pt["deltas"]
+              and pt.get("funnelHead") == "Переходи між стадіями", pt)
         ph = br.get("phone") or {}
         check("4.19 phone width: no sideways scroll of the page (the grid scrolls in its frame)", ph and ph.get("sw", 9e9) <= ph.get("cw", 0), ph)
 finally:

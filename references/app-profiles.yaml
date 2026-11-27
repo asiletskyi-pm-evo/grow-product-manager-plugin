@@ -4,14 +4,16 @@ version: 2
 profiles:
   cjm:
     level: app
+    layout: rail
     title: {uk: "CJM", en: "CJM"}
-    icon: {glyph: journey}
+    icon: {glyph: journey, image: plugin}
     permissions: [notifications, menu-bar]
     modules:
-      - {id: portfolio, block: table, source: portfolio, home: true, title: {uk: "Портфель", en: "Portfolio"}}
+      - {id: portfolio, home: true, title: {uk: "Портфель", en: "Portfolio"}, blocks: [{block: lead, source: portfolio-lead}, {block: table, source: portfolio, title: {uk: "Шляхи", en: "Journeys"}, ask: {when: empty, label: {uk: "Скопіювати фразу", en: "Copy the phrase"}, say: {uk: "Побудуй карту шляху", en: "Build a journey map"}}}, {block: list, source: portfolio-changes, place: aside, title: {uk: "Що змінилось", en: "What changed"}}]}
       - {id: map, block: map, source: map, title: {uk: "Карти", en: "Maps"}}
-      - {id: funnel, block: chart, source: funnel, title: {uk: "Воронка", en: "Funnel"}}
-      - {id: edits, block: feed, source: "@edits", title: {uk: "Правки команди", en: "Team edits"}}
+      - {id: funnel, title: {uk: "Воронка", en: "Funnel"}, counts: {uk: ["критично", "критично", "критично"], en: ["critical", "critical"]}, blocks: [{block: chart, source: funnel, title: {uk: "Переходи між стадіями", en: "Transitions between stages"}}]}
+      - {id: edits, title: {uk: "Правки команди", en: "Team edits"}, blocks: [{block: feed, source: "@edits", ask: {label: {uk: "Скопіювати фразу", en: "Copy the phrase"}, say: {uk: "Розбери правки карти шляху", en: "Review the edits of the journey map"}}}]}
+    refresh: {label: {uk: "Оновити зараз", en: "Refresh now"}, say: {uk: "Онови застосунок CJM", en: "Refresh the CJM app"}}
     menu: [portfolio, map, funnel, {action: edit, accel: "CmdOrCtrl+E"}, edits]
     badge: "@edits.pending"
     tray: {title: portfolio.weakest, menu: map}

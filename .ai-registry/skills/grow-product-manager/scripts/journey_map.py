@@ -2712,14 +2712,59 @@ def app_section(note_name):
     return "map." + s
 
 
+# The app's own words for the map (v4.13.0): the bands over the lanes, the evidence classes said plainly with what each
+# means, the line on a lane only the data fills, a stage's target as a sentence. The page keeps its own words (LABELS).
+APP_LABELS = {
+    "uk": {"bands": ["Шлях покупця", "Докази", "Що робимо"], "locked": "лише з даних",
+           "classes": {"measured": ("виміряно", "з аналітики"), "observed": ("побачено в продукті", "у прогоні продукту"),
+                       "reported": ("зі слів покупців", "з відгуків та інтервʼю"), "external": ("з ринку", "із зовнішніх джерел"),
+                       "simulated": ("змодельовано", "з моделі, не з живих даних"), "assumed": ("припущення", "ще без доказів")},
+           "goal": "Від %s%% переходять на стадію «%s»", "goal_last": "Від %s%% доходять до «%s»", "goal_raw": "Ціль: %s"},
+    "en": {"bands": ["The buyer's path", "Evidence", "What we do"], "locked": "data only",
+           "classes": {"measured": ("measured", "from analytics"), "observed": ("seen in the product", "in a product walkthrough"),
+                       "reported": ("in buyers' words", "from feedback and interviews"), "external": ("from the market", "from outside sources"),
+                       "simulated": ("simulated", "from a model, not live data"), "assumed": ("assumption", "no evidence yet")},
+           "goal": "At least %s%% move on to «%s»", "goal_last": "At least %s%% reach «%s»", "goal_raw": "Target: %s"},
+}
+GOAL = re.compile(r"^\s*([^\s>]+)\s*->\s*([^\s>]+)\s*>=\s*([0-9]+(?:[.,][0-9]+)?)\s*%\s*$")
+
+
+def _app_goal(stages, i, A):
+    """A stage's target as a sentence: «visit -> search >= 45%» → «Від 45% переходять на стадію «Пошук»» (the next stage's
+    name; the last stage names the step it reaches); another target as it is written; none or TBD → ""."""
+    raw = (stages[i]["outcome"] or "").strip()
+    if not raw or "TBD" in raw:
+        return ""
+    m = GOAL.match(raw)
+    if not m:
+        return A["goal_raw"] % nt.safe(raw)
+    if i + 1 < len(stages) and stages[i + 1]["name"]:
+        return A["goal"] % (m.group(3), nt.safe(stages[i + 1]["name"]))
+    return A["goal_last"] % (m.group(3), nt.safe(m.group(2)))
+
+
+def _app_src(r, A):
+    """Under a piece of evidence: its code, its source, its day when the source does not name it, and how it was obtained."""
+    cls = r["class"].strip().lower()
+    src = r["source"].strip()
+    dt = r["date"].strip()
+    if dt and dt not in src and day(dt):
+        src = "%s, %s" % (src, ".".join(reversed(dt.split("-")))) if src else ".".join(reversed(dt.split("-")))
+    code = r["code"].strip()
+    parts = [code if code not in src else "", src, A["classes"][cls][0] if cls in A["classes"] else ""]
+    return nt.safe(" · ".join(x for x in parts if x))
+
+
 def _app_grid(note, name, L):
     """One grid as data — the rows `_grid` shows with the attributes it writes, each cell's title, the gap marks."""
     live = [r for r in note["rows"] if not r["gap"]]
     declared = [s["id"] for s in note["stages"]]
     worthy = [r for r in live if page_worthy(r, declared)]
+    A = APP_LABELS.get(L["lang"], APP_LABELS["en"])
     stages = [{"id": nt.safe(s["id"]), "title": nt.safe(s["name"]), "outcome": nt.safe(s["outcome"] or L["no_outcome"]),
+               "goal": _app_goal(note["stages"], i, A),
                "gap": not any(r["stage"] == s["id"] and evidence(r) for r in worthy),
-               "cells": [nt.safe(cell_title(s["id"], lane, L["lang"])) for lane in LANE_IDS]} for s in note["stages"]]
+               "cells": [nt.safe(cell_title(s["id"], lane, L["lang"])) for lane in LANE_IDS]} for i, s in enumerate(note["stages"])]
     rows = []
     for r in worthy:
         lane = r["lane"]
@@ -2728,7 +2773,7 @@ def _app_grid(note, name, L):
                                       r["class"], r["date"], L["target"] if tg else "") if x)
         rows.append({"id": nt.safe(r["id"]), "stage": nt.safe(r["stage"]), "lane": lane, "text": nt.safe(r["text"]),
                      "parent": nt.safe(r["parent"]), "code": nt.safe(r["code"].strip()), "target": tg,
-                     "locked": bool(_locked(r) or not r["id"]), "meta": nt.safe(meta)})
+                     "locked": bool(_locked(r) or not r["id"]), "meta": nt.safe(meta), "src": _app_src(r, A)})
     hidden = len(live) - len(worthy)
     return {"map": nt.safe(name), "product": nt.safe(note["product"]), "table_sig": table_sig(note)["table"],
             "stages": stages, "rows": rows, "not_shown": hidden, "not_shown_text": L["not_shown"] % hidden if hidden else ""}
@@ -2774,8 +2819,11 @@ def app_data(note, note_name, lang, nest=None):
     pts = [{"date": p["date"], "score": p["score"], "snapshot": nt.safe(p["snapshot"])}
            for p in note["health"] if p["score"] is not None and day(p["date"])]
     above = [{"note": a["note"], "journey": a["journey"], "level": a["level"]} for a in nest["ancestors"]] if tree else []
+    A = APP_LABELS.get(lang, APP_LABELS["en"])
     out = {"v": APP_DATA_VERSION}
     out.update(_app_grid(note, name, L))
+    used = {r["class"].strip().lower() for r in note["rows"]
+            if not r["gap"] and page_worthy(r, [s["id"] for s in note["stages"]]) and r["source"].strip()}
     out.update({"note": note_name, "journey": nt.safe(title), "reviewed": nt.safe(note["reviewed"]), "lang": lang,
                 "lanes": [{"id": lane, "title": L["lane"][lane]} for lane in LANE_IDS],
                 "health": {"points": pts, "trend": trend(pts)},
@@ -2785,7 +2833,9 @@ def app_data(note, note_name, lang, nest=None):
                           "meta": "%s: %s · %s · %s: %s" % (L["note"], nt.safe(note_name), nt.safe(note["product"]), L["reviewed"],
                                                             nt.safe(note["reviewed"] or "⚠️")),
                           "above": T["above"] % " → ".join("«%s» (%s)" % (a["journey"], a["note"]) for a in above) if above else "",
-                          "health": L["health"], "no_trend": L["no_trend"], "gap": "⚠️ " + L["gap"], "children": T["children"]}})
+                          "health": L["health"], "no_trend": L["no_trend"], "gap": "⚠️ " + L["gap"], "children": T["children"],
+                          "bands": A["bands"], "locked": A["locked"],
+                          "classes": [{"word": A["classes"][c][0], "means": A["classes"][c][1]} for c in CLASSES if c in used]}})
     return out
 
 

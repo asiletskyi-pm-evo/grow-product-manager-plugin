@@ -26,6 +26,7 @@
       attentionWarn: "Увага",
       attentionCrit: "Критично",
       baseline: "база",
+      toBase: "до бази",
       weakest: "Найслабше",
       trend: "Тренд",
       needAttention: "потребує уваги",
@@ -75,6 +76,7 @@
       attentionWarn: "Warning",
       attentionCrit: "Critical",
       baseline: "baseline",
+      toBase: "vs baseline",
       weakest: "Weakest",
       trend: "Trend",
       needAttention: "need attention",
@@ -495,6 +497,13 @@
       head.appendChild(el("span", "gpm-stage-title", s.title));
       head.appendChild(el("span", "gpm-stage-value", s.value + unit));
       if (base !== null) { head.appendChild(el("span", "gpm-stage-base", S.t.baseline + " " + base + unit)); }
+      // the change against the base, as a share of it — the thresholds are said in the same words
+      if (base !== null && base > 0) {
+        var d = Math.round((s.value - base) / base * 1000) / 10;
+        var dv = el("span", "gpm-stage-delta" + (level && level !== "ok" ? " gpm-ink-" + level : ""));
+        dv.appendChild(document.createTextNode(S.t.toBase + " " + (d > 0 ? "+" : d < 0 ? "\u2212" : "") + String(Math.abs(d)).replace(".", S.lang === "en" ? "." : ",") + "%"));
+        head.appendChild(dv);
+      }
       if (level && level !== "ok") { head.appendChild(mark(level)); }
       row.appendChild(head);
       if (str(s.id, 64) && info && str(info.id, 200)) { decorate("stage", head, info.id + "|" + s.id); }
@@ -1089,7 +1098,8 @@
     if (SOURCES[b.source] || typeof RENDER[b.block].all === "function") {
       var r = renderBlock(b, snap, view);
       if (!r.node) { return []; }
-      sec = railSection(b.title, "", null, view, cls);
+      // a map names itself (the journey and its product): no section heading over it
+      sec = railSection(b.block === "map" ? "" : b.title, "", null, view, cls);
       sec.appendChild(r.node);
       return [sec];
     }
@@ -1242,7 +1252,9 @@
       back.addEventListener("click", function () { hooks.open(m.under); });
       box.appendChild(back);
     }
-    box.appendChild(el("h2", "gpm-module-title" + (m.home && leads ? " gpm-vh" : ""), (m.under && screenHeading(m, snap, view)) || m.title));
+    // the heading is read, not seen, where the module's first block says it already: a lead on the home, a map
+    var named = (m.home && leads) || (m.blocks.length === 1 && m.blocks[0].block === "map" && shown > 0);
+    box.appendChild(el("h2", "gpm-module-title" + (named ? " gpm-vh" : ""), (m.under && screenHeading(m, snap, view)) || m.title));
     box.appendChild(panel);
     return box;
   }

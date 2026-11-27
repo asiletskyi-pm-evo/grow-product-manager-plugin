@@ -254,8 +254,10 @@ with tempfile.TemporaryDirectory() as d:
     if not have_pw:
         print("⏭  10.x the browser pass — skipped: no playwright")
     else:
-        rc, _, _, pg = wrap(d, ZORG, out="app.html")
-        _, _, _, pg_en = wrap(d, ZORG, "--lang", "en", out="app-en.html")
+        # the browser pass draws the tabs layout: the cjm profile as shell 1 had it (the real cjm stands on the rail, §26)
+        TABS = os.path.join(ROOT, "testing", "fixtures", "app", "profiles-tabs.yaml")
+        rc, _, _, pg = wrap(d, ZORG, "--profiles", TABS, out="app.html")
+        _, _, _, pg_en = wrap(d, ZORG, "--profiles", TABS, "--lang", "en", out="app-en.html")
         js = os.path.join(d, "pw.js")
         with open(js, "w") as f:
             f.write(r"""
@@ -1090,10 +1092,10 @@ const fakeDesktop = `
 PIN_PAGE = ('<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>App</title></head><body><p>Дані застосунку '
             'завантажуються з бази артефакту, коли його відкриває людина, що увійшла в обліковий запис.</p></body></html>')
 PIN = {
-    ("cjm", "uk"): "99583c4d767d88a7bc5e54a4ae4a047fe9114346d6814c4631b81a2d8fbd459e",
-    ("cjm", "en"): "ebcd8d4c6b14540c50874a956c663fb662a1e3e3096caa4b7aae49bed0362c3a",
-    ("pm-os", "uk"): "f033d220584946dc46c9e4e13fda3d87c13950d354a9faf6cba03b6830ef6b2e",
-    ("pm-os", "en"): "02879c18c535c1c1dfdf4df8c69ff617674757d860c39ff274ec691444cb39b3",
+    ("cjm", "uk"): "15978cf04fab9b7065a7882b0ff2cadc0cabfb1e71bb072fbfd7aee49743abdd",
+    ("cjm", "en"): "a83994ffebd9b5737c514cd648fe699a2d3c18777b01908aaac495adc4c03286",
+    ("pm-os", "uk"): "ba82a8eaa93805a876d11e3fc689d58f3da23e8b60b6f97e2bcf4c672544cb89",
+    ("pm-os", "en"): "66a78e50a0929099a2ad985c986a835225d9006c10955fe3a0388728e4e159f1",
 }
 PIN_WHAT = ("the shell or the profile changed: raise `SHELL_VERSION` (every installed app is offered a new page and asks its "
             "permissions again) or, when no published app needs the new page, update this hash on purpose "
@@ -1497,7 +1499,7 @@ with tempfile.TemporaryDirectory() as d:
           open(os.path.join(ROOT, sh.ICON_IMAGES["plugin"]), "rb").read(24)[:8] == b"\x89PNG\r\n\x1a\n"
           and open(os.path.join(ROOT, sh.ICON_IMAGES["plugin"]), "rb").read(24)[16:24] == (256).to_bytes(4, "big") * 2
           and os.path.getsize(os.path.join(ROOT, sh.ICON_IMAGES["plugin"])) <= sh.ICON_IMAGE_MAX
-          and 'class="gpm-logo"' not in html5
+          and 'class="gpm-logo"' in html5 and 'class="gpm-logo"' not in (body_of(pm[3]) if os.path.exists(pm[3]) else "x class=\"gpm-logo\"")
           and any("icon image" in e for e in sh.check_profile("x", dict(cjm, icon={"glyph": "journey", "image": "https-somewhere"})))
           and any("unknown key" in e for e in sh.check_profile("x", dict(cjm, icon={"glyph": "journey", "src": "x"}))), "")
     check("13.7 blocks.js: the block names are the same as app_shell.py's BLOCKS",
