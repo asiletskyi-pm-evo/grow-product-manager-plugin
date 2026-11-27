@@ -13,7 +13,7 @@
            DIR/<collection>/<id>.json, ready for a batch write into the artifact's database. Writes nothing on a refusal.
 
 A profile holds shell code and placeholders only (`<jira_project>`, `<dashboard_id>`) — never a user's value. Only the
-levels `page` and `app` exist; `full`, `full-access` and `commands` arrive in v4.13.1 and are refused. The file is only
+levels `page` and `app` exist; `full`, `full-access` and `commands` arrive in v4.14.1 and are refused. The file is only
 read, never written; local-context.md is never read. Every command ends with one `APP_RESULT {json}` line.
 Stdlib only (Python 3.9). Exit 0; 1 when a check fails; 2 for a wrong argument.
 """
@@ -39,7 +39,7 @@ ICON_KEYS = ("glyph", "image")
 ICON_IMAGE_MAX = 96 * 1024
 ACTIONS = ("edit",)
 LANGS = ("uk", "en")
-LATER_TEXT = "arrives in v4.13.1"
+LATER_TEXT = "arrives in v4.14.1"
 PROFILE_KEYS = ("level", "title", "icon", "permissions", "modules", "menu", "badge", "tray", "notify", "connectors",
                 "commands", "layout", "refresh")
 MODULE_KEYS = ("id", "block", "source", "home", "title", "blocks", "counts", "foot", "under", "where", "about", "back")

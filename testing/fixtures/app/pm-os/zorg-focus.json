@@ -1,0 +1,15 @@
+{
+ "items": [
+  {
+   "title": "Decide the refund flow experiment",
+   "note": "From the daily focus",
+   "product": "zorg",
+   "attention": "ok"
+  },
+  {
+   "title": "Unblock the card payment release",
+   "product": "zorg-pay",
+   "attention": "crit"
+  }
+ ]
+}

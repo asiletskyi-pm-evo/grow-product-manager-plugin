@@ -1,0 +1,32 @@
+{
+  "heading": "By platform",
+  "x": [
+    "26.10",
+    "02.11",
+    "09.11",
+    "16.11"
+  ],
+  "series": [
+    {
+      "name": "Web",
+      "values": [
+        700,
+        690,
+        720,
+        750
+      ]
+    },
+    {
+      "name": "App",
+      "values": [
+        620,
+        600,
+        630,
+        660
+      ]
+    }
+  ],
+  "headline": "The web and the app grow together.",
+  "sub": "Orders by week and platform",
+  "note": "Source: the orders dashboard."
+}

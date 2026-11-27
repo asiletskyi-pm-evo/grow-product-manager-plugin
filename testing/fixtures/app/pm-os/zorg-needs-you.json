@@ -1,0 +1,18 @@
+{
+ "items": [
+  {
+   "at": "2026-11-26T08:10:00Z",
+   "title": "A mention in ZORG-214 waits for an answer",
+   "note": "Tracker, 2 days",
+   "product": "zorg",
+   "attention": "warn"
+  },
+  {
+   "at": "2026-11-26T07:40:00Z",
+   "title": "A review request on the checkout pull request",
+   "note": "Code host",
+   "product": "zorg-pay",
+   "attention": "ok"
+  }
+ ]
+}

@@ -1,0 +1,49 @@
+{
+ "columns": [
+  {
+   "key": "stage",
+   "title": "Stage",
+   "sub": "platform"
+  },
+  {
+   "key": "value",
+   "title": "Conversion, last 4 weeks",
+   "kind": "num",
+   "group": "Conversion"
+  },
+  {
+   "key": "d4w",
+   "title": "To the 4 weeks before",
+   "kind": "num",
+   "group": "Conversion"
+  }
+ ],
+ "rows": [
+  {
+   "stage": "Listing",
+   "platform": "Web",
+   "value": "4.10%",
+   "d4w": "−12.0%",
+   "product": "zorg",
+   "attention": "warn",
+   "marks": {
+    "d4w": "warn"
+   }
+  },
+  {
+   "stage": "Product page",
+   "platform": "Web",
+   "value": "3.40%",
+   "d4w": "+1.5%",
+   "product": "zorg"
+  },
+  {
+   "stage": "Payment",
+   "platform": "App",
+   "value": "96.2%",
+   "d4w": "+0.2%",
+   "product": "zorg-pay"
+  }
+ ],
+ "note": "Source: the funnel tracker, 2026-11-24."
+}

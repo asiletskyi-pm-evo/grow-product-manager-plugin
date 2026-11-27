@@ -1,0 +1,15 @@
+{
+ "items": [
+  {
+   "at": "2026-11-26T10:00:00Z",
+   "title": "Snapshot written: 12 sections",
+   "product": "zorg"
+  },
+  {
+   "at": "2026-11-26T09:00:00Z",
+   "title": "Snapshot skipped: the tracker did not answer",
+   "product": "zorg",
+   "attention": "warn"
+  }
+ ]
+}

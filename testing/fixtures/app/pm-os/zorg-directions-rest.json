@@ -1,0 +1,15 @@
+{
+ "items": [
+  {
+   "title": "Refund",
+   "value": "ZORG-77, on hold",
+   "product": "zorg"
+  },
+  {
+   "title": "Gift cards",
+   "value": "ZPAY-12, closed",
+   "product": "zorg-pay"
+  }
+ ],
+ "side": "2 directions"
+}

@@ -66,6 +66,8 @@ A run started by SCHEDULE has no one to answer §3. So it:
 
 Setting the schedule up is an interactive step: the skill says what will run, how often and where its result will go (the vault or a file, never a hosted surface), and creates it on the user's «так».
 
+**One exception — the pult's data.** A scheduled refresh of the user's own private pult writes its `snapshot` and `runs` documents without the question of §3 when the user gave a standing consent at the pult's set-up, and only while the pult is shared with no one; the page itself, its layout and every other place keep §3. The conditions, the journal and how the consent is taken back: `pm-os-protocol.md` §5.
+
 ## 5. When the surface is absent
 
 Say it once, at the start, in one line — the `host-profiles.md` §3 rule — and take the next column of §2:
@@ -110,6 +112,6 @@ Measured 2026-10-29 (the «Поверхні» programme, design workspace). ✅ 
 | RESEARCH | ✅ | ✅ | ⚠️ only with a research skill installed (it was); else web search | ❌ — web search only |
 | ARTIFACT `desktop` | ✅ macOS, measured 2026-11-26 (below) | ? | ? | ? |
 
-**ARTIFACT `desktop`** — measured 2026-11-26 on macOS (arm64), the Claude desktop app 8.9912.0, contract 0.2.99, with a probe page installed as an app: install works; the permissions `notifications` and `menu-bar` granted and working — a notification, the menu-bar item, the badge on the icon (`full-access` was granted on that account too and reached the files and `python3` — the shell does not ask it before v4.13.1); the artifact's database read by the installed app; a new version of the page is picked up after the app is reopened and asks the permissions again; the icon is not rewritten on an already installed copy (`setIcon` answers `written: false`); asking three permissions in one call hung, one at a time works. Source of the install on Windows: the vendor's launch article (https://claude.com/resources/articles/install-as-app), not a measurement here. Not measured: Windows, the Claude Code CLI, Codex, ChatGPT; a reinstall's icon; a real connector inside the app (`desktop-app-protocol.md` §13).
+**ARTIFACT `desktop`** — measured 2026-11-26 on macOS (arm64), the Claude desktop app 8.9912.0, contract 0.2.99, with a probe page installed as an app: install works; the permissions `notifications` and `menu-bar` granted and working — a notification, the menu-bar item, the badge on the icon (`full-access` was granted on that account too and reached the files and `python3` — the shell does not ask it before v4.14.1); the artifact's database read by the installed app; a new version of the page is picked up after the app is reopened and asks the permissions again; the icon is not rewritten on an already installed copy (`setIcon` answers `written: false`); asking three permissions in one call hung, one at a time works. Source of the install on Windows: the vendor's launch article (https://claude.com/resources/articles/install-as-app), not a measurement here. Not measured: Windows, the Claude Code CLI, Codex, ChatGPT; a reinstall's icon; a real connector inside the app (`desktop-app-protocol.md` §13).
 
 Cowork and claude.ai web are not measured yet; ChatGPT on web and mobile neither. A cell changes only with a measurement on that host, with its date.

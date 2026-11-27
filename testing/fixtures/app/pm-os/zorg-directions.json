@@ -1,0 +1,63 @@
+{
+ "columns": [
+  {
+   "key": "title",
+   "title": "Direction",
+   "sub": "code"
+  },
+  {
+   "key": "stage",
+   "title": "Stage"
+  },
+  {
+   "key": "progress",
+   "title": "Ready",
+   "kind": "segments",
+   "parts": [
+    "Closed",
+    "In work",
+    "No movement over 14 days"
+   ],
+   "last": "warn",
+   "sub": "ready"
+  },
+  {
+   "key": "open",
+   "title": "Open",
+   "kind": "num"
+  }
+ ],
+ "rows": [
+  {
+   "title": "First order",
+   "code": "ZORG-100",
+   "stage": "In progress",
+   "progress": [
+    31,
+    18,
+    1
+   ],
+   "ready": "62% closed, 1 with no movement",
+   "open": 19,
+   "product": "zorg",
+   "attention": "warn",
+   "marks": {
+    "progress": "warn"
+   }
+  },
+  {
+   "title": "Pay by card",
+   "code": "ZPAY-40",
+   "stage": "In progress",
+   "progress": [
+    24,
+    6,
+    0
+   ],
+   "ready": "80% closed",
+   "open": 6,
+   "product": "zorg-pay"
+  }
+ ],
+ "note": "Source: the issue tracker, counts only."
+}

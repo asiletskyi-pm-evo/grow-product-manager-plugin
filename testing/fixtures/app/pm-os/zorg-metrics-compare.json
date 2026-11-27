@@ -1,0 +1,30 @@
+{
+ "kind": "compare",
+ "unit": "%",
+ "series": [
+  "Listing",
+  "Product page"
+ ],
+ "headline": "The app converts about twice as well as the web.",
+ "sub": "Conversion, the last 4 weeks, by platform",
+ "rows": [
+  {
+   "label": "Web",
+   "values": [
+    4.1,
+    3.4
+   ]
+  },
+  {
+   "label": "App",
+   "values": [
+    8.6,
+    7.2
+   ]
+  }
+ ],
+ "note": "Source: the funnel tracker, 2026-11-24.",
+ "digits": 2,
+ "heading": "Conversion to order",
+ "side": "the last 4 weeks"
+}

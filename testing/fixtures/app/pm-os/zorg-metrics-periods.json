@@ -1,0 +1,26 @@
+{
+ "kind": "columns",
+ "heading": "Release pace",
+ "headline": "Two releases a week on average.",
+ "sub": "Releases by week",
+ "cols": [
+  {
+   "label": "02.11",
+   "value": 3
+  },
+  {
+   "label": "09.11",
+   "value": 2
+  },
+  {
+   "label": "16.11",
+   "value": 2
+  },
+  {
+   "label": "23.11",
+   "value": 1,
+   "partial": true
+  }
+ ],
+ "note": "Source: the code host."
+}

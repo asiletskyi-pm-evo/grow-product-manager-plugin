@@ -1,0 +1,15 @@
+{
+  "side": "2 products",
+  "items": [
+    {
+      "title": "Zorg",
+      "note": "The colour comes from the product's design system.",
+      "product": "zorg"
+    },
+    {
+      "title": "Zorg Pay",
+      "note": "The colour was picked without a design system.",
+      "product": "zorg-pay"
+    }
+  ]
+}

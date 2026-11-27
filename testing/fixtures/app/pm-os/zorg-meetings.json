@@ -1,0 +1,28 @@
+{
+ "date": "2026-11-26",
+ "start": "09:00",
+ "end": "18:00",
+ "items": [
+  {
+   "from": "11:00",
+   "to": "11:45",
+   "title": "Checkout sync",
+   "note": "The preparation pack is ready",
+   "product": "zorg-pay"
+  },
+  {
+   "from": "13:00",
+   "to": "15:00",
+   "kind": "focus",
+   "title": "Focus time"
+  },
+  {
+   "from": "15:00",
+   "to": "16:00",
+   "title": "Weekly planning",
+   "note": "No pack yet",
+   "product": "zorg"
+  }
+ ],
+ "source": "calendar"
+}
