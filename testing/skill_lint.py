@@ -11,8 +11,8 @@ Checks 19-25 are the exception, and say so: they are preventive guards for the
 role layer (19-22, JCRL v3.5.0, references/role-profiles.md), the judgment points
 (23, v3.7.0), the evidence classes (24, v3.8.0) and the judgment binds (25, v3.9.0),
 written before any defect of their class could ship. Check 26 (v3.10.0) is back to
-the rule: the vault level L2 cited tool names no server had from v1.6.0 to v3.9.0. Each one still has a seed in
-seeded_leak_test.py.
+the rule: the vault level L2 cited tool names no server had from v1.6.0 to v3.9.0. Check 33 (v4.13.0, the app
+templates) is preventive again. Each one still has a seed in seeded_leak_test.py.
 
 Stdlib-only by design (runs in CI without pip install). PyYAML is used for an
 extra strict parse when available, but the hazard scan does not depend on it.
@@ -54,6 +54,7 @@ CHECKS = """
 32. core-is-data         a shipped doc that puts a name in a ctx command line (`ctx entity "<…>"`, `--q "<…>"`, since v4.12.4 any `ctx graph '<…>'`), runs a core's command (`people_resolver`) or its copy of the builder, or obeys a core's rule; any value of a scripts command in double quotes, a delta in the command line
 33. db-least-rights     a shipped doc that declares an artifact `db` rule letting anyone below the owner write the whole store (`path: ""` with write view|interact|admin), or a db rule set with no root rule (since v4.12.4)
 34. withdrawn-trust    README or CHANGELOG describing the first run trusting registrations by itself without saying it was withdrawn in v4.12.4 (since v4.12.5)
+35. app-template         a URL other than Google Fonts, an e-mail, an artifact link, a UUID, a tracker key outside `<…>` or a denylisted org word in references/app-profiles.yaml or scripts/app_shell/*
 """
 
 root = sys.argv[1] if len(sys.argv) > 1 else "."
@@ -112,6 +113,10 @@ component_files = sorted(glob.glob(os.path.join(root, "agents", "*.md")) +
                          glob.glob(os.path.join(root, "commands", "*.md")) +
                          glob.glob(os.path.join(root, "scripts", "*.py")) +
                          glob.glob(os.path.join(root, "scripts", "*.sh")))
+# v4.13.0: the app templates — the profiles and every file of the shell `wrap` embeds into a published page. The
+# profiles are a ref file already; the shell's files join checks 9 and 16-18 here, and check 33 reads both.
+app_shell_files = sorted(p for p in glob.glob(os.path.join(root, "scripts", "app_shell", "*")) if os.path.isfile(p))
+app_template_files = [os.path.join(root, "references", "app-profiles.yaml")] + app_shell_files
 REF_BASENAMES = {os.path.basename(p) for p in ref_files}
 IGNORE_MD = {"local-context.md", "local-context.example.md", "SKILL.md", "README.md",
              "CHANGELOG.md", "library.md", "sources.md", "categories.md", "_registry.json",
@@ -480,7 +485,8 @@ scan_targets = [os.path.join(root, "local-context.example.md"),
                 os.path.join(root, "README.md")] + \
                glob.glob(os.path.join(root, "templates", "**", "*.md"), recursive=True) + \
                glob.glob(os.path.join(root, "testing", "**", "*.md"), recursive=True) + \
-               [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files + component_files
+               [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files + component_files + \
+               app_shell_files
 for f in scan_targets:
     if not os.path.isfile(f): continue
     rel_name = os.path.relpath(f, root)
@@ -601,7 +607,8 @@ for f in scan_targets:
 # Second: a hardcoded output language. "Language: <Lang> by default" pinned one
 # team's language into a skill that has `user.language` for exactly this.
 NON_LATIN = re.compile(r"[Ѐ-ӿ֐-׿؀-ۿ一-鿿぀-ヿ]")
-locale_targets = [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files + component_files
+locale_targets = [p for p in ref_files if p.endswith((".md", ".yaml"))] + skill_files + component_files + \
+                 app_shell_files
 for f in locale_targets:
     rel_name = os.path.relpath(f, root)
     in_fence = False
@@ -1715,6 +1722,48 @@ for _rel in ("README.md", "CHANGELOG.md"):
         if _WT_RX.search(_line) and not re.search(r"[Ww]ithdrawn in v4\.12\.4|since v4\.12\.4|v4\.12\.4[^\n]*(?:trusts nothing|no registration)", _line):
             fail("withdrawn-trust", f"{_rel}:{_ln}: describes the first run trusting registrations by itself without "
                                     "«withdrawn in v4.12.4» — a scanner reads the history as the plugin's behaviour")
+
+# ============================================================ app template (35)
+# v4.13.0: `wrap` embeds the shell's files byte for byte into every published app, and the profiles name what an app
+# shows; a user's values go only into the published page or its database. Checks 9 and 16-18 read these files by
+# shape (a real host, a real e-mail domain, a signature, a key of 4+ letters); a template is stricter: no URL but
+# Google Fonts (the shell's one request) and the SVG namespace (an identifier, never fetched), no e-mail of any domain,
+# no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the org's own words the optional
+# denylist knows (the lint names no product itself). Preventive: no leak of this class has shipped.
+APP_URL_OK = {"fonts.googleapis.com"}
+APP_NS_OK = {"http://www.w3.org/2000/svg"}
+APP_PLACEHOLDER = re.compile(r"<[A-Za-z][\w-]*>")
+APP_RULES = [
+    (re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b"), "an e-mail"),
+    (re.compile(r"claude\.ai/(?:code/)?artifacts?/|/artifact/[\w-]", re.I), "an artifact link"),
+    (UUID_RE, "a UUID"),
+    (re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b"), "a tracker key outside a placeholder"),
+]
+APP_URL = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s\"'`<>)]*|\bwww\.[\w-]+(?:\.[\w-]+)+")
+for _f in app_template_files:
+    if not os.path.isfile(_f):
+        fail("app-template", f"{os.path.relpath(_f, root)} is missing")
+        continue
+    _rel = os.path.relpath(_f, root)
+    for _ln, _line in enumerate(open(_f, encoding="utf-8").read().split("\n"), 1):
+        _bare = APP_PLACEHOLDER.sub("", _line)
+        for _m in APP_URL.finditer(_bare):
+            _u = _m.group(0)
+            _host = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", _u).split("/")[0].split(":")[0].lower()
+            if _u in APP_NS_OK or (_u.lower().startswith("https://") and _host in APP_URL_OK):
+                continue
+            fail("app-template", f"{_rel}:{_ln}: a URL '{_u[:60]}' in an app template — only https://fonts.googleapis.com; "
+                                 "a user's value goes into the published page or its database")
+        for _rx, _what in APP_RULES:
+            _m = _rx.search(_bare)
+            if _m:
+                fail("app-template", f"{_rel}:{_ln}: {_what} '{_m.group(0)[:60]}' in an app template — placeholders only "
+                                     "(`<jira_project>`, `<dashboard_id>`); a user's value goes into the published page or its database")
+        if ORG_TOKENS:
+            _m = ORG_TOKENS.search(_line)
+            if _m:
+                fail("app-template", f"{_rel}:{_ln}: the org's own word '{_m.group(0)}' in an app template — Zorg in "
+                                     "examples, a placeholder in a profile")
 
 # -------------------------------------------------------------------- report
 print(f"== Static lint: {root} ==")

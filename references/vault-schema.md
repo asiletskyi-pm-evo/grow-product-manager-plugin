@@ -73,6 +73,7 @@ Every artifact, regardless of type, includes these base frontmatter fields:
 | `replaced` | string[] — earlier ids of the same place |
 | `remote_version` | the place's own version after the publication, when its tool gives one |
 | `key` | the result the entry belongs to — a note may mirror several results (a report and its dashboard) |
+| `app` | `PROFILE:SHELL[:PERM,PERM]` string, when the place is an installable app — profile slug, shell version (integer 1–999), permissions from `notifications` · `menu-bar` · `shortcuts` · `overlay` · `full-access`; `publications.py find` returns it as `{profile, shell, permissions}` |
 
 Never a name of whom it was shared with, never a token. A note without the field is valid; it is never backfilled.
 

@@ -31,7 +31,7 @@ KINDS = ("deck", "dashboard", "document", "page", "board", "design")
 SURFACES = ("artifact", "docs", "confluence")          # plus the id of a tools-registry record
 AUDIENCES = ("private", "shared", "space:<KEY>", "unknown")
 FIELDS = ("surface", "kind", "level", "id", "url", "version", "published", "audience", "replaced", "remote_version",
-          "key")
+          "key", "app")
 LEVELS = ("typed", "page")                              # an ARTIFACT's level: two places on one host
 KEY = re.compile(r"^[^\W_][\w.-]{0,79}(?:/[^\W_][\w.-]{0,79}){0,3}\Z")   # lower-case words, Cyrillic too
 BOARD_KEYS = ("artifact_id", "artifact_url", "board_id", "board_url", "live_board_id", "live_board_url")
@@ -45,6 +45,26 @@ CRED = (r"x-amz-[\w-]*|x-goog-[\w-]*|[\w-]*token[\w-]*|[\w-]*secret[\w-]*|[\w-]*
         r"phpsessid|sid|[\w-]*auth[_-]?key|[\w-]*private[_-]?key|rlkey|asp\.net_sessionid|hdnts")
 CRED_PARAM = re.compile(r"(?:^|[?&;#/~])\s*(?:%s)\s*(?:\[\])?\s*=" % CRED, re.I)
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.\w")
+APP_PERMS = ("notifications", "menu-bar", "shortcuts", "overlay", "full-access")
+
+
+def parse_app(s):
+    """`PROFILE:SHELL[:PERM,PERM]` -> {profile, shell, permissions}, or None when it is not that shape. PROFILE is a SLUG,
+    SHELL a whole number 1…999, each PERM one of APP_PERMS, none twice. The same string is how the record keeps it on disk
+    (the shared YAML reader has no nested mappings), so an entry read back goes through here too."""
+    parts = s.split(":") if isinstance(s, str) else []
+    if not 2 <= len(parts) <= 3 or not SLUG.match(parts[0]) or not re.fullmatch(r"[1-9]\d{0,2}", parts[1]):
+        return None
+    perms = parts[2].split(",") if len(parts) == 3 else []
+    if len(parts) == 3 and not parts[2] or len(set(perms)) != len(perms) or any(p not in APP_PERMS for p in perms):
+        return None
+    return {"profile": parts[0], "shell": int(parts[1]), "permissions": perms}
+
+
+def app_text(app):
+    return "%s:%d%s" % (app["profile"], app["shell"], ":" + ",".join(app["permissions"]) if app["permissions"] else "")
+
+
 MAX_ID, MAX_URL, MAX_RV = 300, 2000, 64
 KEY_LINE = re.compile(r"^published[ \t]*:(?P<val>.*)$")
 TOP = re.compile(r"^[^\s#-]")                           # a line that opens another top-level key
@@ -203,6 +223,11 @@ def _entry(e):
         out["version"] = int(v)
     except (ValueError, OverflowError):
         raise Unreadable("a version that is not a whole number from 1")
+    if "app" in out:                                       # kept as PROFILE:SHELL[:PERMS] on disk; a malformed one is
+        app = parse_app(out["app"])                        # dropped like any unreadable field, the place stays
+        out.pop("app")
+        if app:
+            out["app"] = app
     for k in [k for k in out if k not in FIELDS]:          # a field someone added stays only when it is harmless
         v = out[k]
         if isinstance(v, list) or not isinstance(v, (str, int)) or len(str(v)) > 100 or cred_problem(str(v)):
@@ -297,6 +322,8 @@ def render(entries, eol):
             lines.append("    remote_version: %s" % _q(e["remote_version"]))
         if e.get("key"):
             lines.append("    key: %s" % _q(e["key"]))
+        if e.get("app"):
+            lines.append("    app: %s" % _q(app_text(e["app"])))
         if e.get("replaced"):
             lines.append("    replaced: [%s]" % ", ".join(_q(x) for x in e["replaced"]))
         for k in sorted(k for k in e if k not in FIELDS and k != "legacy"):   # a field someone added stays
@@ -466,6 +493,9 @@ def _check_args(args, need_audience=True):
         return "--audience is needed"
     if getattr(args, "at", None) and not AT.match(args.at):
         return "--at is not YYYY-MM-DDTHH:MM[:SS][Z|±HH:MM]"
+    if getattr(args, "app", None) is not None and not parse_app(args.app):
+        return ("--app is PROFILE:SHELL[:PERM,PERM] — a lower-case profile, a shell number 1–999, permissions from %s, "
+                "none twice" % "|".join(APP_PERMS))
     if getattr(args, "remote_version", None):
         bad = value_problem("the remote version", args.remote_version, MAX_RV)
         if bad:
@@ -574,6 +604,8 @@ def cmd_record(args):
     if args.key:
         for e in entries:
             e["key"] = args.key
+    if args.app is not None:
+        entry["app"] = parse_app(args.app)             # no --app keeps the place's own
     if args.remote_version:
         entry["remote_version"] = args.remote_version
     else:
@@ -772,6 +804,8 @@ def main(argv=None):
     p.add_argument("--audience", help="private | shared | unknown | space:<KEY>; a new version keeps the place's own")
     p.add_argument("--remote-version", help="the place's own version or revision, when its tool gives one")
     p.add_argument("--at", help="the version's time (default now, UTC)")
+    p.add_argument("--app", help="PROFILE:SHELL[:PERM,PERM] — the place is an installable app; "
+                                 "a new version without it keeps the place's own")
     p = common(sub.add_parser("share"))
     p.add_argument("--surface", required=True)
     p.add_argument("--kind", required=True)

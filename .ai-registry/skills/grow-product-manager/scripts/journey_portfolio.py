@@ -8,6 +8,8 @@ no board.
                needs attention, the maps that need it first; the hand CJM notes (`type: cjm`) partly: funnel, stages,
                the metric rows per stage, snapshot. A markdown table for the chat, then the result line.
   render-html  the same portfolio as one self-contained page: numbers only — no row text, no link, no request
+  app-data     the same portfolio as an app's data (v4.13.0): portfolio.json (a table block) and, when the product has
+               a funnel-level health-check snapshot, funnel.json (a chart block) — numbers, never a person
   schema       the commands, columns, attention reasons, hand-CJM fields and findings, skip reasons the protocol must
                agree with (validate-consistency.sh check 30)
 
@@ -31,6 +33,7 @@ import note_table as nt  # noqa: E402
 import publications as pub  # noqa: E402
 
 COMMANDS = ("list", "render-html", "schema")
+APP_COMMANDS = ("app-data",)          # since v4.13.0: the app's data — its row stands after `schema` in §13's table
 COLUMNS = (("journey", "шлях"), ("owner", "власник"), ("stages", "етапи"), ("health", "здоров'я"), ("delta", "зміна"),
            ("health_date", "дата точки"), ("reviewed", "рев'ю"), ("pains", "болі"), ("anomalies", "аномалії"),
            ("gaps", "розриви"), ("findings", "знахідки"), ("published", "опубліковано"), ("attention", "увага"))
@@ -625,8 +628,9 @@ def check_protocol(root):
             errs.append("journey-protocol.md has no §13 «The portfolio»")
         crow = nt.table_after(s13, r"\| Command \| What \|")
         cmds = [nt.cmd_name(r[0]) for r in crow]
-        if cmds != list(COMMANDS):
-            errs.append("journey-protocol.md §13: the commands %s ≠ journey_portfolio.py COMMANDS %s" % ("|".join(cmds), "|".join(COMMANDS)))
+        if cmds != list(COMMANDS + APP_COMMANDS):
+            errs.append("journey-protocol.md §13: the commands %s ≠ journey_portfolio.py COMMANDS + APP_COMMANDS %s" % (
+                "|".join(cmds), "|".join(COMMANDS + APP_COMMANDS)))
         have = flags_of()
         for r in crow:
             name = nt.cmd_name(r[0])
@@ -728,8 +732,205 @@ def cmd_render(args):
     return 0
 
 
+# ------------------------------------------------------------------ the app's data (v4.13.0)
+APP_COLUMNS = ("journey", "score", "delta", "state")
+APP_TITLES = {"uk": ("Шлях", "Здоров'я", "Зміна", "Стан"), "en": ("Journey", "Health", "Change", "State")}
+HEALTH_LIMIT = 75    # the meter's mark: below it a map's health reads as weak (the canvas of v4.13.0)
+APP_WORDS = {
+    "uk": {"stages": ("%d стадія без доказів", "%d стадії без доказів", "%d стадій без доказів"), "ok": "усе гаразд",
+           "maps": ("%d шлях", "%d шляхи", "%d шляхів"), "need": ("%d потребує уваги", "%d потребують уваги", "%d потребують уваги"),
+           "need_none": "жоден не потребує уваги", "lead_one": "Один шлях, %s.", "lead_none": "уваги не потребує",
+           "lead_some": "потребує уваги", "weakest": "Найслабший — «%s», здоров'я %s.", "of": "%s: ",
+           "change": "здоров'я %s", "no_maps": "Карт шляху ще немає."},
+    "en": {"stages": ("%d stage without evidence", "%d stages without evidence"), "ok": "all fine",
+           "maps": ("%d journey", "%d journeys"), "need": ("%d needs attention", "%d need attention"),
+           "need_none": "none needs attention", "lead_one": "One journey, %s.", "lead_none": "needs no attention",
+           "lead_some": "needs attention", "weakest": "The weakest is «%s», health %s.", "of": "%s: ",
+           "change": "health %s", "no_maps": "No journey maps yet."},
+}
+VALUE = re.compile(r"^\s*([-+]?\d+(?:[.,]\d+)?)\s*(%?)\s*$")
+
+
+def _plural(n, forms):
+    """The form of a count: uk one / few / many, en one / other."""
+    if len(forms) == 2:
+        return forms[0] if n == 1 else forms[1]
+    if n % 10 == 1 and n % 100 != 11:
+        return forms[0]
+    return forms[1] if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else forms[2]
+
+
+def _signed(v):
+    """+3, −9, 0 — the change as it is read; "" with no change known."""
+    if not isinstance(v, (int, float)):
+        return ""
+    v = int(v) if float(v).is_integer() else round(v, 1)
+    return "+%s" % v if v > 0 else "\u2212%s" % abs(v) if v < 0 else "0"
+
+
+def _state(m, lang):
+    """A map's attention in words: its reasons, a stage count said as one."""
+    W, named = APP_WORDS.get(lang, APP_WORDS["en"]), dict(ATTENTION) if lang == "uk" else EN_ATTENTION
+    out = []
+    for a in m["attention"]:
+        if a["reason"] == "empty_stage":
+            n = len(m["gaps"]["empty_stage"])
+            out.append(_plural(n, W["stages"]) % n)
+        else:
+            out.append(named.get(a["reason"], a["reason"]))
+    return ", ".join(out) or W["ok"]
+
+
+def app_portfolio(p, lang, product=""):
+    """The portfolio as a `table` block's data: one row per journey map, in the portfolio's order — its journey, its
+    note's name, its health on a meter (scale 100, the mark at HEALTH_LIMIT), its change since the previous point as a
+    signed word, its state in words; `attention` crit for a critical anomaly, warn for any other reason, and the same
+    level marks the state cell; `weakest` the map with the lowest score. Never an owner or any person."""
+    rows = []
+    for m in p["maps"]:
+        reasons = [a["reason"] for a in m["attention"]]
+        level = "crit" if "critical_anomaly" in reasons else "warn" if reasons else "ok"
+        score = m["health"]["score"]
+        row = {"journey": m["journey"], "map": os.path.splitext(m["note"])[0], "score": score,
+               "score_text": str(score) if isinstance(score, (int, float)) else "—", "delta": _signed(m["health"]["delta"]) or "—",
+               "state": _state(m, lang), "attention": level, "reviewed": m["reviewed"]}
+        marks = {}
+        if isinstance(score, (int, float)) and score < HEALTH_LIMIT:
+            marks["score"] = "warn"
+        if level != "ok":
+            marks["state"] = level
+        if marks:
+            row["marks"] = marks
+        if product:
+            row["product"] = product
+        rows.append(row)
+    scored = [r for r in rows if isinstance(r["score"], (int, float))]
+    low = min(scored, key=lambda r: r["score"]) if scored else None
+    t = APP_TITLES.get(lang, APP_TITLES["en"])
+    cols = [{"key": "journey", "title": t[0]},
+            {"key": "score", "title": t[1], "kind": "meter", "scale": 100, "limit": HEALTH_LIMIT, "sub": "score_text"},
+            {"key": "delta", "title": t[2], "kind": "num"}, {"key": "state", "title": t[3]}]
+    return {"columns": cols, "rows": rows,
+            "weakest": {"title": low["journey"], "map": low["map"], "score": low["score"]} if low else None}
+
+
+def app_lead(port, lang, label=""):
+    """The portfolio in one or two sentences — how many journeys, how many need attention, the weakest — for a `lead`
+    block; the product's label first when it is given (two products share one introduction) — from the products file."""
+    W = APP_WORDS.get(lang, APP_WORDS["en"])
+    rows = port["rows"]
+    head = (W["of"] % label) if label else ""
+    if not rows:
+        return {"text": head + W["no_maps"]}
+    need = sum(1 for r in rows if r["attention"] != "ok")
+    if len(rows) > 1:
+        text = "%s, %s." % (_plural(len(rows), W["maps"]) % len(rows), _plural(need, W["need"]) % need if need else W["need_none"])
+    else:
+        text = W["lead_one"] % (W["lead_some"] if need else W["lead_none"])
+    w = port["weakest"]
+    if w and len(rows) > 1:
+        text += " " + W["weakest"] % (w["title"], w["score"])
+    return {"text": head + text}
+
+
+def app_changes(p, lang, product=""):
+    """What changed, for a `list` block beside the table: each map whose health moved since its previous point or that
+    needs attention — its name, the change, the level of its attention. None when nothing did."""
+    W = APP_WORDS.get(lang, APP_WORDS["en"])
+    items = []
+    for m in p["maps"]:
+        d = _signed(m["health"]["delta"])
+        reasons = [a["reason"] for a in m["attention"]]
+        if (not d or d == "0") and not reasons:
+            continue
+        level = "crit" if "critical_anomaly" in reasons else "warn" if reasons else "ok"
+        words = [W["change"] % d] if d and d != "0" else []
+        rest = dict(m, attention=[a for a in m["attention"] if not (words and a["reason"] == "health_drop")])
+        if rest["attention"]:
+            words.append(_state(rest, lang))
+        item = {"title": "«%s»: %s" % (m["journey"], ", ".join(words)), "attention": level}
+        if product:
+            item["product"] = product
+        items.append(item)
+    return {"items": items} if items else None
+
+
+def _value(v):
+    """(number or None, unit) of a snapshot's value such as "43.5%"."""
+    m = VALUE.match(str(v if v is not None else ""))
+    if not m:
+        return None, ""
+    f = float(m.group(1).replace(",", "."))
+    return (int(f) if f.is_integer() else f), m.group(2)
+
+
+def app_funnel(folder, product):
+    """The newest funnel-level health-check snapshot of the product (one without `map:`) as a `chart` block's data:
+    {stages: [{id, title, value, baseline, unit}], date, score} — None when there is none."""
+    if not folder or not os.path.isdir(folder):
+        return None
+    best = None
+    for n in sorted(os.listdir(folder)):
+        if not n.endswith(".md"):
+            continue
+        s, _ = jm.inspect_snapshot(os.path.join(folder, n))
+        if s is None or s["map"] or not s["product"] or not jm._same_product(s["product"], product) or jm.day(s["date"]) is None:
+            continue
+        if best is None or (s["date"], n) > (best["date"], best["name"]):
+            best = s
+    if best is None:
+        return None
+    stages = []
+    for st in best["stages"]:
+        value, unit = _value(st.get("value"))
+        base, bunit = _value(st.get("baseline"))
+        stages.append({"id": plain(st.get("id")), "title": plain(st.get("metric")), "value": value, "baseline": base,
+                       "unit": unit or bunit})
+    return {"stages": stages, "date": best["date"], "score": best["score"]}
+
+
+def label_of(path, product):
+    """The product's label from the products file of `app_shell.py snapshot --products` — a JSON list of {id, label,
+    color?}. A label comes from the user's context, so it travels as a file, never as a command-line value
+    (search-protocol §3a). "" without a file or without that product in it."""
+    if not path:
+        return ""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = json.load(fh)
+    except (OSError, ValueError) as e:
+        raise Bad("products: the file does not read (%s)" % (getattr(e, "strerror", None) or type(e).__name__))
+    if not isinstance(raw, list):
+        raise Bad("products: the file must be a list [{id, label, color?}]")
+    for x in raw:
+        if isinstance(x, dict) and x.get("id") == product and isinstance(x.get("label"), str):
+            return plain(x["label"])[:80]
+    return ""
+
+
+def cmd_app_data(args):
+    p, today = _portfolio(args)
+    port = app_portfolio(p, args.lang, args.product)
+    lead = app_lead(port, args.lang, label_of(args.products, args.product))
+    changes = app_changes(p, args.lang, args.product)
+    funnel = app_funnel(args.snapshots, args.product)
+    try:
+        os.makedirs(args.out_dir, exist_ok=True)
+        for name, data in (("portfolio.json", port), ("portfolio-lead.json", lead), ("portfolio-changes.json", changes),
+                           ("funnel.json", funnel)):
+            if data is None:
+                continue
+            with open(os.path.join(args.out_dir, name), "w", encoding="utf-8", newline="") as fh:
+                json.dump(data, fh, ensure_ascii=False)
+    except OSError as e:
+        result(ok=False, error="the data cannot be written: %s" % (e.strerror or type(e).__name__))
+        return 1
+    result(ok=True, out_dir=args.out_dir, maps=len(port["rows"]), funnel=funnel is not None, weakest=port["weakest"])
+    return 0
+
+
 def cmd_schema(args):
-    result(ok=True, commands=list(COMMANDS), columns=[list(c) for c in COLUMNS], attention=[list(a) for a in ATTENTION],
+    result(ok=True, commands=list(COMMANDS), app_commands=list(APP_COMMANDS), columns=[list(c) for c in COLUMNS], attention=[list(a) for a in ATTENTION],
            drop=DROP, cjm_fields=list(CJM_FIELDS), cjm_findings=list(CJM_FINDINGS), skips=[list(s) for s in SKIPS],
            errors=check_protocol(os.path.dirname(HERE)))
     return 0
@@ -738,7 +939,7 @@ def cmd_schema(args):
 def build_parser():
     ap = argparse.ArgumentParser(prog="journey_portfolio.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd")
-    for name in ("list", "render-html"):
+    for name in ("list", "render-html", "app-data"):
         p = sub.add_parser(name)
         p.add_argument("--product", required=True, help="the product of the portfolio — another product's note is left out")
         p.add_argument("--note", action="extend", nargs="+", default=[], help="a journey map or a hand CJM note — its type decides")
@@ -748,6 +949,10 @@ def build_parser():
         p.add_argument("--lang", default="en", choices=sorted(LABELS))
         if name == "render-html":
             p.add_argument("--out", required=True, help="CJM/journeys/<product>/portfolio.html")
+        if name == "app-data":
+            p.add_argument("--out-dir", required=True, help="a scratch folder: portfolio.json, portfolio-lead.json, "
+                           "portfolio-changes.json and funnel.json for app_shell.py snapshot")
+            p.add_argument("--products", help="the products file of app_shell.py snapshot: the product's label opens the lead")
     sub.add_parser("schema")
     return ap, sub
 
@@ -768,10 +973,10 @@ def main(argv=None):
             return 0
         result(ok=False, error="wrong arguments — see journey_portfolio.py <command> --help")
         return 2
-    fn = {"list": cmd_list, "render-html": cmd_render, "schema": cmd_schema}.get(args.cmd)
+    fn = {"list": cmd_list, "render-html": cmd_render, "app-data": cmd_app_data, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
-        result(ok=False, error="a command is needed: %s" % "|".join(COMMANDS))
+        result(ok=False, error="a command is needed: %s" % "|".join(COMMANDS + APP_COMMANDS))
         return 2
     try:
         return fn(args)

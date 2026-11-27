@@ -2,13 +2,15 @@
 
 # Grow Product Manager
 
-**Version:** 4.12.5
+**Version:** 4.13.0
 
 AI assistant plugin for Product Managers. Integrates with Jira, Confluence, Figma, Tableau, and other tools to streamline product management workflows. Includes a Design Bridge that turns concepts, requirements, research, and hypotheses into brand-themed decks, prototypes, and handoffs with WCAG 2.1 AA a11y gates. All brand specifics (Design System, fonts, tokens, pptx templates) are read from your own `local-context.md` — the plugin ships no hardcoded brand assets.
 
 ---
 
 ## Overview
+
+**New in v4.13.0** — **«Застосунки»: a page the plugin published becomes an app you install from the Claude desktop app** (the vendor's launch article, https://claude.com/resources/articles/install-as-app, offers the install for Mac and Windows; measured on macOS only, Windows not measured yet) (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). The first app is «CJM»: the portfolio of your journey maps, the maps themselves, the funnel and your team's edits in one window with its own icon, title and menu — a side rail with the modules, a portfolio that opens with one sentence and a health meter per journey, and the map with each stage's target in words and the source under every piece of evidence. The page shows a button «Встановити як застосунок»; you press it, nobody installs anything for you. Inside the window: a badge on the icon with the team's edits not yet taken into the note, a menu-bar item with the weakest journey, notifications for a new team edit or a funnel stage that has got worse past its threshold since it was last seen on this computer, and the product's own colours, light or dark, picked from your design system with a contrast check. The numbers live in the artifact's database, so a new snapshot updates the app **without a new version of the page** and the permissions are not asked again; every snapshot is a publication, with its one question first, and a scheduled run never writes. Permissions are asked one at a time, only from a button press. Live issue statuses and funnel numbers come through the viewer's own connectors, never polled, and the app says in words when they are not available. The team edits the map inside the app exactly as on the v4.12.0 page. What it does not do yet: no files, no commands, no full access (v4.13.1, after a second security audit), no «Ask Claude» button (not in this release), and no «Open in Claude» item in the menu, because the platform gives a page no call for it. In a browser or on a phone the page works as before. Still to be measured: Windows, and the points of `references/desktop-app-protocol.md` §13. `cjm-research` 0.21.0 (step J4a), `release-manager` 0.5.4 (the `SHELL_VERSION` guard, P11; the agent runs the release machine's checks). New: `references/desktop-app-protocol.md`, `references/app-profiles.yaml`, `scripts/app_shell.py` with `scripts/app_shell/`, `journey_map.py app-data`, `journey_portfolio.py app-data`, `publications.py record --app`, lint check 35. New tests `testing/app_shell_test.py` and `testing/journey_app_data_test.py`.
 
 **New in v4.12.5** — **The history says the auto-trust is gone** (33 skills, 3 agents, 7 commands, 12 connectors, 5 hooks). The audit's rescan of 2026-11-27 read the v4.9.1 entry of the changelog about the first run's automatic trust as what the plugin does now. Each history line that describes it now says it was withdrawn in v4.12.4, and a lint check keeps it so. The plugin's behaviour does not change.
 
@@ -252,7 +254,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ## Skills
 
-### 1. CJM Research (v0.20.1)
+### 1. CJM Research (v0.21.0)
 
 **Description:** Customer Journey Map (CJM) pipeline orchestrator with 6 specialized modes for analyzing customer experiences and identifying growth opportunities.
 
@@ -262,7 +264,7 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 - **Full** — Complete CJM analysis with all data points and insights
 - **Health-Check** — Assess overall funnel health and drop-off zones
 - **Comparison** — Compare customer journeys across platforms or segments
-- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`); since v0.20.0 editing on the page — the switch «Редагувати» on every page of the map, the edits handed over as a file or a copied text and taken through the board's preview (`journey-protocol.md` §9, §12, `journey_map.py page-diff`)
+- **Journey** (since v0.16.0) — A living journey map: the CJM config's stages × ten lanes (actions, touchpoints, experience, pains, metrics, anomalies, opportunities, solutions, initiatives, experiments), every row with its source and evidence class, an owner and a review date, the health trend from health-check snapshots, the opportunity tree of a stage as Mermaid; the vault note is the truth, its dashboard is published only after the question, and the scheduled health-check refreshes the map's numbers locally (`references/journey-protocol.md`, `scripts/journey_map.py`); since v0.18.0 the journey portfolio — every journey map of the product and its hand CJM notes in one list, the ones that need attention first, a page of numbers beside the maps (`journey-protocol.md` §13, `scripts/journey_portfolio.py`); since v0.19.0 nested maps — a step opens a child map (up to three levels), its roll-up on the parent's step without a copy of a row, the whole tree on the root's page and board, a child's own publication beside it, edits from both boards in one preview (`journey-protocol.md` §14, `journey_map.py nest`); since v0.20.0 editing on the page — the switch «Редагувати» on every page of the map, the edits handed over as a file or a copied text and taken through the board's preview (`journey-protocol.md` §9, §12, `journey_map.py page-diff`); since v0.21.0 the desktop app — the portfolio, the maps, the funnel and the team's edits in one installable window (`desktop-app-protocol.md`, `scripts/app_shell.py`)
 
 **Delegates to:** Product Analysis, Knowledge Library, Product Research, Brainstorm Features
 
@@ -561,13 +563,13 @@ The plugin is used by more than IC Product Managers. A **role changes defaults, 
 
 ---
 
-### 19. Release Manager (v0.5.2) — NEW in v1.28.0
+### 19. Release Manager (v0.5.4) — NEW in v1.28.0
 
 **Description:** Releases the plugin repository itself — one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Every irreversible step (commit, push, merge, publish) is user-gated.
 
 **Pipeline:** pre-flight guards (iCloud materialization, stale locks, clean tree) → scope & semver decision → bump in the 4 mandatory places (plugin.json, marketplace.json, README, CHANGELOG) → the registry copy rebuilt from the index, when the repo publishes one for a registry that syncs a subfolder → local `validate-consistency.sh` run → gated commit/push → PR → merge → GitHub Release with tag → mirror sync → post-release verification with the reach check (`testing/release_reach.py`: every mirror, and the copies installed on the machine), optional Confluence changelog update, vault release record, and what a session could not do written out as «Left to do on the release machine».
 
-**Built-in pitfall guide:** `skills/release-manager/references/release-pitfalls.md` — ten real failure modes with guards and recovery recipes (P1 iCloud-evicted git objects, P4 token without workflow scope, P6 diverged protected mirror, P7 stale raw CDN, and more).
+**Built-in pitfall guide:** `skills/release-manager/references/release-pitfalls.md` — eleven real failure modes with guards and recovery recipes (P1 iCloud-evicted git objects, P4 token without workflow scope, P6 diverged protected mirror, P7 stale raw CDN, P11 a shell change without a new `SHELL_VERSION`, and more).
 
 **Generic by design:** works for any Claude plugin repo; org specifics (mirrors, VPN hosts, Confluence page) come from `local-context.md` → `plugin_release`.
 
@@ -697,7 +699,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 
 | Skill | Version | Description |
 |-------|---------|-------------|
-| CJM Research | v0.20.1 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio, nested maps and editing on its page |
+| CJM Research | v0.21.0 | Customer Journey Map analysis and hypothesis validation; the journey map with evidence lanes, its board, the journey portfolio, nested maps, editing on its page and the desktop app |
 | Product Analysis | v0.19.1 | Analyze metrics, dashboards, and A/B test results |
 | Product Research | v0.17.1 | Competitive analysis, user research, market trends, UX benchmarking |
 | Brainstorm Features | v0.15.3 | Interactive feature ideation with ICE scoring + Debate mode (role-based adversarial discussion) |
@@ -717,7 +719,7 @@ The second contour of the plugin: **manager → people → goals → communicati
 | Project Planning | v0.7.0 | Multi-quarter delivery forecast: scope, dependencies, critical path, rolling-reforecast; a story map's slices as milestones |
 | Quarterly Planning | v0.8.2 | Quarterly roadmap with capacity gate and plan-vs-actual retro |
 | Sprint Planning | v0.6.4 | Sprint pre-planning: readiness, sequence violations, carryover risk, assignees |
-| Release Manager | v0.5.2 | Release the plugin repo: bump → validate → PR → Release → mirror sync → reach check, with pitfall guards |
+| Release Manager | v0.5.4 | Release the plugin repo: bump → validate → PR → Release → mirror sync → reach check, with pitfall guards |
 | Focus Advisor | v0.11.1 | PM attention dispatcher: daily / tactical / strategic focus briefs + live Focus Board; signals from calendar, mail, meetings, Jira, roadmap, goals; chains to executing skills |
 | Experiment Tracker | v0.6.3 | Experiment lifecycle registry: proposed → running → readout → decided, stale reminders, chains to product-analysis and decision-log |
 | Decision Log | v0.5.3 | ADR-style product decision records in vault Decisions/: log, search ("why did we…"), supersede |
@@ -1150,5 +1152,5 @@ The Grow Product Manager plugin integrates with:
 For questions, issues, or feature requests, please refer to the plugin documentation or contact the plugin author.
 
 **Plugin Author:** Andrii Siletskyi  
-**Version:** 4.12.5  
+**Version:** 4.13.0  
 **Last Updated:** November 2026

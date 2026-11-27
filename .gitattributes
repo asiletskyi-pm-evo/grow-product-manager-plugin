@@ -1,3 +1,9 @@
 # The registry copy is generated (testing/registry_copy.py): collapsed in diffs.
 # Never mark it export-ignore — a registry downloads an archive of that folder.
 .ai-registry/** linguist-generated=true
+
+# The inputs of the shell's pin test (testing/app_shell_test.py group 25): their bytes are hashed, so never CRLF.
+scripts/app_shell/* text eol=lf
+scripts/app_shell.py text eol=lf
+scripts/journey_map.py text eol=lf
+references/app-profiles.yaml text eol=lf

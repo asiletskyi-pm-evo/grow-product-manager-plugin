@@ -1,0 +1,4 @@
+{"product": "zorg-pay",
+ "light": {"bg": "#f3f7f6", "surface": "#ffffff", "text": "#14201e", "muted": "#51615e", "accent": "#0f766e", "border": "#cfdcd9", "ok": "#2b7a3d", "warn": "#9a5b00", "crit": "#b42318"},
+ "dark": {"bg": "#0f1a19", "surface": "#162423", "text": "#e6f0ee", "muted": "#9db3af", "accent": "#3fc1b3", "border": "#2a3f3c", "ok": "#5cc477", "warn": "#e0a53a", "crit": "#f4806f"},
+ "font": "Manrope", "radius": 12}

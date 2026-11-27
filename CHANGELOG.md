@@ -12,6 +12,77 @@ When a skill changes, its version is bumped independently. The plugin version is
 
 ---
 
+## v4.13.0 «Застосунки» (2026-11-26)
+
+**A page the plugin published becomes an app you install from the Claude desktop app.** The vendor's launch article (https://claude.com/resources/articles/install-as-app) offers the install for Mac and Windows; this release was measured on macOS only (Claude desktop app 8.9912.0, 2026-11-26), Windows has not been measured yet. Until now a published page — the journey map, the portfolio, the funnel — was a page in a browser tab. Now the plugin can wrap it in a small shell: the page gets a button «Встановити як застосунок», and what you install is a window of its own with an icon, a title and a menu. The first app is «CJM»: the portfolio of your journey maps, the maps, the funnel and your team's edits in one place. The plugin installs nothing for anyone — the person presses the button.
+
+### What the app can do
+
+- **Its own window.** A title and an icon, an application menu with the modules and the switch «Редагувати», light and dark themes with a three-state switch (system, light, dark).
+- **Your product's look.** The theme is built from the colours of your design system, 2–3 candidates offered in one question; a colour pair that is too weak to read is named with its replacement and never shipped. Several products in one app: a switch between them, each with its label and colour.
+- **Modules.** The shell has ten kinds of block — a table, a list, a number, a chart, a feed, a journey map and, from shell 2, a lead sentence, bars, a line over time and a day strip — and the app is made of modules that use them; a table cell can hold a meter or a bar of parts. The owner can turn a module off, reorder them or add their own in `config/app`; the page reads that file as someone else's input.
+- **The CJM app's look (shell 2).** A side rail with the logo, the product switch, the modules with what needs attention and one «Дані від …» line at its foot. The portfolio opens with one sentence (how many journeys, how many need attention, the weakest), a table with the health on a meter and the state in words, and «Що змінилось» beside it. The funnel says each stage's change against its base. Built from the canvas the maintainer approved on 2026-11-27.
+- **The journey map inside the app.** The same rows and the same switch «Редагувати» with the same shared edits of the team as on the v4.12.0 page, drawn the canvas's way: the journey's name and its state in a sentence, each stage with «Стадія N» and its target in words («Від 45% переходять на стадію «Пошук»»), a stage without evidence marked in its header, the lanes under three bands, the text plain with its source and evidence class under it («… · побачено в продукті»), the editing bar and its marks in the theme's colours. A map is picked from a list when there are several. The edits are still a draft: they reach the note only through its preview, as before.
+- **A badge, a menu-bar item and notifications.** The badge on the icon counts the team's edits not yet taken into the note; the menu-bar (tray) item names the weakest journey; a notification comes for a new team edit and for a funnel stage that has got worse, past the threshold below its baseline, since it was last seen on this computer (never on first sight). A notification never carries a person's name.
+- **Permissions one at a time.** The panel «Дозволи» asks for each permission only when you press its button, each with a 30 second wait, never on load and never several in one call (three in one call hung the app when measured). A permission you did not grant leaves its feature off silently.
+- **Live numbers from your own connectors.** Issue statuses and the funnel's numbers are read through the connectors of the person who opens the app, once when the data arrives and again on «Оновити» — never polled. The app's own numbers stay as the base with their date, and a missing connector is said in words. The funnel's live numbers belong to one product: the binding names it, or the app has one funnel only — they are never painted on another product's chart.
+- **Updates without a new version.** The numbers live in the artifact's database, in a snapshot, so a new snapshot updates the app and the permissions are not asked again. A new version of the page is published only when the shell or the profile changed, and then the person is told first that the permissions they allowed will be asked again (a «Don't allow» stays for every version). The snapshot's index decides what the app shows: every update of the CJM app is a full one (`snapshot --full`), so a map renamed, removed or grown too large for the database leaves the index and the app at once, and the update deletes its old document — the question before the write names it.
+- **A browser or a phone.** Where the platform cannot install, the page works as in v4.12.0; every part of the shell that is absent or refused switches itself off with no error.
+
+Every snapshot is a publication: one question before every write into the database, and a scheduled run never writes to it. The database's rules let everyone who may view the page read the snapshot, the settings and the log, and only the owner write them — a colleague who may edit the page can write edits, never the numbers.
+
+### What it does not do yet
+
+- **No files, no commands, no full access.** An app that reads a folder or runs the plugin's commands on your computer arrives in v4.13.1, after a second security audit. A profile that asks for it is refused with «arrives in v4.13.1».
+- **No «Ask Claude» button** — not in this release.
+- **No «Open in Claude» item in the menu.** The platform gives a page no call for it, so the shell has no such action and a profile that names one is refused by `check`.
+- **PM OS** is a placeholder profile with no screens. Its modules and sources belong to its own protocol and release; this release gives it the shell, the blocks, the theme, the products, `config/app`, `runs` and the rules.
+
+### Still to be measured on a real computer
+
+**Windows has not been measured at all** — the install, the permissions, the tray item and the notifications there are still to be shown. What the host's probe page showed on 2026-11-26 on macOS (install, permissions, notifications, the menu-bar item, the badge, a database read) is in `references/native-surfaces.md` §7. The acceptance run on the maintainer's computer still has to show, with fictional Zorg data and, for one real product, only in its owner's account: the editing script of the map under the published page's real content-security policy; the theme's fonts on a real network; the first snapshot read by the installed app; a real connector binding; the icon after a reinstall; the permissions asked one by one; a snapshot update without a new version and without the permissions asked again; a colleague who edits the page cannot write the snapshot. Until it has run, the cases are `_pending_` in `testing/test-cases.md`.
+
+### Added
+
+- **`references/desktop-app-protocol.md`** — the shared protocol: the three levels (page, app, full access later), profiles, the one question before the first build, build and publish, the data channel and its rules, connectors as data, permissions, updating, a map too large for one database document, what never happens.
+- **`references/app-profiles.yaml`** and **`scripts/app_shell.py`** — the profiles `cjm` and `pm-os` with placeholders only, and the script: `schema`, `check` (a profile or an owner's `config/app`), `wrap`, `theme`, `snapshot` (the products as a file, `--products FILE`, so a label from your context never reaches a command line). `SHELL_VERSION` is 2: the first shell was never released, and the rail layout and the chart blocks of PM OS's shell 2 come in this release. The script never reads `local-context.md` and never writes into the plugin's files.
+- **`scripts/app_shell/`** — the shell's own files, embedded byte for byte into a wrapped page: `shell.js`, `blocks.js`, `charts.js`, `map.js`, `desk.js`, `live.js`, `shell.css`; **`assets/app-icon.png`** — the plugin's logo as the app's icon.
+- **`journey_map.py app-data`** and **`journey_portfolio.py app-data`** — a map and the portfolio as the data of one section of the snapshot; a map too large for one database document stays out and is named. The map's data carries the app's words (each stage's target as a sentence, each row's source line, the bands, the classes used); the portfolio's comes with `portfolio-lead.json` and `portfolio-changes.json`, and `--products FILE` (the same products file as `snapshot`) puts the product's label first in the lead.
+- **`publications.py record --app PROFILE:SHELL[:PERM,PERM]`** — the publication record remembers that a place is an app, with its profile, shell number and permissions; `find` returns them, so the skill sees what changed.
+- **Lint check 35 `app-template`** — the profiles and every file of the shell hold no value of a user: no link but Google Fonts, no e-mail, no artifact link, no UUID, no tracker key outside a `<placeholder>`, and none of the words of the optional org denylist. The shell's files join lint checks 9 and 16–18. Seeds for it in `testing/seeded_leak_test.py` (46/46 caught in all).
+- **Tests** — `testing/app_shell_test.py` (446 checks, with a browser pass of the shell on a fake `window.claude`), `testing/journey_app_data_test.py` (66), and a new group in `testing/publications_test.py` (111 in all). Fictional Zorg and `zorg-pay` fixtures in `testing/fixtures/app/`.
+- **A release guard** — `release-manager` pitfall P11 and a line in Step 3: a release that changes the shell's files, the `wrap` function, the map's editing code that `wrap` embeds or a profile's modules or menu raises `SHELL_VERSION` (and the profiles file's `version` with it); otherwise a published app is never offered its new page. A pin test in `testing/app_shell_test.py` keeps the hash of shell 1's bytes per profile and language and goes red on any such change.
+- **`docs/superpowers/specs/2026-11-26-desktop-apps-design.md`** and its Ukrainian twin — the design this release follows.
+
+### Changed
+
+- **`cjm-research` 0.21.0** — step J4a, the app: after a journey map's page one offer to build the app «CJM», the one question before the first build, everything local first, then one question and the writes. The mode table, the Step J header and the trigger note carry the new version. The description and `## Routing` are unchanged.
+- **`release-manager` 0.5.4** — the `SHELL_VERSION` guard (Step 3, pitfall P11); «the user decides, the agent runs»: a check that needs the release machine (leak scan, `host-smoke.sh`, `release_reach.py`, the mirror push) is run by the agent through what reaches that machine, never handed to the user as a command; the user keeps the yes and the host permission prompts. The description and `## Routing` are unchanged.
+- **`references/artifact-publishing.md`** — an app as a place and the `app` field of the record; **`references/journey-protocol.md`** — the two `app-data` commands; **`references/native-surfaces.md`** — what the probe measured; **`references/vault-schema.md`** — the record's field.
+
+### Files
+
+| File | Change |
+|---|---|
+| `references/desktop-app-protocol.md`, `references/app-profiles.yaml` | new |
+| `scripts/app_shell.py`, `scripts/app_shell/*`, `assets/app-icon.png` | new — the script, the shell's seven files and the app's icon |
+| `scripts/journey_map.py`, `scripts/journey_portfolio.py` | `app-data` |
+| `scripts/publications.py` | `record --app` |
+| `skills/cjm-research/SKILL.md` | 0.21.0 — step J4a |
+| `skills/release-manager/SKILL.md`, `skills/release-manager/references/release-pitfalls.md` | 0.5.4 — P11, the agent runs the release machine's checks |
+| `references/artifact-publishing.md`, `references/journey-protocol.md`, `references/native-surfaces.md`, `references/vault-schema.md` | the app in each |
+| `testing/app_shell_test.py`, `testing/journey_app_data_test.py`, `testing/publications_test.py`, `testing/fixtures/app/*` | new tests and fixtures |
+| `testing/skill_lint.py`, `testing/seeded_leak_test.py` | check 35 and its seeds |
+| `testing/Testing-process.md`, `testing/test-cases.md` | the new tests, the shell-version rule, the acceptance cases |
+| `docs/superpowers/specs/2026-11-26-desktop-apps-design.md`, `….uk.md` | the design |
+| `README.md`, `.claude-plugin/*.json`, `.codex-plugin/plugin.json`, `.ai-registry/` | «New in v4.13.0», the version, the registry copy |
+
+### Backwards compatibility
+
+No page that exists changes: a page without the shell is published, edited and read exactly as in v4.12.0, and the `edits` collection keeps its format. The app is an offer after a map's page, made only when the product has a map and never without the one question. The publication record gains an optional field; a record without it reads as before. Nothing in a user's `local-context.md`, vault or notes changes, and a scheduled run still publishes and writes nothing.
+
+---
+
 ## v4.12.5 (2026-11-27)
 
 **The history says the auto-trust is gone.** The company audit rescanned the registry copy on 2026-11-27 at commit f780296 — v4.12.3, before v4.12.4 reached it — and kept one HIGH finding, «automatic trust of provider registrations», citing the v4.9.1 entry of this changelog about the first run's automatic trust (withdrawn in v4.12.4). The audit read the history as the plugin's behaviour; the code was fixed in v4.12.4, but the old text still stood unmarked in this file and in README.

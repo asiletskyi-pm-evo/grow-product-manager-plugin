@@ -1,0 +1,4 @@
+{"items": [
+  {"title": "Refund takes too long", "note": "Median 6 days", "product": "zorg", "attention": "warn"},
+  {"title": "Card payment drops", "note": "Since the last release", "product": "zorg-pay", "attention": "crit"},
+  {"title": "First order is stable", "attention": "ok"}]}

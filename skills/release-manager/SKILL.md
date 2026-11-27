@@ -1,6 +1,6 @@
 ---
 name: release-manager
-version: 0.5.2
+version: 0.5.4
 description: Release the plugin repository itself — version bump, CHANGELOG, validation, PR, GitHub Release, mirror sync. Not product feature releases in Jira (product-reporter / sprint-planning). UA — «зарелізь плагін», «підготуй реліз v…». EN — "release the plugin", "ship vX.Y.Z".
 ---
 
@@ -9,6 +9,8 @@ description: Release the plugin repository itself — version bump, CHANGELOG, v
 > **Path rule.** A bare `references/<file>.md` in this file is read from this skill's own `references/` if the file exists there, otherwise from the **shared** `references/` at the plugin root. Resolve the root as `${PLUGIN_ROOT}`, else `${CLAUDE_PLUGIN_ROOT}`, else the directory that contains `skills/`, found by walking up from this folder (`references/host-profiles.md` §6). Never continue without a protocol named here.
 
 Releases the plugin repository itself: one guided pipeline from "changes are ready" to "both remotes tagged, Release published, docs consistent". Built from the real v1.26.1–v1.27.0 release experience — every known pitfall has a guard. **The user stays in the loop:** every irreversible step (commit, push, merge, publish) is gated.
+
+**The user decides; the agent runs** (since v4.13.0). A check that needs the release machine — the leak scan with its local denylist, `host-smoke.sh`, `release_reach.py`, the mirror push of Step 7 — is run by the agent on that machine, through whatever reaches it in this session (a Remote Control session, a device shell, a sibling session that has one). It is never handed to the user as a command to type. Only two things stay with the user: the yes to an irreversible step, and what needs their own eyes or their own approval of a host permission prompt — the agent never approves those for them. When nothing in this session reaches the release machine, the step is owed (Step 8.6) and written as a step the agent will run once it can reach the machine, not as a task for the user.
 
 Generic by design: works for any Claude plugin repo with `.claude-plugin/` manifests + CHANGELOG + README. Org-specific details (mirrors, VPN hosts, Confluence changelog page) come from `local-context.md`, never hardcoded.
 
@@ -52,6 +54,8 @@ Per `local-context-protocol.md`. Load `plugin_release` config; if absent, collec
 6. **Registry copy** — only when the repo has `testing/registry_copy.py`. A registry that syncs a subfolder (`.ai-registry/skills/<name>/`) never reads the root, so that folder is a generated copy. Last, once every file above is final: stage the release's files (`git add <explicit list>`), then run `python3 testing/registry_copy.py`. It rebuilds the copy from the index — unstaged work in progress never reaches it — and derives the Cursor manifest from plugin.json. Never edit the copy by hand; a file fixed after this point means staging and rebuilding again. Validator check 22 fails while the copy's version lags plugin.json. The marketplace entry installs from this copy (since v4.1.1: a host that imports the whole repository refuses a tree with a second plugin manifest), so the copy is what every user gets, and host-smoke's Codex leg installs it.
 
 This pipeline is also reachable as `/grow-product-manager:release [patch|minor|major]` — the command pre-answers Step 2's classification and changes nothing else.
+
+**A release that changes the shell of a published app** (since v4.13.0, pitfall P11) — a file under `scripts/app_shell/`, the `wrap` function of `scripts/app_shell.py`, `EDIT`, `CSS_EDIT` or the edit bar of `scripts/journey_map.py` (embedded by `wrap`), or a profile's modules or menu in `references/app-profiles.yaml` — also raises `SHELL_VERSION` in `scripts/app_shell.py` together with the `version` of `references/app-profiles.yaml`; the validator cannot see the omission, the pin test in `testing/app_shell_test.py` does (P11).
 
 Skill frontmatter versions are normally bumped in the feature PRs themselves; verify they match the CHANGELOG claims.
 
@@ -106,7 +110,7 @@ With a registry copy, the mirror push is what a registry's sync bot reads: it op
 ## Quality Standards
 - Version is read and written only via the structured `"version"` fields; a manifest description never carries a version (since v3.20.0).
 - Explicit `git add` file lists; never `-A` (protects unrelated WIP).
-- Every push/merge/publish — user-gated; Claude prepares, the user (or their browser session) executes.
+- Every push/merge/publish — user-gated: Claude prepares it, asks once, and on the user's yes runs it itself wherever this session can reach; the user types a command only when nothing here can.
 - Force push is never used on protected branches; mirror divergence is resolved by merge, not history rewrite.
 - All numbers and versions in the CHANGELOG entry must match frontmatter reality — the validator is the referee.
 

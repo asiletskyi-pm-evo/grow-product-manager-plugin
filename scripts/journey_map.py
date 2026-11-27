@@ -18,6 +18,8 @@
   nest         the nesting (v4.10.0): the map's subtree of child maps by their `parent` links, each child's roll-up
                (pains by class, anomalies, outcome metric, last health point) — never a copy of a row — and the
                findings of the nesting; nothing written
+  app-data     the map as the data of one section of an app's snapshot (v4.13.0): the rows, cells and attributes its
+               page shows, its health and its child maps — what the app's map.js draws and EDIT edits; no person
   schema       the fields, columns, lanes, levels, findings, board roles and commands the protocol must agree with
                (checks 28 and 29)
 
@@ -63,7 +65,7 @@ FINDINGS = ("no_owner", "stale_review", "no_outcome", "empty_stage", "undeclared
             "pain_no_action", "few_solutions", "stale_metric", "duplicate_id", "link", "secret", "contact")
 MODEL_FINDINGS = ("opportunity_no_story", "two_pains", "person_name")
 COMMANDS = ("parse", "check", "render-html", "health", "refresh", "tree", "board-layout", "board-state", "board-diff",
-            "board-take", "page-diff", "nest", "schema")
+            "board-take", "page-diff", "nest", "app-data", "schema")
 NEST_FINDINGS = ("orphan_child", "nest_cycle", "too_deep", "other_product_parent", "self_parent")
 ORPHAN_WHY = ("no_parent", "bad_parent", "no_stage", "no_stage_in_parent", "no_step")       # why a child hangs on nothing (§14)
 MAX_DEPTH = 3                                    # root → child → grandchild (R38); deeper is a reference by name only
@@ -2689,6 +2691,181 @@ def cmd_render(args):
     return 0
 
 
+# ------------------------------------------------------------------ the map inside the app (v4.13.0)
+# An installed app (app_shell.py) takes the map from its artifact's database, and its page code (app_shell/map.js) draws
+# it from this data: the same rows, the same cells and the same attributes `_grid` writes for EDIT (§9) — so EDIT goes
+# into the app unchanged. Only what the page shows (page_worthy, page-safe texts, the page's own words) and no person.
+APP_DATA_VERSION = 1
+APP_DATA_MAX = 256 * 1024 - 1024        # one map's data: a database document holds 256 KiB, its own fields the last KiB
+
+
+def app_section(note_name):
+    """The snapshot section of a map: `map.<slug>` — the note's name without `journey-` and `.md`, lower case, only
+    [a-z0-9.-], at most 64 characters in all (app_shell.py's SECTION); a name with none of them left is named by a
+    digest of it."""
+    import hashlib
+    stem = unicodedata.normalize("NFC", os.path.splitext(os.path.basename(note_name))[0])
+    s = re.sub(r"^journey-", "", stem.lower())
+    s = re.sub(r"-{2,}", "-", re.sub(r"[^a-z0-9.-]+", "-", s)).strip("-.")[:60].strip("-.")
+    if not s:
+        s = "m" + hashlib.sha256(stem.encode("utf-8")).hexdigest()[:8]
+    return "map." + s
+
+
+# The app's own words for the map (v4.13.0): the bands over the lanes, the evidence classes said plainly with what each
+# means, the line on a lane only the data fills, a stage's target as a sentence. The page keeps its own words (LABELS).
+APP_LABELS = {
+    "uk": {"bands": ["Шлях покупця", "Докази", "Що робимо"], "locked": "лише з даних",
+           "classes": {"measured": ("виміряно", "з аналітики"), "observed": ("побачено в продукті", "у прогоні продукту"),
+                       "reported": ("зі слів покупців", "з відгуків та інтервʼю"), "external": ("з ринку", "із зовнішніх джерел"),
+                       "simulated": ("змодельовано", "з моделі, не з живих даних"), "assumed": ("припущення", "ще без доказів")},
+           "goal": "Від %s%% переходять на стадію «%s»", "goal_last": "Від %s%% доходять до «%s»", "goal_raw": "Ціль: %s"},
+    "en": {"bands": ["The buyer's path", "Evidence", "What we do"], "locked": "data only",
+           "classes": {"measured": ("measured", "from analytics"), "observed": ("seen in the product", "in a product walkthrough"),
+                       "reported": ("in buyers' words", "from feedback and interviews"), "external": ("from the market", "from outside sources"),
+                       "simulated": ("simulated", "from a model, not live data"), "assumed": ("assumption", "no evidence yet")},
+           "goal": "At least %s%% move on to «%s»", "goal_last": "At least %s%% reach «%s»", "goal_raw": "Target: %s"},
+}
+GOAL = re.compile(r"^\s*([^\s>]+)\s*->\s*([^\s>]+)\s*>=\s*([0-9]+(?:[.,][0-9]+)?)\s*%\s*$")
+
+
+def _app_goal(stages, i, A):
+    """A stage's target as a sentence: «visit -> search >= 45%» → «Від 45% переходять на стадію «Пошук»» (the next stage's
+    name; the last stage names the step it reaches); another target as it is written; none or TBD → ""."""
+    raw = (stages[i]["outcome"] or "").strip()
+    if not raw or "TBD" in raw:
+        return ""
+    m = GOAL.match(raw)
+    if not m:
+        return A["goal_raw"] % nt.safe(raw)
+    if i + 1 < len(stages) and stages[i + 1]["name"]:
+        return A["goal"] % (m.group(3), nt.safe(stages[i + 1]["name"]))
+    return A["goal_last"] % (m.group(3), nt.safe(m.group(2)))
+
+
+def _app_src(r, A):
+    """Under a piece of evidence: its code, its source, its day when the source does not name it, and how it was obtained."""
+    cls = r["class"].strip().lower()
+    src = r["source"].strip()
+    dt = r["date"].strip()
+    if dt and dt not in src and day(dt):
+        src = "%s, %s" % (src, ".".join(reversed(dt.split("-")))) if src else ".".join(reversed(dt.split("-")))
+    code = r["code"].strip()
+    parts = [code if code not in src else "", src, A["classes"][cls][0] if cls in A["classes"] else ""]
+    return nt.safe(" · ".join(x for x in parts if x))
+
+
+def _app_grid(note, name, L):
+    """One grid as data — the rows `_grid` shows with the attributes it writes, each cell's title, the gap marks."""
+    live = [r for r in note["rows"] if not r["gap"]]
+    declared = [s["id"] for s in note["stages"]]
+    worthy = [r for r in live if page_worthy(r, declared)]
+    A = APP_LABELS.get(L["lang"], APP_LABELS["en"])
+    stages = [{"id": nt.safe(s["id"]), "title": nt.safe(s["name"]), "outcome": nt.safe(s["outcome"] or L["no_outcome"]),
+               "goal": _app_goal(note["stages"], i, A),
+               "gap": not any(r["stage"] == s["id"] and evidence(r) for r in worthy),
+               "cells": [nt.safe(cell_title(s["id"], lane, L["lang"])) for lane in LANE_IDS]} for i, s in enumerate(note["stages"])]
+    rows = []
+    for r in worthy:
+        lane = r["lane"]
+        tg = r["target"].strip().lower() in YES and lane == "opportunity"
+        meta = " · ".join(x for x in (r["step"], r["level"] if lane == "metric" else "", r["code"], r["source"],
+                                      r["class"], r["date"], L["target"] if tg else "") if x)
+        rows.append({"id": nt.safe(r["id"]), "stage": nt.safe(r["stage"]), "lane": lane, "text": nt.safe(r["text"]),
+                     "parent": nt.safe(r["parent"]), "code": nt.safe(r["code"].strip()), "target": tg,
+                     "locked": bool(_locked(r) or not r["id"]), "meta": nt.safe(meta), "src": _app_src(r, A)})
+    hidden = len(live) - len(worthy)
+    return {"map": nt.safe(name), "product": nt.safe(note["product"]), "table_sig": table_sig(note)["table"],
+            "stages": stages, "rows": rows, "not_shown": hidden, "not_shown_text": L["not_shown"] % hidden if hidden else ""}
+
+
+def _app_tree(nest, lang):
+    """The child maps as data, as `_tree_parts` draws them: each child's grid, chip and summary, its own children nested,
+    the first level past MAX_DEPTH as references by name — never its owner."""
+    L, T, NL = LABELS.get(lang, LABELS["en"]), TREE_LABELS.get(lang, TREE_LABELS["en"]), NEST_LABELS.get(lang, NEST_LABELS["en"])
+    maps = nest["maps"]
+
+    def parts(n):
+        kids, refs = [], []
+        for k in n["children"]:
+            kn = maps[k["note"]]
+            step = (" · %s «%s»" % (NL["step"], k["step"])) if k["step"] else ""
+            words = _rollup_words(k["rollup"], NL)
+            g = _app_grid(kn, k["note"], L)
+            g.update({"note": k["note"], "journey": k["journey"], "level": k["level"], "stage": nt.safe(k["stage"]), "step": k["step"],
+                      "chip": {"t": "↳ «%s»%s" % (k["journey"], step), "m": "%s · %s" % (k["note"] + ".md", words)},
+                      "summary": "%s%s → «%s» · %s" % (nt.safe(k["stage"]), step, k["journey"], T["level"] % k["level"]),
+                      "summary_m": " · %s · %s" % (k["note"] + ".md", words),
+                      "meta": "%s: %s · %s · %s: %s" % (L["note"], k["note"] + ".md", nt.safe(kn["product"]), L["reviewed"],
+                                                        nt.safe(kn["reviewed"] or "⚠️"))})
+            g.update(parts(k))
+            kids.append(g)
+        for x in n["deeper"]:
+            refs.append({"note": x["note"], "journey": x["journey"], "level": x["level"], "stage": nt.safe(x["stage"]),
+                         "t": "↳ «%s»%s" % (x["journey"], (" · %s «%s»" % (NL["step"], x["step"])) if x["step"] else ""),
+                         "m": "%s · %s" % (x["note"] + ".md", T["deeper"] % x["level"])})
+        return {"children": kids, "deeper": refs, "deeper_text": T["deeper_list"] % ", ".join(
+            "«%s» (%s.md)" % (x["journey"], x["note"]) for x in n["deeper"]) if n["deeper"] else ""}
+    return parts(nest["tree"])
+
+
+def app_data(note, note_name, lang, nest=None):
+    """The data of one map's snapshot section (§9): the map's grid as `render_html` draws it, its health, its child maps
+    to three levels and the maps above it — the page's words in `lang`, every value page-safe, no person."""
+    L, T = LABELS.get(lang, LABELS["en"]), TREE_LABELS.get(lang, TREE_LABELS["en"])
+    name = os.path.splitext(note_name)[0]
+    tree = nest is not None and bool(nest["tree"]["children"] or nest["tree"]["deeper"] or nest["ancestors"])
+    title = note["journey"] or note["title"] or note_name
+    pts = [{"date": p["date"], "score": p["score"], "snapshot": nt.safe(p["snapshot"])}
+           for p in note["health"] if p["score"] is not None and day(p["date"])]
+    above = [{"note": a["note"], "journey": a["journey"], "level": a["level"]} for a in nest["ancestors"]] if tree else []
+    A = APP_LABELS.get(lang, APP_LABELS["en"])
+    out = {"v": APP_DATA_VERSION}
+    out.update(_app_grid(note, name, L))
+    used = {r["class"].strip().lower() for r in note["rows"]
+            if not r["gap"] and page_worthy(r, [s["id"] for s in note["stages"]]) and r["source"].strip()}
+    out.update({"note": note_name, "journey": nt.safe(title), "reviewed": nt.safe(note["reviewed"]), "lang": lang,
+                "lanes": [{"id": lane, "title": L["lane"][lane]} for lane in LANE_IDS],
+                "health": {"points": pts, "trend": trend(pts)},
+                "tree": _app_tree(nest, lang) if tree else {"children": [], "deeper": [], "deeper_text": ""},
+                "above": above,
+                "texts": {"title": "%s: %s" % (L["title"], nt.safe(title)),
+                          "meta": "%s: %s · %s · %s: %s" % (L["note"], nt.safe(note_name), nt.safe(note["product"]), L["reviewed"],
+                                                            nt.safe(note["reviewed"] or "⚠️")),
+                          "above": T["above"] % " → ".join("«%s» (%s)" % (a["journey"], a["note"]) for a in above) if above else "",
+                          "health": L["health"], "no_trend": L["no_trend"], "gap": "⚠️ " + L["gap"], "children": T["children"],
+                          "bands": A["bands"], "locked": A["locked"],
+                          "classes": [{"word": A["classes"][c][0], "means": A["classes"][c][1]} for c in CLASSES if c in used]}})
+    return out
+
+
+def cmd_app_data(args):
+    note = load(args.note)
+    if str(note.get("type") or "").strip().lower() != "cjm-journey":
+        raise Bad("%s is not a journey map (type: %s)" % (os.path.basename(args.note), note.get("type") or "—"))
+    lang = args.lang or note["lang"]
+    nest = page_nest(note, args.map, args.dir, lang)
+    name = os.path.basename(note["path"])
+    data = app_data(note, name, lang, nest)
+    raw = json.dumps(data, ensure_ascii=False)
+    size = len(raw.encode("utf-8"))
+    info = {"section": app_section(name), "map": data["map"], "product": data["product"], "rows": len(data["rows"]),
+            "not_shown": data["not_shown"], "children": _shown_count(nest["tree"]) if nest else 0,
+            "deeper": _deeper_of(nest["tree"]) if nest else []}
+    if size > APP_DATA_MAX:
+        result(ok=False, error="the map's data is %d bytes — over the 256 KiB of one database document: it stays out of the app, "
+                               "open its page" % size, bytes=size, **info)
+        return 1
+    try:
+        with open(args.out, "w", encoding="utf-8", newline="") as fh:
+            fh.write(raw)
+    except OSError as e:
+        result(ok=False, error="the data cannot be written: %s" % (e.strerror or type(e).__name__))
+        return 1
+    result(ok=True, out=args.out, bytes=size, **info)
+    return 0
+
+
 def cmd_health(args):
     note = load(args.note)
     if not note["product"]:
@@ -3591,6 +3768,12 @@ def main(argv=None):
     p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
     p.add_argument("--json", action="store_true", help="the result line alone, no tree for the chat")
+    p = sub.add_parser("app-data")
+    p.add_argument("--note", required=True)
+    p.add_argument("--out", required=True, help="the section's data: app_shell.py snapshot --section map.<slug>:<product>:FILE")
+    p.add_argument("--lang", choices=sorted(LABELS), help="default: the language of the note's table headers")
+    p.add_argument("--map", action="extend", nargs="+", default=[], help="a journey map that may nest (default: the note's folder)")
+    p.add_argument("--dir", action="extend", nargs="+", default=[], help="a folder: every .md directly inside it")
     sub.add_parser("schema")
     try:
         args = ap.parse_args(argv)
@@ -3601,7 +3784,8 @@ def main(argv=None):
         return 2
     fn = {"parse": cmd_parse, "check": cmd_check, "render-html": cmd_render, "health": cmd_health,
           "refresh": cmd_refresh, "tree": cmd_tree, "board-layout": cmd_board_layout, "board-state": cmd_board_state,
-          "board-diff": cmd_board_diff, "board-take": cmd_board_take, "page-diff": cmd_page_diff, "nest": cmd_nest, "schema": cmd_schema}.get(args.cmd)
+          "board-diff": cmd_board_diff, "board-take": cmd_board_take, "page-diff": cmd_page_diff, "nest": cmd_nest,
+          "app-data": cmd_app_data, "schema": cmd_schema}.get(args.cmd)
     if fn is None:
         ap.print_help()
         return 2

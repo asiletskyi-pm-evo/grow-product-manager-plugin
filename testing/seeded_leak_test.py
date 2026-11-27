@@ -11,7 +11,8 @@ see CHANGELOG v2.4.1 and `Testing-process.md` — rewritten with a fictional org
 seeds (checks 19-22, JCRL v3.5.0), the judgment-points seeds (check 23,
 v3.7.0 and v3.9.0), the evidence-class seeds (check 24, v3.8.0) and the judgment-binds
 seeds (check 25, v3.9.0) are preventive: their classes have not shipped. The provider-contract
-seed (check 26, v3.10.0) reproduces a class that did ship: invented tool names at vault level L2.
+seed (check 26, v3.10.0) reproduces a class that did ship: invented tool names at vault level L2. The app-template
+seeds (check 35, v4.13.0) are preventive again, and prove that checks 9 and 16-18 read the shell's files too.
 
 Usage: python3 testing/seeded_leak_test.py [PLUGIN_ROOT]   (default: repo root)
 Exit 0 = every seeded defect was caught; exit 1 = at least one slipped through.
@@ -207,6 +208,39 @@ SEEDS = [
     ("db-least-rights: a rule set with no root rule",
      "references/journey-protocol.md", "append",
      'The page declares `db: {rules: [{path: "edits", read: "view", write: "admin"}]}`.', "db-least-rights"),
+    # v4.13.0: check 35 — the app templates (references/app-profiles.yaml, scripts/app_shell/*) hold shell code and
+    # placeholders only; a user's values go into the published page or its database. Preventive: no class has shipped.
+    ("app-template: an e-mail in a copy of the app profiles",
+     "references/app-profiles.yaml", "append",
+     "# owner: someone@zorg.example", "app-template"),
+    ("app-template: an artifact link in a copy of the app profiles",
+     "references/app-profiles.yaml", "append",
+     "# published at claude.ai/artifact/zorg-cjm-0000", "app-template"),
+    ("app-template: a UUID in the shell's code",
+     "scripts/app_shell/desk.js", "append",
+     "// the server: 0000beef-0000-4000-8000-00000000cafe", "app-template"),
+    ("app-template: a tracker key outside a placeholder in the shell's code",
+     "scripts/app_shell/live.js", "append",
+     "// e.g. ZORG-42 for the issue-status role", "app-template"),
+    ("app-template: a URL other than Google Fonts in the shell's code",
+     "scripts/app_shell/blocks.js", "append",
+     'var API = "https://api.zorg.example/v1";', "app-template"),
+    ("app-template: a product name the denylist knows, in a profile",
+     "references/app-profiles.yaml", "append",
+     "# the first app: Zorgtech checkout", "app-template"),
+    # the shape checks 9 and 16-18 walk the shell's files too
+    ("app-template: check 9 reads the shell's code",
+     "scripts/app_shell/map.js", "append",
+     "// boards of https://zorg.atlassian.net", "org-data"),
+    ("app-template: check 16 reads the shell's code",
+     "scripts/app_shell/shell.js", "append",
+     "// colours per Zorg convention", "org-signature"),
+    ("app-template: check 17 reads the shell's code",
+     "scripts/app_shell/shell.js", "append",
+     "// Language: Ukrainian by default", "example-locale"),
+    ("app-template: check 18 reads the shell's style",
+     "scripts/app_shell/shell.css", "append",
+     "/* the epic ZORG-4821 */", "example-keys"),
 ]
 
 # The denylist layer is optional (gitignored), so it gets its own seed: a bare
@@ -279,7 +313,7 @@ def main():
                 continue
             try:
                 open(path, "w", encoding="utf-8").write(seeded)
-                if tag == "org-data":
+                if tag == "org-data" or "denylist" in name:
                     open(denylist, "w", encoding="utf-8").write("# seeded\nZorgtech\n")
                 # the marker the FAIL line must point at: the seeded file's basename
                 # (every check that has a seed names the offending file in its FAIL line)
