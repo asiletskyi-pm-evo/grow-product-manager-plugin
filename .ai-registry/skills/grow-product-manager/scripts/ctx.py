@@ -143,10 +143,11 @@
                                 a registration switched since is refused; it takes no address of its own. http only to
                                 this computer; an id that is not kebab-case, a variable name that is not plain → exit 4.
                                 --list: the approved pairs and the registrations not approved (reads only). untrust
-                                removes the id's pair. The first run after the update — the first repo status | repo copy
-                                | repo add | provider adopt|plan|apply|sync | trust --code | untrust | search
-                                — trusts the registrations already there, once, one line each («Довірено наявну
-                                реєстрацію <id>: <scheme://host> (змінна <VAR> | без змінної)»)
+                                removes the id's pair. The first run — the first repo status | repo copy | repo add |
+                                provider adopt|plan|apply|sync | trust --code | untrust | search — creates the trust file
+                                empty: since v4.12.4 no registration is trusted by itself («довіра адресам: жодну наявну
+                                реєстрацію не довірено автоматично …»); an entry an earlier first run seeded is refused
+                                as `seeded` until you approve it
   slot bind REPO BLOCK[#Subsection] SLOT [--team ID]
                                 what you decided about the slots of the catalogue (references/context-slots.yaml;
                                 since v3.15.0), kept in the store's `.state/slots.json` — no record changes. bind: the
@@ -1559,7 +1560,7 @@ def cmd_repo_list(a, c):
 
 def _trust_prelude(c, repos=None, skipped=None, notes=None):
     """The lines a command that may reach a server prints first (since v4.9.1, context-provider-protocol.md §13): the
-    first run after the update — `ctx_endpoints.seed`: the registrations already there trusted, once, one line each —
+    first run — `ctx_endpoints.seed`: the trust file created empty, since v4.12.4 nothing trusted by itself, one line —
     and two registration files of one id whose endpoints differ (`notes`). `repos`, with the `skipped` and `notes` of
     their read, when the command has read every registration; else they are read here, and only when the trust file is
     not there yet."""
@@ -2461,7 +2462,19 @@ def cmd_entity(a, c):
 
 def cmd_graph(a, c):
     """`graph <request> [--depth 1|2] [--kind K,…]` (since v4.0.0, ctx_graph.run): the notes around a note or an entity,
-    from the edges of the index. Reads the index (refreshed as `entity` does); writes nothing else."""
+    from the edges of the index. Reads the index (refreshed as `entity` does); writes nothing else.
+    `--q-stdin` (since v4.12.4): the request read from stdin, one line — a name or a title from a note never has to stand
+    in the command line (search-protocol §3a); the words, when given too, are a usage error."""
+    if getattr(a, "q_stdin", False):
+        if a.words:
+            raise Usage("graph: the request comes either as words or on stdin (--q-stdin), not both")
+        a.q = []
+        _stdin_q(a)
+        if len(a.q) > 1:
+            raise Usage("graph --q-stdin takes one request, one line (%d came)" % len(a.q))
+        a.words = a.q
+    if not a.words:
+        raise Usage("graph takes a request: the words, or one line on stdin with --q-stdin")
     kinds = [k.strip() for k in (a.kind or "").split(",") if k.strip()]
     for k in kinds:
         if k not in GRAPH_KINDS and not k.startswith("fm:"):
@@ -3111,7 +3124,7 @@ def cmd_provider_sync(a, c):
     deadline = time.monotonic() + sy.BUDGET_S          # the whole run, the registrations' read included (as in v3.23)
     skipped, notes = [], []
     loaded = None if a.repo else crp.load_repos(c.text, c.home, deadline=deadline, skipped=skipped, notes=notes)
-    _trust_prelude(c, loaded, skipped, [] if a.if_due else notes)   # since v4.9.1: the first run after the update, once
+    _trust_prelude(c, loaded, skipped, [] if a.if_due else notes)   # since v4.9.1: the first run, once
     rc, out = _provider_sync_blocks(a, c, loaded, deadline, shadow=notes if a.if_due else [])
     try:                                                # since v3.24.0: the copies, after the blocks (C7)
         rows = loaded if loaded is not None else [r for r in crp.load_repos(c.text, c.home) if r["id"] == a.repo]
@@ -3675,7 +3688,9 @@ def _trust_list(c, repos, out):
         print("схвалені адреси (%s):" % cep.trust_file(c.home))
         for e in data["entries"]:
             reg = by_id.get(e["id"])
-            state = ("реєстрації немає" if reg is None else "діє" if cep.verdict(reg) is None else "реєстрація змінилась")
+            v = cep.verdict(reg) if reg is not None else None
+            state = ("реєстрації немає" if reg is None else "діє" if v is None
+                     else "довірено без схвалення" if v.why == "seeded" else "реєстрація змінилась")   # since v4.12.4
             entries.append(dict(e, state=state))
             print("  %s  %s  %s  %s %s · %s" % (cep._shown(e["id"]), cep.shown(e["url"]) or "?",
                                               cep._var_word(e.get("headers_env") or "") if cep.VAR.match(e.get("headers_env") or "x")
@@ -4197,7 +4212,8 @@ def build_parser():
     sp = sub.add_parser("serve", parents=[common]); sp.add_argument("--install", action="store_true")
     sp = sub.add_parser("audit", parents=[common]); sp.add_argument("--all", dest="all_", action="store_true")
     sp.add_argument("--json", action="store_true")
-    sp = sub.add_parser("graph", parents=[common]); sp.add_argument("words", nargs="+")
+    sp = sub.add_parser("graph", parents=[common]); sp.add_argument("words", nargs="*")
+    sp.add_argument("--q-stdin", dest="q_stdin", action="store_true")
     sp.add_argument("--depth", type=int, choices=(1, 2), default=1); sp.add_argument("--kind")
     sp.add_argument("--json", action="store_true")
     ip_ = sub.add_parser("identity").add_subparsers(dest="action", required=True, parser_class=Parser)

@@ -141,7 +141,8 @@ ZORG = ('<!doctype html><html lang="uk"><head><meta charset="utf-8"><title>Zorg<
 SHELL_JS = open(os.path.join(ROOT, "scripts", "app_shell", "shell.js"), encoding="utf-8").read() \
     if os.path.exists(os.path.join(ROOT, "scripts", "app_shell", "shell.js")) else ""
 CJM_CAPS = {"desktop": {},
-            "db": {"rules": [{"path": "", "read": "view", "write": "admin"},
+            "db": {"rules": [{"path": "", "read": "view", "write": "owner"},
+                             {"path": "edits", "read": "view", "write": "admin"},
                              {"path": "snapshot", "read": "view", "write": "owner"},
                              {"path": "config", "read": "view", "write": "owner"},
                              {"path": "runs", "read": "view", "write": "owner"}]},

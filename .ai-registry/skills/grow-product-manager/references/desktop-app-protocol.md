@@ -57,7 +57,8 @@ The page's data lives in the artifact's database, never in its HTML. The rules `
 
 | Path | Read | Write | What |
 |---|---|---|---|
-| `""` (the rest) | view | admin — the artifact's editors and its owner | `edits`, the team's shared edits of the maps (§10) |
+| `""` (the rest) | view | owner | nothing of its own: the root rule keeps a path no rule names from falling back to the host's default, where Contributors write (the least rights of v4.12.4) |
+| `edits` | view | admin — the artifact's editors and its owner | the team's shared edits of the maps (§10) |
 | `snapshot` | view | owner | `meta`, `theme`, one document per section and product |
 | `config` | view | owner | `app`, the owner's modules (§2) |
 | `runs` | view | owner | one document per snapshot run |
@@ -99,7 +100,7 @@ A map too large for one database document stays out of the app, refused in one o
 
 ## 10. The team's edits in the app
 
-The map inside the app is the map's page of v4.12.0: the same switch «Редагувати», the same `edits` collection and document format, written by the same editing script (`journey-protocol.md` §9 «Shared edits»). Editors and the owner write it (the rule `""` of §5); a viewer sees the marks. The feed «Правки команди» and the badge read the same collection. The edits are still a draft: `cjm-research` J9 reads the app's artifact's `edits` too, and they reach the note only through its preview (`journey-protocol.md` §12).
+The map inside the app is the map's page of v4.12.0: the same switch «Редагувати», the same `edits` collection and document format, written by the same editing script (`journey-protocol.md` §9 «Shared edits»). Editors and the owner write it (the rule `edits` of §5; the rest of the store the owner alone); a viewer sees the marks. The feed «Правки команди» and the badge read the same collection. The edits are still a draft: `cjm-research` J9 reads the app's artifact's `edits` too, and they reach the note only through its preview (`journey-protocol.md` §12).
 
 ## 11. The script
 

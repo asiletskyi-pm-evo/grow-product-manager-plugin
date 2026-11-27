@@ -527,7 +527,8 @@ def check_config(doc):
 
 # ---- wrap ---------------------------------------------------------------------------------------------------------
 
-DB_RULES = [{"path": "", "read": "view", "write": "admin"},
+DB_RULES = [{"path": "", "read": "view", "write": "owner"},
+            {"path": "edits", "read": "view", "write": "admin"},
             {"path": "snapshot", "read": "view", "write": "owner"},
             {"path": "config", "read": "view", "write": "owner"},
             {"path": "runs", "read": "view", "write": "owner"}]

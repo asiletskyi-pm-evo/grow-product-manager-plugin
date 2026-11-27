@@ -118,6 +118,7 @@ try:
     check("a store to plan against", rc == 0, out)
     with FakeMcp(tree=served(KIT)) as fake:
         open(reg, "w", encoding="utf-8").write(REG.format(rid="zorg-core", url=fake.url, blocks="Core/_System/context-blocks.md"))
+        env.trust("zorg-core")                          # since v4.12.4: the first run trusts nothing — the user's yes
 
         print("— 1. no copy, or one not complete: as v3.23")
         r0 = repo_of(env, "zorg-core")

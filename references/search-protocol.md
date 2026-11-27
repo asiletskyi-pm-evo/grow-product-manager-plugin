@@ -58,7 +58,7 @@ With SHELL:
 
 A request is the user's words, and a name, a title or a phrase that came from a meeting, a note, a card or a core — anyone can write `$(…)` or a backtick into those, and a shell reads both inside double quotes. So:
 
-- **Requests go on stdin.** `ctx search` and `ctx entity` take `--q-stdin`: the requests one per line, after any `--q`, the first line the request and the others its variants. Always in a heredoc with a **quoted** delimiter, so the shell expands nothing in it:
+- **Requests go on stdin.** `ctx search` and `ctx entity` take `--q-stdin`: the requests one per line, after any `--q`, the first line the request and the others its variants. `ctx graph` takes it too (since v4.12.4): one line, the one request it walks — a path the engine printed included. Always in a heredoc with a **quoted** delimiter, so the shell expands nothing in it:
 
   ```bash
   python3 "<plugin root>/scripts/ctx.py" entity --q-stdin --kind person --skill <this skill> <<'EOF'
@@ -68,9 +68,9 @@ A request is the user's words, and a name, a title or a phrase that came from a 
   ```
 
   A line equal to `EOF` would end the heredoc: then pick another delimiter (`<<'CTX_Q_END'`). Nothing on stdin is exit 3.
-- **A value the engine printed** — an id, a path, a note's name for `--get`, `--pick`, `--not`, `--product`, `entity same`, `graph` — goes in single quotes, a `'` in it written `'\''`; the engine prints its own commands that way (`ctx entity '<шлях>'`). So does a text you write into a command — `--reason`, `--name`, `--product`, a job's name. Never in double quotes, never bare.
+- **A value the engine printed** — an id, a path, a note's name for `--get`, `--pick`, `--not`, `--product`, `entity same` — goes in single quotes, a `'` in it written `'\''`; the engine prints its own commands that way (`ctx entity '<шлях>'`). So does a text you write into a command — `--reason`, `--name`, `--product`, a job's name. Never in double quotes, never bare.
 - **A delta goes on stdin** (since v4.11.1): `ctx propose --skill <skill> --file -` with the JSON in a quoted heredoc, never `--delta '<json>'` — a delta quotes notes and pages.
-- Never build a command by pasting a name into it in another way; `testing/skill_lint.py` check 32 refuses a shipped doc that puts a placeholder in double quotes in a `ctx` command.
+- Never build a command by pasting a name into it in another way; `testing/skill_lint.py` check 32 refuses a shipped doc that puts a placeholder in double quotes in a `ctx` command, and since v4.12.4 one that puts a request in the command line of `ctx graph` (it goes on stdin, above).
 
 ## 4. Rating the candidates
 
