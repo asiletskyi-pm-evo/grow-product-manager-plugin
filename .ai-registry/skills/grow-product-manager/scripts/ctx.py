@@ -3688,7 +3688,9 @@ def _trust_list(c, repos, out):
         print("схвалені адреси (%s):" % cep.trust_file(c.home))
         for e in data["entries"]:
             reg = by_id.get(e["id"])
-            state = ("реєстрації немає" if reg is None else "діє" if cep.verdict(reg) is None else "реєстрація змінилась")
+            v = cep.verdict(reg) if reg is not None else None
+            state = ("реєстрації немає" if reg is None else "діє" if v is None
+                     else "довірено без схвалення" if v.why == "seeded" else "реєстрація змінилась")   # since v4.12.4
             entries.append(dict(e, state=state))
             print("  %s  %s  %s  %s %s · %s" % (cep._shown(e["id"]), cep.shown(e["url"]) or "?",
                                               cep._var_word(e.get("headers_env") or "") if cep.VAR.match(e.get("headers_env") or "x")

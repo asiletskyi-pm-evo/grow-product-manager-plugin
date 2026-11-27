@@ -505,6 +505,13 @@ with tempfile.TemporaryDirectory() as d, FakeMcp(tree=TREE, require_headers={"X-
           and not any(r["trusted"] for r in res["repos"]) and "Довірено" not in out, (out, first))
     rc, out, res = env.run("repo", "status")
     check("10.2 the second run: no first-run line", rc == 0 and "довіра адресам" not in out, out)
+    data = json.loads(raw(env.home))                    # a trust file as a first run of v4.9.1–v4.12.3 left it
+    data["entries"] = [{"id": "zorg-brain", "url": fake.url, "query_sha256": None, "headers_env": None, "at": NOW,
+                        "how": "seeded"}]
+    open(ce.trust_file(env.home), "w").write(json.dumps(data))
+    rc, out, res = env.run("provider", "trust", "--list")
+    check("10.3 v4.12.4 trust --list names a seeded entry «довірено без схвалення», never «діє»",
+          rc == 0 and "довірено без схвалення" in out and " діє" not in out, out)
 
 # 11. validate check 31 — the one way to a client, the trust file's place, and the protocol's words are the code's ----------
 import re, shutil  # noqa: E402,E401
